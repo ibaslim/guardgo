@@ -1,0 +1,1 @@
+ERROR - 22/08/2025 13:39:40 : ELASTIC : Initialization failed: BadRequestError(400, 'resource_already_exists_exception', 'index [exploit_model/eNMrE5lnRGWdHHZwqO7otQ] already exists') - elastic_controller (/app/orion/services/elastic_manager/elastic_controller.py:74)

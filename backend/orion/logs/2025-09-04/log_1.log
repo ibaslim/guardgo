@@ -1,0 +1,2 @@
+ERROR - 04/09/2025 13:05:19 : ARANGO CONNECTION ERROR: [HTTP 409][ERR 1207] duplicate database name 'orion-web' - arango_controller (/app/orion/services/arango_manager/arango_controller.py:40)
+ERROR - 04/09/2025 13:05:19 : ARANGO GRAPH INIT ERROR: 'NoneType' object has no attribute 'has_collection' - arango_controller (/app/orion/services/arango_manager/arango_controller.py:83)
