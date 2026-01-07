@@ -90,8 +90,13 @@ export class FormDemo {
 
   constructor() {
     // Load theme preference from localStorage
-    const savedTheme = localStorage.getItem('theme');
-    this.darkMode = savedTheme === 'dark';
+    try {
+      const savedTheme = localStorage.getItem('theme');
+      this.darkMode = savedTheme === 'dark';
+    } catch (e) {
+      // localStorage not available, use default light mode
+      this.darkMode = false;
+    }
 
     // Apply the correct theme
     if (this.darkMode) {
@@ -105,10 +110,18 @@ export class FormDemo {
     this.darkMode = !this.darkMode;
     if (this.darkMode) {
       document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
+      try {
+        localStorage.setItem('theme', 'dark');
+      } catch (e) {
+        // localStorage not available, theme won't persist
+      }
     } else {
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
+      try {
+        localStorage.setItem('theme', 'light');
+      } catch (e) {
+        // localStorage not available, theme won't persist
+      }
     }
   }
 
