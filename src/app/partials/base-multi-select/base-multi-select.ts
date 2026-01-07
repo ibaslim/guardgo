@@ -90,6 +90,7 @@ export class BaseMultiSelect implements ControlValueAccessor {
 
     this.onChange(this.selectedValues);
     this.selectionChange.emit(this.selectedValues);
+    this.onTouched();
   }
 
   isSelected(option: MultiSelectOption): boolean {
@@ -107,12 +108,14 @@ export class BaseMultiSelect implements ControlValueAccessor {
       .map((option) => option.value);
     this.onChange(this.selectedValues);
     this.selectionChange.emit(this.selectedValues);
+    this.onTouched();
   }
 
   clearAll(): void {
     this.selectedValues = [];
     this.onChange(this.selectedValues);
     this.selectionChange.emit(this.selectedValues);
+    this.onTouched();
   }
 
   onSearchInput(event: Event): void {
