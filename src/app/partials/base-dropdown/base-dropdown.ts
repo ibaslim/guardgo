@@ -89,7 +89,7 @@ export class BaseDropdown implements ControlValueAccessor {
 
   @HostListener('document:click', ['$event'])
   onClickOutside(event: MouseEvent): void {
-    if (!this.elementRef.nativeElement.contains(event.target)) {
+    if (event.target && !this.elementRef.nativeElement.contains(event.target as Node)) {
       this.isOpen = false;
       this.searchTerm = '';
     }
