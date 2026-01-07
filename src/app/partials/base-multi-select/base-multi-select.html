@@ -130,17 +130,18 @@
           >
             <div class="flex items-center gap-3">
               <!-- Custom Checkbox -->
-              <div class="flex items-center">
+              <div class="relative flex items-center">
                 <input
                   type="checkbox"
                   [checked]="isSelected(option)"
                   [disabled]="option.disabled"
-                  class="w-4 h-4 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none checked:bg-blue-600 checked:border-transparent relative"
+                  class="w-4 h-4 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none checked:bg-blue-600 checked:border-transparent"
                   tabindex="-1"
+                  aria-hidden="true"
                 />
                 @if (isSelected(option)) {
                   <svg
-                    class="w-4 h-4 text-white absolute pointer-events-none"
+                    class="w-4 h-4 text-white absolute inset-0 pointer-events-none"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
