@@ -1,0 +1,185 @@
+<div class="relative w-full">
+  <!-- Label -->
+  @if (label) {
+    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+      {{ label }}
+    </label>
+  }
+
+  <!-- Multi-Select Trigger -->
+  <div
+    (click)="toggleDropdown()"
+    [class.opacity-50]="disabled"
+    [class.cursor-not-allowed]="disabled"
+    [class.ring-2]="isOpen"
+    [class.ring-blue-500]="isOpen"
+    class="relative w-full cursor-pointer rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 py-2 pl-3 pr-10 min-h-[42px] shadow-sm transition-all duration-200 hover:border-gray-400 dark:hover:border-gray-500 focus-within:ring-2 focus-within:ring-blue-500"
+  >
+    <!-- Selected Chips Display -->
+    @if (selectedOptions.length > 0) {
+      <div class="flex flex-wrap gap-1.5">
+        @for (option of displayChips; track option.value) {
+          <span
+            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 transition-colors duration-150"
+          >
+            {{ option.label }}
+            <button
+              type="button"
+              (click)="removeChip(option, $event)"
+              [disabled]="disabled"
+              class="inline-flex items-center justify-center w-4 h-4 rounded-full hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors duration-150"
+              [attr.aria-label]="'Remove ' + option.label"
+            >
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </span>
+        }
+        @if (remainingCount > 0) {
+          <span
+            class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+          >
+            +{{ remainingCount }} more
+          </span>
+        }
+      </div>
+    } @else {
+      <span class="block text-gray-400 dark:text-gray-500">
+        {{ placeholder }}
+      </span>
+    }
+
+    <!-- Chevron Icon -->
+    <span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+      <svg
+        [class.rotate-180]="isOpen"
+        class="h-5 w-5 text-gray-400 transition-transform duration-200"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path
+          fill-rule="evenodd"
+          d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+          clip-rule="evenodd"
+        />
+      </svg>
+    </span>
+  </div>
+
+  <!-- Dropdown Panel -->
+  @if (isOpen) {
+    <div
+      class="absolute z-50 mt-1 w-full rounded-lg bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 animate-fade-in"
+    >
+      <!-- Search Input -->
+      <div class="border-b border-gray-200 dark:border-gray-700 p-2">
+        <input
+          type="text"
+          [value]="searchTerm"
+          (input)="onSearchInput($event)"
+          placeholder="Search options..."
+          class="w-full px-3 py-2 text-sm rounded-md border-0 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Search options"
+        />
+      </div>
+
+      <!-- Action Buttons -->
+      <div
+        class="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50"
+      >
+        <button
+          type="button"
+          (click)="selectAll()"
+          class="text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors duration-150"
+        >
+          Select All
+        </button>
+        <button
+          type="button"
+          (click)="clearAll()"
+          class="text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors duration-150"
+        >
+          Clear All
+        </button>
+      </div>
+
+      <!-- Options List with Checkboxes -->
+      <ul class="max-h-60 overflow-auto py-1" role="listbox" [attr.aria-label]="label || 'Multi-select options'">
+        @if (filteredOptions.length === 0) {
+          <li class="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 text-center">
+            No options found
+          </li>
+        }
+        @for (option of filteredOptions; track option.value) {
+          <li
+            (click)="toggleOption(option)"
+            [class.bg-blue-50]="isSelected(option)"
+            [class.dark:bg-blue-900/20]="isSelected(option)"
+            [class.opacity-50]="option.disabled"
+            [class.cursor-not-allowed]="option.disabled"
+            class="relative cursor-pointer select-none px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150"
+            role="option"
+            [attr.aria-selected]="isSelected(option)"
+          >
+            <div class="flex items-center gap-3">
+              <!-- Custom Checkbox -->
+              <div class="flex items-center">
+                <input
+                  type="checkbox"
+                  [checked]="isSelected(option)"
+                  [disabled]="option.disabled"
+                  class="w-4 h-4 text-blue-600 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer appearance-none checked:bg-blue-600 checked:border-transparent relative"
+                  tabindex="-1"
+                />
+                @if (isSelected(option)) {
+                  <svg
+                    class="w-4 h-4 text-white absolute pointer-events-none"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="3"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                }
+              </div>
+
+              <!-- Option Label -->
+              <span class="text-sm text-gray-900 dark:text-white">
+                {{ option.label }}
+              </span>
+            </div>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+</div>
+
+<style>
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out;
+  }
+</style>
