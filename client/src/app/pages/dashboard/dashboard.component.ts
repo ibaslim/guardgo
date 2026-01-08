@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { ScrollingModule } from '@angular/cdk/scrolling';
 import {AuthService} from "../../services/authetication/auth.service";
+import {AppService} from "../../services/core/app/app.service";
 
 @Component({
   selector: 'app-dashboard',
@@ -30,7 +31,7 @@ export class DashboardComponent implements OnInit {
     { action: 'Profile updated', user: 'emma@example.com', time: '2 hours ago' },
   ];
 
-  constructor(private authService:AuthService, private router: Router) {
+  constructor(private authService:AuthService, protected appService:AppService, private router: Router) {
     const savedTheme = localStorage.getItem('theme');
     this.darkMode = savedTheme === 'dark';
 
@@ -42,12 +43,6 @@ export class DashboardComponent implements OnInit {
   }
 
   ngOnInit() {
-    const user = "ms";
-    if (!user) {
-      this.router.navigate(['/login']);
-      return;
-    }
-    this.userEmail = "ms";
   }
 
   toggleSidebar() {

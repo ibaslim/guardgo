@@ -8,6 +8,9 @@
 @use 'app/shared/partials/forgot-password/reset-password.component.css';
 @use 'app/pages/dashboard/dashboard.component.css';
 @use 'app/shared/partials/message-notification/message-notification.component.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 
 :root {
