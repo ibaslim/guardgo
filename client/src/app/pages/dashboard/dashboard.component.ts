@@ -1,40 +1,71 @@
-import { AfterViewInit, ChangeDetectorRef, Component, OnInit } from '@angular/core';
-import { NgIf } from '@angular/common';
-import { Router, RouterOutlet } from '@angular/router';
+import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { ScrollingModule } from '@angular/cdk/scrolling';
-import { AppService } from '../../services/core/app/app.service';
+import {AuthService} from "../../services/authetication/auth.service";
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   imports: [
-    RouterOutlet,
     ScrollingModule,
-    NgIf,
   ],
   templateUrl: './dashboard.component.html',
 })
-export class DashboardComponent implements AfterViewInit, OnInit {
-  isMenuOpen = true;
-  animationState: any;
+export class DashboardComponent implements OnInit {
+  userEmail = '';
+  sidebarCollapsed = false;
+  darkMode = false;
 
-  constructor(private cdr: ChangeDetectorRef, public router: Router, protected appService: AppService) {
+  stats = [
+    { name: 'Total Users', value: '2,651', change: '+12%', changeType: 'increase' },
+    { name: 'Active Sessions', value: '1,429', change: '+8%', changeType: 'increase' },
+    { name: 'Response Time', value: '24ms', change: '-4%', changeType: 'decrease' },
+    { name: 'Uptime', value: '99.9%', change: '0%', changeType: 'neutral' },
+  ];
+
+  recentActivity = [
+    { action: 'User login', user: 'john@example.com', time: '2 minutes ago' },
+    { action: 'New registration', user: 'sarah@example.com', time: '15 minutes ago' },
+    { action: 'Password reset', user: 'mike@example.com', time: '1 hour ago' },
+    { action: 'Profile updated', user: 'emma@example.com', time: '2 hours ago' },
+  ];
+
+  constructor(private authService:AuthService, private router: Router) {
+    const savedTheme = localStorage.getItem('theme');
+    this.darkMode = savedTheme === 'dark';
+
+    if (this.darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
   }
-  ngOnInit(): void {
-    this.appService.set('isSidebarOpen', this.isMenuOpen);
+
+  ngOnInit() {
+    const user = "ms";
+    if (!user) {
+      this.router.navigate(['/login']);
+      return;
+    }
+    this.userEmail = "ms";
   }
 
-
-  prepareRoute(outlet: RouterOutlet) {
-    this.animationState = outlet?.activatedRouteData?.['animation'] || null;
-    return this.animationState;
+  toggleSidebar() {
+    this.sidebarCollapsed = !this.sidebarCollapsed;
   }
 
-  isCtiGraph(): boolean {
-    return this.router.url.includes('/dashboard/ctigraph');
+  toggleDarkMode() {
+    this.darkMode = !this.darkMode;
+    if (this.darkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
   }
 
-  ngAfterViewInit() {
-    this.cdr.detectChanges();
+  logout() {
+    this.authService.logout();
   }
 }
