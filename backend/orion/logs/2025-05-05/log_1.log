@@ -1,6 +1,0 @@
-ERROR - 05/05/2025 15:16:24 : ELASTIC : Initialization failed: Connection timed out - elastic_controller (/app/orion/services/elastic_manager/elastic_controller.py:56)
-ERROR - 05/05/2025 15:16:24 : ELASTIC : Initialization failed: Connection timed out - elastic_controller (/app/orion/services/elastic_manager/elastic_controller.py:56)
-ERROR - 05/05/2025 15:16:41 : ARANGO CONNECTION ERROR: [HTTP 401][ERR 11] not authorized to execute this request - arango_controller (/app/orion/services/arango_manager/arango_controller.py:37)
-ERROR - 05/05/2025 15:16:41 : ARANGO CONNECTION ERROR: [HTTP 401][ERR 11] not authorized to execute this request - arango_controller (/app/orion/services/arango_manager/arango_controller.py:37)
-ERROR - 05/05/2025 15:16:41 : ARANGO GRAPH INIT ERROR: 'NoneType' object has no attribute 'has_collection' - arango_controller (/app/orion/services/arango_manager/arango_controller.py:66)
-ERROR - 05/05/2025 15:16:42 : ARANGO GRAPH INIT ERROR: 'NoneType' object has no attribute 'has_collection' - arango_controller (/app/orion/services/arango_manager/arango_controller.py:66)

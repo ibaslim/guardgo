@@ -1,0 +1,112 @@
+<div class="" id="content" *ngIf="!twofaRequired">
+  <div class="login-page-container">
+    <div class="login-form-side">
+      <div class="header-links">
+        <a href="https://drive.google.com/file/d/16NQysXxTdEg5Jx6KNok-rqHvdeM-YOJO/view?usp=sharing" target="_blank"
+          class="header-link">Privacy Policy</a> <a href="https://orionintelligence.org/service/" target="_blank"
+          class="header-link">Our Services</a> <a href="https://orionintelligence.org" target="_blank"
+          class="header-link">About Us</a>
+      </div>
+      <div class="center-content-wrapper">
+        <div class="login-content">
+          <img [src]="appService.getConfig().appSettings.logo_url ? '/api/s/static/system/logo' : 'assets/images/shared/orion-Intelligence-logo.svg'" width="80px" height="54px" alt="logo" class="orion-logo" />
+
+          <div class="login-heading">Login to get started!</div>
+
+          <ng-container *ngIf="isMobile">
+            <div class="d-flex align-items-center gap-2 demo-note" (click)="demoLogin()">
+              <span><img src="/assets/images/shared/info.svg" class="info-icon info-icon-demo" alt=""> &nbsp; Want
+                to explore first? <strong>Try Demo</strong></span>
+            </div>
+          </ng-container>
+
+          <form #loginForm="ngForm" (ngSubmit)="onSubmit(loginForm)" class="login-form">
+            <label for="username" class="input-label">Email</label>
+            <div class="input-with-icon">
+              <img src="/assets/images/shared/profile-icon-dark.svg" alt="profile icon" class="input-icon" />
+              <input [(ngModel)]="user.mail" placeholder="Enter email" class="login-input" name="username" required
+                type="text" />
+            </div>
+
+            <label for=" word" class="input-label mt-2">Password</label>
+            <div class="input-with-icon">
+              <img src="/assets/images/shared/lock.svg" alt="profile icon" class="input-icon" />
+              <input [(ngModel)]="user.password" placeholder="Enter password" class="login-input" name="password"
+                required type="password" />
+            </div>
+
+            <span (click)="goToForgot()" class="reset-password">Reset password?</span>
+
+            <div *ngIf="errorMessage == 'verification pending'" class="d-flex align-items-center justify-content-between mt-2 px-3 py-2 rounded-lg bg-danger bg-opacity-75 text-white shadow-sm">
+              <span class="text-start"><b>{{ errorMessage }}</b></span>
+              <button (click)="resendMail()" class="btn btn-light btn-sm ms-3">
+                Resend mail
+              </button>
+            </div>
+
+            <div *ngIf="errorMessage && errorMessage != 'verification pending'" class="d-inline-block mt-2 px-3 py-2 rounded-lg bg-danger bg-opacity-75 text-white shadow-sm text-center">
+              <i class="bi bi-exclamation-diamond-fill me-2"></i>
+              {{ errorMessage }}
+            </div>
+
+            <div>
+              <input [class.login-button]="loginForm.valid" [class.login-button-disable]="!loginForm.valid"
+                type="submit" value="Sign In" />
+            </div>
+          </form>
+
+          <p class="signup-text">
+            Don't have an account? <span (click)="goToSignUp()" class="signup-link cursor-pointer">Sign Up</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="footer-copyright">
+        <p>Copyright &copy; 2025. Powered by</p>
+        <p>{{ this.appService.getConfig().appSettings.app_name }}</p>
+      </div>
+    </div>
+
+    <div class="dashboard-preview-side">
+      <img src="/assets/images/shared/auth_dashboard_icon.svg" alt="Dashboard Preview" class="dashboard-visual" />
+    </div>
+  </div>
+</div>
+
+<div *ngIf="twofaRequired" class="login_container" [class.twofaextend]="otpSecret" id="content">
+  <div class="login_box">
+    <div class="login_header">
+      <img alt="logo" height="41" src="assets/images/shared/home-logo.svg" width="232">
+    </div>
+
+    <p *ngIf="errorMessage" class="text-warning"><b>{{ errorMessage }}</b></p>
+    <div *ngIf="otpDataUrl" class="login_form-group twofa-center">
+      <img [src]="otpDataUrl" alt="2FA QR" width="200" height="200">
+    </div>
+
+    <p *ngIf="otpSecret" class="text-white mt-4"><b>Keep your secret key safe in case you lose access to your
+        authenticator app</b></p>
+    <div *ngIf="otpSecret" class="alert alert-warning cursor-pointer" role="alert" (click)="copyToClipboard(otpSecret)">
+      <div class="d-flex align-items-center">
+        <img src="assets/images/shared/copy-dark.svg" alt="Copy" width="20px" height="20px" class="copy-icon"> <strong
+          class="me-2 ml-3">{{ otpSecret }}</strong> <span *ngIf="copied" class="ml-2">Copied!</span>
+      </div>
+    </div>
+
+    <form (ngSubmit)="submitOtp()">
+      <div class="login_form-group">
+        <label class="login_hidden-label" for="id_otp">OTP</label> <input [(ngModel)]="otpCode" name="otpCode"
+          class="login_input" id="id_otp" placeholder="Authentication code" required minlength="6" maxlength="6"
+          type="text">
+      </div>
+
+      <div class="login-button-container">
+        <button type="submit" [disabled]="!otpCode || otpCode.length < 6"
+          [class.login_btn-submit]="otpCode && otpCode.length === 6"
+          [class.login_btn-disabled]="!otpCode || otpCode.length < 6">
+          Verify OTP
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

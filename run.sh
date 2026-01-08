@@ -1,0 +1,120 @@
+#!/bin/bash
+
+PROJECT_NAME="trusted-search"
+ENV_FILE=".env"
+
+stop_docker() {
+    docker compose -p "$PROJECT_NAME" down --remove-orphans
+    rm -rf staticfiles
+    docker stop trusted-web-nginx 2>/dev/null || true
+    docker rm trusted-web-nginx 2>/dev/null || true
+}
+
+client_build() {
+    cd client || exit
+    npm install
+    if [ "$1" = "-t" ]; then
+        ng build --configuration instrumented
+    else
+        ng build --configuration production
+    fi
+    cd ..
+    rm -rf backend/build
+    mkdir -p backend/build
+    cp -r client/build/* backend/build/
+}
+
+use_compose_file() {
+    if [ "$1" = "production" ]; then
+        COMPOSE_FILE="docker-compose-production.yml"
+    else
+        COMPOSE_FILE="docker-compose.yml"
+    fi
+}
+
+wait_for_test_service() {
+    local url="http://127.0.0.1:8080"
+    until curl -s -o /dev/null "$url"; do
+        sleep 2
+    done
+}
+
+run_test_task() {
+    cd client || exit
+    npm test run
+    cd ..
+    exit 0
+}
+
+set_testing_enabled() {
+    sed -i '/^TESTING_ENABLED=/d' "$ENV_FILE" 2>/dev/null || true
+    if [ "$1" = "-t" ]; then
+        echo 'TESTING_ENABLED="1"' >> "$ENV_FILE"
+    else
+        echo 'TESTING_ENABLED="0"' >> "$ENV_FILE"
+    fi
+}
+
+stop_docker
+
+if [ "$1" = "stop" ]; then
+    echo "Crawler service stopped"
+    exit 0
+fi
+
+COMMAND=$1
+FLAG=$2
+
+set_testing_enabled "$FLAG"
+
+if [ "$COMMAND" = "build" ]; then
+    docker pull python:3.11-slim
+    docker volume prune -f
+
+    case "$FLAG" in
+        -t)
+            client_build "-t"
+            cp nginx/nginx-dev.conf nginx/nginx.conf
+            use_compose_file "default"
+            ;;
+        -c)
+            client_build "$FLAG"
+            cp nginx/nginx-dev.conf nginx/nginx.conf
+            use_compose_file "default"
+            ;;
+        -b)
+            cp nginx/nginx-dev.conf nginx/nginx.conf
+            use_compose_file "default"
+            ;;
+        -d)
+            client_build "$FLAG"
+            cp nginx/nginx-dev.conf nginx/nginx.conf
+            use_compose_file "default"
+            ;;
+        -p)
+            client_build "$FLAG"
+            use_compose_file "production"
+            cp nginx/nginx-prod.conf nginx/nginx.conf
+            sudo mkdir -p /srv/elasticsearch/data
+            sudo chown -R 1000:1000 /srv/elasticsearch/data
+            export ELASTIC_ROOT_IP="37.27.128.168"
+            ;;
+        *)
+            echo "Unknown build flag: $FLAG"
+            exit 1
+            ;;
+    esac
+
+    docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" build
+elif [ "$COMMAND" = "production" ]; then
+    use_compose_file "production"
+else
+    use_compose_file "default"
+fi
+
+docker network create --driver bridge shared_bridge 2>/dev/null || true
+docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" up
+
+if [ "$COMMAND" = "build" ] && [ "$FLAG" = "-t" ]; then
+    wait_for_test_service
+fi

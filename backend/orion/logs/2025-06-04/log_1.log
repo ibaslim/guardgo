@@ -1,1 +1,0 @@
-ERROR - 04/06/2025 14:11:04 : ELASTIC : [5] Something unexpected happened while reading : Connection timed out - elastic_controller (/app/orion/services/elastic_manager/elastic_controller.py:79)

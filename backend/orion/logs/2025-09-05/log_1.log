@@ -1,7 +1,0 @@
-ERROR - 05/09/2025 05:18:05 : ELASTIC : [5] Something unexpected happened while reading : BadRequestError(400, 'search_phase_execution_exception', 'No mapping found for [m_leak_date] in order to sort on') - elastic_controller (/app/orion/services/elastic_manager/elastic_controller.py:120)
-ERROR - 05/09/2025 07:42:42 : ARANGO CONNECTION ERROR: [HTTP 409][ERR 1207] duplicate database name 'orion-web' - arango_controller (/app/orion/services/arango_manager/arango_controller.py:40)
-ERROR - 05/09/2025 07:42:42 : ARANGO GRAPH INIT ERROR: 'NoneType' object has no attribute 'has_collection' - arango_controller (/app/orion/services/arango_manager/arango_controller.py:83)
-ERROR - 05/09/2025 11:35:24 : ARANGO CONNECTION ERROR: [HTTP 409][ERR 1207] duplicate database name 'orion-web' - arango_controller (/app/orion/services/arango_manager/arango_controller.py:40)
-ERROR - 05/09/2025 11:35:24 : ARANGO GRAPH INIT ERROR: 'NoneType' object has no attribute 'has_collection' - arango_controller (/app/orion/services/arango_manager/arango_controller.py:83)
-ERROR - 05/09/2025 12:00:01 : ARANGO CONNECTION ERROR: [HTTP 409][ERR 1207] duplicate database name 'orion-web' - arango_controller (/app/orion/services/arango_manager/arango_controller.py:40)
-ERROR - 05/09/2025 12:00:01 : ARANGO GRAPH INIT ERROR: 'NoneType' object has no attribute 'has_collection' - arango_controller (/app/orion/services/arango_manager/arango_controller.py:83)

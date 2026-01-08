@@ -1,0 +1,28 @@
+<div *ngIf="!isCtiGraph()" data-cy="dashboard-main-container">
+  <div id="top" data-cy="top"></div>
+
+  <div class="row dashboard_sidebar-main" id="dashboard__sidebar-main" data-cy="dashboard-sidebar-main">
+
+    <input class="dashboard_menu-toggle" id="dashboard__menu-toggle" name="menu-input" type="radio"
+      data-cy="menu-toggle">
+
+
+
+    <div class="dashboard_container" data-cy="dashboard-container">
+      <div class="dashboard_sub-container dashboard_content-scroll" id="dashboard-container"
+        data-cy="dashboard-sub-container">
+
+        <span [@dashboard-global-animation]="prepareRoute(routerOutlet)" class="dashboard_body"
+          data-cy="dashboard-body">
+
+          <router-outlet #routerOutlet="outlet" data-cy="router-outlet"></router-outlet>
+        </span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div *ngIf="isCtiGraph()" data-cy="cti-graph-container">
+  <router-outlet data-cy="cti-router-outlet"></router-outlet>
+</div>

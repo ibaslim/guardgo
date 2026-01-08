@@ -1,5 +1,0 @@
-ERROR - 30/04/2025 08:57:03 : ELASTIC : [5] Something unexpected happened while reading : Connection timed out - elastic_controller (/app/orion/services/elastic_manager/elastic_controller.py:75)
-ERROR - 30/04/2025 09:59:23 : ELASTIC : Initialization failed: Connection timed out - elastic_controller (/app/orion/services/elastic_manager/elastic_controller.py:52)
-ERROR - 30/04/2025 09:59:26 : ELASTIC : Initialization failed: Connection timed out - elastic_controller (/app/orion/services/elastic_manager/elastic_controller.py:52)
-ERROR - 30/04/2025 09:59:43 : [5] Something unexpected happened while reading : ApiError(503, 'search_phase_execution_exception', None) - elastic_controller (/app/orion/services/elastic_manager/elastic_controller.py:120)
-ERROR - 30/04/2025 15:00:50 : ELASTIC : [5] Something unexpected happened while reading : Connection timed out - elastic_controller (/app/orion/services/elastic_manager/elastic_controller.py:75)

@@ -1,0 +1,217 @@
+import { Injectable, signal } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { AppSettingsModel, ConfigSettings, LocalSettingsModel } from '../../../shared/model/app/config';
+import { AppStorageService } from './app-storage.service';
+import { ApiService } from '../../../shared/services/api.service';
+import { HttpClient } from '@angular/common/http';
+import { tap } from 'rxjs/operators';
+import { license_rules, search_filter_labels } from '../../../shared/constants/shared-enums';
+import { userSessionData } from '../../../shared/model/company-profile/node.model';
+import { TenantModel } from '../../../shared/model/tenant/tenant.model';
+import { Title } from '@angular/platform-browser';
+import { firstValueFrom } from 'rxjs';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class AppService {
+  public configData = signal<ConfigSettings>(new ConfigSettings());
+  public page = signal<number>(1);
+  public entities = signal<any[]>([]);
+
+  private entitiesCache: any[] | null = null;
+
+  public userSessionData = signal<userSessionData>({
+    user: {
+      email: '',
+      twofa_enabled: false,
+      username: '',
+      role: '',
+      status: '',
+      subscription: false,
+      verificationDate: '',
+      license: []
+    },
+    tenant: {
+      id: '',
+      name: '',
+      phone: '',
+      isDefault: false,
+      hasOnboarding: false,
+      country: '',
+      city: '',
+      postalCode: '',
+      taxId: '',
+      userId: '',
+      licenses: [],
+      assignedQuota: '0',
+      quotaExceeded: false
+    },
+    alerts: []
+  });
+  public tenantData = signal<TenantModel>({
+    name: '',
+    iocs: []
+  });
+  public userImageUrl = signal<string | null>(null);
+
+  constructor(private title: Title, private apiService: ApiService, private activatedRoute: ActivatedRoute, private router: Router, private appStorageService: AppStorageService, private http: HttpClient) {
+    this.loadEntities()
+    this.loadLicenseRules()
+    this.activatedRoute.queryParams.subscribe(params => {
+      const pageParam = +params['page'];
+      if (!isNaN(pageParam)) this.updatePage(pageParam);
+    });
+
+    this.loadStaticConfig();
+    this.appStorageService.setupWatcher(this.configData);
+  }
+
+  async loadSession(forced = false): Promise<void> {
+    let token = localStorage.getItem('token');
+    if (token || forced) {
+      try {
+        const session = await firstValueFrom(this.apiService.post<userSessionData>('get/tenant/node', {}));
+        if (session) this.userSessionData.set(session);
+      } catch {
+        this.userSessionData.set({
+          user: {
+            email: '',
+            twofa_enabled: false,
+            username: '',
+            role: '',
+            status: '',
+            subscription: false,
+            verificationDate: '',
+            license: []
+          },
+          tenant: {
+            id: '',
+            name: '',
+            isDefault: false,
+            phone: '',
+            hasOnboarding: false,
+            country: '',
+            city: '',
+            postalCode: '',
+            taxId: '',
+            userId: '',
+            licenses: [],
+            assignedQuota: '0',
+            quotaExceeded: false
+          },
+          alerts: []
+        });
+      }
+    }
+  }
+
+  loadConfig(): void {
+    this.apiService.get<any>('public').subscribe(response => {
+      if (response?.settings) {
+        const current = this.configData();
+        this.configData.set(new ConfigSettings(response.settings, current.localSettings));
+      }
+    });
+  }
+
+  loadStaticConfig(): void {
+    const current = this.configData();
+    const newConfig = this.appStorageService.getStaticConfig(current.appSettings);
+    this.configData.set(newConfig);
+
+  }
+
+  getConfig(): ConfigSettings {
+    return this.configData();
+  }
+
+  set<T extends keyof (AppSettingsModel & LocalSettingsModel)>(key: T, value: (AppSettingsModel & LocalSettingsModel)[T]): void {
+    this.configData.update(current => {
+      const isAppSetting = key in current.appSettings;
+      const updatedAppSettings = isAppSetting ? { ...current.appSettings, [key]: value } : current.appSettings;
+      const updatedLocalSettings = !isAppSetting ? { ...current.localSettings, [key]: value } : current.localSettings;
+      return new ConfigSettings(updatedAppSettings, updatedLocalSettings);
+    });
+    this.title.setTitle(this.getConfig().appSettings.app_name);
+  }
+
+  updatePage(newPage: number): void {
+    this.page.set(newPage);
+    this.router.navigate([], {
+      relativeTo: this.activatedRoute,
+      queryParams: { ...this.activatedRoute.snapshot.queryParams, page: newPage },
+      replaceUrl: true
+    }).then();
+  }
+
+  loadEntities(): void {
+    if (this.entitiesCache) {
+      this.entities.set(this.entitiesCache);
+      return;
+    }
+  }
+
+  loadLicenseRules(): void {
+    this.http.get<any>('assets/data/licenses/license_rules.json').pipe(
+      tap(data => {
+        for (const key in data) {
+          license_rules[key] = data[key];
+        }
+      })
+    ).subscribe();
+  }
+
+  clearAll(): void {
+    this.appStorageService.clearStorage();
+    this.configData.set(new ConfigSettings());
+    this.userImageUrl.set(null);
+    this.userSessionData.set({
+      user: {
+        email: '',
+        twofa_enabled: false,
+        username: '',
+        role: '',
+        status: '',
+        subscription: false,
+        verificationDate: '',
+        license: []
+      },
+      tenant: {
+        id: '',
+        name: '',
+        isDefault: false,
+        phone: '',
+        hasOnboarding: false,
+        country: '',
+        city: '',
+        postalCode: '',
+        taxId: '',
+        userId: '',
+        licenses: [],
+        assignedQuota: '0',
+        quotaExceeded: false
+      },
+      alerts: []
+    });
+  }
+
+  isMobileMode(): boolean {
+    return this.activatedRoute.snapshot.queryParamMap.get('mode') === 'free';
+  }
+
+  setOnboardingStatus(value: boolean) {
+    this.userSessionData.update(state => {
+      if (!state) return state;
+      localStorage.setItem('onboarding', String(value));
+      return {
+        ...state,
+        tenant: {
+          ...state.tenant,
+          hasOnboarding: value
+        }
+      };
+    });
+  }
+
+}

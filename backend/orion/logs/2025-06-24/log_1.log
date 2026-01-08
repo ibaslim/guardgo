@@ -1,2 +1,0 @@
-ERROR - 24/06/2025 09:21:31 : ELASTIC : [5] Something unexpected happened while reading : BadRequestError(400, 'search_phase_execution_exception', 'no mapping found for field [m_content]') - elastic_controller (/app/orion/services/elastic_manager/elastic_controller.py:90)
-ERROR - 24/06/2025 09:30:39 : ELASTIC : [5] Something unexpected happened while reading : BadRequestError(400, 'search_phase_execution_exception', 'no mapping found for field [m_content]') - elastic_controller (/app/orion/services/elastic_manager/elastic_controller.py:90)

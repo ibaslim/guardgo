@@ -1,0 +1,52 @@
+.notification-wrapper {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    pointer-events: none;
+}
+
+.notification-card {
+    background: #b71c1c;
+    padding: 12px 24px;
+    color: #fff;
+    border-radius: 8px;
+    border: 1px solid #ffcccc55;
+    font-weight: 500;
+    opacity: 0;
+    transform: translateY(-10px);
+    animation: fadeInOut 3s forwards ease-in-out;
+    box-shadow: 0 4px 12px rgba(183, 28, 28, 0.4);
+}
+
+@keyframes fadeInOut {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    10% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    90% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+}
+
+.notification-card.success {
+  background: #1b5e20;
+  border: 1px solid #ccffcc55;
+  box-shadow: 0 4px 12px rgba(27, 94, 32, 0.4);
+}
