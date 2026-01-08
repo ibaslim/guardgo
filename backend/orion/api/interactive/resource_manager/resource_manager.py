@@ -54,7 +54,7 @@ class ResourceManager:
         image_path = self.USER_DIR / f"{user_id}.png"
         return FileResponse(image_path if image_path.is_file() else default_path)
 
-    async def get_system_image(self, user_id: str):
+    async def get_system_image(self, _: str):
         default_path = self.SYSTEM_DIR / "default.png"
         image_path = self.SYSTEM_DIR / f"{'logo'}.png"
         return FileResponse(image_path if image_path.is_file() else default_path)

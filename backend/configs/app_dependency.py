@@ -1,12 +1,9 @@
 from typing import Optional
-
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-
 from orion.helper_manager.env_handler import env_handler
 from orion.services.mongo_manager.shared_model.db_auth_models import user_role, UserStatus
 from orion.services.session_manager.session_manager import session_manager
-# from orion.api.interactive.auth_manager.rules.license_rules import LICENSE_RULES
 from orion.constants import constant
 
 oauth2_scheme = OAuth2PasswordBearer(

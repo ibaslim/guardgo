@@ -101,7 +101,7 @@ class config_controller:
 
         return Response(content=data, media_type="image/png")
 
-    async def uploadSystemResource(self, file: UploadFile, current_user):
+    async def uploadSystemResource(self, file: UploadFile, _):
         contents = await file.read()
         MAX_FILE_SIZE = 50 * 1024
 
@@ -123,5 +123,5 @@ class config_controller:
             new_record = db_system_model(key=AllowedKeys.LOGO_URL, value="logo")
             await self._engine.save(new_record)
 
-        
+
         return {"Profile image": "upload complete"}

@@ -1,13 +1,8 @@
-import asyncio
 import re
 from pathlib import Path
-from typing import Optional
-
-from fastapi import APIRouter, Body, Depends, Query
-
-from configs.app_dependency import license_required, role_required, status_required
-from configs.limiter_dependency import limiter_dependency
-from orion.services.mongo_manager.shared_model.db_auth_models import (UserStatus, user_role, )
+from fastapi import APIRouter, Depends
+from configs.app_dependency import status_required
+from orion.services.mongo_manager.shared_model.db_auth_models import UserStatus
 
 _DOCS_DIR = Path(__file__).resolve().parent / "docs" / "api_docs"
 

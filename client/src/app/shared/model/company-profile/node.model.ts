@@ -36,14 +36,6 @@ export interface TenantDataModel {
     image?: string;
 }
 
-export interface userMetaData {
-    username: string;
-    twofa_enabled: boolean;
-    preferences?: {
-        [key: string]: any;
-    };
-}
-
 export interface AlertAllIoc {
     name: string;
     values: string[];

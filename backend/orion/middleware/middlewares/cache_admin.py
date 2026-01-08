@@ -1,4 +1,3 @@
-# middleware_no_cache.py
 from starlette.middleware.base import BaseHTTPMiddleware
 
 

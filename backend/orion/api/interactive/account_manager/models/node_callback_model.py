@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from orion.services.mongo_manager.shared_model.db_auth_models import LicenseName, UserStatus, user_role
 

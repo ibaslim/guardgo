@@ -5,7 +5,7 @@ import { AppStorageService } from './app-storage.service';
 import { ApiService } from '../../../shared/services/api.service';
 import { HttpClient } from '@angular/common/http';
 import { tap } from 'rxjs/operators';
-import { license_rules, search_filter_labels } from '../../../shared/constants/shared-enums';
+import { license_rules } from '../../../shared/constants/shared-enums';
 import { userSessionData } from '../../../shared/model/company-profile/node.model';
 import { TenantModel } from '../../../shared/model/tenant/tenant.model';
 import { Title } from '@angular/platform-browser';

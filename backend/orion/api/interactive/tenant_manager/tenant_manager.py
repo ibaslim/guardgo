@@ -96,7 +96,7 @@ class TenantManager:
 
         tenant = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(tenant_id))
         if not tenant:
-           
+
             raise HTTPException(status_code=401, detail="Onboarding record not found for this user.")
 
         if tenant.is_default:
@@ -164,7 +164,7 @@ class TenantManager:
             for u in extra_users:
                 u.status = UserStatus.DISABLE.value
                 await self._engine.save(u)
-        
+
 
         tenant_data = tenant.model_dump()
         tenant_data["id"] = str(tenant.id)
@@ -263,7 +263,7 @@ class TenantManager:
                 raise HTTPException(status_code=400, detail="User allocated quota exceeded")
 
             if data.role in ["demo"] and current_user.role not in ["admin"]:
-                
+
                 raise HTTPException(status_code=401, detail="You are not allowed to manage this user")
 
             dek = await KeyManager.get_instance().get_profile_dek(str(tenant.id))
@@ -291,7 +291,7 @@ class TenantManager:
                 tenant_uuid=tenant_uuid, )
 
             await engine.save(user)
-           
+
 
             return {"message": "User created successfully", "username": username, "email": email, "tenant_uuid": tenant_uuid, "allowed_licenses": list(
                 tenant_allowed), }
