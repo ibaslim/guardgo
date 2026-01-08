@@ -1,0 +1,37 @@
+*/.dll
+*/.pyc
+client/cypress/downloads/*
+**/_pycache_/
+.idea/*
+env/*
+backend/env/*
+logs/*
+backend/build/*
+staticfiles/*
+mongo-data/*
+static/trustly/.well-known/model/*
+.env
+
+# Optional: Ignore logs or temporary files
+*.log
+*.tmp
+
+# Optional: Ignore backups or hidden files
+*.bak
+*.swp
+client/node_modules/*
+backend/build/*
+
+backend/static/resource/**
+!backend/static/resource/**/
+!backend/static/resource/**/default.png
+
+client/.angular/cache/*
+
+__pycache__/
+*.py[cod]
+
+.DS_Store
+**/.DS_Store
+client/cypress/screenshots/*
+client/coverage/*
