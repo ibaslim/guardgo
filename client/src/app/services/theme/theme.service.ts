@@ -5,6 +5,7 @@ import { Injectable, signal } from '@angular/core';
 })
 export class ThemeService {
   private darkModeSignal = signal<boolean>(false);
+  private readonly DEFAULT_THEME = 'dark';
 
   constructor() {
     this.initializeTheme();
@@ -15,17 +16,17 @@ export class ThemeService {
     if (typeof localStorage !== 'undefined' && typeof document !== 'undefined') {
       let savedTheme = localStorage.getItem('theme');
       
-      // Handle legacy theme values
+      // Handle legacy theme values (one-time migration per user)
       if (savedTheme === 'dark-theme') {
         savedTheme = 'dark';
-        localStorage.setItem('theme', 'dark');
+        localStorage.setItem('theme', savedTheme);
       } else if (savedTheme === 'light-theme') {
         savedTheme = 'light';
-        localStorage.setItem('theme', 'light');
+        localStorage.setItem('theme', savedTheme);
       }
       
-      // Default to dark if no theme is set
-      const isDark = savedTheme === 'dark' || savedTheme === null;
+      // Default to dark if no theme is set (null or undefined)
+      const isDark = savedTheme === 'dark' || savedTheme == null;
       this.darkModeSignal.set(isDark);
       
       // Apply theme to DOM
