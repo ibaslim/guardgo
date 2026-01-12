@@ -357,3 +357,15 @@ table tr:last-child td {
   opacity: 0.2;
   pointer-events: none;
 }
+
+/* Dark mode support for auth page containers */
+html.dark .login-page-container,
+html.dark .onboarding-container,
+html.dark .welcome-page-wrapper {
+  background: #0E1626;
+}
+
+html.dark .login_container {
+  background: #0E1626;
+}
+
