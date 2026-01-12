@@ -19,8 +19,12 @@ export class AppComponent {
   isVisible = true;
 
   constructor(private router: Router, private errorStore: ErrorStoreService, protected appService: AppService) {
-    const theme = localStorage.getItem('theme') || 'dark-theme';
-    document.body.classList.add(theme);
+    const theme = localStorage.getItem('theme') || 'dark';
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
 
     this.error$ = this.errorStore.error$;
 
