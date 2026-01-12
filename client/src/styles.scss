@@ -8,6 +8,7 @@
 @use 'app/shared/partials/forgot-password/reset-password.component.css';
 @use 'app/pages/dashboard/dashboard.component.css';
 @use 'app/shared/partials/message-notification/message-notification.component.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -25,7 +26,7 @@
   --color-blue-840: linear-gradient(90deg, rgb(21 52 84 / 100%) 0%, rgb(22 56 88 / 100%) 100%);
   --color-blue-830: #F6F8FB;
   --color-blue-820: #10335619;
-  --color-blue-820-light: #ffffff;
+  --color-blue-820-light: #fff;
   --color-blue-810: #E3E8EE;
   --color-blue-800: #fff;
   --color-blue-790: #fff;
@@ -35,11 +36,11 @@
   --color-blue-750: #fff;
   --color-blue-740: #0f263e;
   --color-blue-730: #fff;
-  --color-blue-720: #ffffff;
+  --color-blue-720: #fff;
   --color-blue-710: #F6F8FB;
-  --color-blue-700: #ffffff;
+  --color-blue-700: #fff;
   --color-blue-690: #E4E7EC;
-  --color-blue-680: #ffffff;
+  --color-blue-680: #fff;
   --color-blue-670: #14335299;
   --color-blue-660: linear-gradient(to bottom, #174069, #2A5784);
   --color-blue-650: #153454;
@@ -69,30 +70,26 @@
   --color-text6: #37363675;
   --color-text7: #8E1E1E;
   --color-text8: #969696;
-  --color-pagination: #ffffff;
+  --color-pagination: #fff;
   --color-pagination-hover: #E3E8EE;
   --color-scan-light: #c2c2c2;
   --color-consolidated-primary: #fff;
   --color-consolidated-secondary: #F4F7FA;
-
   --color-red-100: #FFF5F5;
   --color-red-200: #FDE8E8;
   --color-border-red: #F5B5B5;
-
   --color-scan-light-100: #F6F8FB;
   --color-scan-light-200: #E7EBF2;
   --color-border-scan-light: #D6DBE3;
   --color-text-scan-light: #2E3A59;
-
   --color-orange-100: #FFF9F3;
   --color-orange-200: #FFF1E0;
   --color-border-orange: #F5CBA7;
   --color-progress: #E7EBF2;
   --color-placeholder: linear-gradient(90deg,
-      rgba(14, 22, 38, 0) 0%,
-      rgba(14, 22, 38, 0.45) 50%,
-      rgba(14, 22, 38, 0) 100%);
-
+      rgb(14 22 38 / 0%) 0%,
+      rgb(14 22 38 / 45%) 50%,
+      rgb(14 22 38 / 0%) 100%);
   --filter-dropdown-icon: url('/assets/images/shared/filter-dropdown-light-icon.svg');
 
 }
@@ -137,7 +134,7 @@ html.dark {
   --color-gray-910: #34435e;
   --color-green-100: #2b2a0f;
   --color-border: #FCFCFC12;
-  --color-mono: #00000000;
+  --color-mono: #0000;
   --color-white: #172235;
   --color-divider: #1f3043b6;
   --color-divider-dark: #1f3043b6;
@@ -149,7 +146,7 @@ html.dark {
   --color-text2: #D0D0D0;
   --color-text3: #D4D4D4;
   --color-text4: #9fb3c8;
-  --color-text5: #ffffff;
+  --color-text5: #fff;
   --color-text6: #A0B8D190;
   --color-text7: #fff;
   --color-text8: #D0D0D0;
@@ -158,25 +155,21 @@ html.dark {
   --color-scan-light: #172235;
   --color-consolidated-primary: #17223550;
   --color-consolidated-secondary: #172235;
-
   --color-red-100: #2b0f0f;
   --color-red-200: #7a1c1c30;
   --color-border-red: #7a1c1c;
-
   --color-scan-light-200: #172235;
-  --color-border-scan-light: rgba(255, 255, 255, .0274509804);
+  --color-border-scan-light: rgb(255 255 255 / 2.75%);
   --color-text-scan-light: #fff;
-
   --color-orange-100: #2b2a0f;
   --color-orange-200: rgb(122 106 28 / 40%);
   --color-border-orange: #7a6a1c;
   --color-border-progress: #111827;
   --color-progress: #111827;
   --color-placeholder: linear-gradient(90deg,
-      rgba(14, 22, 38, 0) 0%,
-      rgba(14, 22, 38, 0.45) 50%,
-      rgba(14, 22, 38, 0) 100%);
-
+      rgb(14 22 38 / 0%) 0%,
+      rgb(14 22 38 / 45%) 50%,
+      rgb(14 22 38 / 0%) 100%);
   --filter-dropdown-icon: url('/assets/images/shared/filter-dropdown-dark-icon.svg');
 }
 
@@ -357,3 +350,15 @@ table tr:last-child td {
   opacity: 0.2;
   pointer-events: none;
 }
+
+/* Dark mode support for auth page containers */
+html.dark .login-page-container,
+html.dark .onboarding-container,
+html.dark .welcome-page-wrapper {
+  background: #0E1626;
+}
+
+html.dark .login_container {
+  background: #0E1626;
+}
+
