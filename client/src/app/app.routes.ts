@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { AuthGuard } from './shared/guards/auth-guard.guard';
 import { LoginComponent } from './pages/login/login.component';
 import { DashboardComponent } from './pages/dashboard/dashboard.component';
+import { DashboardLayoutComponent } from './layouts/dashboard-layout/dashboard-layout.component';
 import { ErrorHandlerComponent } from './shared/partials/error-handler/error-handler.component';
 import { SignupComponent } from './pages/signup/signup.component';
 import { TenantComponent } from './pages/tenant/tenant.component';
@@ -64,7 +65,7 @@ export const routes: Routes = [
   },
   {
     path: 'dashboard',
-    component: DashboardComponent,
+    component: DashboardLayoutComponent,
     canActivate: [AuthGuard],
     resolve: {
       config: ConfigResolver,
@@ -73,9 +74,13 @@ export const routes: Routes = [
     children: [
       {
         path: '',
-        redirectTo: 'profile',
+        redirectTo: 'overview',
         pathMatch: 'full'
       },
+      {
+        path: 'overview',
+        component: DashboardComponent
+      }
     ]
   },
   {
