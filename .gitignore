@@ -36,3 +36,6 @@ __pycache__/
 **/.DS_Store
 client/cypress/screenshots/*
 client/coverage/*
+
+# Client build artifacts
+client/build/*
