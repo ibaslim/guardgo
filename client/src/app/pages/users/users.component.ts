@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 interface User {
@@ -18,7 +18,7 @@ interface User {
   imports: [CommonModule],
   templateUrl: './users.component.html',
 })
-export class UsersComponent implements OnInit {
+export class UsersComponent {
   stats = [
     { name: 'Total Users', value: '2,651', change: '+12%', changeType: 'increase' },
     { name: 'Active Users', value: '1,892', change: '+8%', changeType: 'increase' },
@@ -38,8 +38,4 @@ export class UsersComponent implements OnInit {
     { id: 9, name: 'Tom Garcia', email: 'tom.garcia@example.com', role: 'User', status: 'Inactive', joinedDate: '2023-11-20', initials: 'TG', color: 'bg-orange-500' },
     { id: 10, name: 'Amy Martinez', email: 'amy.m@example.com', role: 'Guest', status: 'Active', joinedDate: '2024-03-28', initials: 'AM', color: 'bg-cyan-500' },
   ];
-
-  constructor() {}
-
-  ngOnInit() {}
 }

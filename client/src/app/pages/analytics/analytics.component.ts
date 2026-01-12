@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 interface TopPage {
@@ -26,7 +26,7 @@ interface Activity {
   imports: [CommonModule],
   templateUrl: './analytics.component.html',
 })
-export class AnalyticsComponent implements OnInit {
+export class AnalyticsComponent {
   metrics = [
     { name: 'Page Views', value: '45,231', change: '+18%', changeType: 'increase' },
     { name: 'Sessions', value: '12,847', change: '+12%', changeType: 'increase' },
@@ -57,8 +57,4 @@ export class AnalyticsComponent implements OnInit {
     { page: '/dashboard/users', views: 43, time: '25 minutes ago' },
     { page: '/reports/monthly', views: 31, time: '32 minutes ago' },
   ];
-
-  constructor() {}
-
-  ngOnInit() {}
 }
