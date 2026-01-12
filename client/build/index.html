@@ -30,7 +30,20 @@
       <meta content="Darkweb search engine optimized for layered networks, privacy, and in-depth indexing of multiple sources including onion, i2p, and riddle." name="description">
       <meta content="Trustly Search Engine" name="author">
 
-<link rel="stylesheet" href="/styles.cb6fd252efa28e03.css"></head>
+      <!-- Dark Mode Initialization Script -->
+      <script>
+            (function() {
+                  try {
+                        const theme = localStorage.getItem('theme');
+                        if (theme === 'dark') {
+                              document.documentElement.classList.add('dark');
+                        }
+                  } catch (e) {
+                        console.error('Failed to initialize theme:', e);
+                  }
+            })();
+      </script>
+<link rel="stylesheet" href="/styles.e08cd766ee80bc4c.css"></head>
 
 <body>
       <noscript>
@@ -39,6 +52,6 @@
             </div>
       </noscript>
       <app-root></app-root>
-<script src="/runtime.4d23378742f4fd9f.js" type="module"></script><script src="/polyfills.575096d47416d2ec.js" type="module"></script><script src="/scripts.cbc41f404d22c487.js" defer></script><script src="/main.bf9b84c464172f40.js" type="module"></script></body>
+<script src="/runtime.4d23378742f4fd9f.js" type="module"></script><script src="/polyfills.575096d47416d2ec.js" type="module"></script><script src="/scripts.cbc41f404d22c487.js" defer></script><script src="/main.d978a3efbd78fb06.js" type="module"></script></body>
 
 </html>

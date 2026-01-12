@@ -34,6 +34,19 @@
             name="description">
       <meta content="Trustly Search Engine" name="author">
 
+      <!-- Dark Mode Initialization Script -->
+      <script>
+            (function() {
+                  try {
+                        const theme = localStorage.getItem('theme');
+                        if (theme === 'dark') {
+                              document.documentElement.classList.add('dark');
+                        }
+                  } catch (e) {
+                        console.error('Failed to initialize theme:', e);
+                  }
+            })();
+      </script>
 </head>
 
 <body>

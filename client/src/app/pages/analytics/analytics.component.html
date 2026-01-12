@@ -1,0 +1,120 @@
+<header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+  <div class="px-4 sm:px-6 lg:px-8 py-4">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Analytics Overview</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Monitor your application metrics and performance</p>
+  </div>
+</header>
+
+<main class="p-4 sm:p-6 lg:p-8">
+  <!-- Metrics Cards -->
+  <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+    @for (metric of metrics; track metric.name) {
+      <div class="bg-white dark:bg-gray-800 overflow-hidden rounded-lg shadow border border-gray-200 dark:border-gray-700">
+        <div class="p-5">
+          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{{ metric.name }}</dt>
+          <dd class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">{{ metric.value }}</dd>
+          <dd [class]="getChangeClass(metric.changeType)" class="mt-2 flex items-baseline text-sm font-semibold">
+            @if (metric.changeType === 'increase') {
+              <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+              </svg>
+            }
+            @if (metric.changeType === 'decrease') {
+              <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+              </svg>
+            }
+            {{ metric.change }}
+          </dd>
+        </div>
+      </div>
+    }
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+    <!-- Chart Placeholder -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+      <div class="px-4 py-5 sm:p-6">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-5">Traffic Trend</h3>
+        <div class="relative h-64 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 rounded-lg flex items-center justify-center">
+          <div class="text-center">
+            <svg class="w-16 h-16 mx-auto text-blue-500 dark:text-blue-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+            </svg>
+            <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Chart Visualization</p>
+            <p class="text-xs text-gray-500 dark:text-gray-500 mt-1">Mock chart placeholder</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top Pages -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+      <div class="px-4 py-5 sm:p-6">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-5">Top Pages</h3>
+        <div class="space-y-4">
+          @for (page of topPages; track page.path) {
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ page.path }}</span>
+                <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ page.views }}</span>
+              </div>
+              <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div 
+                  class="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  [style.width]="getBarWidth(page.percentage)"
+                ></div>
+              </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ page.percentage }}% of total views</div>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Trends Table -->
+  <div class="bg-white dark:bg-gray-800 shadow rounded-lg border border-gray-200 dark:border-gray-700">
+    <div class="px-4 py-5 sm:p-6">
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-5">Recent Trends</h3>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead class="bg-gray-50 dark:bg-gray-900">
+            <tr>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Date
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Page Views
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Sessions
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Bounce Rate
+              </th>
+            </tr>
+          </thead>
+          <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            @for (trend of recentTrends; track trend.date) {
+              <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                  {{ trend.date }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
+                  {{ trend.pageViews }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
+                  {{ trend.sessions }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
+                  {{ trend.bounceRate }}%
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
