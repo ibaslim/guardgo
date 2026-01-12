@@ -1,109 +1,162 @@
-<div class="bg-gray-50 dark:bg-gray-900 min-h-screen text-gray-900 dark:text-white transition-colors duration-200" id="content" *ngIf="!twofaRequired">
-  <div class="login-page-container">
-    <div class="login-form-side">
-      <div class="header-links">
-        <a href="https://drive.google.com/file/d/16NQysXxTdEg5Jx6KNok-rqHvdeM-YOJO/view?usp=sharing" target="_blank"
-          class="header-link">Privacy Policy</a> <a href="https://orionintelligence.org/service/" target="_blank"
-          class="header-link">Our Services</a> <a href="https://orionintelligence.org" target="_blank"
-          class="header-link">About Us</a>
+<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-200" *ngIf="!twofaRequired">
+  <div class="max-w-md w-full space-y-8">
+    <div>
+      <div class="flex justify-center mb-6">
+        <img [src]="appService.getConfig().appSettings.logo_url ? '/api/s/static/system/logo' : 'assets/images/shared/orion-Intelligence-logo.svg'" width="120" height="80" alt="logo" class="dark:brightness-200" />
       </div>
-      <div class="center-content-wrapper">
-        <div class="login-content">
-          <img [src]="appService.getConfig().appSettings.logo_url ? '/api/s/static/system/logo' : 'assets/images/shared/orion-Intelligence-logo.svg'" width="80px" height="54px" alt="logo" class="orion-logo" />
-
-          <div class="login-heading">Login to get started!</div>
-
-          <ng-container *ngIf="isMobile">
-            <div class="d-flex align-items-center gap-2 demo-note" (click)="demoLogin()">
-              <span><img src="/assets/images/shared/info.svg" class="info-icon info-icon-demo" alt=""> &nbsp; Want
-                to explore first? <strong>Try Demo</strong></span>
-            </div>
-          </ng-container>
-
-          <form #loginForm="ngForm" (ngSubmit)="onSubmit(loginForm)" class="login-form">
-            <label for="username" class="input-label">Email</label>
-            <div class="input-with-icon">
-              <img src="/assets/images/shared/profile-icon-dark.svg" alt="profile icon" class="input-icon" />
-              <input [(ngModel)]="user.mail" placeholder="Enter email" class="login-input" name="username" required
-                type="text" />
-            </div>
-
-            <label for=" word" class="input-label mt-2">Password</label>
-            <div class="input-with-icon">
-              <img src="/assets/images/shared/lock.svg" alt="profile icon" class="input-icon" />
-              <input [(ngModel)]="user.password" placeholder="Enter password" class="login-input" name="password"
-                required type="password" />
-            </div>
-
-            <span (click)="goToForgot()" class="reset-password">Reset password?</span>
-
-            <div *ngIf="errorMessage == 'verification pending'" class="d-flex align-items-center justify-content-between mt-2 px-3 py-2 rounded-lg bg-danger bg-opacity-75 text-white shadow-sm">
-              <span class="text-start"><b>{{ errorMessage }}</b></span>
-              <button (click)="resendMail()" class="btn btn-light btn-sm ms-3">
-                Resend mail
-              </button>
-            </div>
-
-            <div *ngIf="errorMessage && errorMessage != 'verification pending'" class="d-inline-block mt-2 px-3 py-2 rounded-lg bg-danger bg-opacity-75 text-white shadow-sm text-center">
-              <i class="bi bi-exclamation-diamond-fill me-2"></i>
-              {{ errorMessage }}
-            </div>
-
-            <div>
-              <input [class.login-button]="loginForm.valid" [class.login-button-disable]="!loginForm.valid"
-                type="submit" value="Sign In" />
-            </div>
-          </form>
-
-          <p class="signup-text">
-            Don't have an account? <span (click)="goToSignUp()" class="signup-link cursor-pointer">Sign Up</span>
-          </p>
+      <h2 class="mt-6 text-center text-4xl font-extrabold text-gray-900 dark:text-white">
+        Sign in to your account
+      </h2>
+      <p class="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
+        Welcome back to {{ appService.getConfig().appSettings.app_name || 'GuardGo' }}
+      </p>
+    </div>
+    <form #loginForm="ngForm" class="mt-8 space-y-6 bg-white dark:bg-gray-800 shadow-xl rounded-lg p-8" (ngSubmit)="onSubmit(loginForm)">
+      <div class="rounded-md shadow-sm space-y-4">
+        <div>
+          <label for="email-address" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Email address
+          </label>
+          <input
+            id="email-address"
+            name="username"
+            type="email"
+            [(ngModel)]="user.mail"
+            required
+            class="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white dark:bg-gray-700 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+            placeholder="Enter your email"
+          />
+        </div>
+        <div>
+          <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Password
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            [(ngModel)]="user.password"
+            required
+            class="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white dark:bg-gray-700 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+            placeholder="Enter your password"
+          />
         </div>
       </div>
 
-      <div class="footer-copyright">
-        <p>Copyright &copy; 2025. Powered by</p>
-        <p>{{ this.appService.getConfig().appSettings.app_name }}</p>
+      <div class="flex items-center justify-between">
+        <div class="text-sm">
+          <a (click)="goToForgot()" class="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 cursor-pointer">
+            Forgot your password?
+          </a>
+        </div>
       </div>
-    </div>
 
-    <div class="dashboard-preview-side">
-      <img src="/assets/images/shared/auth_dashboard_icon.svg" alt="Dashboard Preview" class="dashboard-visual" />
-    </div>
+      <div *ngIf="isMobile" class="rounded-md bg-blue-50 dark:bg-blue-900 p-4 cursor-pointer" (click)="demoLogin()">
+        <p class="text-sm text-blue-700 dark:text-blue-300">
+          Want to explore first? <strong>Try Demo</strong>
+        </p>
+      </div>
+
+      <div *ngIf="errorMessage == 'verification pending'" class="rounded-md bg-red-50 dark:bg-red-900 p-4">
+        <div class="flex items-center justify-between">
+          <div class="flex">
+            <div class="ml-3">
+              <h3 class="text-sm font-medium text-red-800 dark:text-red-300">
+                {{ errorMessage }}
+              </h3>
+            </div>
+          </div>
+          <button (click)="resendMail()" type="button" class="ml-3 px-3 py-1 bg-white dark:bg-gray-700 text-red-800 dark:text-red-300 text-sm font-medium rounded-md hover:bg-gray-50 dark:hover:bg-gray-600">
+            Resend mail
+          </button>
+        </div>
+      </div>
+
+      <div *ngIf="errorMessage && errorMessage != 'verification pending'" class="rounded-md bg-red-50 dark:bg-red-900 p-4">
+        <div class="flex">
+          <div class="ml-3">
+            <h3 class="text-sm font-medium text-red-800 dark:text-red-300">
+              {{ errorMessage }}
+            </h3>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <button
+          type="submit"
+          [disabled]="!loginForm.valid"
+          class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150"
+        >
+          Sign in
+        </button>
+      </div>
+
+      <div class="text-center">
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+          Don't have an account?
+          <a (click)="goToSignUp()" class="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 ml-1 cursor-pointer">
+            Create one now
+          </a>
+        </p>
+      </div>
+    </form>
   </div>
 </div>
 
-<div *ngIf="twofaRequired" class="login_container" [class.twofaextend]="otpSecret" id="content">
-  <div class="login_box">
-    <div class="login_header">
-      <img alt="logo" height="41" src="assets/images/shared/home-logo.svg" width="232">
+
+<div *ngIf="twofaRequired" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-12 px-4 sm:px-6 lg:px-8">
+  <div class="max-w-md w-full space-y-6 bg-white dark:bg-gray-800 shadow-xl rounded-lg p-8">
+    <div class="flex justify-center mb-4">
+      <img alt="logo" class="h-12 dark:brightness-200" src="assets/images/shared/home-logo.svg">
     </div>
 
-    <p *ngIf="errorMessage" class="text-warning"><b>{{ errorMessage }}</b></p>
-    <div *ngIf="otpDataUrl" class="login_form-group twofa-center">
-      <img [src]="otpDataUrl" alt="2FA QR" width="200" height="200">
+    <div *ngIf="errorMessage" class="rounded-md bg-yellow-50 dark:bg-yellow-900 p-4">
+      <p class="text-sm font-medium text-yellow-800 dark:text-yellow-300">{{ errorMessage }}</p>
     </div>
 
-    <p *ngIf="otpSecret" class="text-white mt-4"><b>Keep your secret key safe in case you lose access to your
-        authenticator app</b></p>
-    <div *ngIf="otpSecret" class="alert alert-warning cursor-pointer" role="alert" (click)="copyToClipboard(otpSecret)">
-      <div class="d-flex align-items-center">
-        <img src="assets/images/shared/copy-dark.svg" alt="Copy" width="20px" height="20px" class="copy-icon"> <strong
-          class="me-2 ml-3">{{ otpSecret }}</strong> <span *ngIf="copied" class="ml-2">Copied!</span>
+    <div *ngIf="otpDataUrl" class="flex justify-center my-6">
+      <img [src]="otpDataUrl" alt="2FA QR" width="200" height="200" class="rounded-lg shadow-md">
+    </div>
+
+    <p *ngIf="otpSecret" class="text-sm font-medium text-gray-700 dark:text-gray-300 text-center">
+      <b>Keep your secret key safe in case you lose access to your authenticator app</b>
+    </p>
+
+    <div *ngIf="otpSecret" class="rounded-md bg-yellow-50 dark:bg-yellow-900 p-4 cursor-pointer" (click)="copyToClipboard(otpSecret)">
+      <div class="flex items-center justify-center space-x-2">
+        <svg class="w-5 h-5 text-yellow-800 dark:text-yellow-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+        </svg>
+        <strong class="text-sm font-mono text-yellow-800 dark:text-yellow-300">{{ otpSecret }}</strong>
+        <span *ngIf="copied" class="text-xs text-green-600 dark:text-green-400">Copied!</span>
       </div>
     </div>
 
-    <form (ngSubmit)="submitOtp()">
-      <div class="login_form-group">
-        <label class="login_hidden-label" for="id_otp">OTP</label> <input [(ngModel)]="otpCode" name="otpCode"
-          class="login_input" id="id_otp" placeholder="Authentication code" required minlength="6" maxlength="6"
-          type="text">
+    <form (ngSubmit)="submitOtp()" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" for="id_otp">
+          Authentication Code
+        </label>
+        <input
+          [(ngModel)]="otpCode"
+          name="otpCode"
+          class="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white dark:bg-gray-700 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          id="id_otp"
+          placeholder="Enter 6-digit code"
+          required
+          minlength="6"
+          maxlength="6"
+          type="text"
+        />
       </div>
 
-      <div class="login-button-container">
-        <button type="submit" [disabled]="!otpCode || otpCode.length < 6"
-          [class.login_btn-submit]="otpCode && otpCode.length === 6"
-          [class.login_btn-disabled]="!otpCode || otpCode.length < 6">
+      <div>
+        <button
+          type="submit"
+          [disabled]="!otpCode || otpCode.length < 6"
+          class="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150"
+        >
           Verify OTP
         </button>
       </div>
