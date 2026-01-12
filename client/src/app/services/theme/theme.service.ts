@@ -7,10 +7,33 @@ export class ThemeService {
   private darkModeSignal = signal<boolean>(false);
 
   constructor() {
+    this.initializeTheme();
+  }
+
+  private initializeTheme() {
     // Initialize from localStorage (client-side only)
-    if (typeof localStorage !== 'undefined') {
-      const savedTheme = localStorage.getItem('theme');
-      this.darkModeSignal.set(savedTheme === 'dark');
+    if (typeof localStorage !== 'undefined' && typeof document !== 'undefined') {
+      let savedTheme = localStorage.getItem('theme');
+      
+      // Handle legacy theme values
+      if (savedTheme === 'dark-theme') {
+        savedTheme = 'dark';
+        localStorage.setItem('theme', 'dark');
+      } else if (savedTheme === 'light-theme') {
+        savedTheme = 'light';
+        localStorage.setItem('theme', 'light');
+      }
+      
+      // Default to dark if no theme is set
+      const isDark = savedTheme === 'dark' || (!savedTheme);
+      this.darkModeSignal.set(isDark);
+      
+      // Apply theme to DOM
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
     }
   }
 

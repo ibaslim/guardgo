@@ -6,6 +6,7 @@ import { NgIf } from '@angular/common';
 import { AppService } from '../../services/core/app/app.service';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MessageNotificationComponent } from '../../shared/partials/message-notification/message-notification.component';
+import { ThemeService } from '../../services/theme/theme.service';
 
 @Component({
   selector: 'app-root',
@@ -18,24 +19,13 @@ export class AppComponent {
   error$: Observable<boolean>;
   isVisible = true;
 
-  constructor(private router: Router, private errorStore: ErrorStoreService, protected appService: AppService) {
-    let theme = localStorage.getItem('theme') || 'dark';
-    
-    // Handle legacy theme values
-    if (theme === 'dark-theme') {
-      theme = 'dark';
-      localStorage.setItem('theme', 'dark');
-    } else if (theme === 'light-theme') {
-      theme = 'light';
-      localStorage.setItem('theme', 'light');
-    }
-    
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-
+  constructor(
+    private router: Router, 
+    private errorStore: ErrorStoreService, 
+    protected appService: AppService,
+    private themeService: ThemeService
+  ) {
+    // ThemeService constructor handles theme initialization
     this.error$ = this.errorStore.error$;
 
     this.router.events.pipe(filter(event => event instanceof NavigationEnd), map(() => {
