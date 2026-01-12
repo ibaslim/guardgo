@@ -25,10 +25,16 @@ export class ThemeService {
       }
       
       // Default to dark if no theme is set
-      const isDark = savedTheme === 'dark' || (!savedTheme);
+      const isDark = savedTheme === 'dark' || savedTheme === null;
       this.darkModeSignal.set(isDark);
       
       // Apply theme to DOM
+      this.applyThemeToDOM(isDark);
+    }
+  }
+
+  private applyThemeToDOM(isDark: boolean) {
+    if (typeof document !== 'undefined') {
       if (isDark) {
         document.documentElement.classList.add('dark');
       } else {
@@ -44,14 +50,7 @@ export class ThemeService {
   toggleTheme() {
     const newMode = !this.darkModeSignal();
     this.darkModeSignal.set(newMode);
-
-    if (typeof document !== 'undefined') {
-      if (newMode) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    }
+    this.applyThemeToDOM(newMode);
 
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('theme', newMode ? 'dark' : 'light');
