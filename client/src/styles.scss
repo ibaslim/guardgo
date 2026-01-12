@@ -97,7 +97,7 @@
 
 }
 
-.dark-theme {
+:root.dark {
   --color-blur-920: #172235;
   --color-blur-910: #0b1020;
   --color-blue-900: #172235;
@@ -186,9 +186,9 @@ img[src*="assets/images/statistics/"]:not([data-ph]) {
   filter: brightness(0.3) contrast(95%) drop-shadow(0 0 0 var(--color-text1)) !important;
 }
 
-.dark-theme img[src*="assets/images/shared/theme"]:not([data-ph]),
-.dark-theme img[src*="assets/images/sidebar/theme"]:not([data-ph]),
-.dark-theme img[src*="assets/images/statistics/"]:not([data-ph]) {
+:root.dark img[src*="assets/images/shared/theme"]:not([data-ph]),
+:root.dark img[src*="assets/images/sidebar/theme"]:not([data-ph]),
+:root.dark img[src*="assets/images/statistics/"]:not([data-ph]) {
   filter: drop-shadow(0 0 0 var(--color-text1)) !important;
 }
 
@@ -203,19 +203,19 @@ html {
 
 body {
   margin: 0;
-  background: #00000000;
+  background: transparent;
   height: 100dvh;
   min-width: 350px !important;
   min-height: 100dvh;
   scrollbar-width: none;
 }
 
-body.dark-theme {
+:root.dark body {
   background-color: #0E1626;
 }
 
-body.light-theme {
-  background-color: linear-gradient(to bottom, rgb(18 52 84 / 100%), rgb(41 87 132 / 100%) 20vh, rgb(41 87 132 / 100%) 100%);
+:root:not(.dark) body {
+  background: linear-gradient(to bottom, rgb(18 52 84 / 100%), rgb(41 87 132 / 100%) 20vh, rgb(41 87 132 / 100%) 100%);
 }
 
 body::-webkit-scrollbar,
@@ -255,7 +255,7 @@ img[data-ph] {
   animation: shimmer-dark 1.6s linear infinite;
 }
 
-.dark-theme img[data-ph] {
+:root.dark img[data-ph] {
   background:
     var(--color-placeholder),
     url('/assets/images/shared/placeholder.svg') center/cover no-repeat;
