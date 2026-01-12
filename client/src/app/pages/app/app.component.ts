@@ -19,7 +19,17 @@ export class AppComponent {
   isVisible = true;
 
   constructor(private router: Router, private errorStore: ErrorStoreService, protected appService: AppService) {
-    const theme = localStorage.getItem('theme') || 'dark';
+    let theme = localStorage.getItem('theme') || 'dark';
+    
+    // Handle legacy theme values
+    if (theme === 'dark-theme') {
+      theme = 'dark';
+      localStorage.setItem('theme', 'dark');
+    } else if (theme === 'light-theme') {
+      theme = 'light';
+      localStorage.setItem('theme', 'light');
+    }
+    
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
