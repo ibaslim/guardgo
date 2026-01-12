@@ -11,6 +11,8 @@ import { ResetPasswordComponent } from './shared/partials/forgot-password/reset-
 import { TenantGuard } from './shared/guards/tenant-guard.guard';
 import { NotificationComponent } from './shared/partials/notification/notification.component';
 import { ConfigResolver } from './shared/resolvers/config.resolver';
+import { UsersComponent } from './pages/users/users.component';
+import { AnalyticsComponent } from './pages/analytics/analytics.component';
 
 export const routes: Routes = [
 
@@ -80,6 +82,14 @@ export const routes: Routes = [
       {
         path: 'overview',
         component: DashboardComponent
+      },
+      {
+        path: 'users',
+        component: UsersComponent
+      },
+      {
+        path: 'analytics',
+        component: AnalyticsComponent
       }
     ]
   },

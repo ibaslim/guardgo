@@ -34,6 +34,16 @@
             name="description">
       <meta content="Trustly Search Engine" name="author">
 
+      <!-- Initialize dark mode before Angular boots to prevent flash -->
+      <script>
+            (function() {
+                  const theme = localStorage.getItem('theme');
+                  if (theme === 'dark') {
+                        document.documentElement.classList.add('dark');
+                  }
+            })();
+      </script>
+
 </head>
 
 <body>
