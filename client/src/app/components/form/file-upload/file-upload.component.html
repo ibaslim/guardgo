@@ -1,0 +1,14 @@
+<div class="w-full">
+  <label *ngIf="label" class="block mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">{{ label }}<span *ngIf="required" class="text-red-500">*</span></label>
+  <div class="flex items-center justify-center w-full">
+    <label class="flex flex-col items-center w-full px-4 py-6 bg-white dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 cursor-pointer hover:border-blue-500 transition">
+      <svg class="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4a1 1 0 011-1h8a1 1 0 011 1v12m-4 4v-4m0 0l-4-4m4 4l4-4" />
+      </svg>
+      <span class="text-sm text-gray-600 dark:text-gray-400 mb-2">Click to upload or drag and drop</span>
+      <input type="file" class="hidden" [required]="required" [disabled]="disabled" (change)="onFileChange($event)" />
+    </label>
+  </div>
+  <div *ngIf="helperText" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ helperText }}</div>
+  <div *ngIf="errorText" class="mt-1 text-xs text-red-500">{{ errorText }}</div>
+</div>

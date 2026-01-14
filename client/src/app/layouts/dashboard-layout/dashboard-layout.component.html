@@ -34,6 +34,24 @@
           }
         </a>
 
+        <a routerLink="/dashboard/components-demo" routerLinkActive="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          @if (!sidebarCollapsed) {
+            <span class="ml-3">Components Demo</span>
+          }
+        </a>
+
+        <a routerLink="/dashboard/forms" routerLinkActive="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 6h8M8 12h8M8 18h8" />
+          </svg>
+          @if (!sidebarCollapsed) {
+            <span class="ml-3">Forms</span>
+          }
+        </a>
+
         <a routerLink="/dashboard/users" routerLinkActive="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20" class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -106,6 +124,34 @@
     [class.ml-20]="sidebarCollapsed"
     class="transition-all duration-300 bg-gray-50 dark:bg-gray-900 min-h-screen"
   >
+    <!-- Top Navbar -->
+    <header class="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+      <div></div>
+      <div class="relative user-menu-container avatar" (click)="$event.stopPropagation()">
+        <button type="button" class="flex items-center gap-3 rounded-full focus:outline-none group bg-transparent border-none p-0" (click)="showUserMenu = !showUserMenu">
+          <app-avatar
+            class="avatar"
+            [name]="'Jane Doe'"
+            [src]="'https://randomuser.me/api/portraits/women/44.jpg'"
+          ></app-avatar>
+          <div class="hidden sm:flex flex-col text-left">
+            <span class="font-medium text-gray-900 dark:text-gray-100 text-sm">Jane Doe</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400">jane.doe&#64;email.com</span>
+          </div>
+          <svg class="w-4 h-4 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        <div *ngIf="showUserMenu" class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+          <div class="py-2">
+            <a href="#" class="block px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Profile</a>
+            <a href="#" class="block px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">User Settings</a>
+            <a href="#" class="block px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Dashboard</a>
+            <a href="#" class="block px-4 py-2 text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700">Logout</a>
+          </div>
+        </div>
+      </div>
+    </header>
     <router-outlet></router-outlet>
   </div>
 </div>

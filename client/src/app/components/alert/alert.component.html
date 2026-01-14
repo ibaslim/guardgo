@@ -1,0 +1,14 @@
+<div *ngIf="!closedState" [ngClass]="{
+  'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border border-green-200 dark:border-green-700': type === 'success',
+  'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 border border-red-200 dark:border-red-700': type === 'error',
+  'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-700': type === 'info',
+  'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 border border-yellow-200 dark:border-yellow-700': type === 'warning'
+}" class="p-3 rounded mb-2 flex items-start gap-2 relative">
+  <span class="flex-1">{{ message }}</span>
+  <button
+    type="button"
+    aria-label="Close alert"
+    (click)="close()"
+    class="absolute top-2 right-2 text-lg text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 px-1 rounded focus:outline-none"
+  >&times;</button>
+</div>

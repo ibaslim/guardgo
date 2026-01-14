@@ -8,10 +8,11 @@ import {AppService} from '../../../services/core/app/app.service';
 
 import QRCode from 'qrcode';
 
+import { BaseInputComponent } from '../../../components/form/base-input/base-input.component';
 @Component({
   selector: 'app-login-container',
   standalone: true,
-  imports: [FormsModule, NgIf, CommonModule],
+  imports: [FormsModule, NgIf, CommonModule, BaseInputComponent],
   templateUrl: './login-container.component.html',
 })
 export class LoginContainerComponent implements OnInit, OnDestroy {

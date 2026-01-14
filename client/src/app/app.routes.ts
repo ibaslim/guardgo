@@ -13,8 +13,11 @@ import { NotificationComponent } from './shared/partials/notification/notificati
 import { ConfigResolver } from './shared/resolvers/config.resolver';
 import { UsersComponent } from './pages/users/users.component';
 import { AnalyticsComponent } from './pages/analytics/analytics.component';
+import { ComponentsDemoComponent } from './pages/components-demo/components-demo.component';
 
 export const routes: Routes = [
+
+
 
   {
     path: '',
@@ -90,12 +93,20 @@ export const routes: Routes = [
       {
         path: 'analytics',
         component: AnalyticsComponent
+      },
+      {
+        path: 'components-demo',
+        loadComponent: () => import('./pages/components-demo/components-demo.component').then(m => m.ComponentsDemoComponent)
+      },
+      {
+        path: 'forms',
+        loadComponent: () => import('./pages/forms/forms-page.component').then(m => m.FormsPageComponent)
       }
     ]
   },
   {
     path: '**',
-    component: ErrorHandlerComponent,
+    loadComponent: () => import('./pages/not-found/not-found.component').then(m => m.NotFoundComponent),
     data: { animation: 'ErrorPage' }
   }
 ];

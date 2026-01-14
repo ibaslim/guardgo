@@ -4,10 +4,11 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../../services/authetication/auth.service';
 import { NgForm, FormsModule } from '@angular/forms';
 
+import { BaseInputComponent } from '../../../components/form/base-input/base-input.component';
 @Component({
   selector: 'app-forgot-password',
   templateUrl: './reset-password.component.html',
-  imports: [FormsModule, NgIf, CommonModule]
+  imports: [FormsModule, NgIf, CommonModule, BaseInputComponent]
 })
 export class ResetPasswordComponent implements OnInit {
   email = '';

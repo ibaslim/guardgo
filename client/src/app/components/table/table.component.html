@@ -1,0 +1,99 @@
+<div class="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+  <input
+    type="text"
+    [(ngModel)]="filter"
+    placeholder="Search..."
+    class="block w-64 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none"
+  />
+</div>
+<div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow">
+  <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+    <thead class="bg-gray-50 dark:bg-gray-800">
+      <tr>
+        <th class="px-6 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider cursor-pointer select-none group sticky top-0 bg-gray-50 dark:bg-gray-800 z-20">Name</th>
+        <th class="px-6 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider cursor-pointer select-none group sticky top-0 bg-gray-50 dark:bg-gray-800 z-20">Email</th>
+        <th class="px-6 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider cursor-pointer select-none group sticky top-0 bg-gray-50 dark:bg-gray-800 z-20">Role</th>
+        <th class="px-6 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider cursor-pointer select-none group sticky top-0 bg-gray-50 dark:bg-gray-800 z-20">Status</th>
+        <th class="px-6 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider cursor-pointer select-none group sticky top-0 bg-gray-50 dark:bg-gray-800 z-20">Joined</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+      <ng-container *ngIf="loading; else tableRows">
+        <tr *ngFor="let _ of [1,2,3,4,5]">
+          <td colspan="5" class="px-6 py-4">
+            <div class="h-4 rounded bg-gray-200 dark:bg-gray-700 w-full animate-pulse"></div>
+          </td>
+        </tr>
+      </ng-container>
+      <ng-template #tableRows>
+        <tr *ngIf="!loading && pagedData.length === 0">
+          <td colspan="5" class="px-6 py-10 text-center text-gray-400 dark:text-gray-500">
+            <div class="flex flex-col items-center justify-center gap-2">
+              <svg class="w-12 h-12 mb-2 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 48 48"><circle cx="24" cy="24" r="22" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 24h16M16 32h8"/></svg>
+              <div class="font-semibold text-gray-400 dark:text-gray-500">No data found</div>
+              <div class="text-xs text-gray-400 dark:text-gray-600">Try adjusting your filter or search criteria.</div>
+            </div>
+          </td>
+        </tr>
+        <tr *ngFor="let row of pagedData; let i = index" [ngClass]="{
+            'bg-white dark:bg-gray-900': i % 2 === 0,
+            'bg-gray-50 dark:bg-gray-800': i % 2 === 1,
+            'hover:bg-blue-50 dark:hover:bg-blue-900': true
+          }" class="transition">
+          <td class="px-6 py-4 whitespace-nowrap">
+            <div class="flex items-center gap-3">
+              <app-avatar [name]="row['FirstName'] + ' ' + row['LastName']" [src]="row['Avatar']"></app-avatar>
+              <div>
+                <div class="font-medium text-gray-900 dark:text-gray-100">{{ row['FirstName'] }} {{ row['LastName'] }}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">{{ row['Email'] }}</div>
+              </div>
+            </div>
+          </td>
+          <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ row['Email'] }}</td>
+          <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ row['Role'] }}</td>
+          <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+            <app-badge
+              [label]="row['Status']"
+              [color]="getBadgeColor(badgeMap && badgeMap[row['Status']] ? badgeMap[row['Status']] : 'secondary')"
+            ></app-badge>
+          </td>
+          <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">{{ row['Joined'] }}</td>
+        </tr>
+      </ng-template>
+    </tbody>
+  </table>
+</div>
+<div class="flex items-center justify-between mt-6">
+  <div class="text-sm text-gray-500 dark:text-gray-400">
+    Page {{ page }} of {{ totalPages }}
+  </div>
+  <nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+    <button
+      class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-medium text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 focus:z-20 focus:outline-none"
+      [disabled]="page === 1"
+      (click)="setPage(page - 1)"
+    >
+      <span class="sr-only">Previous</span>
+      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+    </button>
+    <ng-container *ngFor="let p of [].constructor(totalPages); let i = index">
+      <button
+        (click)="setPage(i + 1)"
+        [ngClass]="{
+          'bg-blue-50 text-blue-600 border-blue-500 z-10': page === i + 1,
+          'dark:bg-blue-900 dark:text-blue-200 dark:border-blue-400': page === i + 1,
+          'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-700': page !== i + 1
+        }"
+        class="relative inline-flex items-center px-4 py-2 border text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 focus:z-20 focus:outline-none"
+      >{{ i + 1 }}</button>
+    </ng-container>
+    <button
+      class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-medium text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 focus:z-20 focus:outline-none"
+      [disabled]="page === totalPages"
+      (click)="setPage(page + 1)"
+    >
+      <span class="sr-only">Next</span>
+      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+    </button>
+  </nav>
+</div>

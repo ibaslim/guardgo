@@ -1,0 +1,12 @@
+<div
+  class="relative overflow-hidden bg-gray-200 dark:bg-gray-700"
+  [ngStyle]="{ width: width, height: height }"
+  [ngClass]="{
+    'rounded': rounded === 'md',
+    'rounded-full': rounded === 'full',
+    'rounded-lg': rounded === 'lg',
+    'rounded-sm': rounded === 'sm'
+  }"
+>
+  <span class="absolute inset-0 block w-full h-full shimmer"></span>
+</div>

@@ -1,0 +1,21 @@
+<div class="w-full">
+  <label *ngIf="label" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">{{ label }}<span *ngIf="required" class="text-red-500">*</span></label>
+  <div class="relative select-dropdown">
+    <button type="button" class="block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2 text-left text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed" [class.text-gray-400]="!value" (click)="dropdownOpen = !dropdownOpen" [disabled]="disabled">
+      <span *ngIf="value; else placeholderBlock">{{ getSelectedLabel() }}</span>
+      <ng-template #placeholderBlock><span class="text-gray-400">{{ placeholder || 'Select...' }}</span></ng-template>
+      <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+    </button>
+    <div *ngIf="dropdownOpen" class="absolute z-10 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+      <input *ngIf="searchable" type="text" [(ngModel)]="search" [placeholder]="placeholder || 'Search...'" class="block w-full rounded-t-lg border-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2 text-sm text-gray-900 dark:text-gray-100 focus:ring-0 focus:outline-none" [disabled]="disabled" />
+      <div class="max-h-60 overflow-y-auto">
+        <div *ngFor="let opt of filteredOptions" (click)="selectOption(opt.value)" class="px-4 py-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-800 text-sm text-gray-900 dark:text-gray-100" [class.bg-blue-100]="value === opt.value">
+          {{ opt.label }}
+        </div>
+        <div *ngIf="filteredOptions.length === 0" class="px-4 py-2 text-gray-400 text-sm">No options</div>
+      </div>
+    </div>
+  </div>
+  <div *ngIf="helperText" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ helperText }}</div>
+  <div *ngIf="errorText" class="mt-1 text-xs text-red-500">{{ errorText }}</div>
+</div>

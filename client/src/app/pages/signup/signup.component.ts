@@ -1,6 +1,7 @@
 import {Component, OnInit} from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
 import {CommonModule} from '@angular/common';
+import { BaseInputComponent } from '../../components/form/base-input/base-input.component';
 import {FormsModule, NgForm} from '@angular/forms';
 import {AuthService} from '../../services/authetication/auth.service';
 import {AppService} from '../../services/core/app/app.service';
@@ -8,7 +9,7 @@ import {AppService} from '../../services/core/app/app.service';
 @Component({
   selector: 'app-signup',
   standalone: true,
-  imports: [FormsModule, CommonModule],
+  imports: [FormsModule, CommonModule, BaseInputComponent],
   templateUrl: './signup.component.html'
 })
 export class SignupComponent implements OnInit {

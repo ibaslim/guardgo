@@ -14,32 +14,24 @@
     <form #loginForm="ngForm" class="mt-8 space-y-6 bg-white dark:bg-gray-800 shadow-xl rounded-lg p-8" (ngSubmit)="onSubmit(loginForm)">
       <div class="rounded-md shadow-sm space-y-4">
         <div>
-          <label for="email-address" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Email address
-          </label>
-          <input
-            id="email-address"
+          <app-base-input
+            label="Email address"
             name="username"
             type="email"
             [(ngModel)]="user.mail"
-            required
-            class="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white dark:bg-gray-700 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-            placeholder="Enter your email"
-          />
+            [required]="true"
+            [placeholder]="'Enter your email'"
+          ></app-base-input>
         </div>
         <div>
-          <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Password
-          </label>
-          <input
-            id="password"
+          <app-base-input
+            label="Password"
             name="password"
             type="password"
             [(ngModel)]="user.password"
-            required
-            class="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white dark:bg-gray-700 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-            placeholder="Enter your password"
-          />
+            [required]="true"
+            [placeholder]="'Enter your password'"
+          ></app-base-input>
         </div>
       </div>
 

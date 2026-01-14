@@ -1,0 +1,254 @@
+
+<header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+  <div class="px-4 sm:px-6 lg:px-8 py-4">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Reusable Components Demo</h1>
+  </div>
+</header>
+
+<main class="p-4 sm:p-6 lg:p-8">
+  <!-- Alerts -->
+  <section>
+    <h2 class="text-xl font-semibold mb-2">Alerts</h2>
+    <div class="space-y-2">
+      <app-alert type="success" message="This is a success alert!"></app-alert>
+      <app-alert type="error" message="This is an error alert!"></app-alert>
+      <app-alert type="info" message="This is an info alert!"></app-alert>
+      <app-alert type="warning" message="This is a warning alert!"></app-alert>
+      <app-alert *ngIf="showClosableAlert" type="info" message="This alert can be closed!" [closable]="true" (closed)="showClosableAlert = false"></app-alert>
+    </div>
+
+  <!-- Buttons -->
+  <section>
+    <h2 class="text-xl font-semibold mb-2">Buttons</h2>
+    <div class="flex flex-wrap gap-3 items-center">
+      <app-button label="Primary" type="primary"></app-button>
+      <app-button label="Secondary" type="secondary"></app-button>
+      <app-button label="Success" type="success"></app-button>
+      <app-button label="Danger" type="danger"></app-button>
+      <app-button label="Warning" type="warning"></app-button>
+      <app-button label="Info" type="info"></app-button>
+      <app-button label="Outline" type="outline"></app-button>
+      <app-button label="Link" type="link"></app-button>
+      <app-button label="Disabled" [disabled]="true"></app-button>
+      <app-button type="primary"><span icon class="mr-2">🔍</span>With Icon</app-button>
+    </div>
+  </section>
+
+  <!-- Badges -->
+  <section>
+    <h2 class="text-xl font-semibold mb-2">Badges</h2>
+    <div class="flex gap-2 flex-wrap">
+      <app-badge label="Primary" color="primary"></app-badge>
+      <app-badge label="Success" color="success"></app-badge>
+      <app-badge label="Danger" color="danger"></app-badge>
+      <app-badge label="Secondary" color="secondary"></app-badge>
+    </div>
+  </section>
+
+  <!-- Avatars -->
+  <section>
+    <h2 class="text-xl font-semibold mb-2">Avatars</h2>
+    <div class="flex gap-4 items-center">
+      <app-avatar src="https://i.pravatar.cc/100?img=1" name="Alice"></app-avatar>
+      <app-avatar name="Bob"></app-avatar>
+      <app-avatar></app-avatar>
+    </div>
+  </section>
+
+  <!-- Placeloads -->
+  <section>
+    <h2 class="text-xl font-semibold mb-2">Placeload (Skeleton)</h2>
+
+    <!-- Tailwind UI Card Skeleton -->
+    <div class="mx-auto w-full max-w-sm rounded-md border border-blue-300 p-4 mb-6">
+      <div class="flex animate-pulse space-x-4">
+        <div class="size-10 rounded-full bg-gray-200 dark:bg-gray-700"></div>
+        <div class="flex-1 space-y-6 py-1">
+          <div class="h-2 rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div class="space-y-3">
+            <div class="grid grid-cols-3 gap-4">
+              <div class="col-span-2 h-2 rounded bg-gray-200 dark:bg-gray-700"></div>
+              <div class="col-span-1 h-2 rounded bg-gray-200 dark:bg-gray-700"></div>
+            </div>
+            <div class="h-2 rounded bg-gray-200 dark:bg-gray-700"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tailwind UI Table Skeleton -->
+    <div class="overflow-x-auto mb-6">
+      <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <thead class="bg-gray-50 dark:bg-gray-900">
+          <tr>
+            <th class="px-6 py-3"></th>
+            <th class="px-6 py-3"></th>
+            <th class="px-6 py-3"></th>
+            <th class="px-6 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+          <tr *ngFor="let _ of [1,2,3,4,5]">
+            <td class="px-6 py-4">
+              <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-24 animate-pulse"></div>
+            </td>
+            <td class="px-6 py-4">
+              <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-32 animate-pulse"></div>
+            </td>
+            <td class="px-6 py-4">
+              <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-20 animate-pulse"></div>
+            </td>
+            <td class="px-6 py-4">
+              <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-16 animate-pulse"></div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Tailwind UI Page Skeleton -->
+    <div class="space-y-4 mb-6">
+      <div class="h-6 w-1/3 rounded bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+      <div class="h-4 w-full rounded bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+      <div class="h-4 w-full rounded bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+      <div class="h-4 w-2/3 rounded bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+    </div>
+
+    <!-- Tailwind UI Dashboard Skeleton -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div class="h-24 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+      <div class="h-24 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+      <div class="h-24 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+      <div class="h-24 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <thead class="bg-gray-50 dark:bg-gray-900">
+          <tr>
+            <th class="px-6 py-3"></th>
+            <th class="px-6 py-3"></th>
+            <th class="px-6 py-3"></th>
+            <th class="px-6 py-3"></th>
+            <th class="px-6 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+          <tr *ngFor="let _ of [1,2,3,4,5]">
+            <td class="px-6 py-4">
+              <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-24 animate-pulse"></div>
+            </td>
+            <td class="px-6 py-4">
+              <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-32 animate-pulse"></div>
+            </td>
+            <td class="px-6 py-4">
+              <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-20 animate-pulse"></div>
+            </td>
+            <td class="px-6 py-4">
+              <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-16 animate-pulse"></div>
+            </td>
+            <td class="px-6 py-4">
+              <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-20 animate-pulse"></div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+    <div>
+      <h3 class="text-lg font-semibold mb-2">Dashboard Placeload</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div class="h-24 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+        <div class="h-24 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+        <div class="h-24 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+        <div class="h-24 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead class="bg-gray-50 dark:bg-gray-900">
+            <tr>
+              <th class="px-6 py-3"></th>
+              <th class="px-6 py-3"></th>
+              <th class="px-6 py-3"></th>
+              <th class="px-6 py-3"></th>
+              <th class="px-6 py-3"></th>
+            </tr>
+          </thead>
+          <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            <tr *ngFor="let _ of [1,2,3,4,5]">
+              <td class="px-6 py-4">
+                <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-24 animate-pulse"></div>
+              </td>
+              <td class="px-6 py-4">
+                <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-32 animate-pulse"></div>
+              </td>
+              <td class="px-6 py-4">
+                <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-20 animate-pulse"></div>
+              </td>
+              <td class="px-6 py-4">
+                <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-16 animate-pulse"></div>
+              </td>
+              <td class="px-6 py-4">
+                <div class="h-2 rounded bg-gray-200 dark:bg-gray-700 w-20 animate-pulse"></div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Card -->
+  <section>
+    <h2 class="text-xl font-semibold mb-2">Card</h2>
+    <app-card title="Card Title">
+      <p>This is a card with some content. You can put anything here.</p>
+      <div class="mt-4 flex gap-2">
+        <app-button label="Action" type="primary"></app-button>
+        <app-button label="Cancel" type="secondary"></app-button>
+      </div>
+    </app-card>
+  </section>
+
+  <!-- Table -->
+  <section>
+    <h2 class="text-xl font-semibold mb-2">Professional Table Demo</h2>
+    <div class="flex gap-2 mb-2">
+      <app-button label="Show Data" type="primary" (click)="loadingTable = false; emptyTable = false;"></app-button>
+      <app-button label="Loading" type="info" (click)="loadingTable = true; emptyTable = false;"></app-button>
+      <app-button label="Empty" type="outline" (click)="loadingTable = false; emptyTable = true;"></app-button>
+    </div>
+    <!-- Removed compact mode and columns controls -->
+    <app-table
+      [data]="tableData"
+      [loading]="false"
+      [pageSize]="5"
+      [showFilter]="true"
+      [showPagination]="true"
+      [showSort]="true"
+      [badgeColumn]="'Status'"
+      [badgeMap]="{ 'Active': 'success', 'Inactive': 'error' }"
+    ></app-table>
+    <div class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+      <ul class="list-disc ml-6">
+        <li>Filter by any column using the search box above the table.</li>
+        <li>Click column headers to sort ascending/descending.</li>
+        <li>Paginate through data with navigation below the table.</li>
+        <li>Status column uses colored badges for Active/Inactive.</li>
+        <li>Skeleton loading shown when <code>[loading]</code> is true.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Modal -->
+  <section>
+    <h2 class="text-xl font-semibold mb-2">Modal</h2>
+    <app-button label="Show Modal" type="primary" (click)="showModal = true"></app-button>
+    <app-modal [show]="showModal" title="Example Modal" (close)="showModal = false">
+      <p>This is a modal dialog. You can close it by clicking outside, pressing ESC, or using the button below.</p>
+      <ng-container modal-actions>
+        <app-button label="Close" type="secondary" (click)="showModal = false"></app-button>
+        <app-button label="Action" type="primary"></app-button>
+      </ng-container>
+    </app-modal>
+  </section>
+

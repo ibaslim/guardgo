@@ -1,0 +1,21 @@
+<div class="w-full px-4 py-8">
+  <div class="max-w-4xl mx-auto">
+    <h1 class="text-2xl font-bold mb-8 text-gray-900 dark:text-gray-100">Forms Demo</h1>
+    <form (ngSubmit)="submit()" class="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <app-base-input label="Name" name="name" [(ngModel)]="formModel.name" [required]="true"></app-base-input>
+      <app-base-input label="Email" name="email" type="email" [(ngModel)]="formModel.email" [required]="true"></app-base-input>
+      <app-base-input label="Password" name="password" type="password" [(ngModel)]="formModel.password" [required]="true"></app-base-input>
+      <app-base-input label="Age" name="age" type="number" [(ngModel)]="formModel.age"></app-base-input>
+      <app-select-input label="Country" name="country" [options]="countries" [(ngModel)]="formModel.country" placeholder="Select country" [required]="true" [searchable]="true"></app-select-input>
+      <app-multiselect-input label="Skills" name="skills" [options]="skills" [(ngModel)]="formModel.skills" placeholder="Select skills" [searchable]="true"></app-multiselect-input>
+      <app-radio label="Gender" name="gender" [options]="genders" [(ngModel)]="formModel.gender" [required]="true"></app-radio>
+      <app-textarea label="Bio" name="bio" [(ngModel)]="formModel.bio" placeholder="Tell us about yourself"></app-textarea>
+      <app-switch label="Enable notifications" name="notifications" [(ngModel)]="formModel.notifications"></app-switch>
+      <app-file-upload label="Upload file" name="file" [(ngModel)]="formModel.file" helperText="PNG, JPG, PDF up to 10MB" [required]="false"></app-file-upload>
+      <app-switch label="Accept terms and conditions" name="terms" [(ngModel)]="formModel.terms" [required]="true"></app-switch>
+      <div class="md:col-span-2">
+        <button type="submit" class="w-full py-3 px-4 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition">Submit</button>
+      </div>
+    </form>
+  </div>
+</div>
