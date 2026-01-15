@@ -60,7 +60,7 @@
     <h2 class="text-xl font-semibold mb-2">Placeload (Skeleton)</h2>
 
     <!-- Tailwind UI Card Skeleton -->
-    <div class="mx-auto w-full max-w-sm rounded-md border border-blue-300 p-4 mb-6">
+    <div class="mx-auto w-full max-w-sm rounded-md border p-4 mb-6">
       <div class="flex animate-pulse space-x-4">
         <div class="size-10 rounded-full bg-gray-200 dark:bg-gray-700"></div>
         <div class="flex-1 space-y-6 py-1">
@@ -212,11 +212,6 @@
   <!-- Table -->
   <section>
     <h2 class="text-xl font-semibold mb-2">Professional Table Demo</h2>
-    <div class="flex gap-2 mb-2">
-      <app-button label="Show Data" type="primary" (click)="loadingTable = false; emptyTable = false;"></app-button>
-      <app-button label="Loading" type="info" (click)="loadingTable = true; emptyTable = false;"></app-button>
-      <app-button label="Empty" type="outline" (click)="loadingTable = false; emptyTable = true;"></app-button>
-    </div>
     <!-- Removed compact mode and columns controls -->
     <app-table
       [data]="tableData"
@@ -228,15 +223,6 @@
       [badgeColumn]="'Status'"
       [badgeMap]="{ 'Active': 'success', 'Inactive': 'error' }"
     ></app-table>
-    <div class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-      <ul class="list-disc ml-6">
-        <li>Filter by any column using the search box above the table.</li>
-        <li>Click column headers to sort ascending/descending.</li>
-        <li>Paginate through data with navigation below the table.</li>
-        <li>Status column uses colored badges for Active/Inactive.</li>
-        <li>Skeleton loading shown when <code>[loading]</code> is true.</li>
-      </ul>
-    </div>
   </section>
 
   <!-- Modal -->
