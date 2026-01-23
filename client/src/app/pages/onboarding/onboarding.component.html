@@ -1,0 +1,6 @@
+<div *ngIf="userType === 'guard'" class="w-full px-4 py-8">
+  <app-guard-setting [guardData]="guardData"></app-guard-setting>
+</div>
+<div *ngIf="userType === 'client'" class="w-full px-4 py-8">
+  <app-client-setting [clientData]="clientData"></app-client-setting>
+</div>

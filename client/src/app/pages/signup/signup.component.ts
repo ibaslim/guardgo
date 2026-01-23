@@ -1,19 +1,20 @@
-import {Component, OnInit} from '@angular/core';
-import {ActivatedRoute, Router} from '@angular/router';
-import {CommonModule} from '@angular/common';
+import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { CommonModule } from '@angular/common';
 import { BaseInputComponent } from '../../components/form/base-input/base-input.component';
-import {FormsModule, NgForm} from '@angular/forms';
-import {AuthService} from '../../services/authetication/auth.service';
-import {AppService} from '../../services/core/app/app.service';
+import { FormsModule, NgForm } from '@angular/forms';
+import { AuthService } from '../../services/authetication/auth.service';
+import { AppService } from '../../services/core/app/app.service';
+import { RadioComponent } from "../../components/form/radio/radio.component";
 
 @Component({
   selector: 'app-signup',
   standalone: true,
-  imports: [FormsModule, CommonModule, BaseInputComponent],
+  imports: [FormsModule, CommonModule, BaseInputComponent, RadioComponent],
   templateUrl: './signup.component.html'
 })
 export class SignupComponent implements OnInit {
-  user = { username: '', mail: '', password: '' };
+  user = { username: '', mail: '', password: '', role: '' };
   errorMessage: string | null = null;
   passwordStrength: 'weak' | 'medium' | 'strong' | null = null;
   showPasswordMeter = false;
@@ -30,7 +31,7 @@ export class SignupComponent implements OnInit {
   usernamePattern = /^[A-Za-z][A-Za-z0-9_-]{7,19}$/;
   usernameSuggestion: string = '';
 
-  constructor(private router: Router, public auth_service: AuthService, private route: ActivatedRoute, protected appService:AppService) { }
+  constructor(private router: Router, public auth_service: AuthService, private route: ActivatedRoute, protected appService: AppService) { }
 
   ngOnInit(): void {
     this.route.queryParams.subscribe(() => {
@@ -94,6 +95,11 @@ export class SignupComponent implements OnInit {
       return false;
     }
 
+    if (!this.user.role) {
+      this.errorMessage = 'Please select a role';
+      return false;
+    }
+
     this.errorMessage = null;
     return true;
   }
@@ -138,8 +144,15 @@ export class SignupComponent implements OnInit {
     return Object.values(this.passwordChecks).every(v => v);
   }
 
+  roles = [
+    { label: 'Client', value: 'client' },
+    { label: 'Guard', value: 'guard' }
+  ];
+
   onSubmit(form: NgForm) {
     if (!this.validateFields() || !form.valid) return;
+
+    console.log('Form submitted', this.user);
 
     this.auth_service.signup(this.user.username, this.user.mail, this.user.password).subscribe({
       next: () => this.router.navigate(['/welcome']),
