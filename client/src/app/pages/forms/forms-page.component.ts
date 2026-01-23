@@ -8,6 +8,7 @@ import { TextareaComponent } from '../../components/form/textarea/textarea.compo
 import { RadioComponent } from '../../components/form/radio/radio.component';
 import { SwitchComponent } from '../../components/form/switch/switch.component';
 import { FileUploadComponent } from '../../components/form/file-upload/file-upload.component';
+import { WeeklyAvailabilityComponent } from "../../components/form/weekly-availability/weekly-availability.component";
 
 @Component({
   selector: 'app-forms-page',
@@ -21,8 +22,9 @@ import { FileUploadComponent } from '../../components/form/file-upload/file-uplo
     TextareaComponent,
     RadioComponent,
     SwitchComponent,
-    FileUploadComponent
-  ],
+    FileUploadComponent,
+    WeeklyAvailabilityComponent
+],
   templateUrl: './forms-page.component.html',
   styleUrls: ['./forms-page.component.scss']
 })
@@ -38,7 +40,8 @@ export class FormsPageComponent {
     bio: '',
     notifications: false,
     terms: false,
-    file: null
+    file: null,
+    availability: {}
   };
 
   countries = [
