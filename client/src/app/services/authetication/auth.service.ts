@@ -68,17 +68,6 @@ export class AuthService {
             return;
           }
 
-          const sessionData = response?.session || {};
-          if (sessionData?.role === 'crawler') {
-            this.authState.next({
-              token: null,
-              isAuthenticated: false,
-              isValidated: true,
-              error: 'Access denied!'
-            });
-            return;
-          }
-
           this.setToken(response.access_token);
           this.startTokenRefresh();
           this.appService.loadSession(true).then(() => {
@@ -123,17 +112,6 @@ export class AuthService {
               isAuthenticated: false,
               isValidated: true,
               error: 'Invalid 2FA code'
-            });
-            return;
-          }
-
-          const sessionData = response?.session || {};
-          if (sessionData?.role === 'crawler') {
-            this.authState.next({
-              token: null,
-              isAuthenticated: false,
-              isValidated: true,
-              error: 'Access denied!'
             });
             return;
           }

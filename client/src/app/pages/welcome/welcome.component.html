@@ -1,11 +1,17 @@
-<img alt="background" class="app-background app-background-dark img-fluid w-100 h-100 object-fit-cover"
-    src="/assets/images/shared/Bg.webp">
-<div class="bg-transparent dark:bg-gray-900/80 absolute inset-0 transition-colors duration-200"></div>
-<div class="welcome-page-wrapper">
-    <div class="welcome-page__card">
-        <img src="/assets/images/shared/welcom_icon.svg" alt="Tick">
-        <div class="welcome-page__card-heading">{{ heading }}</div>
-        <div class="welcome-page__card-paragraph">{{ message }}</div>
-        <button (click)="goToLogin()">Go to login</button>
+<div class="welcome-container">
+    <div class="container">
+        <div class="row align-items-center justify-content-center min-vh-100">
+            <div class="col-lg-6 col-md-8 text-center">
+                <div class="welcome-content">
+                    <img src="/assets/images/shared/welcom_icon.svg" alt="Welcome" class="welcome-icon mb-4">
+                    <h1 class="welcome-heading">{{ heading }}</h1>
+                    <hr class="welcome-divider">
+                    <p class="welcome-message">{{ message }}</p>
+                    <button *ngIf="hasToken" class="btn btn-primary btn-lg mt-4 welcome-button" (click)="goToLogin()">
+                        Go to Login
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 </div>

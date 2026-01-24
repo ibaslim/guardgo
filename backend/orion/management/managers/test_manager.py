@@ -10,7 +10,7 @@ from elasticsearch import AsyncElasticsearch, helpers as es_helpers, NotFoundErr
 from orion.helper_manager.env_handler import env_handler
 from orion.services.mongo_manager.mongo_enums import MONGO_CONNECTIONS
 from orion.services.mongo_manager.shared_model.db_auth_models import db_user_account
-from orion.services.session_manager.session_enums import admin_mock, admin_user, crawler_mock, crawler_user
+from orion.services.session_manager.session_enums import admin_mock, admin_user
 
 
 class test_manager:
@@ -35,10 +35,6 @@ class test_manager:
 
         admin_mock["username"] = "admin_test_username"
         admin_user["password"] = db_user_account.hash_password(
-            "Zq9M#rX@e7W^B0T+f(ysG!kJc1d2mC&N%hAUEP)6Y4n$R8VbHS")
-
-        crawler_mock["username"] = "crawler_test_username"
-        crawler_user["password"] = db_user_account.hash_password(
             "Zq9M#rX@e7W^B0T+f(ysG!kJc1d2mC&N%hAUEP)6Y4n$R8VbHS")
 
     def _fix(self, v):

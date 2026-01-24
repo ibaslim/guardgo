@@ -71,7 +71,7 @@ export class AppService {
     let token = localStorage.getItem('token');
     if (token || forced) {
       try {
-        const session = await firstValueFrom(this.apiService.post<userSessionData>('get/tenant/node', {}));
+        const session = await firstValueFrom(this.apiService.get<userSessionData>('me'));
         if (session) this.userSessionData.set(session);
       } catch {
         this.userSessionData.set({

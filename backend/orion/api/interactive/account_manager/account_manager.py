@@ -45,23 +45,35 @@ class AccountManager:
     async def get_all_users(self, current_user) -> List[user_param_model]:
         if current_user.role == "admin" or LicenseName.MAINTAINER in (current_user.licenses or []):
             tenant_uuid = current_user.tenant_uuid
-            users = await self._engine.find(
-                db_user_account,
-                (db_user_account.tenant_uuid == tenant_uuid) & (db_user_account.role != user_role.CRAWLER))
-            return [user_param_model(**u.dict()) for u in users]
+            # Use raw collection to avoid odmantic parse errors on legacy records
+            collection = self._engine.get_collection(db_user_account)
+            docs = await collection.find({"tenant_uuid": tenant_uuid}).to_list(length=None)
+
+            sanitized = []
+            for d in docs:
+                try:
+                    sanitized.append(user_param_model(
+                        username=d.get("username"),
+                        email=d.get("email"),
+                        role=d.get("role"),
+                        status=d.get("status"),
+                        subscription=d.get("subscription"),
+                        licenses=d.get("licenses"),
+                        preferences=d.get("preferences"),
+                    ))
+                except Exception:
+                    # Skip legacy/invalid records instead of failing the whole list
+                    continue
+            return sanitized
         return []
 
     async def create_user(self, data: user_model, current_user):
         try:
             engine = mongo_controller.get_instance().get_engine()
 
-            if current_user.role == user_role.ADMIN:
-                if data.role != user_role.ANALYST:
-                    raise HTTPException(status_code=403, detail="Not allowed")
-            elif user_role.MEMBER == current_user.role and LicenseName.MAINTAINER in (current_user.licenses or []):
-                if data.role not in [user_role.MEMBER, user_role.ANALYST]:
-                    raise HTTPException(status_code=403, detail="Not allowed")
-            else:
+            # Only admins of the same tenant can create users
+            allowed_roles = [user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]
+            if current_user.role not in allowed_roles:
                 raise HTTPException(status_code=403, detail="Not allowed")
 
             username = (data.username or "").strip()
@@ -142,10 +154,7 @@ class AccountManager:
         else:
             raise HTTPException(status_code=401, detail="You are not allowed to update this user")
 
-        if user.role in ["demo"] and current_user.role not in ["admin"]:
-            raise HTTPException(status_code=401, detail="You are not allowed to manage this user")
-
-        if user.role in ["admin", "crawl"]:
+        if user.role in [user_role.ADMIN]:
             raise HTTPException(status_code=401, detail="This user type cannot be updated")
 
         if request.status == UserStatus.DISABLE:
@@ -227,14 +236,19 @@ class AccountManager:
         user_image_file = self.IMAGE_DIR / f"{str(user.id)}.png"
         user_image_path = "/api/s/static/user/" + (str(user.id) if user_image_file.is_file() else "default")
 
+        # Extract tenant profile data
+        profile = tenant.profile or {}
+        tenant_name = profile.get("name", "")
+        tenant_phone = profile.get("phone", "")
+        tenant_country = profile.get("country", "")
+        tenant_city = profile.get("city", "")
+        tenant_postal_code = profile.get("postal_code", "")
+
         node = NodeCallbackModel.model_validate(
             {"user": {"email": user.email, "twofa_enabled": user.twofa_enabled, "username": user.username, "role": user.role, "status": user.status, "subscription": user.subscription, "verificationDate": user.account_verify_at.isoformat() if user.account_verify_at else None, "license": [
                 license.value for license in
                 user.licenses], "image": user_image_path, }, "tenant": {"hasOnboarding": tenant.status == TenantStatus.ONBOARDING, "id": str(
-                tenant.id), "isDefault": str(tenant.is_default), "name": self.safe_decrypt(
-                enc, tenant.name), "phone": self.safe_decrypt(enc, tenant.phone), "country": self.safe_decrypt(
-                enc, tenant.country), "city": self.safe_decrypt(enc, tenant.city), "postalCode": self.safe_decrypt(
-                enc, tenant.postal_code), "taxId": self.safe_decrypt(enc, tenant.id), "userId": "", "licenses": [
+                tenant.id), "isDefault": str(tenant.is_default), "name": tenant_name, "phone": tenant_phone, "country": tenant_country, "city": tenant_city, "postalCode": tenant_postal_code, "taxId": str(tenant.id), "userId": "", "licenses": [
                 self.safe_decrypt(enc, l) for l in (tenant.licenses or [])], "assignedQuota": str(
                 assigned_quota), "quotaExceeded": bool(
                 not tenant.is_default and tenant.user_quota is not None and assigned_quota < total_user), "image": tenant_image_path, } })

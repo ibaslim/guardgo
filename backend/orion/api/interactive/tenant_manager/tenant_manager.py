@@ -1,7 +1,8 @@
 import re
 import threading
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any
+from datetime import datetime
 
 from bson import ObjectId
 from fastapi import HTTPException
@@ -11,8 +12,9 @@ from cryptography.fernet import Fernet
 from orion.api.interactive.account_manager.models.user_model import user_model
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_keys import db_keys
-from orion.services.mongo_manager.shared_model.db_tenant_model import IocCategory, db_tenant_model, TenantRequest, TenantStatus
-from orion.services.mongo_manager.shared_model.db_auth_models import UserStatus, db_user_account
+from orion.services.mongo_manager.shared_model.db_tenant_model import IocCategory, db_tenant_model, TenantRequest, TenantStatus, TenantType, TenantPayload
+from orion.api.interactive.tenant_manager.models.tenant_profile_update import TenantProfileUpdate
+from orion.services.mongo_manager.shared_model.db_auth_models import UserStatus, db_user_account, user_role
 from orion.services.encryption_manager.key_manager import KeyManager
 from orion.constants.constant import CONSTANTS
 
@@ -39,6 +41,15 @@ class TenantManager:
         TenantManager.__instance = self
 
     @staticmethod
+    def _deep_merge(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+        for k, v in (update or {}).items():
+            if isinstance(v, dict) and isinstance(base.get(k), dict):
+                base[k] = TenantManager._deep_merge(base.get(k, {}), v)
+            else:
+                base[k] = v
+        return base
+
+    @staticmethod
     async def _dek(tenant_id: str) -> bytes:
         return await KeyManager.get_instance().get_or_create_dek(tenant_id)
 
@@ -46,25 +57,25 @@ class TenantManager:
         try:
             dek = await KeyManager.get_instance().create_dek(str(data.id))
             enc = Fernet(dek)
-            data.name = enc.encrypt((data.name or "").encode()).decode()
-            data.phone = enc.encrypt((data.phone or "").encode()).decode()
-            data.country = enc.encrypt((data.country or "").encode()).decode()
-            data.city = enc.encrypt((data.city or "").encode()).decode()
-            data.postal_code = enc.encrypt((data.postal_code or "").encode()).decode()
-            data.licenses = [enc.encrypt(l.encode()).decode() for l in (data.licenses or [])]
-            data.email = enc.encrypt((data.email or "").encode()).decode()
 
+            # Encrypt licenses (used by both legacy and new code)
+            data.licenses = [enc.encrypt(l.encode()).decode() for l in (data.licenses or [])]
+
+            # Encrypt IOC values
             data.iocs = [IocCategory(
                 ioc_id=enc.encrypt(ioc.ioc_id.encode()).decode(),
                 name=enc.encrypt(ioc.name.encode()).decode(),
                 values=[enc.encrypt(v.encode()).decode() for v in (ioc.values or [])]) for ioc in (data.iocs or [])]
 
+            # Ensure status is set
             data.status = TenantStatus.ONBOARDING
+
+            # Save the tenant
             await self._engine.save(data)
         except Exception as _:
+            # Cleanup related documents (don't delete the tenant itself if it wasn't saved)
             await self._engine.remove(db_user_account, db_user_account.tenant_uuid == str(data.id))
             await self._engine.remove(db_keys, db_keys.id == str(data.id))
-            await self._engine.delete(data)
             raise
 
     async def get_tenant(self, current_user) -> TenantRequest:
@@ -189,30 +200,177 @@ class TenantManager:
         return {"message": "Tenant updated", "user": current_user.username, "company": tenant_data[
             "name"], "tenant": tenant_data}
 
+    async def update_profile(self, data: TenantProfileUpdate, current_user):
+        tenant_id = getattr(current_user, "tenant_uuid", None)
+        if not tenant_id:
+            raise HTTPException(status_code=400, detail="Invalid company association")
+
+        tenant = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(tenant_id))
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        # Role guard: Admin can update any; domain admins can update their domain type only
+        role = getattr(current_user, "role", None)
+        allowed = False
+        if role == user_role.ADMIN:
+            allowed = True
+        else:
+            if tenant.tenant_type == TenantType.GUARD and role == user_role.GUARD_ADMIN:
+                allowed = True
+            elif tenant.tenant_type == TenantType.CLIENT and role == user_role.CLIENT_ADMIN:
+                allowed = True
+            elif tenant.tenant_type == TenantType.SERVICE_PROVIDER and role == user_role.SP_ADMIN:
+                allowed = True
+
+        if not allowed:
+            raise HTTPException(status_code=401, detail="You are not allowed to update this profile")
+
+        # Ensure request matches tenant type
+        selected_type = data.selected_type()
+        if selected_type is None:
+            raise HTTPException(status_code=400, detail="Profile payload is required")
+        if selected_type != tenant.tenant_type:
+            raise HTTPException(status_code=400, detail="Profile type does not match tenant type")
+
+        update_payload = data.dump_selected() or {}
+        existing_profile = tenant.profile or {}
+        merged = TenantManager._deep_merge(existing_profile, update_payload)
+
+        tenant.profile = merged
+        tenant.updated_at = tenant.updated_at  # keep field present; odmantic will persist
+        await self._engine.save(tenant)
+
+        return {"message": "Profile updated", "tenant_id": str(tenant.id), "tenant_type": tenant.tenant_type, "profile": tenant.profile or {}}
+
+    async def upsert_tenant(self, data: TenantPayload, current_user, is_update: bool = True):
+        """Unified endpoint for GET/POST/PUT complete tenant data (including profile)."""
+        if is_update:
+            # Update existing tenant
+            tenant_id = getattr(current_user, "tenant_uuid", None)
+            if not tenant_id:
+                raise HTTPException(status_code=400, detail="Invalid company association")
+
+            tenant = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(tenant_id))
+            if not tenant:
+                raise HTTPException(status_code=404, detail="Tenant not found")
+
+            # Role guard: only ADMIN or matching domain admin
+            role = getattr(current_user, "role", None)
+            allowed = role == user_role.ADMIN or (
+                tenant.tenant_type == TenantType.GUARD and role == user_role.GUARD_ADMIN or
+                tenant.tenant_type == TenantType.CLIENT and role == user_role.CLIENT_ADMIN or
+                tenant.tenant_type == TenantType.SERVICE_PROVIDER and role == user_role.SP_ADMIN
+            )
+            if not allowed:
+                raise HTTPException(status_code=401, detail="You are not allowed to update this tenant")
+        else:
+            # Create new tenant
+            tenant = db_tenant_model(
+                tenant_type=data.tenant_type,
+                profile=data.profile,
+                subscription=data.subscription,
+                verified=data.verified,
+                user_quota=data.user_quota,
+                status=TenantStatus.ONBOARDING,
+                licenses=data.licenses,
+                iocs=data.iocs,
+            )
+
+        # Update base fields
+        tenant.tenant_type = data.tenant_type
+        tenant.subscription = data.subscription
+        tenant.verified = data.verified
+        tenant.user_quota = data.user_quota
+        if data.status is not None:
+            tenant.status = data.status
+        if data.licenses:
+            tenant.licenses = data.licenses
+        if data.iocs:
+            tenant.iocs = data.iocs
+
+        # Merge profile (only for non-legacy types)
+        if data.profile is not None:
+            # Ensure profile type matches tenant_type
+            existing = tenant.profile or {}
+            merged = TenantManager._deep_merge(existing, data.profile)
+            tenant.profile = merged
+
+        tenant.updated_at = datetime.utcnow()
+        if data.verified and not tenant.verified_date:
+            tenant.verified_date = datetime.utcnow()
+
+        await self._engine.save(tenant)
+
+        return {
+            "message": "Tenant updated" if is_update else "Tenant created",
+            "id": str(tenant.id),
+            "tenant_type": tenant.tenant_type,
+            "status": tenant.status,
+            "profile": tenant.profile or {},
+        }
+
     async def get_all_tenant(self) -> List[db_tenant_model]:
         tenants = await self._engine.find(db_tenant_model, db_tenant_model.is_default == False)
         result = []
         for tenant in tenants:
-            dek = await KeyManager.get_instance().get_profile_dek(ObjectId(tenant.id))
-            enc = Fernet(dek)
+            profile = tenant.profile or {}
 
-            tenant.name = enc.decrypt(tenant.name.encode()).decode()
-            tenant.phone = enc.decrypt(tenant.phone.encode()).decode()
-            tenant.country = enc.decrypt(tenant.country.encode()).decode()
-            tenant.city = enc.decrypt(tenant.city.encode()).decode()
-            tenant.postal_code = enc.decrypt(tenant.postal_code.encode()).decode()
-            tenant.licenses = [enc.decrypt(l.encode()).decode() for l in (tenant.licenses or [])]
-            if tenant.email:
-                tenant.email = enc.decrypt(tenant.email.encode()).decode()
-            else:
-                tenant.email = ""
+            # Decrypt legacy encrypted fields that still exist (licenses, iocs).
+            try:
+                dek = await KeyManager.get_instance().get_profile_dek(ObjectId(tenant.id))
+                enc: Fernet | None = Fernet(dek) if dek else None
+            except Exception:
+                enc = None
 
-            tenant.iocs = [IocCategory(
-                ioc_id=enc.decrypt(ioc.ioc_id.encode()).decode(),
-                name=enc.decrypt(ioc.name.encode()).decode(),
-                values=[enc.decrypt(v.encode()).decode() for v in (ioc.values or [])]) for ioc in (tenant.iocs or [])]
+            licenses = []
+            for l in (tenant.licenses or []):
+                if enc:
+                    try:
+                        licenses.append(enc.decrypt(l.encode()).decode())
+                        continue
+                    except Exception:
+                        pass
+                licenses.append(l)
 
-            result.append(tenant)
+            iocs = []
+            for ioc in (tenant.iocs or []):
+                if enc:
+                    try:
+                        ioc_id = enc.decrypt(ioc.ioc_id.encode()).decode()
+                    except Exception:
+                        ioc_id = ioc.ioc_id
+                    try:
+                        name = enc.decrypt(ioc.name.encode()).decode()
+                    except Exception:
+                        name = ioc.name
+                else:
+                    ioc_id = ioc.ioc_id
+                    name = ioc.name
+                values = []
+                for v in (ioc.values or []):
+                    if enc:
+                        try:
+                            values.append(enc.decrypt(v.encode()).decode())
+                            continue
+                        except Exception:
+                            pass
+                    values.append(v)
+                iocs.append(IocCategory(ioc_id=ioc_id, name=name, values=values))
+
+            result.append({
+                "id": str(tenant.id),
+                "tenant_type": tenant.tenant_type,
+                "profile": profile,
+                "subscription": tenant.subscription,
+                "verified": tenant.verified,
+                "user_quota": tenant.user_quota,
+                "status": tenant.status,
+                "licenses": licenses,
+                "iocs": iocs,
+                "created_at": tenant.created_at,
+                "updated_at": tenant.updated_at,
+                "verified_date": tenant.verified_date,
+            })
 
         return result
 

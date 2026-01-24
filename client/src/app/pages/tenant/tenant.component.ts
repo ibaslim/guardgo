@@ -114,7 +114,7 @@ export class TenantComponent implements OnInit {
     });
     this.appService.set('entityfilterCategories', this.categories);
 
-    this.apiService.post<any>('update/tenants', filteredOnboardingData).subscribe({
+    this.apiService.put<any>('tenant', filteredOnboardingData).subscribe({
       next: (res) => {
         this.appService.userSessionData.update(state => {
           if (!state) return state;

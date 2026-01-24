@@ -8,7 +8,7 @@ from orion.api.interactive.tenant_manager.tenant_manager import TenantManager
 from orion.constants.constant import CONSTANTS
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_auth_models import db_user_account, user_role, LicenseName
-from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus
+from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus, TenantType
 from orion.api.interactive.signup_manager.model.signup_request_model import SignupRequest
 from orion.services.redis_manager.redis_controller import redis_controller
 from orion.services.redis_manager.redis_enums import REDIS_COMMANDS
@@ -29,14 +29,15 @@ class SignupManager:
 
         username_pattern = r"^[A-Za-z][A-Za-z0-9_-]{7,19}$"
         if not re.match(username_pattern, username):
-            raise HTTPException(status_code=422, detail="Username already exist")
+            raise HTTPException(status_code=422, detail="Username must be 8-20 characters, start with a letter, and contain only letters, numbers, hyphens, or underscores")
 
         email_pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
         if not re.match(email_pattern, email):
             raise HTTPException(status_code=422, detail="Invalid email format")
 
+        # Check for existing username or email
         existing_user = await engine.find_one(
-            db_user_account, (db_user_account.username == username))
+            db_user_account, (db_user_account.username == username) | (db_user_account.email == email))
         if existing_user:
             raise HTTPException(status_code=400, detail="Username or email already exists")
 
@@ -68,17 +69,28 @@ class SignupManager:
         if not company:
             raise HTTPException(status_code=422, detail="Invalid email")
 
+        # Determine tenant type from signup (defaults to client)
+        type_str = (data.tenant_type or "client").strip().lower()
+        role_mapping = {
+            "guard": user_role.GUARD_ADMIN,
+            "client": user_role.CLIENT_ADMIN,
+            "service_provider": user_role.SP_ADMIN,
+        }
+        user_role_assigned = role_mapping.get(type_str, user_role.CLIENT_ADMIN)
+
+        tenant_type_enum = {
+            "guard": TenantType.GUARD,
+            "client": TenantType.CLIENT,
+            "service_provider": TenantType.SERVICE_PROVIDER,
+        }.get(type_str, TenantType.CLIENT)
+
         tenant = db_tenant_model(
             iocs=[],
-            name=company,
-            phone="",
-            country="",
-            city="",
-            postal_code="",
             user_quota=2,
             licenses=["maintainer", "free"],
             status=TenantStatus.ONBOARDING,
-            email=email
+            tenant_type=tenant_type_enum,
+            profile={"name": company}
             )
         await TenantManager.get_instance().create_tenant(tenant)
 
@@ -86,7 +98,7 @@ class SignupManager:
             username=username,
             email=email,
             password=hashed_password,
-            role=user_role.MEMBER,
+            role=user_role_assigned,
             verification_token=_verification_token,
             verification_expiry=_verification_token_expire,
             licenses=[LicenseName.MAINTAINER],
@@ -101,10 +113,14 @@ class SignupManager:
             subject=MailSubject.VERIFICATION.value,
             lurlHeading=MailUrlHeading.VERIFICATION.value,
             url=verify_url)
-        await mail_manager.get_instance().send_verification_mail(
-            to=user.email, subject=MailSubject.VERIFICATION.value, body=html_content)
+        try:
+            await mail_manager.get_instance().send_verification_mail(
+                to=user.email, subject=MailSubject.VERIFICATION.value, body=html_content)
+        except Exception as e:
+            # Log mail error but don't fail signup - user can request resend
+            print(f"Failed to send verification email to {user.email}: {e}")
 
-        return {"message": "Signup successful. Your account is under verification.", "status": "pending", "email": email}
+        return {"message": "Signup successful. Your account is under verification.", "status": "pending", "email": email, "user_id": str(user.id)}
 
     @staticmethod
     async def resend_verification_email(data: SignupRequest):

@@ -3,10 +3,12 @@ import { Router } from '@angular/router';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
+import { CommonModule } from '@angular/common';
 
 @Component({
   selector: 'app-welcome',
-  imports: [],
+  standalone: true,
+  imports: [CommonModule],
   templateUrl: './welcome.component.html',
   styleUrl: './welcome.component.css'
 })
