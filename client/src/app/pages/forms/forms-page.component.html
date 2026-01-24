@@ -13,6 +13,7 @@
       <app-switch label="Enable notifications" name="notifications" [(ngModel)]="formModel.notifications"></app-switch>
       <app-file-upload label="Upload file" name="file" [(ngModel)]="formModel.file" helperText="PNG, JPG, PDF up to 10MB" [required]="false"></app-file-upload>
       <app-switch label="Accept terms and conditions" name="terms" [(ngModel)]="formModel.terms" [required]="true"></app-switch>
+      <app-weekly-availability class="md: col-span-2" label="Weekly Availability" name="availability" [(ngModel)]="formModel.availability"></app-weekly-availability>
       <div class="md:col-span-2">
         <button type="submit" class="w-full py-3 px-4 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition">Submit</button>
       </div>

@@ -24,6 +24,7 @@ export class RadioComponent implements ControlValueAccessor {
   @Input() required = false;
     @Input() helperText: string = '';
     @Input() errorText: string = '';
+  @Input() horizontal = false;
 
   value: any = '';
   onChange = (value: any) => {};

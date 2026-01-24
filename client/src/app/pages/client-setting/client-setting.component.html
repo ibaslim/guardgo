@@ -1,0 +1,75 @@
+<div class="w-full px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold mb-8 text-gray-900 dark:text-gray-100">
+            Client Form
+        </h1>
+
+        <form (ngSubmit)="submitClientForm()" class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="flex flex-col">
+                <app-base-input label="Legal Entity Name" name="legalEntityName"
+                    [(ngModel)]="clientFormModel.legalEntityName" [required]="true">
+                </app-base-input>
+                <app-error-message [errorMessage]="clientErrors.legalEntityName"></app-error-message>
+            </div>
+
+            <div class="flex flex-col">
+                <app-base-input label="Business Contact Number" name="businessContactNumber" type="tel"
+                    [(ngModel)]="clientFormModel.primaryContactInfo" [required]="true">
+                </app-base-input>
+                <app-error-message [errorMessage]="clientErrors.primaryContactInfo"></app-error-message>
+            </div>
+
+            <div class="flex flex-col md:col-span-2">
+                <app-textarea label="Billing Address" name="billingAddress" [(ngModel)]="clientFormModel.billingAddress"
+                    placeholder="Enter your billing address" [required]="true">
+                </app-textarea>
+                <app-error-message [errorMessage]="clientErrors.billingAddress"></app-error-message>
+            </div>
+
+            <div class="md:col-span-2">
+                <app-file-upload label="Upload Business Logo" name="businessLogo"
+                    [(ngModel)]="clientFormModel.businessLogo" helperText="PNG, JPG, PDF up to 10MB" [required]="false">
+                </app-file-upload>
+            </div>
+
+            <div class="md:col-span-2 space-y-6">
+
+                <div *ngFor="let site of clientFormModel.sites; let i = index"
+                    class="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+                    <div class="flex flex-col">
+                        <app-base-input label="Site Name" name="'siteName' + i" [(ngModel)]="site.siteName"
+                            [required]="i===0">
+                        </app-base-input>
+                        <app-error-message [errorMessage]="clientErrors['siteName' + i]"></app-error-message>
+                    </div>
+
+                    <div class="flex flex-col md:col-span-2">
+                        <app-textarea label="Site Address" name="'siteAddress' + i" [(ngModel)]="site.siteAddress"
+                            placeholder="Enter site address" [required]="i===0">
+                        </app-textarea>
+                        <app-error-message [errorMessage]="clientErrors['siteAddress' + i]"></app-error-message>
+                    </div>
+
+                </div>
+
+                <button type="button" (click)="addSite()"
+                    class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition">
+                    Add another site
+                </button>
+
+            </div>
+
+            <div class="md:col-span-2">
+                <button *ngIf="!isEditMode" type="submit"
+                    class="w-full py-3 px-4 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition">
+                    Submit
+                </button>
+                <button *ngIf="isEditMode" type="submit"
+                    class="w-full py-3 px-4 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 transition">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
