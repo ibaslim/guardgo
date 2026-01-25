@@ -87,7 +87,7 @@ async def logout(request: Request):
     return resp
 
 
-@auth_router.post("/api/signup")
+@auth_router.post("/api/signup", status_code=201)
 async def signup(data: SignupRequest):
     return await SignupManager.signup_user(data)
 

@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { AvatarComponent } from '../../components/avatar/avatar.component';
+import { AvatarMenuComponent } from '../../components/avatar-menu/avatar-menu.component';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from "../../services/authetication/auth.service";
 import { AppService } from "../../services/core/app/app.service";
@@ -12,13 +12,12 @@ import { ThemeService } from "../../services/theme/theme.service";
   imports: [
     CommonModule,
     RouterModule,
-    AvatarComponent
+    AvatarMenuComponent
   ],
   // ...existing code...
   templateUrl: './dashboard-layout.component.html',
 })
 export class DashboardLayoutComponent implements OnInit {
-  showUserMenu = false;
   user = { name: '', avatar: '' };
   sidebarCollapsed = false;
 
@@ -33,19 +32,10 @@ export class DashboardLayoutComponent implements OnInit {
     this.user.avatar = session?.user?.image || '';
   }
 
-  onClickOutside = (event: MouseEvent) => {
-    const target = event.target as HTMLElement;
-    if (!target.closest('.user-menu-container')) {
-      this.showUserMenu = false;
-    }
-  };
-
   ngOnInit() {
-    document.addEventListener('mousedown', this.onClickOutside);
   }
 
   ngOnDestroy() {
-    document.removeEventListener('mousedown', this.onClickOutside);
   }
 
   toggleSidebar() {

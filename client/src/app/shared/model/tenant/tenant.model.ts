@@ -25,6 +25,6 @@ export interface TenantModel {
   user_quota?: number;
   status?: TenantStatus;
   licenses?: string[];
-  quotaExceeded?: boolean;
+  quota_exceeded?: boolean;
   email?: string;
 }

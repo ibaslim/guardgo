@@ -25,15 +25,17 @@ export interface TenantDataModel {
     phone: string;
     country: string;
     city: string;
-    postalCode: string;
-    hasOnboarding: boolean;
-    isDefault: boolean;
-    taxId: string;
-    userId: string;
+    postal_code: string;
+    has_onboarding: boolean;
+    is_default: boolean;
+    tax_id: string;
+    user_id: string;
     licenses: string[];
-    assignedQuota: string;
-    quotaExceeded: boolean;
+    assigned_quota: string;
+    quota_exceeded: boolean;
     image?: string;
+    tenant_type?: string;
+    status?: string;
 }
 
 export interface AlertAllIoc {

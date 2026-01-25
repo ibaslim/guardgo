@@ -15,10 +15,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class user_role(str, Enum):
     ADMIN = "admin"
-    CRAWLER = "crawler"
-    MEMBER = "member"
-    ANALYST = "analyst"
-    DEMO = "demo"
+    GUARD_ADMIN = "guard_admin"
+    CLIENT_ADMIN = "client_admin"
+    SP_ADMIN = "sp_admin"
 
 
 class UserStatus(str, Enum):
@@ -43,7 +42,7 @@ class db_user_account(Model):
     username: str = Field(unique=True)
     password: str
     email: str = Field(default="")
-    role: user_role = Field(default=user_role.MEMBER)
+    role: user_role = Field(default=user_role.CLIENT_ADMIN)
     status: Optional[UserStatus] = Field(default=None)
 
     tenant_uuid: str = Field(default="")
@@ -68,10 +67,13 @@ class db_user_account(Model):
     def validate_username(cls, value: str, info: FieldValidationInfo) -> str:
         value = value.strip()
         role = info.data.get("role")
-        if role == user_role.MEMBER:
-            username_pattern = r"^[A-Za-z][A-Za-z0-9_-]{7,19}$"
+        username_pattern = r"^[A-Za-z][A-Za-z0-9_-]{7,19}$"
+        # Allow legacy short admin usernames like "admin" to keep existing accounts working
+        if value == "admin" or role == user_role.ADMIN:
+            return value
+        if role != user_role.ADMIN:
             if not re.match(username_pattern, value):
-                raise ValueError("Username already exist")
+                raise ValueError("Username must be 8-20 characters, start with letter")
             if any(op in value for op in ["$", "{", "}"]):
                 raise ValueError("Invalid characters in username")
         return value
@@ -130,11 +132,8 @@ class db_user_account(Model):
     def is_admin(self) -> bool:
         return self.role == user_role.ADMIN
 
-    def is_crawler(self) -> bool:
-        return self.role == user_role.CRAWLER
-
-    def is_demo(self) -> bool:
-        return self.role == user_role.MEMBER
+    def is_tenant_admin(self) -> bool:
+        return self.role in [user_role.GUARD_ADMIN, user_role.CLIENT_ADMIN, user_role.SP_ADMIN]
 
     def verify_2fa(self, code: str) -> bool:
         if not self.twofa_enabled or not self.twofa_secret:

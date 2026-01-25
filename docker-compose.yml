@@ -45,8 +45,7 @@ services:
       - /var/www/certbot:/var/www/certbot
       - /etc/letsencrypt:/etc/letsencrypt:ro
     networks:
-      backend:
-        ipv4_address: 172.20.1.13
+      - backend
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost:8080 || exit 1" ]
       interval: 30s
@@ -72,8 +71,7 @@ services:
       timeout: 5s
       retries: 3
     networks:
-      backend:
-        ipv4_address: 172.20.1.12
+      - backend
     deploy:
       resources:
         limits:
@@ -112,8 +110,7 @@ services:
       tail -f /var/log/mongodb.log
       "
     networks:
-      backend:
-        ipv4_address: 172.20.1.14
+      - backend
     healthcheck:
       test: [ "CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/27017' || exit 1" ]
       interval: 30s
@@ -126,15 +123,24 @@ services:
         reservations:
           memory: 128M
 
+  mailpit:
+    container_name: trusted-web-mailpit
+    image: axllent/mailpit:latest
+    restart: always
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web UI
+    networks:
+      - backend
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
 networks:
   shared_bridge:
-    external: true
+    driver: bridge
   backend:
     driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.20.1.0/24
 
 volumes:
   redis:

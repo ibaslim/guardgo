@@ -11,10 +11,6 @@ oauth2_scheme = OAuth2PasswordBearer(
 
 
 async def get_current_role(token: str = Depends(oauth2_scheme)):
-    auth = env_handler.get_instance().env("AUTH")
-    if auth == "0":
-        return user_role.DEMO
-
     role = await session_manager.get_instance().get_current_role(token)
     if role is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User role not found")

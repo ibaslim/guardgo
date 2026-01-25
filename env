@@ -19,10 +19,15 @@ CYPRESS_ADMIN_USERNAME=admin
 CYPRESS_ADMIN_PASSWORD='R9&!HNgT#yS@+kY^WnA%pD(euF*BVCaLJw1Mxtbrs'
 
 # MAIL KEYS
-ACCOUNTS_MAIL_PASSWORD='u#V)dca1&SC'
+# For local/stage testing with Mailpit:
+#   ACCOUNTS_MAIL_PASSWORD='anything' (Mailpit accepts any password)
+#   ACCOUNTS_SMTP_SERVER=mailpit (matches docker-compose service name)
+# For production, use real SMTP server credentials:
+ACCOUNTS_MAIL_PASSWORD='test'
+ACCOUNTS_SMTP_PORT='1025'
 APP_URL='http://localhost:4200'
-ACCOUNTS_MAIL=accounts@orionintelligence.org
-ACCOUNTS_SMTP_SERVER=smtp.titan.email
+ACCOUNTS_MAIL=test@mailpit.local
+ACCOUNTS_SMTP_SERVER=mailpit
 
 # PRODUCTION MODE
 AUTH='1'

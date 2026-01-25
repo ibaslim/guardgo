@@ -3,17 +3,19 @@ import { Router } from '@angular/router';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
+import { CommonModule } from '@angular/common';
 
 @Component({
   selector: 'app-welcome',
-  imports: [],
+  standalone: true,
+  imports: [CommonModule],
   templateUrl: './welcome.component.html',
   styleUrl: './welcome.component.css'
 })
 export class WelcomeComponent implements OnInit {
   hasToken: boolean = false;
   message: string = "Your registration has been submitted! We've received your information and are now reviewing your request. You will receive an email notification once your account has been approved by an administrator.";
-  heading: string = "Thank you for registering with ";
+  heading: string = "Thank you for registering with GuardGo";
   constructor(private router: Router, private route: ActivatedRoute, public apiService: ApiService, appService: AppService) {
     this.heading += appService.getConfig().appSettings.app_name + "!"
   }
