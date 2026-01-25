@@ -36,16 +36,17 @@ export class AppService {
       id: '',
       name: '',
       phone: '',
-      isDefault: false,
-      hasOnboarding: false,
+      is_default: false,
+      has_onboarding: false,
       country: '',
       city: '',
-      postalCode: '',
-      taxId: '',
-      userId: '',
+      postal_code: '',
+      tax_id: '',
+      user_id: '',
       licenses: [],
-      assignedQuota: '0',
-      quotaExceeded: false
+      assigned_quota: '0',
+      quota_exceeded: false,
+      status: ''
     },
     alerts: []
   });
@@ -88,17 +89,18 @@ export class AppService {
           tenant: {
             id: '',
             name: '',
-            isDefault: false,
+            is_default: false,
             phone: '',
-            hasOnboarding: false,
+            has_onboarding: false,
             country: '',
             city: '',
-            postalCode: '',
-            taxId: '',
-            userId: '',
+            postal_code: '',
+            tax_id: '',
+            user_id: '',
             licenses: [],
-            assignedQuota: '0',
-            quotaExceeded: false
+            assigned_quota: '0',
+            quota_exceeded: false,
+            status: ''
           },
           alerts: []
         });
@@ -180,17 +182,18 @@ export class AppService {
       tenant: {
         id: '',
         name: '',
-        isDefault: false,
+        is_default: false,
         phone: '',
-        hasOnboarding: false,
+        has_onboarding: false,
         country: '',
         city: '',
-        postalCode: '',
-        taxId: '',
-        userId: '',
+        postal_code: '',
+        tax_id: '',
+        user_id: '',
         licenses: [],
-        assignedQuota: '0',
-        quotaExceeded: false
+        assigned_quota: '0',
+        quota_exceeded: false,
+        status: ''
       },
       alerts: []
     });
@@ -208,8 +211,29 @@ export class AppService {
         ...state,
         tenant: {
           ...state.tenant,
-          hasOnboarding: value
+          has_onboarding: value
         }
+      };
+    });
+  }
+
+  setTenantStatus(status: string, hasOnboarding?: boolean) {
+    this.userSessionData.update(state => {
+      if (!state) return state;
+
+      const updatedTenant = {
+        ...state.tenant,
+        status
+      };
+
+      if (hasOnboarding !== undefined) {
+        updatedTenant.has_onboarding = hasOnboarding;
+        localStorage.setItem('onboarding', String(hasOnboarding));
+      }
+
+      return {
+        ...state,
+        tenant: updatedTenant
       };
     });
   }

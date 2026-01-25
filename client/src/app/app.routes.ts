@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { AuthGuard } from './shared/guards/auth-guard.guard';
+import { onboardingGuard } from './shared/guards/onboarding.guard';
 import { LoginComponent } from './pages/login/login.component';
 import { DashboardComponent } from './pages/dashboard/dashboard.component';
 import { DashboardLayoutComponent } from './layouts/dashboard-layout/dashboard-layout.component';
@@ -36,24 +37,6 @@ export const routes: Routes = [
     data: { animation: 'LoginPage' }
   },
   {
-    path: 'onboarding',
-    resolve: { config: ConfigResolver },
-    component: OnboardingComponent,
-    data: { animation: 'OnboardingPage' }
-  },
-  {
-    path: 'guard-setting',
-    resolve: { config: ConfigResolver },
-    component: GuardSettingComponent,
-    data: { animation: 'GuardSettingPage' }
-  },
-  {
-    path: 'clients-setting',
-    resolve: { config: ConfigResolver },
-    component: ClientSettingComponent,
-    data: { animation: 'ClientSettingPage' }
-  },
-  {
     path: 'welcome',
     component: WelcomeComponent,
     data: { animation: 'WelcomePage' }
@@ -81,7 +64,7 @@ export const routes: Routes = [
   {
     path: 'dashboard',
     component: DashboardLayoutComponent,
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, onboardingGuard],
     resolve: {
       config: ConfigResolver,
     },
@@ -94,35 +77,32 @@ export const routes: Routes = [
       },
       {
         path: 'overview',
-        component: DashboardComponent
+        component: DashboardComponent,
+        canActivate: [onboardingGuard]
       },
       {
         path: 'users',
-        component: UsersComponent
+        component: UsersComponent,
+        canActivate: [onboardingGuard]
       },
       {
         path: 'analytics',
-        component: AnalyticsComponent
+        component: AnalyticsComponent,
+        canActivate: [onboardingGuard]
       },
       {
         path: 'components-demo',
-        loadComponent: () => import('./pages/components-demo/components-demo.component').then(m => m.ComponentsDemoComponent)
+        loadComponent: () => import('./pages/components-demo/components-demo.component').then(m => m.ComponentsDemoComponent),
+        canActivate: [onboardingGuard]
       },
       {
         path: 'forms',
-        loadComponent: () => import('./pages/forms/forms-page.component').then(m => m.FormsPageComponent)
+        loadComponent: () => import('./pages/forms/forms-page.component').then(m => m.FormsPageComponent),
+        canActivate: [onboardingGuard]
       },
       {
         path: 'onboarding',
-        component: OnboardingComponent,
-      },
-      {
-        path: 'guard-setting',
-        component: GuardSettingComponent,
-      },
-      {
-        path: 'clients-setting',
-        component: ClientSettingComponent,
+        component: OnboardingComponent
       }
     ]
   },

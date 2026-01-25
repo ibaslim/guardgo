@@ -90,15 +90,16 @@ export class TenantComponent implements OnInit {
   }
 
   hasIocsWithValues(): boolean {
-    return this.onboardingData?.iocs?.some(ioc => ioc.values.length > 0) ?? false;
+    const iocs = this.onboardingData?.iocs || [];
+    return iocs.some(ioc => (ioc.values || []).length > 0);
   }
 
   getFilteredIocs() {
     if (!this.iocSearchText) {
       return this.onboardingData.iocs;
     }
-    return this.onboardingData.iocs.filter(ioc =>
-      ioc.name.toLowerCase().includes(this.iocSearchText.toLowerCase())
+    return (this.onboardingData.iocs || []).filter(ioc =>
+      (ioc.name || '').toLowerCase().includes((this.iocSearchText || '').toLowerCase())
     );
   }
 

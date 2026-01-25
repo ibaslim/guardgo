@@ -247,10 +247,10 @@ class AccountManager:
         node = NodeCallbackModel.model_validate(
             {"user": {"email": user.email, "twofa_enabled": user.twofa_enabled, "username": user.username, "role": user.role, "status": user.status, "subscription": user.subscription, "verificationDate": user.account_verify_at.isoformat() if user.account_verify_at else None, "license": [
                 license.value for license in
-                user.licenses], "image": user_image_path, }, "tenant": {"hasOnboarding": tenant.status == TenantStatus.ONBOARDING, "id": str(
-                tenant.id), "isDefault": str(tenant.is_default), "name": tenant_name, "phone": tenant_phone, "country": tenant_country, "city": tenant_city, "postalCode": tenant_postal_code, "taxId": str(tenant.id), "userId": "", "licenses": [
-                self.safe_decrypt(enc, l) for l in (tenant.licenses or [])], "assignedQuota": str(
-                assigned_quota), "quotaExceeded": bool(
-                not tenant.is_default and tenant.user_quota is not None and assigned_quota < total_user), "image": tenant_image_path, } })
+                user.licenses], "image": user_image_path, }, "tenant": {"has_onboarding": tenant.status == TenantStatus.ONBOARDING, "id": str(
+                tenant.id), "is_default": str(tenant.is_default), "name": tenant_name, "phone": tenant_phone, "country": tenant_country, "city": tenant_city, "postal_code": tenant_postal_code, "tax_id": str(tenant.id), "user_id": "", "licenses": [
+                self.safe_decrypt(enc, l) for l in (tenant.licenses or [])], "assigned_quota": str(
+                assigned_quota), "quota_exceeded": bool(
+                not tenant.is_default and tenant.user_quota is not None and assigned_quota < total_user), "image": tenant_image_path, "tenant_type": tenant.tenant_type.value, "status": tenant.status.value, } })
 
         return node

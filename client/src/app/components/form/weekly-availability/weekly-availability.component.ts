@@ -61,7 +61,7 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
   }
 
   toggleSlot(slot: string) {
-    const allSelected = this.daysOfWeek.every(day => this.availability[day]?.includes(slot));
+    const allSelected = this.daysOfWeek.every(day => (this.availability[day] || []).includes(slot));
 
     this.daysOfWeek.forEach(day => {
       if (!this.availability[day]) this.availability[day] = [];

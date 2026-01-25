@@ -15,7 +15,7 @@ import { CommonModule } from '@angular/common';
 export class WelcomeComponent implements OnInit {
   hasToken: boolean = false;
   message: string = "Your registration has been submitted! We've received your information and are now reviewing your request. You will receive an email notification once your account has been approved by an administrator.";
-  heading: string = "Thank you for registering with ";
+  heading: string = "Thank you for registering with GuardGo";
   constructor(private router: Router, private route: ActivatedRoute, public apiService: ApiService, appService: AppService) {
     this.heading += appService.getConfig().appSettings.app_name + "!"
   }

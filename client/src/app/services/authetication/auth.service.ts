@@ -156,8 +156,8 @@ export class AuthService {
     this.login('_', '_', true).subscribe(async (_) => { });
   }
 
-  signup(username: string, email: string, password: string): Observable<any> {
-    return this.apiService.post('signup', { username, email, password });
+  signup(username: string, email: string, password: string, tenant_type?: string): Observable<any> {
+    return this.apiService.post('signup', { username, email, password, tenant_type });
   }
 
   signup_verification(mail: string, password: string): Observable<any> {

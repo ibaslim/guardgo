@@ -8,7 +8,7 @@ export class TenantGuard implements CanActivate {
 
     canActivate(): boolean {
 
-        if (!this.appService.userSessionData().tenant.hasOnboarding) {
+        if (!this.appService.userSessionData().tenant.has_onboarding) {
             this.router.navigate(['/dashboard'], { replaceUrl: true }).then();
             return false;
         }
