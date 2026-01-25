@@ -95,6 +95,58 @@ browse freely while safeguarding their online identity.
 
 ![JPJ pdf](https://github.com/user-attachments/assets/399fd130-988d-4e0d-acef-2f60d6220a81)
 
+## Backend API
+
+The backend is a FastAPI application with MongoDB (via Odmantic). It includes authentication, tenant management, and resource endpoints.
+
+### Tenant Profile APIs
+
+- Get Profile: POST `/api/tenant/profile` (or GET `/api/me/profile`)
+	- Auth: `ADMIN`, `GUARD_ADMIN`, `CLIENT_ADMIN`, `SP_ADMIN`
+	- Returns the current tenant's `profile` object (empty if not set).
+
+- Update Profile: PUT `/api/tenant/profile` (or PUT `/api/me/profile`)
+	- Payload supports exactly one typed object: `guard`, `client`, or `service_provider`.
+	- Partial updates allowed; fields omitted are unchanged.
+	- Enforced: Only the domain admin matching `tenant_type` (or `ADMIN`) can update.
+
+Example payloads:
+
+```json
+{
+	"guard": {
+		"full_name": "John Doe",
+		"hourly_rate": 18.5,
+		"weekly_availability": { "night": true }
+	}
+}
+```
+
+```json
+{
+	"client": {
+		"legal_entity_name": "Acme Corp",
+		"primary_contact": { "name": "Alice" },
+		"billing_model": "per_hour"
+	}
+}
+```
+
+```json
+{
+	"service_provider": {
+		"legal_company_name": "SecureOps Ltd",
+		"company_phone": "+1-555-0100",
+		"operating_regions": [ { "city": "Seattle", "coverage_radius_km": 50 } ]
+	}
+}
+```
+
+Notes:
+- Exactly one of `guard`, `client`, `service_provider` must be present.
+- The provided type must match the tenant's `tenant_type`.
+- Lists are replaced when present; nested objects are deep-merged for partial updates.
+
 ## Contribution
 
 We welcome contributions to improve Orion Search. If you'd like to contribute, please fork the repository and submit a

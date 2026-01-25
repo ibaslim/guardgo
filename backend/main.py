@@ -29,6 +29,14 @@ async def lifespan(p_app: FastAPI):
     service_manager_instance = service_manager.get_instance()
     await service_manager_instance.build_assets(ANGULAR_BUILD_DIR)
     await service_manager_instance.init_services()
+    
+    # Run tenant migration to typed profiles
+    try:
+        from migrations.scripts.migrate_tenant_to_typed_profiles import migrate_tenants
+        await migrate_tenants()
+    except Exception as e:
+        print(f"Warning: Tenant migration failed: {e}")
+    
     setup_admin(mongo_controller.get_instance().get_engine()).mount_to(p_app)
     app.include_router(interface)
     yield
@@ -48,11 +56,11 @@ def custom_swagger_ui():
 
 
 configure_swagger(app)
-app.include_router(auth_router, include_in_schema=False)
-app.include_router(admin_routes, include_in_schema=False)
-app.include_router(public_routes, include_in_schema=False)
-app.include_router(tenant_routes, include_in_schema=False)
-app.include_router(api_routes)
+app.include_router(auth_router, include_in_schema=True)
+app.include_router(admin_routes, include_in_schema=True)
+app.include_router(public_routes, include_in_schema=True)
+app.include_router(tenant_routes, include_in_schema=True)
+app.include_router(api_routes, include_in_schema=True)
 
 app.add_exception_handler(Exception, global_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)

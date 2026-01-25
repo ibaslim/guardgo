@@ -68,17 +68,6 @@ export class AuthService {
             return;
           }
 
-          const sessionData = response?.session || {};
-          if (sessionData?.role === 'crawler') {
-            this.authState.next({
-              token: null,
-              isAuthenticated: false,
-              isValidated: true,
-              error: 'Access denied!'
-            });
-            return;
-          }
-
           this.setToken(response.access_token);
           this.startTokenRefresh();
           this.appService.loadSession(true).then(() => {
@@ -127,17 +116,6 @@ export class AuthService {
             return;
           }
 
-          const sessionData = response?.session || {};
-          if (sessionData?.role === 'crawler') {
-            this.authState.next({
-              token: null,
-              isAuthenticated: false,
-              isValidated: true,
-              error: 'Access denied!'
-            });
-            return;
-          }
-
           this.setToken(response.access_token);
           this.startTokenRefresh();
         },
@@ -178,8 +156,8 @@ export class AuthService {
     this.login('_', '_', true).subscribe(async (_) => { });
   }
 
-  signup(username: string, email: string, password: string): Observable<any> {
-    return this.apiService.post('signup', { username, email, password });
+  signup(username: string, email: string, password: string, tenant_type?: string): Observable<any> {
+    return this.apiService.post('signup', { username, email, password, tenant_type });
   }
 
   signup_verification(mail: string, password: string): Observable<any> {

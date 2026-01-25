@@ -1,83 +1,107 @@
-
-<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-200">
-  <div class="max-w-md w-full space-y-8">
-    <div>
-      <div class="flex justify-center mb-6">
-        <img src="assets/images/shared/orion-Intelligence-logo.svg" width="120" height="80" alt="logo" class="dark:brightness-200" />
-      </div>
-      <h2 class="mt-6 text-center text-4xl font-extrabold text-gray-900 dark:text-white">
-        Sign up for an account
-      </h2>
-      <p class="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-        Welcome to {{ appService.getConfig().appSettings.app_name || 'GuardGo' }}
-      </p>
-    </div>
-    <form #signUpForm="ngForm" class="mt-8 space-y-6 bg-white dark:bg-gray-800 shadow-xl rounded-lg p-8" (ngSubmit)="onSubmit(signUpForm)">
-      <div class="rounded-md shadow-sm space-y-4">
-        <div>
-          <app-base-input
-            label="Username"
-            name="username"
-            [(ngModel)]="user.username"
-            [required]="true"
-            [placeholder]="'Enter your username'"
-            [errorText]="usernameSuggestion ? usernameSuggestion.replace('Username already taken. Suggested usernames: ', '') : ''"
-          ></app-base-input>
-        </div>
-        <div>
-          <app-base-input
-            label="Company Mail"
-            name="companymail"
-            type="email"
-            [(ngModel)]="user.mail"
-            [required]="true"
-            [placeholder]="'Enter your company mail'"
-          ></app-base-input>
-        </div>
-        <div>
-          <app-base-input
-            label="Password"
-            name="password"
-            type="password"
-            [(ngModel)]="user.password"
-            [required]="true"
-            [placeholder]="'Enter your password'"
-            (ngModelChange)="onPasswordInput($event)"
-          ></app-base-input>
-        </div>
-      </div>
-      <div *ngIf="showPasswordMeter" class="mt-2">
-        <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-2">
-          <div class="h-2 rounded-full transition-all duration-300"
-            [ngClass]="{
-              'bg-red-500': passwordStrength === 'weak',
-              'bg-yellow-500': passwordStrength === 'medium',
-              'bg-green-500': passwordStrength === 'strong'
-            }"
-            [style.width.%]="passwordStrength === 'weak' ? 33 : passwordStrength === 'medium' ? 66 : 100">
-          </div>
-        </div>
-        <ul class="text-xs text-gray-600 dark:text-gray-400 mb-2">
-          <li *ngIf="currentUnmetCheck">{{ currentUnmetCheck }}</li>
-        </ul>
-      </div>
-      <div *ngIf="errorMessage" class="rounded-md bg-red-50 dark:bg-red-900 p-4 text-center text-red-800 dark:text-red-300 mb-2">
-        {{ errorMessage }}
+<div
+  class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-200">
+  <div class="max-w-2xl w-full space-y-8">
+    <!-- Header -->
+    <div class="text-center space-y-4">
+      <div class="flex justify-center">
+        <img src="assets/images/shared/orion-Intelligence-logo.svg" width="120" height="80" alt="logo"
+          class="dark:brightness-200" />
       </div>
       <div>
-        <button
-          type="submit"
-          [disabled]="!signUpForm.valid || !allPasswordRequirementsMet"
-          class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-150"
-        >
-          Sign up
-        </button>
+        <h2 class="text-3xl font-bold text-gray-900 dark:text-white">Create Account</h2>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          Join {{ appService.getConfig().appSettings.app_name || 'GuardGo' }} today
+        </p>
       </div>
-      <div class="text-center mt-4">
+    </div>
+
+    <!-- Form -->
+    <form #signUpForm="ngForm" class="bg-white dark:bg-gray-800 shadow-lg rounded-2xl p-10 space-y-8"
+      (ngSubmit)="onSubmit(signUpForm)">
+      <!-- Account Credentials Section -->
+      <section class="space-y-5">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">Account Information
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <app-base-input label="Username" name="username" [(ngModel)]="user.username" [required]="true"
+              [placeholder]="'Choose username'"
+              [errorText]="usernameSuggestion ? usernameSuggestion.replace('Username already taken. Suggested usernames: ', '') : ''"></app-base-input>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">8-20 characters</p>
+          </div>
+          <div>
+            <app-base-input label="Email" name="email" type="email" [(ngModel)]="user.mail" [required]="true"
+              [placeholder]="'you@example.com'"></app-base-input>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">For account recovery</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Password Section -->
+      <section class="space-y-5 border-t border-gray-200 dark:border-gray-700 pt-8">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">Security</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <app-base-input label="Password" name="password" type="password" [(ngModel)]="user.password"
+              [required]="true" [placeholder]="'••••••••'" (ngModelChange)="onPasswordInput($event)"></app-base-input>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">At least 8 characters</p>
+          </div>
+          <div>
+            <app-base-input label="Confirm Password" name="confirmPassword" type="password"
+              [(ngModel)]="user.confirmPassword" [required]="true" [placeholder]="'••••••••'"></app-base-input>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2"
+              [ngClass]="{'text-green-600 dark:text-green-400': user.password && user.password === user.confirmPassword, 'text-red-600 dark:text-red-400': user.password && user.password !== user.confirmPassword}">
+              <span *ngIf="!user.password">Must match password</span>
+              <span *ngIf="user.password && user.password === user.confirmPassword">✓ Matches</span>
+              <span *ngIf="user.password && user.password !== user.confirmPassword">✗ Does not match</span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Password Strength Indicator -->
+        <div *ngIf="showPasswordMeter" class="mt-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+          <div class="flex items-center gap-3">
+            <div class="flex-1 h-2 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
+              <div class="h-2 rounded-full transition-all duration-300"
+                [style.width.%]="(user.password.length / 20) * 100"
+                [ngClass]="{'bg-red-500': user.password.length < 8, 'bg-yellow-500': user.password.length >= 8 && user.password.length < 12, 'bg-green-500': user.password.length >= 12}">
+              </div>
+            </div>
+            <span class="text-xs font-medium whitespace-nowrap"
+              [ngClass]="{'text-red-600 dark:text-red-400': user.password.length < 8, 'text-yellow-600 dark:text-yellow-400': user.password.length >= 8 && user.password.length < 12, 'text-green-600 dark:text-green-400': user.password.length >= 12}">{{
+              user.password.length }}/20</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Role Selection Section -->
+      <section class="space-y-5 border-t border-gray-200 dark:border-gray-700 pt-8">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">What's your role?
+        </h3>
+        <app-radio label="" name="tenant_type" [(ngModel)]="user.tenant_type" [options]="roles" [required]="true"
+          [horizontal]="false"></app-radio>
+        <p class="text-xs text-gray-500 dark:text-gray-400">Select the role that best describes your use case</p>
+      </section>
+
+      <!-- Error Message -->
+      <div *ngIf="errorMessage"
+        class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/40 p-4">
+        <p class="text-sm text-red-800 dark:text-red-300">{{ errorMessage }}</p>
+      </div>
+
+      <!-- Submit Button -->
+      <button type="submit" [disabled]="!signUpForm.valid || !isPasswordValid || !user.tenant_type"
+        class="w-full py-4 px-4 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200">
+        Create Account
+      </button>
+
+      <!-- Footer Links -->
+      <div class="text-center border-t border-gray-200 dark:border-gray-700 pt-8">
         <p class="text-sm text-gray-600 dark:text-gray-400">
           Already have an account?
-          <a (click)="goToLogin()" class="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 ml-1 cursor-pointer">
-            Login
+          <a (click)="goToLogin()"
+            class="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 cursor-pointer">
+            Log in
           </a>
         </p>
       </div>

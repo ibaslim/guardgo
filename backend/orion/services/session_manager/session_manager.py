@@ -63,8 +63,6 @@ class session_manager:
                 raise HTTPException(status_code=401, detail="Missing or invalid token")
 
             session_id = payload.get("sid")
-            if user.role in user_role.CRAWLER:
-                return user
 
             if not session_id:
                 raise HTTPException(status_code=401, detail="Missing or invalid token")
@@ -126,13 +124,14 @@ class session_manager:
         if username:
             user = await self._engine.find_one(db_user_account, db_user_account.username == username)
 
-        if not free and user and user.role not in user_role.CRAWLER and expires_delta > timedelta(minutes=30):
+        # All users get standard token expiry (30 minutes)
+        if not free and expires_delta and expires_delta > timedelta(minutes=30):
             expires_delta = timedelta(minutes=30)
 
         expire = datetime.now(timezone.utc) + expires_delta if not free else None
 
         session_id = None
-        if user and user.role not in user_role.CRAWLER and not free:
+        if user and not free:
             session_id = secrets.token_urlsafe(32)
             user.current_session_id = session_id
             await self._engine.save(user)
@@ -189,9 +188,7 @@ class session_manager:
                 user.twofa_enabled = True
                 await self._engine.save(user)
 
-            access_ttl = timedelta(weeks=92) if user.role == user_role.CRAWLER else timedelta(minutes=30)
-            if user.role not in user_role.CRAWLER and access_ttl > timedelta(minutes=30):
-                access_ttl = timedelta(minutes=30)
+            access_ttl = timedelta(minutes=30)  # Standard token expiry for all users
 
             access_token, _role = await self.create_access_token({"sub": username}, access_ttl)
             onboarding_exists = await self.get_instance().has_onboarding(str(user.tenant_uuid))
@@ -225,25 +222,24 @@ class session_manager:
                 raise HTTPException(status_code=401, detail="User not found")
 
             session_id = payload.get("sid")
-            if user.role not in user_role.CRAWLER:
-                if not session_id:
+            if not session_id:
+                raise HTTPException(status_code=401, detail="Invalid token")
+
+            redis_key = f"session:{str(user.id)}"
+            redis_sid = await self._redis.invoke_trigger(REDIS_COMMANDS.S_GET_STRING, [redis_key, None, None])
+
+            if redis_sid is None:
+                if user.current_session_id != session_id:
                     raise HTTPException(status_code=401, detail="Invalid token")
-
-                redis_key = f"session:{str(user.id)}"
-                redis_sid = await self._redis.invoke_trigger(REDIS_COMMANDS.S_GET_STRING, [redis_key, None, None])
-
-                if redis_sid is None:
-                    if user.current_session_id != session_id:
-                        raise HTTPException(status_code=401, detail="Invalid token")
-                    await self._redis.invoke_trigger(
-                        REDIS_COMMANDS.S_SET_STRING,
-                        [redis_key, session_id, self._session_ttl])
-                else:
-                    if redis_sid != user.current_session_id or redis_sid != session_id:
-                        raise HTTPException(status_code=401, detail="Invalid token")
-                    await self._redis.invoke_trigger(
-                        REDIS_COMMANDS.S_SET_STRING,
-                        [redis_key, redis_sid, self._session_ttl])
+                await self._redis.invoke_trigger(
+                    REDIS_COMMANDS.S_SET_STRING,
+                    [redis_key, session_id, self._session_ttl])
+            else:
+                if redis_sid != user.current_session_id or redis_sid != session_id:
+                    raise HTTPException(status_code=401, detail="Invalid token")
+                await self._redis.invoke_trigger(
+                    REDIS_COMMANDS.S_SET_STRING,
+                    [redis_key, redis_sid, self._session_ttl])
 
             role_name = (getattr(user.role, "value", str(user.role))).split(".")[-1].lower()
             acct_at = user.account_verify_at
@@ -255,14 +251,9 @@ class session_manager:
 
             onboarding_exists = await self.has_onboarding(str(user.tenant_uuid))
 
-            base_expiry = time.time() + CONSTANTS.S_AUTH_ACCESS_TOKEN_EXPIRE_MINUTES * 60 * 60 * 24
-            if user.role not in user_role.CRAWLER:
-                base_expiry = time.time() + 3 * 60
-
-            if user.role in user_role.CRAWLER:
-                new_token_payload = {"sub": username, "exp": base_expiry}
-            else:
-                new_token_payload = {"sub": username, "exp": base_expiry, "sid": session_id}
+            # Standard 3-minute token expiry for all users
+            base_expiry = time.time() + 3 * 60
+            new_token_payload = {"sub": username, "exp": base_expiry, "sid": session_id}
 
             new_token = jwt.encode(new_token_payload, CONSTANTS.S_AUTH_SECRET_KEY, algorithm=CONSTANTS.S_AUTH_ALGORITHM)
 

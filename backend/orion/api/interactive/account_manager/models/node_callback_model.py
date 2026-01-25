@@ -24,15 +24,17 @@ class TenantDataModel(BaseModel):
     phone: str
     country: str
     city: str
-    postalCode: str
-    taxId: str
-    hasOnboarding: bool
-    isDefault: bool
-    userId: str
+    postal_code: str
+    tax_id: str
+    has_onboarding: bool
+    is_default: bool
+    user_id: str
     licenses: list[str]
-    assignedQuota: str
-    quotaExceeded: bool
+    assigned_quota: str
+    quota_exceeded: bool
     image: Optional[str] = None
+    tenant_type: Optional[str] = None
+    status: Optional[str] = None
 
 
 class NodeCallbackModel(BaseModel):

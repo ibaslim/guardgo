@@ -1,19 +1,19 @@
 import { Routes } from '@angular/router';
 import { AuthGuard } from './shared/guards/auth-guard.guard';
+import { onboardingGuard } from './shared/guards/onboarding.guard';
 import { LoginComponent } from './pages/login/login.component';
 import { DashboardComponent } from './pages/dashboard/dashboard.component';
 import { DashboardLayoutComponent } from './layouts/dashboard-layout/dashboard-layout.component';
-import { ErrorHandlerComponent } from './shared/partials/error-handler/error-handler.component';
 import { SignupComponent } from './pages/signup/signup.component';
-import { TenantComponent } from './pages/tenant/tenant.component';
 import { WelcomeComponent } from './pages/welcome/welcome.component';
 import { ResetPasswordComponent } from './shared/partials/forgot-password/reset-password.component';
-import { TenantGuard } from './shared/guards/tenant-guard.guard';
 import { NotificationComponent } from './shared/partials/notification/notification.component';
 import { ConfigResolver } from './shared/resolvers/config.resolver';
 import { UsersComponent } from './pages/users/users.component';
 import { AnalyticsComponent } from './pages/analytics/analytics.component';
-import { ComponentsDemoComponent } from './pages/components-demo/components-demo.component';
+import { OnboardingComponent } from './pages/onboarding/onboarding.component';
+import { ClientSettingComponent } from './pages/client-setting/client-setting.component';
+import { GuardSettingComponent } from './pages/guard-setting/guard-setting.component';
 
 export const routes: Routes = [
 
@@ -35,13 +35,6 @@ export const routes: Routes = [
     resolve: { config: ConfigResolver },
     component: LoginComponent,
     data: { animation: 'LoginPage' }
-  },
-  {
-    path: 'onboarding',
-    resolve: { config: ConfigResolver },
-    component: TenantComponent,
-    canActivate: [TenantGuard],
-    data: { animation: 'TenantPage' }
   },
   {
     path: 'welcome',
@@ -71,7 +64,7 @@ export const routes: Routes = [
   {
     path: 'dashboard',
     component: DashboardLayoutComponent,
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, onboardingGuard],
     resolve: {
       config: ConfigResolver,
     },
@@ -84,23 +77,32 @@ export const routes: Routes = [
       },
       {
         path: 'overview',
-        component: DashboardComponent
+        component: DashboardComponent,
+        canActivate: [onboardingGuard]
       },
       {
         path: 'users',
-        component: UsersComponent
+        component: UsersComponent,
+        canActivate: [onboardingGuard]
       },
       {
         path: 'analytics',
-        component: AnalyticsComponent
+        component: AnalyticsComponent,
+        canActivate: [onboardingGuard]
       },
       {
         path: 'components-demo',
-        loadComponent: () => import('./pages/components-demo/components-demo.component').then(m => m.ComponentsDemoComponent)
+        loadComponent: () => import('./pages/components-demo/components-demo.component').then(m => m.ComponentsDemoComponent),
+        canActivate: [onboardingGuard]
       },
       {
         path: 'forms',
-        loadComponent: () => import('./pages/forms/forms-page.component').then(m => m.FormsPageComponent)
+        loadComponent: () => import('./pages/forms/forms-page.component').then(m => m.FormsPageComponent),
+        canActivate: [onboardingGuard]
+      },
+      {
+        path: 'onboarding',
+        component: OnboardingComponent
       }
     ]
   },

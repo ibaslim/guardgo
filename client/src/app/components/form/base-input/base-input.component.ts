@@ -17,7 +17,7 @@ import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/f
   ]
 })
 export class BaseInputComponent implements ControlValueAccessor {
-  @Input() type: 'text' | 'number' | 'email' | 'password' = 'text';
+  @Input() type: 'text' | 'number' | 'email' | 'password' | 'tel' | 'date' = 'text';
   @Input() label = '';
   @Input() placeholder?: string;
   @Input() disabled = false;
@@ -27,8 +27,10 @@ export class BaseInputComponent implements ControlValueAccessor {
   @Input() helperText: string = '';
   @Input() errorText: string = '';
   value: string | number = '';
-  onChange = (value: any) => {};
-  onTouched = () => {};
+  onChange = (value: any) => { };
+  onTouched = () => { };
+
+  touched = false;
 
   get effectivePlaceholder(): string {
     return this.placeholder ?? (this.label ? `Enter ${this.label.toLowerCase()}` : 'Enter value');

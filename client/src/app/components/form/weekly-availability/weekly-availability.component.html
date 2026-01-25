@@ -1,0 +1,44 @@
+<div
+    class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow mt-4">
+
+    <!-- Table -->
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <thead class="bg-gray-50 dark:bg-gray-800">
+            <tr>
+                <th
+                    class="px-6 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider">
+                    Day / Time
+                </th>
+                <th *ngFor="let slot of timeSlots" class="px-6 py-3 text-xs font-bold">
+                    <div class="flex flex-col items-center gap-1">
+                        <span>{{ slot }}</span>
+                        <input type="checkbox" (click)="toggleSlot(slot)" class="h-4 w-4 ..." />
+                    </div>
+                </th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+            <tr *ngFor="let day of daysOfWeek; let i = index"
+                [ngClass]="{'bg-white dark:bg-gray-900': i % 2 === 0, 'bg-gray-50 dark:bg-gray-800': i % 2 === 1}">
+                <td class="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{{ day }}</td>
+                <td *ngFor="let slot of timeSlots" class="px-6 py-4">
+                    <div class="flex justify-center">
+                        <input type="checkbox" [checked]="(availability[day] || []).includes(slot)"
+                            (change)="toggle(day, slot, $event)" class="h-4 w-4 ..." />
+                    </div>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    <!-- Buttons above the table -->
+    <div class="flex justify-end gap-2 p-4">
+        <button type="button" (click)="selectAll()"
+            class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+            Select All
+        </button>
+        <button type="button" (click)="clearAll()"
+            class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition">
+            Clear All
+        </button>
+    </div>
+</div>

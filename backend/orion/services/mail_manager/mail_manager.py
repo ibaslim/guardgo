@@ -34,18 +34,22 @@ class mail_manager:
         return subject, body
 
     async def send_verification_mail(self, to: str, subject: str, body: str):
-        subject, body = await self.process_app_variables(subject, body)
-        ACCOUNTS_MAIL_PASSWORD = env_handler.get_instance().env("ACCOUNTS_MAIL_PASSWORD")
-        sender_email = env_handler.get_instance().env("ACCOUNTS_MAIL")
-        smtp_server = env_handler.get_instance().env("ACCOUNTS_SMTP_SERVER")
-        smtp_port = 465
-        msg = MIMEMultipart("alternative")
-        msg["From"] = sender_email
-        msg["To"] = to
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "html"))
-        await asyncio.to_thread(
-            self._send_sync_email, sender_email, ACCOUNTS_MAIL_PASSWORD, to, msg, smtp_server, smtp_port)
+        try:
+            subject, body = await self.process_app_variables(subject, body)
+            ACCOUNTS_MAIL_PASSWORD = env_handler.get_instance().env("ACCOUNTS_MAIL_PASSWORD")
+            sender_email = env_handler.get_instance().env("ACCOUNTS_MAIL")
+            smtp_server = env_handler.get_instance().env("ACCOUNTS_SMTP_SERVER")
+            smtp_port = int(env_handler.get_instance().env("ACCOUNTS_SMTP_PORT", "465"))
+            msg = MIMEMultipart("alternative")
+            msg["From"] = sender_email
+            msg["To"] = to
+            msg["Subject"] = subject
+            msg.attach(MIMEText(body, "html"))
+            await asyncio.to_thread(
+                self._send_sync_email, sender_email, ACCOUNTS_MAIL_PASSWORD, to, msg, smtp_server, smtp_port)
+        except Exception as e:
+            print(f"ERROR sending mail to {to}: {str(e)}")
+            raise
 
     async def send_verification_mail_list(self, to_list, subject: str, body: str):
         subject, body = await self.process_app_variables(subject, body)
@@ -64,9 +68,22 @@ class mail_manager:
     @staticmethod
     def _send_sync_email(sender_email, password, to, msg, smtp_server, smtp_port):
         recipients = [to, sender_email]
-        with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
-            server.login(sender_email, password)
-            server.sendmail(sender_email, recipients, msg.as_string())
+        try:
+            # Try SSL first (port 465)
+            if smtp_port == 465:
+                with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+                    if password:
+                        server.login(sender_email, password)
+                    server.sendmail(sender_email, recipients, msg.as_string())
+            else:
+                # Use plain SMTP for mailpit (port 1025)
+                with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    if password:
+                        server.login(sender_email, password)
+                    server.sendmail(sender_email, recipients, msg.as_string())
+        except Exception as e:
+            print(f"ERROR in _send_sync_email: {str(e)}")
+            raise
 
     @staticmethod
     def _send_sync_email_list(sender_email, password, to_list, msg, smtp_server, smtp_port):

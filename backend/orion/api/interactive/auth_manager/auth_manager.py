@@ -84,10 +84,8 @@ class auth_manager:
         if user.status == UserStatus.DISABLE:
             raise HTTPException(status_code=401, detail="Account Blocked")
 
-        if user.role == user_role.CRAWLER:
-            access_token_expires = timedelta(weeks=92)
-        else:
-            access_token_expires = timedelta(minutes=30)
+        # All users get standard token expiry
+        access_token_expires = timedelta(minutes=30)
 
         access_token, role = await session_manager.get_instance().create_access_token(
             data={"sub": user.username}, expires_delta=access_token_expires, free=free)

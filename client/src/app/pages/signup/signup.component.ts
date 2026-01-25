@@ -1,36 +1,28 @@
-import {Component, OnInit} from '@angular/core';
-import {ActivatedRoute, Router} from '@angular/router';
-import {CommonModule} from '@angular/common';
+import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { CommonModule } from '@angular/common';
 import { BaseInputComponent } from '../../components/form/base-input/base-input.component';
-import {FormsModule, NgForm} from '@angular/forms';
-import {AuthService} from '../../services/authetication/auth.service';
-import {AppService} from '../../services/core/app/app.service';
+import { FormsModule, NgForm } from '@angular/forms';
+import { AuthService } from '../../services/authetication/auth.service';
+import { AppService } from '../../services/core/app/app.service';
+import { RadioComponent } from "../../components/form/radio/radio.component";
 
 @Component({
   selector: 'app-signup',
   standalone: true,
-  imports: [FormsModule, CommonModule, BaseInputComponent],
+  imports: [FormsModule, CommonModule, BaseInputComponent, RadioComponent],
   templateUrl: './signup.component.html'
 })
 export class SignupComponent implements OnInit {
-  user = { username: '', mail: '', password: '' };
+  user = { username: '', mail: '', password: '', confirmPassword: '', tenant_type: '' };
   errorMessage: string | null = null;
-  passwordStrength: 'weak' | 'medium' | 'strong' | null = null;
   showPasswordMeter = false;
-  passwordChecks = {
-    length: false,
-    lowercase: false,
-    uppercase: false,
-    number: false,
-    specialChar: false
-  };
-  currentUnmetCheck: string | null = null;
   isMobile = false;
 
   usernamePattern = /^[A-Za-z][A-Za-z0-9_-]{7,19}$/;
   usernameSuggestion: string = '';
 
-  constructor(private router: Router, public auth_service: AuthService, private route: ActivatedRoute, protected appService:AppService) { }
+  constructor(private router: Router, public auth_service: AuthService, private route: ActivatedRoute, protected appService: AppService) { }
 
   ngOnInit(): void {
     this.route.queryParams.subscribe(() => {
@@ -94,54 +86,43 @@ export class SignupComponent implements OnInit {
       return false;
     }
 
+    if (this.user.password.length < 8) {
+      this.errorMessage = 'Password must be at least 8 characters';
+      return false;
+    }
+
+    if (this.user.password !== this.user.confirmPassword) {
+      this.errorMessage = 'Passwords do not match';
+      return false;
+    }
+
+    if (!this.user.tenant_type) {
+      this.errorMessage = 'Please select a domain';
+      return false;
+    }
+
     this.errorMessage = null;
     return true;
   }
 
   onPasswordInput(password: string) {
     this.showPasswordMeter = password.length > 0;
-    this.passwordChecks = {
-      length: password.length >= 8,
-      lowercase: /[a-z]/.test(password),
-      uppercase: /[A-Z]/.test(password),
-      number: /[0-9]/.test(password),
-      specialChar: /[^A-Za-z0-9]/.test(password)
-    };
-
-    const checkOrder = [
-      { key: 'length', message: 'At least 8 characters' },
-      { key: 'lowercase', message: 'At least one lowercase letter' },
-      { key: 'uppercase', message: 'At least one uppercase letter' },
-      { key: 'number', message: 'At least one number' },
-      { key: 'specialChar', message: 'At least one special character' }
-    ] as const;
-
-    this.currentUnmetCheck = checkOrder.find(c => !this.passwordChecks[c.key])?.message || null;
-
-    const allRequirementsMet = Object.values(this.passwordChecks).every(v => v);
-
-    if (!allRequirementsMet) {
-      this.passwordStrength = 'weak';
-      return;
-    }
-
-    if (password.length >= 12 && this.passwordChecks.specialChar && this.passwordChecks.number) {
-      this.passwordStrength = 'strong';
-    } else if (password.length >= 10) {
-      this.passwordStrength = 'medium';
-    } else {
-      this.passwordStrength = 'weak';
-    }
   }
 
-  get allPasswordRequirementsMet(): boolean {
-    return Object.values(this.passwordChecks).every(v => v);
+  get isPasswordValid(): boolean {
+    return this.user.password.length >= 8 && this.user.password === this.user.confirmPassword;
   }
+
+  roles = [
+    { label: 'Client', value: 'client' },
+    { label: 'Guard', value: 'guard' },
+    { label: 'Service Provider', value: 'service_provider' }
+  ];
 
   onSubmit(form: NgForm) {
     if (!this.validateFields() || !form.valid) return;
 
-    this.auth_service.signup(this.user.username, this.user.mail, this.user.password).subscribe({
+    this.auth_service.signup(this.user.username, this.user.mail, this.user.password, this.user.tenant_type).subscribe({
       next: () => this.router.navigate(['/welcome']),
       error: (err) => {
         this.errorMessage = err?.error?.detail || 'Signup failed';
