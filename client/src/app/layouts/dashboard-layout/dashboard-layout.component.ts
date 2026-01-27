@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Host, HostListener, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AvatarMenuComponent } from '../../components/avatar-menu/avatar-menu.component';
 import { Router, RouterModule } from '@angular/router';
@@ -14,12 +14,12 @@ import { ThemeService } from "../../services/theme/theme.service";
     RouterModule,
     AvatarMenuComponent
   ],
-  // ...existing code...
   templateUrl: './dashboard-layout.component.html',
 })
 export class DashboardLayoutComponent implements OnInit {
   user = { name: '', avatar: '' };
   sidebarCollapsed = false;
+  isMobileView = false;
 
   constructor(
     private authService: AuthService,
@@ -33,6 +33,17 @@ export class DashboardLayoutComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.checkScreenWidth();
+  }
+
+  @HostListener('window:resize', ['$event'])
+  onResize(event: any) {
+    this.checkScreenWidth();
+  }
+
+  checkScreenWidth() {
+    this.isMobileView = window.innerWidth < 1024;
+    this.sidebarCollapsed = this.isMobileView;
   }
 
   ngOnDestroy() {

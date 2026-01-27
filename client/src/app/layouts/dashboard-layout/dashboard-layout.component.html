@@ -1,11 +1,18 @@
 <div class="min-h-screen">
-  <aside [class.w-64]="!sidebarCollapsed" [class.w-20]="sidebarCollapsed"
+  <!-- Backdrop overlay for mobile -->
+  @if (!sidebarCollapsed && isMobileView) {
+  <div (click)="toggleSidebar()" class="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"></div>
+  }
+
+  <aside [class.w-64]="!sidebarCollapsed && !isMobileView" [class.w-20]="sidebarCollapsed && !isMobileView"
+    [class.w-full]="!sidebarCollapsed && isMobileView" [class.-translate-x-full]="sidebarCollapsed && isMobileView"
     class="fixed inset-y-0 left-0 z-50 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300">
     <div class="flex flex-col h-full">
       <div class="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
         @if (!sidebarCollapsed) {
         <h1 class="text-xl font-bold text-blue-600 dark:text-blue-400">GuardGo</h1>
         }
+        @if (!isMobileView) {
         <button (click)="toggleSidebar()" [attr.aria-label]="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
           class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -16,6 +23,15 @@
             }
           </svg>
         </button>
+        }
+        @if (isMobileView) {
+        <button (click)="toggleSidebar()" aria-label="Close sidebar"
+          class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+          </svg>
+        </button>
+        }
       </div>
 
       <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
@@ -69,12 +85,25 @@
     </div>
   </aside>
 
-  <div [class.ml-64]="!sidebarCollapsed" [class.ml-20]="sidebarCollapsed"
-    class="transition-all duration-300 bg-gray-50 dark:bg-gray-900 min-h-screen">
+  <div [class.ml-64]="!sidebarCollapsed && !isMobileView" [class.ml-20]="sidebarCollapsed && !isMobileView"
+    [class.ml-0]="isMobileView" class="transition-all duration-300 bg-gray-50 dark:bg-gray-900 min-h-screen">
     <!-- Top Navbar -->
     <header
       class="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-      <div></div>
+      <div class="flex items-center">
+        @if (isMobileView) {
+        <button (click)="toggleSidebar()" [attr.aria-label]="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            @if (sidebarCollapsed) {
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            } @else {
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            }
+          </svg>
+        </button>
+        }
+      </div>
       <app-avatar-menu></app-avatar-menu>
     </header>
     <router-outlet></router-outlet>
