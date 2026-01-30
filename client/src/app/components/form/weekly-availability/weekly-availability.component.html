@@ -6,7 +6,10 @@
             <!-- Slot header with "select all" -->
             <div class="flex items-center justify-between mb-2">
                 <span class="font-semibold text-gray-700 dark:text-gray-200">{{ slot }}</span>
-                <input type="checkbox" (click)="toggleSlot(slot)" class="h-4 w-4" />
+                <div class="flex items-center gap-2">
+                    <p class="text-sm sm:text-xs text-gray-500 dark:text-gray-400 mt-1 sm:mt-0">Select All</p>
+                    <input type="checkbox" (click)="toggleSlot(slot)" class="h-4 w-4" />
+                </div>
             </div>
             <!-- Days checkboxes for this slot -->
             <div class="flex flex-col gap-2 pl-4">
