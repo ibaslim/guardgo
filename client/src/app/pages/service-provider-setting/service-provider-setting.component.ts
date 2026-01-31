@@ -93,7 +93,7 @@ export class ServiceProviderSettingComponent {
     private apiService: ApiService,
     private router: Router,
     private appService: AppService
-  ) {}
+  ) { }
 
   ngOnInit() {
     if (this.providerData && this.hasProviderData(this.providerData)) {
@@ -116,6 +116,10 @@ export class ServiceProviderSettingComponent {
 
   addRegion() {
     this.providerFormModel.operatingRegions.push('');
+  }
+
+  trackByIndex(index: number, item: any): any {
+    return index;
   }
 
   addCategory() {

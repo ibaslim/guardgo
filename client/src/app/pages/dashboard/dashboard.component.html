@@ -7,23 +7,20 @@
 <main class="p-4 sm:p-6 lg:p-8">
   <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
     @for (stat of stats; track stat.name) {
-      <div class="bg-white dark:bg-gray-800 overflow-hidden rounded-lg shadow">
-        <div class="p-5">
-          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{{ stat.name }}</dt>
-          <dd class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">{{ stat.value }}</dd>
-          <dd
-            class="mt-2 flex items-baseline text-sm font-semibold"
-            [class.text-green-600]="stat.changeType === 'increase'"
-            [class.text-red-600]="stat.changeType === 'decrease'"
-            [class.text-gray-600]="stat.changeType === 'neutral'"
-            [class.dark:text-green-400]="stat.changeType === 'increase'"
-            [class.dark:text-red-400]="stat.changeType === 'decrease'"
-            [class.dark:text-gray-400]="stat.changeType === 'neutral'"
-          >
-            {{ stat.change }}
-          </dd>
-        </div>
+    <div class="bg-white dark:bg-gray-800 overflow-hidden rounded-lg shadow">
+      <div class="p-5">
+        <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{{ stat.name }}</dt>
+        <dd class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">{{ stat.value }}</dd>
+        <dd class="mt-2 flex items-baseline text-sm font-semibold"
+          [class.text-green-600]="stat.changeType === 'increase'" [class.text-red-600]="stat.changeType === 'decrease'"
+          [class.text-gray-600]="stat.changeType === 'neutral'"
+          [class.dark:text-green-400]="stat.changeType === 'increase'"
+          [class.dark:text-red-400]="stat.changeType === 'decrease'"
+          [class.dark:text-gray-400]="stat.changeType === 'neutral'">
+          {{ stat.change }}
+        </dd>
       </div>
+    </div>
     }
   </div>
 
@@ -34,29 +31,34 @@
       <div class="flow-root">
         <ul role="list" class="-mb-8">
           @for (activity of recentActivity; track activity.time; let last = $last) {
-            <li>
-              <div class="relative pb-8">
-                @if (!last) {
-                  <span class="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200 dark:bg-gray-700"></span>
-                }
-                <div class="relative flex space-x-3">
-                  <span class="h-8 w-8 rounded-full bg-blue-500 dark:bg-blue-600 flex items-center justify-center ring-8 ring-white dark:ring-gray-800">
-                    <svg class="h-5 w-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
-                    </svg>
-                  </span>
-                  <div class="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
-                    <p class="text-sm text-gray-500 dark:text-gray-400">
-                      <span class="font-medium text-gray-900 dark:text-white">{{ activity.action }}</span>
-                      - {{ activity.user }}
-                    </p>
-                    <time class="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {{ activity.time }}
-                    </time>
-                  </div>
+          <li>
+            <div class="relative pb-8">
+              @if (!last) {
+              <span class="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200 dark:bg-gray-700"></span>
+              }
+              <div class="relative flex space-x-3">
+                <span
+                  class="h-8 w-8 rounded-full bg-blue-500 dark:bg-blue-600 flex items-center justify-center ring-8 ring-white dark:ring-gray-800">
+                  <svg class="h-5 w-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                      clip-rule="evenodd" />
+                  </svg>
+                </span>
+                <div class="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
+                  <p class="text-sm text-gray-500 dark:text-gray-400">
+                    <span class="block sm:inline font-medium text-gray-900 dark:text-white">{{ activity.action }}</span>
+                    <span class="hidden sm:inline"> - </span>
+                    <span class="block sm:inline">
+                      {{ activity.user }}
+                    </span>
+                  </p>
+                  <time class="whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {{ activity.time }}
+                  </time>
                 </div>
               </div>
-            </li>
+            </div>
+          </li>
           }
         </ul>
       </div>
