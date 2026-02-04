@@ -29,14 +29,18 @@ interface SecurityLicense {
   document?: File | null;
 }
 
+interface TimeRange {
+  start: string;
+  end: string;
+}
+
+interface DayAvailability {
+  enabled: boolean;
+  timeRanges: TimeRange[];
+}
+
 interface WeeklyAvailability {
-  Monday: string[];
-  Tuesday: string[];
-  Wednesday: string[];
-  Thursday: string[];
-  Friday: string[];
-  Saturday: string[];
-  Sunday: string[];
+  [day: string]: DayAvailability;
 }
 
 interface Guard {
@@ -93,16 +97,15 @@ export class GuardSettingComponent implements OnInit {
     },
     operationalRadius: null,
     weeklyAvailability: {
-      Monday: [],
-      Tuesday: [],
-      Wednesday: [],
-      Thursday: [],
-      Friday: [],
-      Saturday: [],
-      Sunday: []
+      Monday: { enabled: false, timeRanges: [] },
+      Tuesday: { enabled: false, timeRanges: [] },
+      Wednesday: { enabled: false, timeRanges: [] },
+      Thursday: { enabled: false, timeRanges: [] },
+      Friday: { enabled: false, timeRanges: [] },
+      Saturday: { enabled: false, timeRanges: [] },
+      Sunday: { enabled: false, timeRanges: [] }
     }
   };
-
 
   guardErrors: any = {};
 
@@ -110,7 +113,7 @@ export class GuardSettingComponent implements OnInit {
     private apiService: ApiService,
     private router: Router,
     private appService: AppService
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     if (this.guardData && this.hasGuardData(this.guardData)) {
@@ -130,8 +133,21 @@ export class GuardSettingComponent implements OnInit {
       data.identification.idNumber.trim() ||
       data.securityLicense.licenseNumber.trim() ||
       data.operationalRadius != null ||
-      Object.values(data.weeklyAvailability).some(day => day.length > 0)
+      Object.values(data.weeklyAvailability).some(day => day.enabled && day.timeRanges.length > 0)
     );
+  }
+
+  // Clean up availability before validation/submission
+  private cleanupAvailability(): void {
+    Object.keys(this.guardFormModel.weeklyAvailability).forEach(day => {
+      const dayData = this.guardFormModel.weeklyAvailability[day];
+      if (dayData.enabled) {
+        // Keep only the first range and any additional ranges that are complete
+        dayData.timeRanges = dayData.timeRanges.filter((range, index) => {
+          return index === 0 || (range.start && range.end);
+        });
+      }
+    });
   }
 
   validateGuardForm(): boolean {
@@ -203,10 +219,49 @@ export class GuardSettingComponent implements OnInit {
       this.guardErrors.operationalRadius = 'Operational radius must be at least 1 mile.';
     }
 
+    // Validate weekly availability
+    const hasAtLeastOneDay = Object.values(this.guardFormModel.weeklyAvailability).some(
+      day => day.enabled
+    );
+
+    if (!hasAtLeastOneDay) {
+      this.guardErrors.availability = 'Please select at least one day of availability.';
+    }
+
+    // Check each enabled day has valid time ranges
+    Object.entries(this.guardFormModel.weeklyAvailability).forEach(([dayName, dayData]) => {
+      if (dayData.enabled) {
+        if (dayData.timeRanges.length === 0) {
+          this.guardErrors.availability = `${dayName} requires at least one time range.`;
+          return;
+        }
+
+        // Check the first time range (mandatory)
+        const firstRange = dayData.timeRanges[0];
+        if (!firstRange.start || !firstRange.end) {
+          this.guardErrors.availability = `Please complete the first time range for ${dayName}.`;
+          return;
+        }
+
+        // Check additional time ranges (optional, but if started, must be completed)
+        dayData.timeRanges.forEach((range, index) => {
+          if (index > 0) {
+            // Additional ranges are optional, but if one field is filled, both must be filled
+            if ((range.start && !range.end) || (!range.start && range.end)) {
+              this.guardErrors.availability = `Please complete both start and end times for all time ranges in ${dayName}, or remove incomplete ranges.`;
+            }
+          }
+        });
+      }
+    });
+
     return Object.keys(this.guardErrors).length === 0;
   }
 
   submitGuardForm(): void {
+    // Clean up empty additional time ranges before validation
+    this.cleanupAvailability();
+
     if (!this.validateGuardForm()) {
       return;
     }

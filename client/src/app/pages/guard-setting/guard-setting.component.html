@@ -147,6 +147,7 @@
                 </div>
                 <app-weekly-availability label="Weekly Availability" name="availability"
                     [(ngModel)]="guardFormModel.weeklyAvailability"></app-weekly-availability>
+                <app-error-message [errorMessage]="guardErrors.availability"></app-error-message>
             </section>
 
             <div *ngIf="guardErrors.submit"
