@@ -90,6 +90,24 @@ class TokenAuthProvider(AuthProvider):
         return redirect
 
 
+async def get_current_user_from_cookie(request: Request):
+    """Extract current user from access_token cookie"""
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing or invalid token")
+    
+    try:
+        session_mgr = session_manager.get_instance()
+        user = await session_mgr.get_current_user(token)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return user
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Token validation failed")
+
+
 def setup_admin(engine: AIOEngine) -> Admin:
     admin = Admin(
         engine=engine, title="Admin Panel", auth_provider=TokenAuthProvider(), base_url="/admin/")

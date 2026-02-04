@@ -4,9 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { BaseInputComponent } from '../../components/form/base-input/base-input.component';
 import { FileUploadComponent } from '../../components/form/file-upload/file-upload.component';
+import { PageComponent } from '../../components/page/page.component';
+import { SectionComponent } from '../../components/section/section.component';
+import { ButtonComponent } from '../../components/button/button.component';
+import { StickyActionBarComponent } from '../../components/sticky-action-bar/sticky-action-bar.component';
 import { ErrorMessageComponent } from "../../components/error-message/error-message.component";
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
+import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 
 interface Address {
   street: string;
@@ -49,6 +54,10 @@ interface ServiceProvider {
     FormsModule,
     BaseInputComponent,
     FileUploadComponent,
+    PageComponent,
+    SectionComponent,
+    ButtonComponent,
+    StickyActionBarComponent,
     ErrorMessageComponent
   ],
   templateUrl: './service-provider-setting.component.html',
@@ -222,7 +231,7 @@ export class ServiceProviderSettingComponent {
     const validCategories = this.providerFormModel.guardCategoriesOffered.filter(c => c.trim());
 
     const tenantUpdatePayload = {
-      tenant_type: 'service_provider',
+      tenant_type: TENANT_TYPES.SERVICE_PROVIDER,
       profile: {
         legal_company_name: this.providerFormModel.legalCompanyName,
         company_registration_number: this.providerFormModel.companyRegistrationNumber,

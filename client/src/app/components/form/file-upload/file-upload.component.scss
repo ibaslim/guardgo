@@ -1,3 +1,9 @@
+ .file-upload-dropzone {
+  &.dropzone-active {
+    border-color: #3b82f6;
+    background-color: rgba(59, 130, 246, 0.05);
+  }
+}
 .file-upload {
   .hidden {
     display: none;

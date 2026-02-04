@@ -187,7 +187,7 @@ async def update_current_user(user: user_meta_model, current_user=Depends(get_cu
     tags=["Tenant"],
     operation_id="uploadTenantImage",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN, user_role.CLIENT_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN]))], )
 async def upload_tenant_image(file: UploadFile, current_user=Depends(get_current_user)):
     return await ResourceManager.get_instance().uploadTenantImage(file, current_user)
 
@@ -199,9 +199,37 @@ async def upload_tenant_image(file: UploadFile, current_user=Depends(get_current
     tags=["Tenant"],
     operation_id="deleteTenantImage",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN, user_role.CLIENT_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN]))], )
 async def delete_tenant_image(current_user=Depends(get_current_user)):
-    return await ResourceManager.get_instance().delete_user_icon(current_user)
+    return await ResourceManager.get_instance().delete_tenant_image(current_user)
+
+
+# ============================================================================
+# IDENTITY DOCUMENT UPLOAD ENDPOINTS
+# ============================================================================
+
+@tenant_routes.post(
+    "/api/tenant/files/identity",
+    summary="Upload tenant identity document",
+    description="Upload identity documents for the current tenant profile.",
+    tags=["Tenant"],
+    operation_id="uploadTenantIdentityDocument",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN]))], )
+async def upload_tenant_identity_document(file: UploadFile, current_user=Depends(get_current_user)):
+    return await ResourceManager.get_instance().upload_tenant_identity_document(file, current_user)
+
+
+@tenant_routes.delete(
+    "/api/tenant/files/identity/{file_id}",
+    summary="Delete tenant identity document",
+    description="Delete an identity document for the current tenant.",
+    tags=["Tenant"],
+    operation_id="deleteTenantIdentityDocument",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN]))], )
+async def delete_tenant_identity_document(file_id: str, current_user=Depends(get_current_user)):
+    return await ResourceManager.get_instance().delete_tenant_identity_document(file_id, current_user)
 
 
 @tenant_routes.put(

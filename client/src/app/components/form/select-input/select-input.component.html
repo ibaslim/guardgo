@@ -9,7 +9,7 @@
     <div *ngIf="dropdownOpen" class="absolute z-10 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
       <input *ngIf="searchable" type="text" [(ngModel)]="search" [placeholder]="placeholder || 'Search...'" class="block w-full rounded-t-lg border-0 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2 text-sm text-gray-900 dark:text-gray-100 focus:ring-0 focus:outline-none" [disabled]="disabled" />
       <div class="max-h-60 overflow-y-auto">
-        <div *ngFor="let opt of filteredOptions" (click)="selectOption(opt.value)" class="px-4 py-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-800 text-sm text-gray-900 dark:text-gray-100" [class.bg-blue-100]="value === opt.value">
+        <div *ngFor="let opt of filteredOptions" (click)="selectOption(opt.value)" class="px-4 py-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900 text-sm text-gray-900 dark:text-gray-100 transition" [class.selected-option]="value === opt.value">
           {{ opt.label }}
         </div>
         <div *ngIf="filteredOptions.length === 0" class="px-4 py-2 text-gray-400 text-sm">No options</div>

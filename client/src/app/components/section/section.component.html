@@ -1,0 +1,11 @@
+<section [class]="containerClass">
+  <div [class]="headerClass">
+    <div>
+      <h2 *ngIf="title" [class]="titleClass">{{ title }}</h2>
+      <p *ngIf="subtitle" [class]="subtitleClass">{{ subtitle }}</p>
+    </div>
+    <ng-content select="[section-actions]"></ng-content>
+  </div>
+
+  <ng-content></ng-content>
+</section>

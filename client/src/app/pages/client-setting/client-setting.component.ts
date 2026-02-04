@@ -4,9 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { BaseInputComponent } from '../../components/form/base-input/base-input.component';
 import { FileUploadComponent } from '../../components/form/file-upload/file-upload.component';
+import { PageComponent } from '../../components/page/page.component';
+import { SectionComponent } from '../../components/section/section.component';
+import { ButtonComponent } from '../../components/button/button.component';
+import { StickyActionBarComponent } from '../../components/sticky-action-bar/sticky-action-bar.component';
 import { ErrorMessageComponent } from "../../components/error-message/error-message.component";
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
+import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 
 interface Address {
   street: string;
@@ -38,10 +43,17 @@ interface Client {
 @Component({
   selector: 'app-client-setting',
   standalone: true,
-  imports: [CommonModule,
+  imports: [
+    CommonModule,
     FormsModule,
     BaseInputComponent,
-    FileUploadComponent, ErrorMessageComponent],
+    FileUploadComponent,
+    PageComponent,
+    SectionComponent,
+    ButtonComponent,
+    StickyActionBarComponent,
+    ErrorMessageComponent
+  ],
   templateUrl: './client-setting.component.html',
   styleUrl: './client-setting.component.css'
 })
@@ -194,7 +206,7 @@ export class ClientSettingComponent {
     }
 
     const tenantUpdatePayload = {
-      tenant_type: 'client',
+      tenant_type: TENANT_TYPES.CLIENT,
       profile: {
         legal_entity_name: this.clientFormModel.legalEntityName,
         company_registration_number: this.clientFormModel.companyRegistrationNumber,
