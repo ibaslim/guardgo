@@ -1,252 +1,224 @@
-<div class="w-full px-4 py-8">
-    <div class="max-w-4xl mx-auto space-y-8">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-            Service Provider Profile
-        </h1>
-
-        <form (ngSubmit)="submitProviderForm()" class="space-y-6">
-            <section
-                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Company</h2>
-                    <p class="text-sm sm:text-xs text-gray-500 dark:text-gray-400 mt-1 sm:mt-0">Core registration
-                        details.</p>
+<app-page title="Service Provider Profile">
+    <form (ngSubmit)="submitProviderForm()" class="space-y-6">
+        <app-section title="Company" subtitle="Core registration details.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col">
+                    <app-base-input label="Legal Company Name" name="legalCompanyName"
+                        [(ngModel)]="providerFormModel.legalCompanyName" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.legalCompanyName"></app-error-message>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="flex flex-col">
-                        <app-base-input label="Legal Company Name" name="legalCompanyName"
-                            [(ngModel)]="providerFormModel.legalCompanyName" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.legalCompanyName"></app-error-message>
-                    </div>
 
-                    <div class="flex flex-col">
-                        <app-base-input label="Company Registration Number" name="companyRegistrationNumber"
-                            [(ngModel)]="providerFormModel.companyRegistrationNumber" [required]="true">
-                        </app-base-input>
-                        <app-error-message
-                            [errorMessage]="providerErrors.companyRegistrationNumber"></app-error-message>
-                    </div>
-                </div>
-            </section>
-
-            <section
-                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Contact & Branding</h2>
-                    <p class="text-sm sm:text-xs text-gray-500 dark:text-gray-400 mt-1 sm:mt-0">How clients will reach
-                        and see you.</p>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="flex flex-col">
-                        <app-base-input label="Company Phone" name="companyPhone" type="tel"
-                            [(ngModel)]="providerFormModel.companyPhone" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.companyPhone"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Company Email" name="companyEmail" type="email"
-                            [(ngModel)]="providerFormModel.companyEmail" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.companyEmail"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col md:col-span-2">
-                        <app-file-upload label="Upload Company Logo" name="companyLogo"
-                            [(ngModel)]="providerFormModel.companyLogo" helperText="PNG, JPG, PDF up to 10MB"
-                            [required]="false">
-                        </app-file-upload>
-                        <p class="text-xs text-gray-500 mt-2">Optional, recommended for proposals.</p>
-                    </div>
-                </div>
-            </section>
-
-            <section
-                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Head Office Address</h2>
-                    <p class="text-sm sm:text-xs text-gray-500 dark:text-gray-400 mt-1 sm:mt-0">Used for billing and
-                        compliance.</p>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="flex flex-col">
-                        <app-base-input label="Street Address" name="officeStreet"
-                            [(ngModel)]="providerFormModel.headOfficeAddress.street" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.officeStreet"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="City" name="officeCity"
-                            [(ngModel)]="providerFormModel.headOfficeAddress.city" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.officeCity"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Country" name="officeCountry"
-                            [(ngModel)]="providerFormModel.headOfficeAddress.country" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.officeCountry"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Postal Code" name="officePostalCode"
-                            [(ngModel)]="providerFormModel.headOfficeAddress.postalCode" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.officePostalCode"></app-error-message>
-                    </div>
-                </div>
-            </section>
-
-            <section
-                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Primary Representative</h2>
-                    <p class="text-sm sm:text-xs text-gray-500 dark:text-gray-400 mt-1 sm:mt-0">Single point of contact.
-                    </p>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="flex flex-col">
-                        <app-base-input label="Representative Name" name="repName"
-                            [(ngModel)]="providerFormModel.primaryRepresentative.name" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.repName"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Representative Email" name="repEmail" type="email"
-                            [(ngModel)]="providerFormModel.primaryRepresentative.email" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.repEmail"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Representative Phone" name="repPhone" type="tel"
-                            [(ngModel)]="providerFormModel.primaryRepresentative.phone" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.repPhone"></app-error-message>
-                    </div>
-                </div>
-            </section>
-
-            <section
-                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Security License</h2>
-                    <p class="text-sm sm:text-xs text-gray-500 dark:text-gray-400 mt-1 sm:mt-0">Must be active to deploy
-                        guards.</p>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="flex flex-col">
-                        <app-base-input label="License Number" name="licenseNumber"
-                            [(ngModel)]="providerFormModel.securityLicense.licenseNumber" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.licenseNumber"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Issuing Authority" name="issuingAuthority"
-                            [(ngModel)]="providerFormModel.securityLicense.issuingAuthority" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.issuingAuthority"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Expiry Date" name="expiryDate" type="date"
-                            [(ngModel)]="providerFormModel.securityLicense.expiryDate" [required]="true">
-                        </app-base-input>
-                        <app-error-message [errorMessage]="providerErrors.expiryDate"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col md:col-span-2">
-                        <app-file-upload label="License Document" name="licenseDocument"
-                            [(ngModel)]="providerFormModel.securityLicense.document"
-                            helperText="PNG, JPG, PDF up to 10MB" [required]="false">
-                        </app-file-upload>
-                        <p class="text-xs text-gray-500 mt-2">Optional upload now avoids later holds.</p>
-                    </div>
-                </div>
-            </section>
-
-            <section
-                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Operating Regions</h2>
-                    <div class="flex items-center gap-3">
-                        <p class="text-sm sm:text-xs text-gray-500 dark:text-gray-400 mt-1 sm:mt-0">Start with primary
-                            jurisdictions.</p>
-                        <button type="button" (click)="addRegion()"
-                            class="hidden md:inline-flex items-center px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition">Add
-                            region</button>
-                    </div>
-                </div>
-                <div class="space-y-4">
-                    <div *ngFor="let region of providerFormModel.operatingRegions; let i = index trackBy: trackByIndex"
-                        class="flex flex-col">
-                        <app-base-input [label]="'Region ' + (i + 1)" [name]="'region' + i"
-                            [(ngModel)]="providerFormModel.operatingRegions[i]" [required]="i === 0">
-                        </app-base-input>
-                    </div>
-                    <app-error-message [errorMessage]="providerErrors.operatingRegions"></app-error-message>
-                    <button type="button" (click)="addRegion()"
-                        class="w-full md:hidden px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-                        Add another region
-                    </button>
-                </div>
-            </section>
-
-            <section
-                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Guard Categories Offered</h2>
-                    <div class="flex items-center gap-3">
-                        <p class="text-sm sm:text-xs text-gray-500 dark:text-gray-400 mt-1 sm:mt-0">E.g., Patrol,
-                            Concierge, Event.</p>
-                        <button type="button" (click)="addCategory()"
-                            class="hidden md:inline-flex items-center px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition">Add
-                            category</button>
-                    </div>
-                </div>
-                <div class="space-y-4">
-                    <div *ngFor="let category of providerFormModel.guardCategoriesOffered; let i = index trackBy: trackByIndex"
-                        class="flex flex-col">
-                        <app-base-input [label]="'Category ' + (i + 1)" [name]="'category' + i"
-                            [(ngModel)]="providerFormModel.guardCategoriesOffered[i]" [required]="i === 0">
-                        </app-base-input>
-                    </div>
-                    <app-error-message [errorMessage]="providerErrors.guardCategories"></app-error-message>
-                    <button type="button" (click)="addCategory()"
-                        class="w-full md:hidden px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-                        Add another category
-                    </button>
-                </div>
-            </section>
-
-            <div *ngIf="providerErrors.submit"
-                class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/40 p-4">
-                <app-error-message [errorMessage]="providerErrors.submit"></app-error-message>
-            </div>
-
-            <div class="sticky bottom-0 left-0 right-0 z-10">
-                <div
-                    class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/80 backdrop-blur px-4 py-3 shadow-md">
-                    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <p class="text-sm text-gray-600 dark:text-gray-300">Save to activate your provider profile.</p>
-                        <div class="flex-1 md:flex md:justify-end">
-                            <button *ngIf="!isEditMode" type="submit"
-                                class="w-full md:w-auto py-3 px-5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition">
-                                Submit
-                            </button>
-                            <button *ngIf="isEditMode" type="submit"
-                                class="w-full md:w-auto py-3 px-5 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700 transition">
-                                Save Changes
-                            </button>
-                        </div>
-                    </div>
+                <div class="flex flex-col">
+                    <app-base-input label="Company Registration Number" name="companyRegistrationNumber"
+                        [(ngModel)]="providerFormModel.companyRegistrationNumber" [required]="true">
+                    </app-base-input>
+                    <app-error-message
+                        [errorMessage]="providerErrors.companyRegistrationNumber"></app-error-message>
                 </div>
             </div>
-        </form>
-    </div>
-</div>
+        </app-section>
+
+        <app-section title="Contact & Branding" subtitle="How clients will reach and see you.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col">
+                    <app-base-input label="Company Phone" name="companyPhone" type="tel"
+                        [(ngModel)]="providerFormModel.companyPhone" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.companyPhone"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Company Email" name="companyEmail" type="email"
+                        [(ngModel)]="providerFormModel.companyEmail" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.companyEmail"></app-error-message>
+                </div>
+
+                <div class="flex flex-col md:col-span-2">
+                    <app-file-upload label="Upload Company Logo" name="companyLogo"
+                        [(ngModel)]="providerFormModel.companyLogo" helperText="PNG, JPG, PDF up to 10MB"
+                        [required]="false">
+                    </app-file-upload>
+                    <p class="text-xs text-gray-500 mt-2">Optional, recommended for proposals.</p>
+                </div>
+            </div>
+        </app-section>
+
+        <app-section title="Head Office Address" subtitle="Used for billing and compliance.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col">
+                    <app-base-input label="Street Address" name="officeStreet"
+                        [(ngModel)]="providerFormModel.headOfficeAddress.street" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.officeStreet"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="City" name="officeCity"
+                        [(ngModel)]="providerFormModel.headOfficeAddress.city" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.officeCity"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Country" name="officeCountry"
+                        [(ngModel)]="providerFormModel.headOfficeAddress.country" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.officeCountry"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Postal Code" name="officePostalCode"
+                        [(ngModel)]="providerFormModel.headOfficeAddress.postalCode" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.officePostalCode"></app-error-message>
+                </div>
+            </div>
+        </app-section>
+
+        <app-section title="Primary Representative" subtitle="Single point of contact.">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="flex flex-col">
+                    <app-base-input label="Representative Name" name="repName"
+                        [(ngModel)]="providerFormModel.primaryRepresentative.name" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.repName"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Representative Email" name="repEmail" type="email"
+                        [(ngModel)]="providerFormModel.primaryRepresentative.email" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.repEmail"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Representative Phone" name="repPhone" type="tel"
+                        [(ngModel)]="providerFormModel.primaryRepresentative.phone" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.repPhone"></app-error-message>
+                </div>
+            </div>
+        </app-section>
+
+        <app-section title="Security License" subtitle="Must be active to deploy guards.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col">
+                    <app-base-input label="License Number" name="licenseNumber"
+                        [(ngModel)]="providerFormModel.securityLicense.licenseNumber" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.licenseNumber"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Issuing Authority" name="issuingAuthority"
+                        [(ngModel)]="providerFormModel.securityLicense.issuingAuthority" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.issuingAuthority"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Expiry Date" name="expiryDate" type="date"
+                        [(ngModel)]="providerFormModel.securityLicense.expiryDate" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.expiryDate"></app-error-message>
+                </div>
+
+                <div class="flex flex-col md:col-span-2">
+                    <app-file-upload label="License Document" name="licenseDocument"
+                        [(ngModel)]="providerFormModel.securityLicense.document"
+                        helperText="PNG, JPG, PDF up to 10MB" [required]="false">
+                    </app-file-upload>
+                    <p class="text-xs text-gray-500 mt-2">Optional upload now avoids later holds.</p>
+                </div>
+            </div>
+        </app-section>
+
+        <app-section title="Operating Regions" subtitle="Start with primary jurisdictions.">
+            <ng-container section-actions>
+                <app-button
+                    [label]="'Add region'"
+                    type="outline"
+                    [htmlType]="'button'"
+                    [customClass]="'hidden md:inline-flex rounded-lg'"
+                    (click)="addRegion()">
+                </app-button>
+            </ng-container>
+
+            <div class="space-y-4">
+                <div *ngFor="let region of providerFormModel.operatingRegions; let i = index trackBy: trackByIndex"
+                    class="flex flex-col">
+                    <app-base-input [label]="'Region ' + (i + 1)" [name]="'region' + i"
+                        [(ngModel)]="providerFormModel.operatingRegions[i]" [required]="i === 0">
+                    </app-base-input>
+                </div>
+                <app-error-message [errorMessage]="providerErrors.operatingRegions"></app-error-message>
+
+                <app-button
+                    [label]="'Add another region'"
+                    type="outline"
+                    [htmlType]="'button'"
+                    [fullWidth]="true"
+                    [customClass]="'md:hidden rounded-lg'"
+                    (click)="addRegion()">
+                </app-button>
+            </div>
+        </app-section>
+
+        <app-section title="Guard Categories Offered" subtitle="E.g., Patrol, Concierge, Event.">
+            <ng-container section-actions>
+                <app-button
+                    [label]="'Add category'"
+                    type="outline"
+                    [htmlType]="'button'"
+                    [customClass]="'hidden md:inline-flex rounded-lg'"
+                    (click)="addCategory()">
+                </app-button>
+            </ng-container>
+
+            <div class="space-y-4">
+                <div *ngFor="let category of providerFormModel.guardCategoriesOffered; let i = index trackBy: trackByIndex"
+                    class="flex flex-col">
+                    <app-base-input [label]="'Category ' + (i + 1)" [name]="'category' + i"
+                        [(ngModel)]="providerFormModel.guardCategoriesOffered[i]" [required]="i === 0">
+                    </app-base-input>
+                </div>
+                <app-error-message [errorMessage]="providerErrors.guardCategories"></app-error-message>
+
+                <app-button
+                    [label]="'Add another category'"
+                    type="outline"
+                    [htmlType]="'button'"
+                    [fullWidth]="true"
+                    [customClass]="'md:hidden rounded-lg'"
+                    (click)="addCategory()">
+                </app-button>
+            </div>
+        </app-section>
+
+        <div *ngIf="providerErrors.submit"
+            class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/40 p-4">
+            <app-error-message [errorMessage]="providerErrors.submit"></app-error-message>
+        </div>
+
+        <app-sticky-action-bar [message]="'Save to activate your provider profile.'" [containerClass]="'px-0'">
+            <app-button *ngIf="!isEditMode"
+                [label]="'Submit'"
+                type="primary"
+                [htmlType]="'submit'"
+                [fullWidth]="true"
+                size="lg"
+                [customClass]="'w-full md:w-auto rounded-lg'">
+            </app-button>
+            <app-button *ngIf="isEditMode"
+                [label]="'Save Changes'"
+                type="success"
+                [htmlType]="'submit'"
+                [fullWidth]="true"
+                size="lg"
+                [customClass]="'w-full md:w-auto rounded-lg'">
+            </app-button>
+        </app-sticky-action-bar>
+    </form>
+</app-page>

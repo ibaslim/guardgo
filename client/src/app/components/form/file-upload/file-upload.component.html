@@ -1,14 +1,73 @@
 <div class="w-full">
   <label *ngIf="label" class="block mb-1 text-sm font-medium text-gray-700 dark:text-gray-200">{{ label }}<span *ngIf="required" class="text-red-500">*</span></label>
+  
+  <!-- Existing File Display -->
+  <div *ngIf="hasExistingFile" class="mb-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <div>
+          <p class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ existingFileName || 'Uploaded File' }}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">Currently uploaded</p>
+        </div>
+      </div>
+      <a *ngIf="existingFileUrl" [href]="existingFileUrl" target="_blank" rel="noopener"
+         class="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium">
+        View
+      </a>
+    </div>
+  </div>
+
+  <!-- New File Display -->
+  <div *ngIf="hasNewFile" class="mb-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div>
+          <p class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ value?.name }}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400">
+            Ready to upload
+            <span *ngIf="showFileSize && value">• {{ formatFileSize(value.size) }}</span>
+          </p>
+        </div>
+      </div>
+      <button type="button" (click)="removeFile()" 
+              class="text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 font-medium">
+        Remove
+      </button>
+    </div>
+  </div>
+
+  <!-- File Upload Area -->
   <div class="flex items-center justify-center w-full">
-    <label class="flex flex-col items-center w-full px-4 py-6 bg-white dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 cursor-pointer hover:border-blue-500 transition">
+    <label
+      class="file-upload-dropzone flex flex-col items-center w-full px-4 py-6 bg-white dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 cursor-pointer transition hover:border-blue-500 dark:hover:border-blue-400"
+      [class.dropzone-active]="isDragOver"
+      [class.cursor-not-allowed]="disabled"
+      [attr.aria-disabled]="disabled"
+    >
       <svg class="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4a1 1 0 011-1h8a1 1 0 011 1v12m-4 4v-4m0 0l-4-4m4 4l4-4" />
       </svg>
-      <span class="text-sm text-gray-600 dark:text-gray-400 mb-2">Click to upload or drag and drop</span>
-      <input type="file" class="hidden" [required]="required" [disabled]="disabled" (change)="onFileChange($event)" />
+      <span class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+        {{ hasExistingFile || hasNewFile ? 'Click to replace file' : 'Click to upload or drag and drop' }}
+      </span>
+      <input
+        type="file"
+        class="hidden"
+        [required]="required"
+        [disabled]="disabled"
+        [attr.accept]="accept"
+        [attr.multiple]="allowMultiple ? '' : null"
+        (change)="onFileChange($event)"
+        aria-label="Upload file"
+      />
     </label>
   </div>
   <div *ngIf="helperText" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ helperText }}</div>
-  <div *ngIf="errorText" class="mt-1 text-xs text-red-500">{{ errorText }}</div>
+  <div *ngIf="resolvedError" class="mt-1 text-xs text-red-500">{{ resolvedError }}</div>
 </div>
