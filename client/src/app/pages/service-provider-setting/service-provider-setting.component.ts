@@ -26,6 +26,13 @@ interface ContactPerson {
   phone: string;
 }
 
+interface EmergencyServiceProviderContact {
+  name: string;
+  email: string;
+  phone: string;
+  landlinePhone: string;
+}
+
 interface SecurityLicense {
   licenseNumber: string;
   issuingAuthority: string;
@@ -40,7 +47,7 @@ interface ServiceProvider {
   headOfficeAddress: Address;
   companyPhone: string;
   companyEmail: string;
-  primaryRepresentative: ContactPerson;
+  emergencyContact: EmergencyServiceProviderContact;
   securityLicense: SecurityLicense;
   operatingRegions: string[];
   guardCategoriesOffered: string[];
@@ -79,10 +86,11 @@ export class ServiceProviderSettingComponent {
     },
     companyPhone: '',
     companyEmail: '',
-    primaryRepresentative: {
+    emergencyContact: {
       name: '',
       email: '',
-      phone: ''
+      phone: '',
+      landlinePhone: ''
     },
     securityLicense: {
       licenseNumber: '',
@@ -119,7 +127,7 @@ export class ServiceProviderSettingComponent {
       data.companyRegistrationNumber.trim() ||
       data.companyPhone.trim() ||
       data.headOfficeAddress.street.trim() ||
-      data.primaryRepresentative.name.trim()
+      data.emergencyContact.name.trim()
     );
   }
 
@@ -177,21 +185,32 @@ export class ServiceProviderSettingComponent {
       this.providerErrors.companyEmail = 'Invalid email format.';
     }
 
-    // Primary Representative
-    if (!this.providerFormModel.primaryRepresentative.name.trim()) {
-      this.providerErrors.repName = 'Representative name is required.';
+    // Emergency Contact
+    if (!this.providerFormModel.emergencyContact.name.trim()) {
+      this.providerErrors.emergencyContactName = 'Emergency contact name is required.';
     }
-    if (!this.providerFormModel.primaryRepresentative.email.trim()) {
-      this.providerErrors.repEmail = 'Representative email is required.';
-    } else if (!/^[\w.-]+@[\w.-]+\.\w+$/.test(this.providerFormModel.primaryRepresentative.email)) {
-      this.providerErrors.repEmail = 'Invalid email format.';
+
+    if (!this.providerFormModel.emergencyContact.email.trim()) {
+      this.providerErrors.emergencyContactEmail = 'Emergency contact email is required.';
+    } else if (!/^[\w.-]+@[\w.-]+\.\w+$/.test(this.providerFormModel.emergencyContact.email)) {
+      this.providerErrors.emergencyContactEmail = 'Invalid email format.';
     }
-    if (!this.providerFormModel.primaryRepresentative.phone.trim()) {
-      this.providerErrors.repPhone = 'Representative phone is required.';
+
+    if (!this.providerFormModel.emergencyContact.phone.trim()) {
+      this.providerErrors.emergencyContactPhone = 'Emergency mobile phone is required.';
     } else {
-      const repDigits = this.providerFormModel.primaryRepresentative.phone.replace(/[^0-9]/g, '');
-      if (repDigits.length < 10 || repDigits.length > 15) {
-        this.providerErrors.repPhone = 'Phone number must be 10-15 digits.';
+      const digits = this.providerFormModel.emergencyContact.phone.replace(/[^0-9]/g, '');
+      if (digits.length < 10 || digits.length > 15) {
+        this.providerErrors.emergencyContactPhone = 'Phone must be 10–15 digits.';
+      }
+    }
+
+    if (!this.providerFormModel.emergencyContact.landlinePhone.trim()) {
+      this.providerErrors.emergencyContactLandline = 'Emergency landline phone is required.';
+    } else {
+      const digits = this.providerFormModel.emergencyContact.landlinePhone.replace(/[^0-9]/g, '');
+      if (digits.length < 10 || digits.length > 15) {
+        this.providerErrors.emergencyContactLandline = 'Landline must be 10–15 digits.';
       }
     }
 
@@ -238,10 +257,11 @@ export class ServiceProviderSettingComponent {
         head_office_address: this.providerFormModel.headOfficeAddress,
         company_phone: this.providerFormModel.companyPhone,
         company_email: this.providerFormModel.companyEmail,
-        primary_representative: {
-          name: this.providerFormModel.primaryRepresentative.name,
-          email: this.providerFormModel.primaryRepresentative.email,
-          phone: this.providerFormModel.primaryRepresentative.phone
+        emergency_contact: {
+          name: this.providerFormModel.emergencyContact.name,
+          email: this.providerFormModel.emergencyContact.email,
+          phone: this.providerFormModel.emergencyContact.phone,
+          landline_phone: this.providerFormModel.emergencyContact.landlinePhone
         },
         security_license: {
           license_number: this.providerFormModel.securityLicense.licenseNumber,

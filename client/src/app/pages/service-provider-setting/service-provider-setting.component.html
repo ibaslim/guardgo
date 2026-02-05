@@ -13,8 +13,7 @@
                     <app-base-input label="Company Registration Number" name="companyRegistrationNumber"
                         [(ngModel)]="providerFormModel.companyRegistrationNumber" [required]="true">
                     </app-base-input>
-                    <app-error-message
-                        [errorMessage]="providerErrors.companyRegistrationNumber"></app-error-message>
+                    <app-error-message [errorMessage]="providerErrors.companyRegistrationNumber"></app-error-message>
                 </div>
             </div>
         </app-section>
@@ -77,28 +76,37 @@
             </div>
         </app-section>
 
-        <app-section title="Primary Representative" subtitle="Single point of contact.">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <app-section title="Emergency Contact" subtitle="Who we can reach in case of emergency.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
                 <div class="flex flex-col">
-                    <app-base-input label="Representative Name" name="repName"
-                        [(ngModel)]="providerFormModel.primaryRepresentative.name" [required]="true">
+                    <app-base-input label="Emergency Contact Name" name="emergencyContactName"
+                        [(ngModel)]="providerFormModel.emergencyContact.name" [required]="true">
                     </app-base-input>
-                    <app-error-message [errorMessage]="providerErrors.repName"></app-error-message>
+                    <app-error-message [errorMessage]="providerErrors.emergencyContactName"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="Representative Email" name="repEmail" type="email"
-                        [(ngModel)]="providerFormModel.primaryRepresentative.email" [required]="true">
+                    <app-base-input label="Emergency Contact Email" name="emergencyContactEmail" type="email"
+                        [(ngModel)]="providerFormModel.emergencyContact.email" [required]="true">
                     </app-base-input>
-                    <app-error-message [errorMessage]="providerErrors.repEmail"></app-error-message>
+                    <app-error-message [errorMessage]="providerErrors.emergencyContactEmail"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="Representative Phone" name="repPhone" type="tel"
-                        [(ngModel)]="providerFormModel.primaryRepresentative.phone" [required]="true">
+                    <app-base-input label="Emergency Mobile Phone" name="emergencyContactPhone" type="tel"
+                        [(ngModel)]="providerFormModel.emergencyContact.phone" [required]="true">
                     </app-base-input>
-                    <app-error-message [errorMessage]="providerErrors.repPhone"></app-error-message>
+                    <app-error-message [errorMessage]="providerErrors.emergencyContactPhone"></app-error-message>
                 </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Emergency Landline Phone" name="emergencyContactLandline" type="tel"
+                        [(ngModel)]="providerFormModel.emergencyContact.landlinePhone" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.emergencyContactLandline"></app-error-message>
+                </div>
+
             </div>
         </app-section>
 
@@ -127,8 +135,8 @@
 
                 <div class="flex flex-col md:col-span-2">
                     <app-file-upload label="License Document" name="licenseDocument"
-                        [(ngModel)]="providerFormModel.securityLicense.document"
-                        helperText="PNG, JPG, PDF up to 10MB" [required]="false">
+                        [(ngModel)]="providerFormModel.securityLicense.document" helperText="PNG, JPG, PDF up to 10MB"
+                        [required]="false">
                     </app-file-upload>
                     <p class="text-xs text-gray-500 mt-2">Optional upload now avoids later holds.</p>
                 </div>
@@ -137,12 +145,8 @@
 
         <app-section title="Operating Regions" subtitle="Start with primary jurisdictions.">
             <ng-container section-actions>
-                <app-button
-                    [label]="'Add region'"
-                    type="outline"
-                    [htmlType]="'button'"
-                    [customClass]="'hidden md:inline-flex rounded-lg'"
-                    (click)="addRegion()">
+                <app-button [label]="'Add region'" type="outline" [htmlType]="'button'"
+                    [customClass]="'hidden md:inline-flex rounded-lg'" (click)="addRegion()">
                 </app-button>
             </ng-container>
 
@@ -155,25 +159,16 @@
                 </div>
                 <app-error-message [errorMessage]="providerErrors.operatingRegions"></app-error-message>
 
-                <app-button
-                    [label]="'Add another region'"
-                    type="outline"
-                    [htmlType]="'button'"
-                    [fullWidth]="true"
-                    [customClass]="'md:hidden rounded-lg'"
-                    (click)="addRegion()">
+                <app-button [label]="'Add another region'" type="outline" [htmlType]="'button'" [fullWidth]="true"
+                    [customClass]="'md:hidden rounded-lg'" (click)="addRegion()">
                 </app-button>
             </div>
         </app-section>
 
         <app-section title="Guard Categories Offered" subtitle="E.g., Patrol, Concierge, Event.">
             <ng-container section-actions>
-                <app-button
-                    [label]="'Add category'"
-                    type="outline"
-                    [htmlType]="'button'"
-                    [customClass]="'hidden md:inline-flex rounded-lg'"
-                    (click)="addCategory()">
+                <app-button [label]="'Add category'" type="outline" [htmlType]="'button'"
+                    [customClass]="'hidden md:inline-flex rounded-lg'" (click)="addCategory()">
                 </app-button>
             </ng-container>
 
@@ -186,13 +181,8 @@
                 </div>
                 <app-error-message [errorMessage]="providerErrors.guardCategories"></app-error-message>
 
-                <app-button
-                    [label]="'Add another category'"
-                    type="outline"
-                    [htmlType]="'button'"
-                    [fullWidth]="true"
-                    [customClass]="'md:hidden rounded-lg'"
-                    (click)="addCategory()">
+                <app-button [label]="'Add another category'" type="outline" [htmlType]="'button'" [fullWidth]="true"
+                    [customClass]="'md:hidden rounded-lg'" (click)="addCategory()">
                 </app-button>
             </div>
         </app-section>
@@ -203,21 +193,11 @@
         </div>
 
         <app-sticky-action-bar [message]="'Save to activate your provider profile.'" [containerClass]="'px-0'">
-            <app-button *ngIf="!isEditMode"
-                [label]="'Submit'"
-                type="primary"
-                [htmlType]="'submit'"
-                [fullWidth]="true"
-                size="lg"
-                [customClass]="'w-full md:w-auto rounded-lg'">
+            <app-button *ngIf="!isEditMode" [label]="'Submit'" type="primary" [htmlType]="'submit'" [fullWidth]="true"
+                size="lg" [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>
-            <app-button *ngIf="isEditMode"
-                [label]="'Save Changes'"
-                type="success"
-                [htmlType]="'submit'"
-                [fullWidth]="true"
-                size="lg"
-                [customClass]="'w-full md:w-auto rounded-lg'">
+            <app-button *ngIf="isEditMode" [label]="'Save Changes'" type="success" [htmlType]="'submit'"
+                [fullWidth]="true" size="lg" [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>
         </app-sticky-action-bar>
     </form>

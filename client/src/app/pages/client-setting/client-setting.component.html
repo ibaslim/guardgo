@@ -43,6 +43,41 @@
             </div>
         </app-section>
 
+        <app-section title="Emergency Contact" subtitle="Who we can reach in case of emergency.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                <div class="flex flex-col">
+                    <app-base-input label="Emergency Contact Name" name="emergencyContactName"
+                        [(ngModel)]="clientFormModel.emergencyContact.name" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="clientErrors.emergencyContactName"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Emergency Contact Email" name="emergencyContactEmail" type="email"
+                        [(ngModel)]="clientFormModel.emergencyContact.email" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="clientErrors.emergencyContactEmail"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Emergency Mobile Phone" name="emergencyContactPhone" type="tel"
+                        [(ngModel)]="clientFormModel.emergencyContact.phone" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="clientErrors.emergencyContactPhone"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Emergency Landline Phone" name="emergencyContactLandline" type="tel"
+                        [(ngModel)]="clientFormModel.emergencyContact.landlinePhone" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="clientErrors.emergencyContactLandline"></app-error-message>
+                </div>
+
+            </div>
+        </app-section>
+
+
         <app-section title="Billing Address" subtitle="Appears on invoices and contracts.">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col">
@@ -53,8 +88,8 @@
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="City" name="billingCity"
-                        [(ngModel)]="clientFormModel.billingAddress.city" [required]="true">
+                    <app-base-input label="City" name="billingCity" [(ngModel)]="clientFormModel.billingAddress.city"
+                        [required]="true">
                     </app-base-input>
                     <app-error-message [errorMessage]="clientErrors.billingCity"></app-error-message>
                 </div>
@@ -78,8 +113,7 @@
         <app-section title="Branding" subtitle="Optional logo for reports.">
             <div>
                 <app-file-upload label="Upload Business Logo" name="businessLogo"
-                    [(ngModel)]="clientFormModel.businessLogo" helperText="PNG, JPG, PDF up to 10MB"
-                    [required]="false">
+                    [(ngModel)]="clientFormModel.businessLogo" helperText="PNG, JPG, PDF up to 10MB" [required]="false">
                 </app-file-upload>
                 <p class="text-xs text-gray-500 mt-2">Optional, recommended for site signage.</p>
             </div>
@@ -87,12 +121,8 @@
 
         <app-section title="Sites" subtitle="Add locations we will service.">
             <ng-container section-actions>
-                <app-button
-                    [label]="'Add site'"
-                    type="outline"
-                    [htmlType]="'button'"
-                    [customClass]="'hidden md:inline-flex rounded-lg'"
-                    (click)="addSite()">
+                <app-button [label]="'Add site'" type="outline" [htmlType]="'button'"
+                    [customClass]="'hidden md:inline-flex rounded-lg'" (click)="addSite()">
                 </app-button>
             </ng-container>
 
@@ -107,8 +137,8 @@
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="flex flex-col md:col-span-2">
-                            <app-base-input [label]="'Site Name'" [name]="'siteName' + i"
-                                [(ngModel)]="site.siteName" [required]="i===0">
+                            <app-base-input [label]="'Site Name'" [name]="'siteName' + i" [(ngModel)]="site.siteName"
+                                [required]="i===0">
                             </app-base-input>
                             <app-error-message [errorMessage]="clientErrors['siteName' + i]"></app-error-message>
                         </div>
@@ -121,8 +151,8 @@
                         </div>
 
                         <div class="flex flex-col">
-                            <app-base-input [label]="'City'" [name]="'siteCity' + i"
-                                [(ngModel)]="site.siteAddress.city" [required]="i===0">
+                            <app-base-input [label]="'City'" [name]="'siteCity' + i" [(ngModel)]="site.siteAddress.city"
+                                [required]="i===0">
                             </app-base-input>
                             <app-error-message [errorMessage]="clientErrors['siteCity' + i]"></app-error-message>
                         </div>
@@ -138,20 +168,14 @@
                             <app-base-input [label]="'Postal Code'" [name]="'sitePostalCode' + i"
                                 [(ngModel)]="site.siteAddress.postalCode" [required]="i===0">
                             </app-base-input>
-                            <app-error-message
-                                [errorMessage]="clientErrors['sitePostalCode' + i]"></app-error-message>
+                            <app-error-message [errorMessage]="clientErrors['sitePostalCode' + i]"></app-error-message>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <app-button
-                [label]="'Add another site'"
-                type="outline"
-                [htmlType]="'button'"
-                [fullWidth]="true"
-                [customClass]="'md:hidden rounded-lg'"
-                (click)="addSite()">
+            <app-button [label]="'Add another site'" type="outline" [htmlType]="'button'" [fullWidth]="true"
+                [customClass]="'md:hidden rounded-lg'" (click)="addSite()">
             </app-button>
         </app-section>
 
@@ -161,21 +185,11 @@
         </div>
 
         <app-sticky-action-bar [message]="'Save to activate your client profile.'" [containerClass]="'px-0'">
-            <app-button *ngIf="!isEditMode"
-                [label]="'Submit'"
-                type="primary"
-                [htmlType]="'submit'"
-                [fullWidth]="true"
-                size="lg"
-                [customClass]="'w-full md:w-auto rounded-lg'">
+            <app-button *ngIf="!isEditMode" [label]="'Submit'" type="primary" [htmlType]="'submit'" [fullWidth]="true"
+                size="lg" [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>
-            <app-button *ngIf="isEditMode"
-                [label]="'Save Changes'"
-                type="success"
-                [htmlType]="'submit'"
-                [fullWidth]="true"
-                size="lg"
-                [customClass]="'w-full md:w-auto rounded-lg'">
+            <app-button *ngIf="isEditMode" [label]="'Save Changes'" type="success" [htmlType]="'submit'"
+                [fullWidth]="true" size="lg" [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>
         </app-sticky-action-bar>
     </form>

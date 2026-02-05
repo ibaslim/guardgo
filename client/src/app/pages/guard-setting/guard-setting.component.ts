@@ -58,14 +58,14 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   canadianProvinces = CANADIAN_PROVINCES;
 
   // Converted options for select-input component
-  documentTypeOptions = IDENTITY_DOCUMENT_TYPES.map(dt => ({ 
-    value: dt.value, 
-    label: dt.label 
+  documentTypeOptions = IDENTITY_DOCUMENT_TYPES.map(dt => ({
+    value: dt.value,
+    label: dt.label
   }));
-  
-  provinceOptions = CANADIAN_PROVINCES.map(prov => ({ 
-    value: prov.code, 
-    label: prov.label 
+
+  provinceOptions = CANADIAN_PROVINCES.map(prov => ({
+    value: prov.code,
+    label: prov.label
   }));
 
   countryOptions = COUNTRY_OPTIONS;
@@ -81,6 +81,12 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     mobilePhone: null,
     landlinePhone: null,
     dob: '',
+    emergencyContact: {
+      name: '',
+      email: '',
+      phone: null,
+      landlinePhone: null
+    },
     address: {
       street: '',
       city: '',
@@ -126,7 +132,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     private apiService: ApiService,
     private router: Router,
     private appService: AppService
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     if (this.guardData && this.hasGuardData(this.guardData)) {
@@ -176,7 +182,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         formData.address.country = 'CA';
       }
     }
-    
+
     // Transform identification documents if they exist
     if (formData.identification?.documents && Array.isArray(formData.identification.documents)) {
       formData.identification.documents = formData.identification.documents.map((doc: any, index: number) => {
@@ -184,7 +190,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         // If backend provides an ID, use that; otherwise create stable ID
         const backendId = doc.id || doc.document_id;
         const stableId = backendId || `doc_type_${doc.document_type || 'unknown'}_idx_${index}`;
-        
+
         return {
           documentType: doc.document_type || doc.documentType || '',
           number: doc.document_number || doc.number || '',
@@ -205,14 +211,14 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         formData.identification.documents = [];
       }
     }
-    
+
     // Handle security license file metadata
     if (formData.securityLicense) {
       const license = formData.securityLicense as any;
       formData.securityLicense.existingFileUrl = license.document_file_url || license.file_url || undefined;
       formData.securityLicense.existingFileName = license.document_file_name || license.file_name || undefined;
     }
-    
+
     return formData;
   }
 
@@ -223,6 +229,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       data.mobilePhone?.e164 ||
       data.landlinePhone?.e164 ||
       data.dob ||
+      data.emergencyContact.name.trim() ||
+      data.emergencyContact.email.trim() ||
+      data.emergencyContact.phone?.e164 ||
+      data.emergencyContact.landlinePhone?.e164 ||
       data.address.street.trim() ||
       (data.identification.documents && data.identification.documents.length > 0) ||
       data.identification.idNumber?.trim() ||
@@ -254,7 +264,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
    */
   removeIdentificationDocument(index: number): void {
     const doc = this.guardFormModel.identification.documents[index];
-    
+
     // Clear all errors for this document
     if (doc && doc.id) {
       delete this.guardErrors[`identification_${doc.id}_type`];
@@ -262,7 +272,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       delete this.guardErrors[`identification_${doc.id}_province`];
       delete this.guardErrors[`identification_${doc.id}_expiry`];
     }
-    
+
     // If the removed document was primary, clear the primary selection
     if (
       this.guardFormModel.identification.primaryDocumentId === doc?.id
@@ -273,7 +283,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     if (doc?.existingFileId) {
       this.deleteIdentityFile(doc);
     }
-    
+
     this.guardFormModel.identification.documents.splice(index, 1);
   }
 
@@ -438,7 +448,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       const dobDate = new Date(this.guardFormModel.dob);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       if (dobDate >= today) {
         this.guardErrors['dob'] = 'Date of birth must be in the past.';
       } else {
@@ -447,7 +457,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         const monthDiff = today.getMonth() - dobDate.getMonth();
         const dayDiff = today.getDate() - dobDate.getDate();
         const actualAge = (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) ? age - 1 : age;
-        
+
         if (actualAge < 18) {
           this.guardErrors['dob'] = 'You must be at least 18 years old.';
         } else if (actualAge > 100) {
@@ -459,7 +469,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     // Phone Numbers - At least one required (mobile or landline)
     const hasMobile = this.guardFormModel.mobilePhone && this.guardFormModel.mobilePhone.e164;
     const hasLandline = this.guardFormModel.landlinePhone && this.guardFormModel.landlinePhone.e164;
-    
+
     if (!hasMobile && !hasLandline) {
       this.guardErrors['phoneNumbers'] = 'At least one phone number (mobile or landline) is required.';
     } else if (hasMobile && hasLandline) {
@@ -468,6 +478,38 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         this.guardErrors['phoneNumbers'] = 'Mobile and landline phone numbers must be from the same country.';
       }
     }
+
+    // Emergency Contact Validation
+    const emergency = this.guardFormModel.emergencyContact;
+
+    // Name
+    if (!emergency.name.trim()) {
+      this.guardErrors['emergencyContactName'] = 'Emergency contact name is required.';
+    }
+
+    // Email
+    if (!emergency.email.trim()) {
+      this.guardErrors['emergencyContactEmail'] = 'Emergency contact email is required.';
+    } else {
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(emergency.email)) {
+        this.guardErrors['emergencyContactEmail'] = 'Please enter a valid email address.';
+      }
+    }
+
+    // Phone numbers – at least one required (mobile or landline)
+    const emergencyMobile = emergency.phone?.e164;
+    const emergencyLandline = emergency.landlinePhone?.e164;
+
+    if (!emergencyMobile && !emergencyLandline) {
+      this.guardErrors['emergencyContactPhone'] = 'At least one emergency contact number (mobile or landline) is required.';
+    } else {
+      // If both are provided, check consistency if needed
+      if (emergencyMobile && emergencyLandline && emergency.phone?.country !== emergency.landlinePhone?.country) {
+        this.guardErrors['emergencyContactPhone'] = 'Emergency contact mobile and landline numbers must be from the same country.';
+      }
+    }
+
 
     // Address
     if (!this.guardFormModel.address.street.trim()) {
@@ -499,7 +541,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         this.guardErrors['addressProvince'] = 'Please select a valid province from the list.';
       }
     }
-    
+
     // Canadian Postal Code validation (A1A 1A1 format)
     if (!this.guardFormModel.address.postalCode.trim()) {
       this.guardErrors['addressPostalCode'] = 'Postal code is required.';
@@ -586,6 +628,14 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       profile: {
         name: this.guardFormModel.name,
         date_of_birth: this.guardFormModel.dob,
+        emergency_contact: {
+          name: this.guardFormModel.emergencyContact.name,
+          email: this.guardFormModel.emergencyContact.email,
+          ...(this.guardFormModel.emergencyContact.phone?.e164 && {
+            phone: this.guardFormModel.emergencyContact.phone.e164,
+            phone_country: this.guardFormModel.emergencyContact.phone.country
+          })
+        },
         address: {
           street: this.guardFormModel.address.street,
           city: this.guardFormModel.address.city,
@@ -628,8 +678,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       payload.profile.landline_phone_country = this.guardFormModel.landlinePhone.country;
     }
     // Legacy contact field
-    const legacyContact = this.guardFormModel.mobilePhone?.national || 
-                          this.guardFormModel.landlinePhone?.national || '';
+    const legacyContact = this.guardFormModel.mobilePhone?.national ||
+      this.guardFormModel.landlinePhone?.national || '';
     payload.profile.contact = legacyContact;
 
     // Add operational radius if set

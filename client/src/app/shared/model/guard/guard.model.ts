@@ -1,8 +1,3 @@
-/**
- * Guard Profile Models
- * Global type definitions for guard onboarding and profile management
- */
-
 export interface PhoneNumber {
   e164: string;
   national: string;
@@ -20,16 +15,23 @@ export interface Address {
   postalCode: string;
 }
 
+export interface GuardEmergencyContact {
+  name: string;
+  email: string;
+  phone: PhoneNumber | null;
+  landlinePhone?: PhoneNumber | null;
+}
+
 export interface IdentificationDocument {
   documentType: string;
   number: string;
   province?: string;
   expiryDate?: string;
   file?: File | null;
-  id?: string; // unique identifier for UI purposes
-  existingFileUrl?: string; // URL to existing uploaded file
-  existingFileName?: string; // Name of existing uploaded file
-  existingFileId?: string; // Backend file identifier
+  id?: string;
+  existingFileUrl?: string;
+  existingFileName?: string;
+  existingFileId?: string;
   existingFileMimeType?: string;
   existingFileSize?: number;
 }
@@ -37,7 +39,6 @@ export interface IdentificationDocument {
 export interface Identification {
   documents: IdentificationDocument[];
   primaryDocumentId?: string;
-  // Legacy fields for backward compatibility
   idType?: string;
   idNumber?: string;
   document?: File | null;
@@ -48,8 +49,8 @@ export interface SecurityLicense {
   issuingAuthority: string;
   expiryDate: string;
   document?: File | null;
-  existingFileUrl?: string; // URL to existing uploaded file
-  existingFileName?: string; // Name of existing uploaded file
+  existingFileUrl?: string;
+  existingFileName?: string;
 }
 
 export interface WeeklyAvailability {
@@ -69,6 +70,10 @@ export interface GuardErrors {
   mobilePhone?: string;
   landlinePhone?: string;
   phoneNumbers?: string;
+  emergencyContactName?: string;
+  emergencyContactEmail?: string;
+  emergencyContactPhone?: string;
+  emergencyContactLandlinePhone?: string;
   addressStreet?: string;
   addressCity?: string;
   addressCountry?: string;
@@ -80,15 +85,16 @@ export interface GuardErrors {
   expiryDate?: string;
   operationalRadius?: string;
   submit?: string;
-  [key: string]: string | undefined; // For dynamic identification document errors
+  [key: string]: string | undefined;
 }
 
 export interface Guard {
   name: string;
-  contact: string; // Legacy field for backward compatibility
+  contact: string;
   mobilePhone?: PhoneNumber | null;
   landlinePhone?: PhoneNumber | null;
   dob: string;
+  emergencyContact: GuardEmergencyContact;
   address: Address;
   identification: Identification;
   securityLicense: SecurityLicense;
