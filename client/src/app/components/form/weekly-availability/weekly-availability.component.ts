@@ -181,10 +181,43 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
           this.validationErrors[day].push('Time ranges cannot overlap.');
           isValid = false;
         }
+
+        // Check if total duration exceeds 24 hours
+        if (this.exceedsTotalDuration(day)) {
+          this.validationErrors[day].push('Total duration cannot exceed 24 hours.');
+          isValid = false;
+        }
       }
     });
 
     return isValid;
+  }
+
+  // Check if total duration of all time ranges exceeds 24 hours
+  private exceedsTotalDuration(day: string): boolean {
+    const ranges = this.availability[day].timeRanges.filter(r => r.start && r.end);
+
+    let totalMinutes = 0;
+
+    ranges.forEach(range => {
+      const startMinutes = this.parseTime(range.start);
+      const endMinutes = this.parseTime(range.end);
+
+      if (startMinutes !== null && endMinutes !== null) {
+        // Calculate duration for this range
+        let duration = endMinutes - startMinutes;
+
+        // Handle overnight shifts (e.g., 11:00 PM to 2:00 AM)
+        if (duration < 0) {
+          duration = (24 * 60) + duration;
+        }
+
+        totalMinutes += duration;
+      }
+    });
+
+    // Check if total exceeds 24 hours (1440 minutes)
+    return totalMinutes > (24 * 60);
   }
 
   // Check if time ranges overlap for a specific day
