@@ -16,6 +16,7 @@ import { ButtonComponent } from '../../components/button/button.component';
 import { StickyActionBarComponent } from '../../components/sticky-action-bar/sticky-action-bar.component';
 import { ErrorMessageComponent } from "../../components/error-message/error-message.component";
 import { ProfilePictureUploadComponent } from '../../components/profile-picture-upload/profile-picture-upload.component';
+import { CardComponent } from '../../components/card/card.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
 import { CANADIAN_PROVINCES, IDENTITY_DOCUMENT_TYPES, requiresExpiry, requiresProvince } from '../../shared/constants/canadian-identity.constants';
@@ -41,7 +42,8 @@ import { toTitleCase } from '../../shared/helpers/format.helper';
     ButtonComponent,
     StickyActionBarComponent,
     ErrorMessageComponent,
-    ProfilePictureUploadComponent
+    ProfilePictureUploadComponent,
+    CardComponent
   ],
   templateUrl: './guard-setting.component.html',
   styleUrls: ['./guard-setting.component.css']
