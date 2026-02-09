@@ -12,6 +12,7 @@ import { ErrorMessageComponent } from "../../components/error-message/error-mess
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
+import { MultiselectInputComponent } from '../../components/form/multiselect-input/multiselect-input.component';
 
 interface Address {
   street: string;
@@ -44,6 +45,7 @@ interface ServiceProvider {
   securityLicense: SecurityLicense;
   operatingRegions: string[];
   guardCategoriesOffered: string[];
+  guardType: string[];
 }
 
 @Component({
@@ -58,7 +60,8 @@ interface ServiceProvider {
     SectionComponent,
     ButtonComponent,
     StickyActionBarComponent,
-    ErrorMessageComponent
+    ErrorMessageComponent,
+    MultiselectInputComponent,
   ],
   templateUrl: './service-provider-setting.component.html',
   styleUrls: ['./service-provider-setting.component.css']
@@ -66,6 +69,13 @@ interface ServiceProvider {
 export class ServiceProviderSettingComponent {
 
   @Input() providerData?: ServiceProvider;
+
+  // Guard type options for multi-select
+  guardTypeOptions = [
+    { value: 'UnarmedGuard', label: 'Unarmed' },
+    { value: 'ArmedGuard', label: 'Armed' },
+    { value: 'TacticalGuard', label: 'Tactical' }
+  ];
 
   providerFormModel: ServiceProvider = {
     legalCompanyName: '',
@@ -91,7 +101,8 @@ export class ServiceProviderSettingComponent {
       document: null
     },
     operatingRegions: [''],
-    guardCategoriesOffered: ['']
+    guardCategoriesOffered: [''],
+    guardType: []
   };
 
   providerErrors: any = {};
@@ -177,6 +188,10 @@ export class ServiceProviderSettingComponent {
       this.providerErrors.companyEmail = 'Invalid email format.';
     }
 
+    if (!this.providerFormModel.guardType || this.providerFormModel.guardType.length === 0) {
+      this.providerErrors['guardType'] = 'At least one guard type must be selected.';
+    }
+
     // Primary Representative
     if (!this.providerFormModel.primaryRepresentative.name.trim()) {
       this.providerErrors.repName = 'Representative name is required.';
@@ -249,7 +264,8 @@ export class ServiceProviderSettingComponent {
           expiry_date: this.providerFormModel.securityLicense.expiryDate
         },
         operating_regions: validRegions,
-        guard_categories_offered: validCategories
+        guard_categories_offered: validCategories,
+        guard_types: this.providerFormModel.guardType
       },
       status: 'active'
     };

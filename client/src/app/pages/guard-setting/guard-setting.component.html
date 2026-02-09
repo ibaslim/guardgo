@@ -1,250 +1,238 @@
 <app-page title="Guard Profile">
-        <form (ngSubmit)="submitGuardForm()" class="space-y-6">
-            <!-- Profile Picture Section -->
-            <app-section title="Profile Picture" subtitle="Your photo helps clients recognize you.">
-                <app-profile-picture-upload 
-                    [maxSizeKb]="500"
-                    [title]="'Profile Picture'"
-                    [subtitle]="'Your photo helps clients recognize you.'">
-                </app-profile-picture-upload>
-            </app-section>
+    <form (ngSubmit)="submitGuardForm()" class="space-y-6">
+        <!-- Profile Picture Section -->
+        <app-section title="Profile Picture" subtitle="Your photo helps clients recognize you.">
+            <app-profile-picture-upload [maxSizeKb]="500" [title]="'Profile Picture'"
+                [subtitle]="'Your photo helps clients recognize you.'">
+            </app-profile-picture-upload>
+        </app-section>
 
-            <app-section title="Basic Info" subtitle="Who you are and how we reach you.">
-                <div class="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                    <div class="flex flex-col">
-                        <app-base-input label="Full Name" name="name" [(ngModel)]="guardFormModel.name"
-                            [required]="true"></app-base-input>
-                        <app-error-message [errorMessage]="guardErrors.name || null"></app-error-message>
-                    </div>
+        <app-section title="Basic Info" subtitle="Who you are and how we reach you.">
+            <div class="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
 
-                    <div class="flex flex-col">
-                        <app-mobile-phone-input 
-                            label="Mobile Phone" 
-                            name="mobilePhone"
-                            [(ngModel)]="guardFormModel.mobilePhone"
-                            [defaultCountry]="'CA'"
-                            [disableCountrySelector]="true"
-                            helperText="Enter your mobile number">
-                        </app-mobile-phone-input>
-                        <app-error-message [errorMessage]="guardErrors.mobilePhone || null"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-landline-phone-input 
-                            label="Landline Phone (Optional)" 
-                            name="landlinePhone"
-                            [(ngModel)]="guardFormModel.landlinePhone"
-                            [defaultCountry]="'CA'"
-                            [disableCountrySelector]="true"
-                            helperText="Enter your landline number">
-                        </app-landline-phone-input>
-                        <app-error-message [errorMessage]="guardErrors.landlinePhone || null"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Date of Birth" name="dateOfBirth" type="date"
-                            [(ngModel)]="guardFormModel.dob" [required]="true"></app-base-input>
-                        <app-error-message [errorMessage]="guardErrors.dob || null"></app-error-message>
-                    </div>
-
-                    <!-- At least one phone required message -->
-                    <div class="col-span-1 md:col-span-2" *ngIf="guardErrors.phoneNumbers">
-                        <app-error-message [errorMessage]="guardErrors.phoneNumbers"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Operational Radius (miles)" name="operationalRadius" type="number"
-                            [(ngModel)]="guardFormModel.operationalRadius" [min]="0"></app-base-input>
-                        <p class="text-xs sm:text-xs text-gray-500 mt-2">Leave blank if you are location-flexible.</p>
-                        <app-error-message [errorMessage]="guardErrors.operationalRadius || null"></app-error-message>
-                    </div>
+                <div class="flex flex-col">
+                    <app-base-input label="Full Name" name="name" [(ngModel)]="guardFormModel.name"
+                        [required]="true"></app-base-input>
+                    <app-error-message [errorMessage]="guardErrors.name || null"></app-error-message>
                 </div>
-            </app-section>
 
-            <app-section title="Home Address" subtitle="Used to align nearby shifts.">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="flex flex-col">
-                        <app-select-input label="Country" [name]="'addressCountry'"
-                            [(ngModel)]="guardFormModel.address.country" [options]="countryOptions"
-                            placeholder="-- Select Country --" [required]="true" [searchable]="true" [disabled]="true"></app-select-input>
-                        <app-error-message [errorMessage]="guardErrors.addressCountry || null"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-select-input label="Province/State" [name]="'addressProvince'"
-                            [(ngModel)]="guardFormModel.address.province" [options]="provinceOptions"
-                            placeholder="-- Select Province --" [required]="true" [searchable]="true"></app-select-input>
-                        <app-error-message [errorMessage]="guardErrors.addressProvince || null"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="City" name="addressCity" [(ngModel)]="guardFormModel.address.city"
-                            [required]="true"></app-base-input>
-                        <app-error-message [errorMessage]="guardErrors.addressCity || null"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Postal Code" name="addressPostalCode"
-                            [(ngModel)]="guardFormModel.address.postalCode" [required]="true"></app-base-input>
-                        <app-error-message [errorMessage]="guardErrors.addressPostalCode || null"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Street Address" name="addressStreet"
-                            [(ngModel)]="guardFormModel.address.street" [required]="true"></app-base-input>
-                        <app-error-message [errorMessage]="guardErrors.addressStreet || null"></app-error-message>
-                    </div>
+                <div class="flex flex-col">
+                    <app-mobile-phone-input label="Mobile Phone" name="mobilePhone"
+                        [(ngModel)]="guardFormModel.mobilePhone" [defaultCountry]="'CA'" [disableCountrySelector]="true"
+                        helperText="Enter your mobile number">
+                    </app-mobile-phone-input>
+                    <app-error-message [errorMessage]="guardErrors.mobilePhone || null"></app-error-message>
                 </div>
-            </app-section>
 
-            <app-section title="Identification Documents" subtitle="We verify identity before approving shifts.">
+                <div class="flex flex-col">
+                    <app-landline-phone-input label="Landline Phone (Optional)" name="landlinePhone"
+                        [(ngModel)]="guardFormModel.landlinePhone" [defaultCountry]="'CA'"
+                        [disableCountrySelector]="true" helperText="Enter your landline number">
+                    </app-landline-phone-input>
+                    <app-error-message [errorMessage]="guardErrors.landlinePhone || null"></app-error-message>
+                </div>
 
-                <!-- Error message for identification documents -->
-                <app-error-message [errorMessage]="guardErrors.identification || null"></app-error-message>
+                <div class="flex flex-col">
+                    <app-base-input label="Date of Birth" name="dateOfBirth" type="date"
+                        [(ngModel)]="guardFormModel.dob" [required]="true"></app-base-input>
+                    <app-error-message [errorMessage]="guardErrors.dob || null"></app-error-message>
+                </div>
 
-                <!-- List of added documents -->
-                <div *ngIf="guardFormModel.identification.documents && guardFormModel.identification.documents.length > 0"
-                    class="space-y-4">
-                    <div *ngFor="let doc of guardFormModel.identification.documents; let i = index"
-                        class="p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 space-y-4">
-                        <div class="flex justify-between items-start">
-                            <h3 class="font-semibold text-gray-800 dark:text-gray-200">
-                                {{ doc.documentType ? toTitleCase(doc.documentType) : ('Document ' + (i + 1)) }}
-                            </h3>
-                            <app-button
-                                label="Remove"
-                                type="danger"
-                                htmlType="button"
-                                size="sm"
-                                (click)="removeIdentificationDocument(i)">
-                            </app-button>
+                <!-- At least one phone required message -->
+                <div class="col-span-1 md:col-span-2" *ngIf="guardErrors.phoneNumbers">
+                    <app-error-message [errorMessage]="guardErrors.phoneNumbers"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Operational Radius (miles)" name="operationalRadius" type="number"
+                        [(ngModel)]="guardFormModel.operationalRadius" [min]="0"></app-base-input>
+                    <p class="text-xs sm:text-xs text-gray-500 mt-2">Leave blank if you are location-flexible.</p>
+                    <app-error-message [errorMessage]="guardErrors.operationalRadius || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-multiselect-input label="Guard Types" name="guardTypes" [(ngModel)]="guardFormModel.guardTypes"
+                        [options]="guardTypeOptions" placeholder="Select guard types you specialize in"
+                        [required]="true" [searchable]="true">
+                    </app-multiselect-input>
+                    <app-error-message [errorMessage]="guardErrors.guardTypes || null"></app-error-message>
+                </div>
+
+            </div>
+        </app-section>
+
+        <app-section title="Home Address" subtitle="Used to align nearby shifts.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col">
+                    <app-select-input label="Country" [name]="'addressCountry'"
+                        [(ngModel)]="guardFormModel.address.country" [options]="countryOptions"
+                        placeholder="-- Select Country --" [required]="true" [searchable]="true"
+                        [disabled]="true"></app-select-input>
+                    <app-error-message [errorMessage]="guardErrors.addressCountry || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-select-input label="Province/State" [name]="'addressProvince'"
+                        [(ngModel)]="guardFormModel.address.province" [options]="provinceOptions"
+                        placeholder="-- Select Province --" [required]="true" [searchable]="true"></app-select-input>
+                    <app-error-message [errorMessage]="guardErrors.addressProvince || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="City" name="addressCity" [(ngModel)]="guardFormModel.address.city"
+                        [required]="true"></app-base-input>
+                    <app-error-message [errorMessage]="guardErrors.addressCity || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Postal Code" name="addressPostalCode"
+                        [(ngModel)]="guardFormModel.address.postalCode" [required]="true"></app-base-input>
+                    <app-error-message [errorMessage]="guardErrors.addressPostalCode || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Street Address" name="addressStreet"
+                        [(ngModel)]="guardFormModel.address.street" [required]="true"></app-base-input>
+                    <app-error-message [errorMessage]="guardErrors.addressStreet || null"></app-error-message>
+                </div>
+            </div>
+        </app-section>
+
+        <app-section title="Identification Documents" subtitle="We verify identity before approving shifts.">
+
+            <!-- Error message for identification documents -->
+            <app-error-message [errorMessage]="guardErrors.identification || null"></app-error-message>
+
+            <!-- List of added documents -->
+            <div *ngIf="guardFormModel.identification.documents && guardFormModel.identification.documents.length > 0"
+                class="space-y-4">
+                <div *ngFor="let doc of guardFormModel.identification.documents; let i = index"
+                    class="p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 space-y-4">
+                    <div class="flex justify-between items-start">
+                        <h3 class="font-semibold text-gray-800 dark:text-gray-200">
+                            {{ doc.documentType ? toTitleCase(doc.documentType) : ('Document ' + (i + 1)) }}
+                        </h3>
+                        <app-button label="Remove" type="danger" htmlType="button" size="sm"
+                            (click)="removeIdentificationDocument(i)">
+                        </app-button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Document Type Dropdown -->
+                        <div class="flex flex-col">
+                            <app-select-input label="Document Type" [name]="'docType_' + i"
+                                [(ngModel)]="doc.documentType" [options]="documentTypeOptions"
+                                placeholder="-- Select Document Type --" [required]="true"
+                                [searchable]="true"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['identification_' + doc.id + '_type'] || null"></app-error-message>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <!-- Document Type Dropdown -->
-                            <div class="flex flex-col">
-                                <app-select-input label="Document Type" [name]="'docType_' + i"
-                                    [(ngModel)]="doc.documentType" [options]="documentTypeOptions"
-                                    placeholder="-- Select Document Type --" [required]="true" [searchable]="true"></app-select-input>
-                                <app-error-message [errorMessage]="guardErrors['identification_' + doc.id + '_type'] || null"></app-error-message>
-                            </div>
+                        <!-- Document Number -->
+                        <div class="flex flex-col">
+                            <app-base-input [label]="'Document Number'" [name]="'docNumber_' + i"
+                                [(ngModel)]="doc.number" [required]="true"></app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['identification_' + doc.id + '_number'] || null"></app-error-message>
+                        </div>
 
-                            <!-- Document Number -->
-                            <div class="flex flex-col">
-                                <app-base-input [label]="'Document Number'" [name]="'docNumber_' + i"
-                                    [(ngModel)]="doc.number" [required]="true"></app-base-input>
-                                <app-error-message [errorMessage]="guardErrors['identification_' + doc.id + '_number'] || null"></app-error-message>
-                            </div>
+                        <!-- Province (conditional) -->
+                        <div *ngIf="requiresProvince(doc.documentType)" class="flex flex-col">
+                            <app-select-input label="Province" [name]="'province_' + i" [(ngModel)]="doc.province"
+                                [options]="provinceOptions" placeholder="-- Select Province --"
+                                [required]="requiresProvince(doc.documentType)" [searchable]="true"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['identification_' + doc.id + '_province'] || null"></app-error-message>
+                        </div>
 
-                            <!-- Province (conditional) -->
-                            <div *ngIf="requiresProvince(doc.documentType)" class="flex flex-col">
-                                <app-select-input label="Province" [name]="'province_' + i"
-                                    [(ngModel)]="doc.province" [options]="provinceOptions"
-                                    placeholder="-- Select Province --" [required]="requiresProvince(doc.documentType)" [searchable]="true"></app-select-input>
-                                <app-error-message [errorMessage]="guardErrors['identification_' + doc.id + '_province'] || null"></app-error-message>
-                            </div>
+                        <!-- Expiry Date (conditional) -->
+                        <div *ngIf="requiresExpiry(doc.documentType)" class="flex flex-col">
+                            <app-base-input [label]="'Expiry Date'" [name]="'docExpiry_' + i" type="date"
+                                [(ngModel)]="doc.expiryDate"
+                                [required]="requiresExpiry(doc.documentType)"></app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['identification_' + doc.id + '_expiry'] || null"></app-error-message>
+                        </div>
 
-                            <!-- Expiry Date (conditional) -->
-                            <div *ngIf="requiresExpiry(doc.documentType)" class="flex flex-col">
-                                <app-base-input [label]="'Expiry Date'" [name]="'docExpiry_' + i" type="date"
-                                    [(ngModel)]="doc.expiryDate" [required]="requiresExpiry(doc.documentType)"></app-base-input>
-                                <app-error-message [errorMessage]="guardErrors['identification_' + doc.id + '_expiry'] || null"></app-error-message>
-                            </div>
-
-                            <!-- File Upload -->
-                            <div class="flex flex-col md:col-span-2">
-                                <app-file-upload [label]="'Upload Document'" [name]="'docFile_' + i"
-                                    [(ngModel)]="doc.file" 
-                                    (fileChange)="onIdentityFileSelected(doc, $event)"
-                                    [existingFileUrl]="doc.existingFileUrl"
-                                    [existingFileName]="doc.existingFileName"
-                                    helperText="PNG, JPG, PDF up to 10MB"
-                                    [required]="false"
-                                    [disabled]="identityUploadInProgress[doc.id || '']"></app-file-upload>
-                                <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, but speeds verification.</p>
-                                <p *ngIf="identityUploadInProgress[doc.id || '']" class="text-xs text-primary-600 mt-2">Uploading document...</p>
-                                <app-error-message [errorMessage]="identityUploadErrors[doc.id || ''] || null"></app-error-message>
-                            </div>
+                        <!-- File Upload -->
+                        <div class="flex flex-col md:col-span-2">
+                            <app-file-upload [label]="'Upload Document'" [name]="'docFile_' + i" [(ngModel)]="doc.file"
+                                (fileChange)="onIdentityFileSelected(doc, $event)"
+                                [existingFileUrl]="doc.existingFileUrl" [existingFileName]="doc.existingFileName"
+                                helperText="PNG, JPG, PDF up to 10MB" [required]="false"
+                                [disabled]="identityUploadInProgress[doc.id || '']"></app-file-upload>
+                            <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, but speeds verification.</p>
+                            <p *ngIf="identityUploadInProgress[doc.id || '']" class="text-xs text-primary-600 mt-2">
+                                Uploading document...</p>
+                            <app-error-message
+                                [errorMessage]="identityUploadErrors[doc.id || ''] || null"></app-error-message>
                         </div>
                     </div>
                 </div>
-
-                <!-- Add Document Button -->
-                <div class="flex justify-center pt-4">
-                    <app-button
-                        [label]="'+ ' + (guardFormModel.identification.documents && guardFormModel.identification.documents.length > 0 ? 'Add Another Document' : 'Add Document')"
-                        type="secondary"
-                        [htmlType]="'button'"
-                        [customClass]="'rounded-lg'"
-                        (click)="addIdentificationDocument()">
-                    </app-button>
-                </div>
-            </app-section>
-
-            <app-section title="Security License" subtitle="Required for active duty.">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="flex flex-col">
-                        <app-base-input label="License Number" name="licenseNumber"
-                            [(ngModel)]="guardFormModel.securityLicense.licenseNumber"
-                            [required]="true"></app-base-input>
-                        <app-error-message [errorMessage]="guardErrors.licenseNumber || null"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Issuing Authority" name="issuingAuthority"
-                            [(ngModel)]="guardFormModel.securityLicense.issuingAuthority"
-                            [required]="true"></app-base-input>
-                        <app-error-message [errorMessage]="guardErrors.issuingAuthority || null"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col">
-                        <app-base-input label="Expiry Date" name="expiryDate" type="date"
-                            [(ngModel)]="guardFormModel.securityLicense.expiryDate" [required]="true"></app-base-input>
-                        <app-error-message [errorMessage]="guardErrors.expiryDate || null"></app-error-message>
-                    </div>
-
-                    <div class="flex flex-col md:col-span-2">
-                        <app-file-upload label="License Document" name="licenseDocument"
-                            [(ngModel)]="guardFormModel.securityLicense.document" 
-                            [existingFileUrl]="guardFormModel.securityLicense.existingFileUrl"
-                            [existingFileName]="guardFormModel.securityLicense.existingFileName"
-                            helperText="PNG, JPG, PDF up to 10MB"
-                            [required]="false"></app-file-upload>
-                        <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.</p>
-                    </div>
-                </div>
-            </app-section>
-
-            <app-section title="Weekly Availability" subtitle="Set preferred shift windows."
-                containerClass="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-4 sm:p-6 space-y-4 sm:space-y-6">
-                <app-weekly-availability label="Weekly Availability" name="availability"
-                    [(ngModel)]="guardFormModel.weeklyAvailability"></app-weekly-availability>
-            </app-section>
-
-            <div *ngIf="guardErrors.submit"
-                class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/40 p-4">
-                <app-error-message [errorMessage]="guardErrors.submit"></app-error-message>
             </div>
 
-            <app-sticky-action-bar [message]="'Save to continue onboarding.'">
-                <app-button *ngIf="!isEditMode"
-                    [label]="isSubmitting ? 'Submitting...' : 'Submit'"
-                    type="primary"
-                    [htmlType]="'submit'"
-                    [disabled]="isSubmitting"
-                    [fullWidth]="true"
-                    size="lg"
-                    [customClass]="'w-full md:w-auto rounded-lg'">
+            <!-- Add Document Button -->
+            <div class="flex justify-center pt-4">
+                <app-button
+                    [label]="'+ ' + (guardFormModel.identification.documents && guardFormModel.identification.documents.length > 0 ? 'Add Another Document' : 'Add Document')"
+                    type="secondary" [htmlType]="'button'" [customClass]="'rounded-lg'"
+                    (click)="addIdentificationDocument()">
                 </app-button>
-                <app-button *ngIf="isEditMode"
-                    [label]="isSubmitting ? 'Saving...' : 'Save Changes'"
-                    type="success"
-                    [htmlType]="'submit'"
-                    [disabled]="isSubmitting"
-                    [fullWidth]="true"
-                    size="lg"
-                    [customClass]="'w-full md:w-auto rounded-lg'">
-                </app-button>
-            </app-sticky-action-bar>
-        </form>
-    </app-page>
+            </div>
+        </app-section>
+
+        <app-section title="Security License" subtitle="Required for active duty.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col">
+                    <app-base-input label="License Number" name="licenseNumber"
+                        [(ngModel)]="guardFormModel.securityLicense.licenseNumber" [required]="true"></app-base-input>
+                    <app-error-message [errorMessage]="guardErrors.licenseNumber || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Issuing Authority" name="issuingAuthority"
+                        [(ngModel)]="guardFormModel.securityLicense.issuingAuthority"
+                        [required]="true"></app-base-input>
+                    <app-error-message [errorMessage]="guardErrors.issuingAuthority || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input label="Expiry Date" name="expiryDate" type="date"
+                        [(ngModel)]="guardFormModel.securityLicense.expiryDate" [required]="true"></app-base-input>
+                    <app-error-message [errorMessage]="guardErrors.expiryDate || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col md:col-span-2">
+                    <app-file-upload label="License Document" name="licenseDocument"
+                        [(ngModel)]="guardFormModel.securityLicense.document"
+                        [existingFileUrl]="guardFormModel.securityLicense.existingFileUrl"
+                        [existingFileName]="guardFormModel.securityLicense.existingFileName"
+                        helperText="PNG, JPG, PDF up to 10MB" [required]="false"></app-file-upload>
+                    <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.</p>
+                </div>
+            </div>
+        </app-section>
+
+        <app-section title="Weekly Availability" subtitle="Set preferred shift windows."
+            containerClass="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-4 sm:p-6 space-y-4 sm:space-y-6">
+            <app-weekly-availability label="Weekly Availability" name="availability"
+                [(ngModel)]="guardFormModel.weeklyAvailability"></app-weekly-availability>
+        </app-section>
+
+        <div *ngIf="guardErrors.submit"
+            class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/40 p-4">
+            <app-error-message [errorMessage]="guardErrors.submit"></app-error-message>
+        </div>
+
+        <app-sticky-action-bar [message]="'Save to continue onboarding.'">
+            <app-button *ngIf="!isEditMode" [label]="isSubmitting ? 'Submitting...' : 'Submit'" type="primary"
+                [htmlType]="'submit'" [disabled]="isSubmitting" [fullWidth]="true" size="lg"
+                [customClass]="'w-full md:w-auto rounded-lg'">
+            </app-button>
+            <app-button *ngIf="isEditMode" [label]="isSubmitting ? 'Saving...' : 'Save Changes'" type="success"
+                [htmlType]="'submit'" [disabled]="isSubmitting" [fullWidth]="true" size="lg"
+                [customClass]="'w-full md:w-auto rounded-lg'">
+            </app-button>
+        </app-sticky-action-bar>
+    </form>
+</app-page>

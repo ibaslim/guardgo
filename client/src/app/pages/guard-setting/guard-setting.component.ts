@@ -23,6 +23,7 @@ import { COUNTRY_OPTIONS } from '../../shared/constants/countries.constants';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { Guard, GuardErrors, IdentificationDocument } from '../../shared/model/guard';
 import { toTitleCase } from '../../shared/helpers/format.helper';
+import { MultiselectInputComponent } from '../../components/form/multiselect-input/multiselect-input.component';
 
 @Component({
   selector: 'app-guard-setting',
@@ -41,7 +42,8 @@ import { toTitleCase } from '../../shared/helpers/format.helper';
     ButtonComponent,
     StickyActionBarComponent,
     ErrorMessageComponent,
-    ProfilePictureUploadComponent
+    ProfilePictureUploadComponent,
+    MultiselectInputComponent
   ],
   templateUrl: './guard-setting.component.html',
   styleUrls: ['./guard-setting.component.css']
@@ -58,17 +60,24 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   canadianProvinces = CANADIAN_PROVINCES;
 
   // Converted options for select-input component
-  documentTypeOptions = IDENTITY_DOCUMENT_TYPES.map(dt => ({ 
-    value: dt.value, 
-    label: dt.label 
+  documentTypeOptions = IDENTITY_DOCUMENT_TYPES.map(dt => ({
+    value: dt.value,
+    label: dt.label
   }));
-  
-  provinceOptions = CANADIAN_PROVINCES.map(prov => ({ 
-    value: prov.code, 
-    label: prov.label 
+
+  provinceOptions = CANADIAN_PROVINCES.map(prov => ({
+    value: prov.code,
+    label: prov.label
   }));
 
   countryOptions = COUNTRY_OPTIONS;
+
+  // Guard type options for multi-select
+  guardTypeOptions = [
+    { value: 'UnarmedGuard', label: 'Unarmed' },
+    { value: 'ArmedGuard', label: 'Armed' },
+    { value: 'TacticalGuard', label: 'Tactical' }
+  ];
 
   // UI helper methods
   requiresProvince = requiresProvince;
@@ -110,7 +119,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       Friday: [],
       Saturday: [],
       Sunday: []
-    }
+    },
+    guardTypes: []
   };
 
 
@@ -126,7 +136,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     private apiService: ApiService,
     private router: Router,
     private appService: AppService
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     if (this.guardData && this.hasGuardData(this.guardData)) {
@@ -176,7 +186,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         formData.address.country = 'CA';
       }
     }
-    
+
     // Transform identification documents if they exist
     if (formData.identification?.documents && Array.isArray(formData.identification.documents)) {
       formData.identification.documents = formData.identification.documents.map((doc: any, index: number) => {
@@ -184,7 +194,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         // If backend provides an ID, use that; otherwise create stable ID
         const backendId = doc.id || doc.document_id;
         const stableId = backendId || `doc_type_${doc.document_type || 'unknown'}_idx_${index}`;
-        
+
         return {
           documentType: doc.document_type || doc.documentType || '',
           number: doc.document_number || doc.number || '',
@@ -205,14 +215,14 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         formData.identification.documents = [];
       }
     }
-    
+
     // Handle security license file metadata
     if (formData.securityLicense) {
       const license = formData.securityLicense as any;
       formData.securityLicense.existingFileUrl = license.document_file_url || license.file_url || undefined;
       formData.securityLicense.existingFileName = license.document_file_name || license.file_name || undefined;
     }
-    
+
     return formData;
   }
 
@@ -254,7 +264,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
    */
   removeIdentificationDocument(index: number): void {
     const doc = this.guardFormModel.identification.documents[index];
-    
+
     // Clear all errors for this document
     if (doc && doc.id) {
       delete this.guardErrors[`identification_${doc.id}_type`];
@@ -262,7 +272,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       delete this.guardErrors[`identification_${doc.id}_province`];
       delete this.guardErrors[`identification_${doc.id}_expiry`];
     }
-    
+
     // If the removed document was primary, clear the primary selection
     if (
       this.guardFormModel.identification.primaryDocumentId === doc?.id
@@ -273,7 +283,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     if (doc?.existingFileId) {
       this.deleteIdentityFile(doc);
     }
-    
+
     this.guardFormModel.identification.documents.splice(index, 1);
   }
 
@@ -438,7 +448,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       const dobDate = new Date(this.guardFormModel.dob);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       if (dobDate >= today) {
         this.guardErrors['dob'] = 'Date of birth must be in the past.';
       } else {
@@ -447,7 +457,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         const monthDiff = today.getMonth() - dobDate.getMonth();
         const dayDiff = today.getDate() - dobDate.getDate();
         const actualAge = (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) ? age - 1 : age;
-        
+
         if (actualAge < 18) {
           this.guardErrors['dob'] = 'You must be at least 18 years old.';
         } else if (actualAge > 100) {
@@ -459,7 +469,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     // Phone Numbers - At least one required (mobile or landline)
     const hasMobile = this.guardFormModel.mobilePhone && this.guardFormModel.mobilePhone.e164;
     const hasLandline = this.guardFormModel.landlinePhone && this.guardFormModel.landlinePhone.e164;
-    
+
     if (!hasMobile && !hasLandline) {
       this.guardErrors['phoneNumbers'] = 'At least one phone number (mobile or landline) is required.';
     } else if (hasMobile && hasLandline) {
@@ -467,6 +477,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       if (this.guardFormModel.mobilePhone?.country !== this.guardFormModel.landlinePhone?.country) {
         this.guardErrors['phoneNumbers'] = 'Mobile and landline phone numbers must be from the same country.';
       }
+    }
+
+    // Guard Types
+    if (!this.guardFormModel.guardTypes || this.guardFormModel.guardTypes.length === 0) {
+      this.guardErrors['guardTypes'] = 'At least one guard type must be selected.';
     }
 
     // Address
@@ -499,7 +514,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         this.guardErrors['addressProvince'] = 'Please select a valid province from the list.';
       }
     }
-    
+
     // Canadian Postal Code validation (A1A 1A1 format)
     if (!this.guardFormModel.address.postalCode.trim()) {
       this.guardErrors['addressPostalCode'] = 'Postal code is required.';
@@ -614,7 +629,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           issuing_authority: this.guardFormModel.securityLicense.issuingAuthority,
           expiry_date: this.guardFormModel.securityLicense.expiryDate
         },
-        weekly_availability: this.guardFormModel.weeklyAvailability
+        weekly_availability: this.guardFormModel.weeklyAvailability,
+        guard_types: this.guardFormModel.guardTypes
       }
     };
 
@@ -628,8 +644,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       payload.profile.landline_phone_country = this.guardFormModel.landlinePhone.country;
     }
     // Legacy contact field
-    const legacyContact = this.guardFormModel.mobilePhone?.national || 
-                          this.guardFormModel.landlinePhone?.national || '';
+    const legacyContact = this.guardFormModel.mobilePhone?.national ||
+      this.guardFormModel.landlinePhone?.national || '';
     payload.profile.contact = legacyContact;
 
     // Add operational radius if set

@@ -79,6 +79,7 @@ export interface GuardErrors {
   issuingAuthority?: string;
   expiryDate?: string;
   operationalRadius?: string;
+  guardTypes?: string;
   submit?: string;
   [key: string]: string | undefined; // For dynamic identification document errors
 }
@@ -94,4 +95,5 @@ export interface Guard {
   securityLicense: SecurityLicense;
   operationalRadius: number | null;
   weeklyAvailability: WeeklyAvailability;
+  guardTypes: string[];
 }
