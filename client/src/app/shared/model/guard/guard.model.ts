@@ -52,6 +52,53 @@ export interface SecurityLicense {
   existingFileName?: string; // Name of existing uploaded file
 }
 
+export interface SecurityLicenseDocument {
+  fullLegalName: string;
+  licenseNumber: string;
+  licenseType: string;
+  issuingProvince: string;
+  issueDate: string;
+  expiryDate: string;
+  file?: File | null;
+  id?: string; // unique identifier for UI purposes
+  existingFileUrl?: string;
+  existingFileName?: string;
+  existingFileId?: string;
+  existingFileMimeType?: string;
+  existingFileSize?: number;
+}
+
+export interface PoliceClearanceRecord {
+  issuingAuthorityType: string;
+  issuingAuthorityOther?: string;
+  issuingProvince: string;
+  issuingCity?: string;
+  issueDate: string;
+  referenceNumber?: string;
+  file?: File | null;
+  id?: string; // unique identifier for UI purposes
+  existingFileUrl?: string;
+  existingFileName?: string;
+  existingFileId?: string;
+  existingFileMimeType?: string;
+  existingFileSize?: number;
+}
+
+export interface TrainingCertificate {
+  certificateName: string;
+  issuingOrganizationType: string;
+  issuingOrganizationOther?: string;
+  issueDate: string;
+  expiryDate?: string;
+  file?: File | null;
+  id?: string; // unique identifier for UI purposes
+  existingFileUrl?: string;
+  existingFileName?: string;
+  existingFileId?: string;
+  existingFileMimeType?: string;
+  existingFileSize?: number;
+}
+
 export interface WeeklyAvailability {
   Monday: string[];
   Tuesday: string[];
@@ -78,6 +125,9 @@ export interface GuardErrors {
   licenseNumber?: string;
   issuingAuthority?: string;
   expiryDate?: string;
+  securityLicenses?: string;
+  policeClearances?: string;
+  trainingCertificates?: string;
   operationalRadius?: string;
   submit?: string;
   [key: string]: string | undefined; // For dynamic identification document errors
@@ -91,7 +141,10 @@ export interface Guard {
   dob: string;
   address: Address;
   identification: Identification;
-  securityLicense: SecurityLicense;
+  securityLicense?: SecurityLicense; // Legacy
+  securityLicenses: SecurityLicenseDocument[];
+  policeClearances: PoliceClearanceRecord[];
+  trainingCertificates: TrainingCertificate[];
   operationalRadius: number | null;
   weeklyAvailability: WeeklyAvailability;
 }

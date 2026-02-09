@@ -68,7 +68,10 @@ export class SelectInputComponent implements ControlValueAccessor {
 
   getSelectedLabel(): string {
     const selected = this.options.find(opt => opt.value === this.value);
-    return selected ? selected.label : '';
+    if (selected) {
+      return selected.label;
+    }
+    return this.value ? String(this.value) : '';
   }
 
   get filteredOptions() {

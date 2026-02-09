@@ -14,12 +14,18 @@ class ResourceManager:
         self.USER_DIR = self.BASE_DIR / "static" / "resource" / "profile"
         self.TENANT_DIR = self.BASE_DIR / "static" / "resource" / "tenant"
         self.TENANT_IDENTITY_DIR = self.BASE_DIR / "static" / "resource" / "tenant_identity"
+        self.TENANT_SECURITY_LICENSE_DIR = self.BASE_DIR / "static" / "resource" / "tenant_security_license"
+        self.TENANT_POLICE_CLEARANCE_DIR = self.BASE_DIR / "static" / "resource" / "tenant_police_clearance"
+        self.TENANT_TRAINING_CERT_DIR = self.BASE_DIR / "static" / "resource" / "tenant_training_certificate"
         self.SYSTEM_DIR = self.BASE_DIR / "static" / "resource" / "system"
         self.ROBOTS_FILE = self.BASE_DIR / "static" / "robots.txt"
 
         self.USER_DIR.mkdir(parents=True, exist_ok=True)
         self.TENANT_DIR.mkdir(parents=True, exist_ok=True)
         self.TENANT_IDENTITY_DIR.mkdir(parents=True, exist_ok=True)
+        self.TENANT_SECURITY_LICENSE_DIR.mkdir(parents=True, exist_ok=True)
+        self.TENANT_POLICE_CLEARANCE_DIR.mkdir(parents=True, exist_ok=True)
+        self.TENANT_TRAINING_CERT_DIR.mkdir(parents=True, exist_ok=True)
         self.SYSTEM_DIR.mkdir(parents=True, exist_ok=True)
 
         if ResourceManager.__instance is not None:
@@ -170,6 +176,195 @@ class ResourceManager:
                 file_path.unlink()
 
         return {"identity_document": "deleted"}
+
+    async def upload_tenant_security_license_document(self, file: UploadFile, current_user):
+        contents = await file.read()
+
+        if len(contents) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large! Maximum allowed size is 10 MB")
+
+        if not (file.content_type.startswith("image/") or file.content_type == "application/pdf"):
+            raise HTTPException(status_code=415, detail="Invalid file type")
+
+        extension_map = {
+            "application/pdf": ".pdf",
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/png": ".png",
+        }
+        original_extension = Path(file.filename or "").suffix.lower()
+        extension = extension_map.get(file.content_type, original_extension or ".bin")
+
+        tenant_dir = self.TENANT_SECURITY_LICENSE_DIR / f"{current_user.tenant_uuid}"
+        tenant_dir.mkdir(parents=True, exist_ok=True)
+
+        file_id = uuid4().hex
+        stored_name = f"{file_id}{extension}"
+        file_path = tenant_dir / stored_name
+
+        with open(file_path, "wb") as f:
+            f.write(contents)
+
+        return {
+            "file_id": file_id,
+            "file_name": file.filename,
+            "stored_name": stored_name,
+            "mime_type": file.content_type,
+            "size": len(contents),
+            "file_url": f"/api/tenant/files/security-license/{file_id}",
+        }
+
+    async def get_tenant_security_license_document(self, file_id: str, current_user):
+        tenant_dir = self.TENANT_SECURITY_LICENSE_DIR / f"{current_user.tenant_uuid}"
+        if not tenant_dir.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        matches = list(tenant_dir.glob(f"{file_id}.*"))
+        if not matches:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        return FileResponse(matches[0])
+
+    async def delete_tenant_security_license_document(self, file_id: str, current_user):
+        tenant_dir = self.TENANT_SECURITY_LICENSE_DIR / f"{current_user.tenant_uuid}"
+        if not tenant_dir.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        matches = list(tenant_dir.glob(f"{file_id}.*"))
+        if not matches:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        for file_path in matches:
+            if file_path.is_file():
+                file_path.unlink()
+
+        return {"security_license_document": "deleted"}
+
+    async def upload_tenant_police_clearance_document(self, file: UploadFile, current_user):
+        contents = await file.read()
+
+        if len(contents) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large! Maximum allowed size is 10 MB")
+
+        if not (file.content_type.startswith("image/") or file.content_type == "application/pdf"):
+            raise HTTPException(status_code=415, detail="Invalid file type")
+
+        extension_map = {
+            "application/pdf": ".pdf",
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/png": ".png",
+        }
+        original_extension = Path(file.filename or "").suffix.lower()
+        extension = extension_map.get(file.content_type, original_extension or ".bin")
+
+        tenant_dir = self.TENANT_POLICE_CLEARANCE_DIR / f"{current_user.tenant_uuid}"
+        tenant_dir.mkdir(parents=True, exist_ok=True)
+
+        file_id = uuid4().hex
+        stored_name = f"{file_id}{extension}"
+        file_path = tenant_dir / stored_name
+
+        with open(file_path, "wb") as f:
+            f.write(contents)
+
+        return {
+            "file_id": file_id,
+            "file_name": file.filename,
+            "stored_name": stored_name,
+            "mime_type": file.content_type,
+            "size": len(contents),
+            "file_url": f"/api/tenant/files/police-clearance/{file_id}",
+        }
+
+    async def get_tenant_police_clearance_document(self, file_id: str, current_user):
+        tenant_dir = self.TENANT_POLICE_CLEARANCE_DIR / f"{current_user.tenant_uuid}"
+        if not tenant_dir.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        matches = list(tenant_dir.glob(f"{file_id}.*"))
+        if not matches:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        return FileResponse(matches[0])
+
+    async def delete_tenant_police_clearance_document(self, file_id: str, current_user):
+        tenant_dir = self.TENANT_POLICE_CLEARANCE_DIR / f"{current_user.tenant_uuid}"
+        if not tenant_dir.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        matches = list(tenant_dir.glob(f"{file_id}.*"))
+        if not matches:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        for file_path in matches:
+            if file_path.is_file():
+                file_path.unlink()
+
+        return {"police_clearance_document": "deleted"}
+
+    async def upload_tenant_training_certificate(self, file: UploadFile, current_user):
+        contents = await file.read()
+
+        if len(contents) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File too large! Maximum allowed size is 10 MB")
+
+        if not (file.content_type.startswith("image/") or file.content_type == "application/pdf"):
+            raise HTTPException(status_code=415, detail="Invalid file type")
+
+        extension_map = {
+            "application/pdf": ".pdf",
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/png": ".png",
+        }
+        original_extension = Path(file.filename or "").suffix.lower()
+        extension = extension_map.get(file.content_type, original_extension or ".bin")
+
+        tenant_dir = self.TENANT_TRAINING_CERT_DIR / f"{current_user.tenant_uuid}"
+        tenant_dir.mkdir(parents=True, exist_ok=True)
+
+        file_id = uuid4().hex
+        stored_name = f"{file_id}{extension}"
+        file_path = tenant_dir / stored_name
+
+        with open(file_path, "wb") as f:
+            f.write(contents)
+
+        return {
+            "file_id": file_id,
+            "file_name": file.filename,
+            "stored_name": stored_name,
+            "mime_type": file.content_type,
+            "size": len(contents),
+            "file_url": f"/api/tenant/files/training-certificate/{file_id}",
+        }
+
+    async def get_tenant_training_certificate(self, file_id: str, current_user):
+        tenant_dir = self.TENANT_TRAINING_CERT_DIR / f"{current_user.tenant_uuid}"
+        if not tenant_dir.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        matches = list(tenant_dir.glob(f"{file_id}.*"))
+        if not matches:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        return FileResponse(matches[0])
+
+    async def delete_tenant_training_certificate(self, file_id: str, current_user):
+        tenant_dir = self.TENANT_TRAINING_CERT_DIR / f"{current_user.tenant_uuid}"
+        if not tenant_dir.exists():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        matches = list(tenant_dir.glob(f"{file_id}.*"))
+        if not matches:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        for file_path in matches:
+            if file_path.is_file():
+                file_path.unlink()
+
+        return {"training_certificate": "deleted"}
 
     async def delete_system_image(self, current_user):
         image_path = self.SYSTEM_DIR / f"logo.png"
