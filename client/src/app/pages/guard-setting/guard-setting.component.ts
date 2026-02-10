@@ -17,10 +17,12 @@ import { StickyActionBarComponent } from '../../components/sticky-action-bar/sti
 import { ErrorMessageComponent } from "../../components/error-message/error-message.component";
 import { ProfilePictureUploadComponent } from '../../components/profile-picture-upload/profile-picture-upload.component';
 import { CardComponent } from '../../components/card/card.component';
+import { ClientPreferredGuardTypesComponent } from '../../components/client-preferred-guard-types/client-preferred-guard-types.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
-import { Guard, GuardErrors, IdentificationDocument, SecurityLicenseDocument, PoliceClearanceRecord, TrainingCertificate } from '../../shared/model/guard';
+import { getIssuingAuthorityForProvince } from '../../shared/constants/provincial-authorities.constants';
+import { Guard, GuardErrors, IdentificationDocument, SecurityLicenseDocument, PoliceClearanceRecord, TrainingCertificate, WeeklyAvailability } from '../../shared/model/guard';
 import { toTitleCase } from '../../shared/helpers/format.helper';
 
 @Component({
@@ -41,7 +43,8 @@ import { toTitleCase } from '../../shared/helpers/format.helper';
     StickyActionBarComponent,
     ErrorMessageComponent,
     ProfilePictureUploadComponent,
-    CardComponent
+    CardComponent,
+    ClientPreferredGuardTypesComponent
   ],
   templateUrl: './guard-setting.component.html',
   styleUrls: ['./guard-setting.component.css']
@@ -70,6 +73,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   policeClearanceAuthorityOptions: { value: string; label: string }[] = [];
+
+  guardTypeOptions: { value: string; label: string }[] = [];
 
   loadGuardMetadata(onLoaded?: () => void): void {
     this.apiService.get<any>('public/guard-metadata')
@@ -101,6 +106,19 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           }
           if (response?.policeClearanceAuthorityTypes?.length) {
             this.policeClearanceAuthorityOptions = response.policeClearanceAuthorityTypes;
+          }
+          if (response?.guardTypeOptions?.length) {
+            this.guardTypeOptions = response.guardTypeOptions;
+          } else {
+            this.apiService.get<any>('public/client-metadata')
+              .pipe(takeUntil(this.destroy$))
+              .subscribe({
+                next: (clientResponse) => {
+                  if (clientResponse?.guardTypeOptions?.length) {
+                    this.guardTypeOptions = clientResponse.guardTypeOptions;
+                  }
+                }
+              });
           }
           onLoaded?.();
         },
@@ -136,6 +154,73 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     const byLabel = options.find(opt => opt.label.toLowerCase() === normalized.toLowerCase());
     return byLabel?.value || normalized;
   }
+
+  /**
+   * Get the suggested issuing authority for a given province code
+   * @param provinceCode - Two-letter province code (e.g., 'ON', 'AB')
+   * @returns The issuing authority name for the province
+   */
+  getSuggestedIssuingAuthority(provinceCode: string): string {
+    return getIssuingAuthorityForProvince(provinceCode);
+  }
+
+  private mapWeeklyAvailabilityToBackend(availability: WeeklyAvailability | Record<string, string[]>): {
+    morning: boolean;
+    afternoon: boolean;
+    night: boolean;
+  } {
+    const availabilityMap = availability as Record<string, string[]>;
+    const days = Object.keys(availabilityMap || {});
+    const hasSlot = (slot: string) => days.some(day => (availabilityMap[day] || []).includes(slot));
+
+    return {
+      morning: hasSlot('Morning'),
+      afternoon: hasSlot('Evening'),
+      night: hasSlot('Night')
+    };
+  }
+
+  private mapWeeklyAvailabilityFromBackend(availability: any): Record<string, string[]> {
+    const defaultAvailability: Record<string, string[]> = {
+      Monday: [],
+      Tuesday: [],
+      Wednesday: [],
+      Thursday: [],
+      Friday: [],
+      Saturday: [],
+      Sunday: []
+    };
+
+    if (!availability) {
+      return defaultAvailability;
+    }
+
+    const hasDayKeys = Object.keys(defaultAvailability).some(day => Array.isArray(availability?.[day]));
+    if (hasDayKeys) {
+      return {
+        ...defaultAvailability,
+        ...availability
+      };
+    }
+
+    const morning = Boolean(availability.morning);
+    const afternoon = Boolean(availability.afternoon);
+    const night = Boolean(availability.night);
+
+    Object.keys(defaultAvailability).forEach((day) => {
+      if (morning) {
+        defaultAvailability[day].push('Morning');
+      }
+      if (afternoon) {
+        defaultAvailability[day].push('Evening');
+      }
+      if (night) {
+        defaultAvailability[day].push('Night');
+      }
+    });
+
+    return defaultAvailability;
+  }
   
   provinceOptions: { value: string; label: string }[] = [];
 
@@ -164,6 +249,12 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       province: '',
       postalCode: ''
     },
+    secondaryContact: {
+      name: '',
+      email: '',
+      mobilePhone: null,
+      landlinePhone: null
+    },
     identification: {
       documents: [],
       primaryDocumentId: undefined,
@@ -174,6 +265,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     securityLicenses: [],
     policeClearances: [],
     trainingCertificates: [],
+    preferredGuardTypes: [],
     operationalRadius: null,
     weeklyAvailability: {
       Monday: [],
@@ -276,28 +368,92 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
    * Transform backend data format to frontend form format
    */
   private transformBackendDataToForm(data: Guard): Guard {
-    const formData = JSON.parse(JSON.stringify(data));
+    const profile = (data as any)?.profile || data || {};
+    const formData = JSON.parse(JSON.stringify(profile));
+
+    formData.name = profile.full_name || profile.name || formData.name || '';
+    formData.dob = profile.date_of_birth || profile.dateOfBirth || formData.dob || '';
+
+    const rawAddress = profile.home_address || profile.homeAddress || profile.address || {};
+    formData.address = {
+      street: rawAddress.street || '',
+      city: rawAddress.city || '',
+      country: rawAddress.country || 'CA',
+      province: rawAddress.province || '',
+      postalCode: rawAddress.postal_code || rawAddress.postalCode || ''
+    };
+
+    const rawAvailability = profile.weekly_availability || profile.weeklyAvailability;
+    formData.weeklyAvailability = this.mapWeeklyAvailabilityFromBackend(rawAvailability);
+
+    if (profile.max_travel_radius_km != null) {
+      const km = Number(profile.max_travel_radius_km);
+      formData.operationalRadius = Number.isFinite(km) ? Number((km / 1.60934).toFixed(1)) : null;
+    }
 
     // Transform phone numbers from backend
-    if ((data as any).mobile_phone) {
+    const mobilePhoneValue = profile.mobile_phone || (data as any).mobile_phone;
+    const mobilePhoneCountry = profile.mobile_phone_country || (data as any).mobile_phone_country || 'CA';
+    if (mobilePhoneValue) {
       formData.mobilePhone = {
-        e164: (data as any).mobile_phone,
-        national: (data as any).mobile_phone, // Backend should provide formatted version
-        international: (data as any).mobile_phone,
-        country: (data as any).mobile_phone_country || 'CA',
+        e164: mobilePhoneValue,
+        national: mobilePhoneValue, // Backend should provide formatted version
+        international: mobilePhoneValue,
+        country: mobilePhoneCountry,
         phoneType: 'mobile' as const,
-        rawInput: (data as any).mobile_phone
+        rawInput: mobilePhoneValue
       };
     }
-    if ((data as any).landline_phone) {
+    const landlinePhoneValue = profile.landline_phone || (data as any).landline_phone;
+    const landlinePhoneCountry = profile.landline_phone_country || (data as any).landline_phone_country || 'CA';
+    if (landlinePhoneValue) {
       formData.landlinePhone = {
-        e164: (data as any).landline_phone,
-        national: (data as any).landline_phone,
-        international: (data as any).landline_phone,
-        country: (data as any).landline_phone_country || 'CA',
+        e164: landlinePhoneValue,
+        national: landlinePhoneValue,
+        international: landlinePhoneValue,
+        country: landlinePhoneCountry,
         phoneType: 'landline' as const,
-        rawInput: (data as any).landline_phone
+        rawInput: landlinePhoneValue
       };
+    }
+
+    // Transform secondary contact phone numbers
+    if (!formData.secondaryContact) {
+      formData.secondaryContact = {
+        name: '',
+        email: '',
+        mobilePhone: null,
+        landlinePhone: null
+      };
+    }
+    
+    if (profile.secondary_contact) {
+      const secondaryContactData = profile.secondary_contact;
+      formData.secondaryContact.name = secondaryContactData.name || '';
+      formData.secondaryContact.email = secondaryContactData.email || '';
+
+      const secondaryPhone = secondaryContactData.phone || secondaryContactData.mobile_phone;
+      if (secondaryPhone) {
+        formData.secondaryContact.mobilePhone = {
+          e164: secondaryPhone,
+          national: secondaryPhone,
+          international: secondaryPhone,
+          country: secondaryContactData.mobile_phone_country || 'CA',
+          phoneType: 'mobile' as const,
+          rawInput: secondaryPhone
+        };
+      }
+
+      if (secondaryContactData.landline_phone) {
+        formData.secondaryContact.landlinePhone = {
+          e164: secondaryContactData.landline_phone,
+          national: secondaryContactData.landline_phone,
+          international: secondaryContactData.landline_phone,
+          country: secondaryContactData.landline_phone_country || 'CA',
+          phoneType: 'landline' as const,
+          rawInput: secondaryContactData.landline_phone
+        };
+      }
     }
 
     if (formData.address?.country) {
@@ -307,6 +463,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       }
     }
     
+    if (!formData.identification) {
+      formData.identification = { documents: [] };
+    }
+
     // Transform identification documents if they exist
     if (formData.identification?.documents && Array.isArray(formData.identification.documents)) {
       formData.identification.documents = formData.identification.documents.map((doc: any, index: number) => {
@@ -329,6 +489,24 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           id: stableId
         };
       });
+    } else if (formData.identification?.id_type || formData.identification?.id_number) {
+      const legacyIdType = formData.identification.id_type || '';
+      const legacyIdNumber = formData.identification.id_number || '';
+      formData.identification.documents = [
+        {
+          documentType: legacyIdType,
+          number: legacyIdNumber,
+          province: undefined,
+          expiryDate: undefined,
+          file: null,
+          existingFileUrl: formData.identification.document_url || undefined,
+          existingFileName: undefined,
+          existingFileId: undefined,
+          existingFileMimeType: undefined,
+          existingFileSize: undefined,
+          id: `doc_legacy_${Date.now()}`
+        }
+      ];
     } else if (!formData.identification?.documents) {
       // Initialize documents array if it doesn't exist
       if (formData.identification) {
@@ -349,6 +527,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
             this.securityLicenseTypeOptions
           ),
           issuingProvince: license.issuing_province || license.issuingProvince || '',
+          issuingAuthority: license.issuing_authority || license.issuingAuthority || '',
           issueDate: license.issue_date || license.issueDate || '',
           expiryDate: license.expiry_date || license.expiryDate || '',
           file: null,
@@ -371,6 +550,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
             this.securityLicenseTypeOptions
           ),
           issuingProvince: license.issuing_province || license.issuingProvince || '',
+          issuingAuthority: license.issuing_authority || license.issuingAuthority || '',
           issueDate: license.issue_date || license.issueDate || '',
           expiryDate: license.expiry_date || license.expiryDate || '',
           file: null,
@@ -453,6 +633,16 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       });
     } else if (!formData.trainingCertificates) {
       formData.trainingCertificates = [];
+    }
+
+    // Transform preferred guard types if they exist
+    const rawPreferredGuardTypes = (formData as any).preferred_guard_types || formData.preferredGuardTypes || [];
+    if (Array.isArray(rawPreferredGuardTypes)) {
+      formData.preferredGuardTypes = rawPreferredGuardTypes.map((guardType: any) => {
+        return typeof guardType === 'string' ? guardType : guardType.value || guardType;
+      });
+    } else if (!formData.preferredGuardTypes) {
+      formData.preferredGuardTypes = [];
     }
     
     return formData;
@@ -607,6 +797,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       licenseNumber: '',
       licenseType: 'securityGuard',
       issuingProvince: '',
+      issuingAuthority: '',
       issueDate: '',
       expiryDate: '',
       file: null,
@@ -623,6 +814,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       delete this.guardErrors[`security_license_${license.id}_licenseNumber`];
       delete this.guardErrors[`security_license_${license.id}_licenseType`];
       delete this.guardErrors[`security_license_${license.id}_issuingProvince`];
+      delete this.guardErrors[`security_license_${license.id}_issuingAuthority`];
       delete this.guardErrors[`security_license_${license.id}_issueDate`];
       delete this.guardErrors[`security_license_${license.id}_expiryDate`];
     }
@@ -1137,6 +1329,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
               this.guardErrors[`security_license_${license.id}_issuingProvince`] = 'Please select a valid province.';
             }
           }
+          if (!license.issuingAuthority.trim()) {
+            this.guardErrors[`security_license_${license.id}_issuingAuthority`] = 'Issuing authority is required.';
+          }
           if (!license.issueDate) {
             this.guardErrors[`security_license_${license.id}_issueDate`] = 'Issue date is required.';
           }
@@ -1212,6 +1407,45 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       }
     }
 
+    // Secondary Contact Validation (optional, but if any field is filled, name and email are required)
+    const secondaryContact = this.guardFormModel.secondaryContact;
+    const hasSecondaryContactData = secondaryContact && (
+      secondaryContact.name?.trim() ||
+      secondaryContact.email?.trim() ||
+      (secondaryContact.mobilePhone?.e164) ||
+      (secondaryContact.landlinePhone?.e164)
+    );
+
+    if (hasSecondaryContactData) {
+      // If any field is provided, name and email are required
+      if (!secondaryContact.name?.trim()) {
+        this.guardErrors['secondaryContactName'] = 'Contact name is required if secondary contact is provided.';
+      }
+      if (!secondaryContact.email?.trim()) {
+        this.guardErrors['secondaryContactEmail'] = 'Contact email is required if secondary contact is provided.';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(secondaryContact.email)) {
+        this.guardErrors['secondaryContactEmail'] = 'Please enter a valid email address.';
+      }
+      
+      // At least one phone required if any field is filled
+      const hasSecondaryMobile = secondaryContact.mobilePhone && secondaryContact.mobilePhone.e164;
+      const hasSecondaryLandline = secondaryContact.landlinePhone && secondaryContact.landlinePhone.e164;
+      
+      if (!hasSecondaryMobile && !hasSecondaryLandline) {
+        this.guardErrors['secondaryContactPhoneNumbers'] = 'At least one phone number (mobile or landline) is required.';
+      } else if (hasSecondaryMobile && hasSecondaryLandline) {
+        // If both phone numbers are provided, they must be from the same country
+        if (secondaryContact.mobilePhone?.country !== secondaryContact.landlinePhone?.country) {
+          this.guardErrors['secondaryContactPhoneNumbers'] = 'Mobile and landline phone numbers must be from the same country.';
+        }
+      }
+    }
+
+    // Preferred Guard Types
+    if (!this.guardFormModel.preferredGuardTypes || this.guardFormModel.preferredGuardTypes.length === 0) {
+      this.guardErrors['preferredGuardTypes'] = 'Select at least one preferred guard type.';
+    }
+
     // Operational Radius
     if (
       this.guardFormModel.operationalRadius != null &&
@@ -1232,14 +1466,19 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     this.isSubmitting = true;
     this.guardErrors = {}; // Clear previous errors
 
+    const identificationDocs = this.guardFormModel.identification.documents || [];
+    const primaryIdentification = identificationDocs.find(
+      doc => doc.id === this.guardFormModel.identification.primaryDocumentId
+    ) || identificationDocs[0];
+
     // Build JSON payload (files already uploaded separately)
     const payload: any = {
       tenant_type: TENANT_TYPES.GUARD,
       status: 'active',
       profile: {
-        name: this.guardFormModel.name,
+        full_name: this.guardFormModel.name,
         date_of_birth: this.guardFormModel.dob,
-        address: {
+        home_address: {
           street: this.guardFormModel.address.street,
           city: this.guardFormModel.address.city,
           country: this.guardFormModel.address.country,
@@ -1247,7 +1486,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           postal_code: this.guardFormModel.address.postalCode
         },
         identification: {
-          documents: this.guardFormModel.identification.documents.map(doc => ({
+          ...(primaryIdentification?.documentType && { id_type: primaryIdentification.documentType }),
+          ...(primaryIdentification?.number && { id_number: primaryIdentification.number }),
+          ...(primaryIdentification?.existingFileUrl && { document_url: primaryIdentification.existingFileUrl }),
+          documents: identificationDocs.map(doc => ({
             document_type: doc.documentType,
             document_number: doc.number,
             ...(doc.province && { province: doc.province }),
@@ -1267,6 +1509,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           license_number: license.licenseNumber,
           license_type: license.licenseType,
           issuing_province: license.issuingProvince,
+          issuing_authority: license.issuingAuthority,
           issue_date: license.issueDate,
           expiry_date: license.expiryDate,
           ...(license.existingFileId && { document_file_id: license.existingFileId }),
@@ -1304,7 +1547,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           ...(cert.existingFileMimeType && { document_file_mime_type: cert.existingFileMimeType }),
           ...(cert.existingFileSize != null && { document_file_size: cert.existingFileSize })
         })),
-        weekly_availability: this.guardFormModel.weeklyAvailability
+        preferred_guard_types: this.guardFormModel.preferredGuardTypes,
+        weekly_availability: this.mapWeeklyAvailabilityToBackend(this.guardFormModel.weeklyAvailability)
       }
     };
 
@@ -1317,6 +1561,25 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       payload.profile.landline_phone = this.guardFormModel.landlinePhone.e164;
       payload.profile.landline_phone_country = this.guardFormModel.landlinePhone.country;
     }
+    
+    // Add secondary contact if any data is present
+    const secondaryContact = this.guardFormModel.secondaryContact;
+    if (secondaryContact && (
+      secondaryContact.name?.trim() ||
+      secondaryContact.email?.trim() ||
+      secondaryContact.mobilePhone?.e164 ||
+      secondaryContact.landlinePhone?.e164
+    )) {
+      const secondaryPhone = secondaryContact.mobilePhone?.e164
+        || secondaryContact.landlinePhone?.e164
+        || '';
+      payload.profile.secondary_contact = {
+        name: secondaryContact.name || '',
+        email: secondaryContact.email || '',
+        phone: secondaryPhone
+      };
+    }
+    
     // Legacy contact field
     const legacyContact = this.guardFormModel.mobilePhone?.national || 
                           this.guardFormModel.landlinePhone?.national || '';
@@ -1324,7 +1587,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
 
     // Add operational radius if set
     if (this.guardFormModel.operationalRadius != null) {
-      payload.profile.operational_radius = this.guardFormModel.operationalRadius;
+      payload.profile.max_travel_radius_km = Math.round(this.guardFormModel.operationalRadius * 1.60934);
     }
 
     this.apiService.put('tenant', payload)

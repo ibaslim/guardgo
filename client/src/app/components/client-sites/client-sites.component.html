@@ -1,0 +1,114 @@
+<app-section [title]="title" [subtitle]="subtitle">
+  <ng-container section-actions>
+    <app-button
+      [label]="'Add site'"
+      type="outline"
+      [htmlType]="'button'"
+      [customClass]="'hidden md:inline-flex rounded-lg'"
+      (click)="onAddSite()">
+    </app-button>
+  </ng-container>
+
+  <div class="space-y-4">
+    <app-card *ngFor="let site of sites; let i = index" class="block" [bodyClass]="'mt-4'">
+      <div card-header>
+        <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">
+          {{ site.siteName ? site.siteName : ('Site ' + (i + 1)) }}
+        </h3>
+      </div>
+      <div card-actions>
+        <app-button
+          *ngIf="sites.length > 1"
+          label="Remove"
+          type="danger"
+          htmlType="button"
+          size="sm"
+          (click)="onRemoveSite(i)">
+        </app-button>
+        <span
+          class="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+          {{ i === 0 && requiredFirst ? 'Required' : 'Optional' }}
+        </span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="flex flex-col md:col-span-2">
+          <app-base-input [label]="'Site Name'" [name]="'siteName' + i"
+            [(ngModel)]="site.siteName" [required]="i===0 && requiredFirst">
+          </app-base-input>
+          <app-error-message [errorMessage]="errors['siteName' + i]"></app-error-message>
+        </div>
+
+        <div class="flex flex-col">
+          <app-base-input [label]="'Street (line 1)'" [name]="'siteStreet' + i"
+            [(ngModel)]="site.siteAddress.street" [required]="i===0 && requiredFirst">
+          </app-base-input>
+          <app-error-message [errorMessage]="errors['siteStreet' + i]"></app-error-message>
+        </div>
+
+        <div class="flex flex-col">
+          <app-base-input [label]="'City'" [name]="'siteCity' + i"
+            [(ngModel)]="site.siteAddress.city" [required]="i===0 && requiredFirst">
+          </app-base-input>
+          <app-error-message [errorMessage]="errors['siteCity' + i]"></app-error-message>
+        </div>
+
+        <div class="flex flex-col">
+          <app-select-input [label]="'Country'" [name]="'siteCountry' + i"
+            [(ngModel)]="site.siteAddress.country" [options]="countryOptions"
+            placeholder="-- Select Country --" [required]="i===0 && requiredFirst" [searchable]="true" [disabled]="true"></app-select-input>
+          <app-error-message [errorMessage]="errors['siteCountry' + i]"></app-error-message>
+        </div>
+
+        <div class="flex flex-col" *ngIf="site.siteAddress.country === 'CA'">
+          <app-select-input [label]="'Province'" [name]="'siteProvince' + i"
+            [(ngModel)]="site.siteAddress.province" [options]="provinceOptions"
+            placeholder="-- Select Province --" [required]="i===0 && requiredFirst" [searchable]="true"></app-select-input>
+          <app-error-message [errorMessage]="errors['siteProvince' + i]"></app-error-message>
+        </div>
+
+        <div class="flex flex-col">
+          <app-base-input [label]="'Postal Code'" [name]="'sitePostalCode' + i"
+            [(ngModel)]="site.siteAddress.postalCode" [required]="i===0 && requiredFirst">
+          </app-base-input>
+          <app-error-message [errorMessage]="errors['sitePostalCode' + i]"></app-error-message>
+        </div>
+
+        <div class="flex flex-col">
+          <app-base-input [label]="'Site Manager Contact'" [name]="'siteManagerContact' + i"
+            [(ngModel)]="site.siteManagerContact">
+          </app-base-input>
+        </div>
+
+        <div class="flex flex-col">
+          <app-base-input [label]="'Manager Email'" [name]="'managerEmail' + i" type="email"
+            [(ngModel)]="site.managerEmail">
+          </app-base-input>
+          <app-error-message [errorMessage]="errors['siteManagerEmail' + i]"></app-error-message>
+        </div>
+
+        <div class="flex flex-col">
+          <app-base-input [label]="'Number of Guards Required'" [name]="'guardsRequired' + i" type="number"
+            [(ngModel)]="site.numberOfGuardsRequired" [min]="1">
+          </app-base-input>
+          <app-error-message [errorMessage]="errors['siteGuardsRequired' + i]"></app-error-message>
+        </div>
+
+        <div class="flex flex-col">
+          <app-select-input [label]="'Site Type'" [name]="'siteType' + i"
+            [(ngModel)]="site.siteType" [options]="siteTypeOptions"
+            placeholder="-- Select Site Type --"></app-select-input>
+        </div>
+      </div>
+    </app-card>
+  </div>
+
+  <app-button
+    [label]="'Add another site'"
+    type="outline"
+    [htmlType]="'button'"
+    [fullWidth]="true"
+    [customClass]="'md:hidden rounded-lg'"
+    (click)="onAddSite()">
+  </app-button>
+</app-section>

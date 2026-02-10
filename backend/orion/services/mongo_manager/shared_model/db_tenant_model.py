@@ -92,6 +92,24 @@ class GuardDocumentType(str, Enum):
     STUDY_PERMIT = "study_permit"
 
 
+class ClientType(str, Enum):
+    COMPANY = "company"
+    INDIVIDUAL = "individual"
+
+
+class ClientSiteType(str, Enum):
+    OFFICE = "office"
+    WAREHOUSE = "warehouse"
+    EVENT = "event"
+    RESIDENTIAL = "residential"
+
+
+class ClientGuardType(str, Enum):
+    ARMED = "armed"
+    UNARMED = "unarmed"
+    TACTICAL = "tactical"
+
+
 class GuardAvailability(EmbeddedModel):
     morning: bool = False
     afternoon: bool = False
@@ -110,6 +128,7 @@ class GuardSecurityLicense(EmbeddedModel):
     license_number: str = ""
     license_type: Optional[SecurityLicenseType] = None
     issuing_province: str = ""
+    issuing_authority: str = ""
     issue_date: Optional[datetime] = None
     expiry_date: Optional[datetime] = None
     document_file_id: Optional[str] = None
@@ -163,6 +182,10 @@ class GuardProfile(EmbeddedModel):
     full_name: str = ""
     date_of_birth: Optional[datetime] = None
     home_address: Address = Address()
+    mobile_phone: Optional[str] = None
+    mobile_phone_country: Optional[str] = None
+    landline_phone: Optional[str] = None
+    landline_phone_country: Optional[str] = None
     profile_picture_url: Optional[str] = None
     identification: GuardIdentification = GuardIdentification()
     security_license: GuardLicense = GuardLicense()
@@ -173,6 +196,7 @@ class GuardProfile(EmbeddedModel):
     max_travel_radius_km: Optional[int] = None
     weekly_availability: GuardAvailability = GuardAvailability()
     preferred_guard_types: List[str] = []
+    secondary_contact: Optional[ContactPerson] = None
     service_provider_id: Optional[str] = None
     hourly_rate: Optional[float] = None
     shift_rate: Optional[float] = None
@@ -186,19 +210,22 @@ class ClientSite(EmbeddedModel):
     site_manager_contact: str = ""
     manager_email: str = ""
     number_of_guards_required: Optional[int] = None
-    site_type: Optional[str] = None  # office/warehouse/event/residential
+    site_type: Optional[ClientSiteType] = None  # office/warehouse/event/residential
 
 
 class ClientProfile(EmbeddedModel):
     legal_entity_name: str = ""
-    business_type: Optional[str] = None
+    business_type: Optional[ClientType] = None
+    industry: Optional[str] = None
     company_registration_number: str = ""
+    company_website: Optional[str] = None
     company_logo_url: Optional[str] = None
     primary_contact: ContactPerson = ContactPerson()
+    secondary_contact: Optional[ContactPerson] = None
     billing_address: Address = Address()
     tax_vat_number: Optional[str] = None
     sites: List[ClientSite] = []
-    preferred_guard_types: List[str] = []
+    preferred_guard_types: List[ClientGuardType] = []
     billing_model: str = "per_hour"  # per_hour/per_shift
     subscription_tier: str = "basic"
 
@@ -207,14 +234,23 @@ class ClientProfile(EmbeddedModel):
 class OperatingRegion(EmbeddedModel):
     city: str = ""
     country: str = ""
+    province: str = ""
     coverage_radius_km: Optional[int] = None
 
 
 class SecurityLicense(EmbeddedModel):
     license_number: str = ""
     issuing_authority: str = ""
+    license_type: Optional[SecurityLicenseType] = None
+    issuing_province: str = ""
+    issue_date: Optional[datetime] = None
     expiry_date: Optional[datetime] = None
     document_url: Optional[str] = None
+    document_file_id: Optional[str] = None
+    document_file_url: Optional[str] = None
+    document_file_name: Optional[str] = None
+    document_file_mime_type: Optional[str] = None
+    document_file_size: Optional[int] = None
 
 
 class InsurancePolicy(EmbeddedModel):
@@ -245,7 +281,7 @@ class ServiceProviderProfile(EmbeddedModel):
     default_billing_model: str = "per_hour"
     guard_count: int = 0
     subscription_tier: str = "basic"
-    emergency_contact: str = ""
+    emergency_contact: Optional[ContactPerson] = None
 
 
 class db_tenant_model(Model):

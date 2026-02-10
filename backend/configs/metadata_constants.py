@@ -6,6 +6,9 @@ from orion.services.mongo_manager.shared_model.db_tenant_model import (
     PoliceClearanceAuthorityType,
     TrainingCertificateType,
     TrainingIssuerType,
+    ClientType,
+    ClientSiteType,
+    ClientGuardType,
 )
 
 Option = Dict[str, str]
@@ -180,3 +183,32 @@ TRAINING_ISSUER_OPTIONS_MAP: Dict[str, List[Option]] = {
         {"value": TrainingIssuerType.OTHER.value, "label": "Other (Specify)"},
     ],
 }
+
+CLIENT_SITE_TYPE_OPTIONS: List[Option] = [
+    {"value": ClientSiteType.OFFICE.value, "label": "Office"},
+    {"value": ClientSiteType.WAREHOUSE.value, "label": "Warehouse"},
+    {"value": ClientSiteType.EVENT.value, "label": "Event"},
+    {"value": ClientSiteType.RESIDENTIAL.value, "label": "Residential"},
+]
+
+CLIENT_BILLING_MODEL_OPTIONS: List[Option] = [
+    {"value": "per_hour", "label": "Per Hour"},
+    {"value": "per_shift", "label": "Per Shift"},
+]
+
+CLIENT_SUBSCRIPTION_TIER_OPTIONS: List[Option] = [
+    {"value": "basic", "label": "Basic"},
+    {"value": "standard", "label": "Standard"},
+    {"value": "premium", "label": "Premium"},
+]
+
+CLIENT_GUARD_TYPE_OPTIONS: List[Option] = [
+    {"value": ClientGuardType.ARMED.value, "label": "Armed"},
+    {"value": ClientGuardType.UNARMED.value, "label": "Un-Armed"},
+    {"value": ClientGuardType.TACTICAL.value, "label": "Tactical"},
+]
+
+CLIENT_TYPE_OPTIONS: List[Option] = [
+    {"value": ClientType.COMPANY.value, "label": "Company"},
+    {"value": ClientType.INDIVIDUAL.value, "label": "Individual"},
+]

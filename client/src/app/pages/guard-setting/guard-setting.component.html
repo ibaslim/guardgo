@@ -88,6 +88,52 @@
             </div>
         </app-section>
 
+        <app-section title="Secondary Contact (Optional)" subtitle="Backup contact for urgent updates.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col md:col-span-1">
+                    <app-base-input label="Contact Name" name="secondaryContactName"
+                        [(ngModel)]="guardFormModel.secondaryContact.name">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="guardErrors.secondaryContactName || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col md:col-span-1">
+                    <app-base-input label="Contact Email" name="secondaryContactEmail" type="email"
+                        [(ngModel)]="guardFormModel.secondaryContact.email">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="guardErrors.secondaryContactEmail || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col md:col-span-1">
+                    <app-mobile-phone-input label="Mobile Phone" name="secondaryContactMobile"
+                        [(ngModel)]="guardFormModel.secondaryContact.mobilePhone" [defaultCountry]="'CA'"
+                        [disableCountrySelector]="true" helperText="Enter mobile number">
+                    </app-mobile-phone-input>
+                </div>
+
+                <div class="flex flex-col md:col-span-1">
+                    <app-landline-phone-input label="Landline Phone (Optional)" name="secondaryContactLandline"
+                        [(ngModel)]="guardFormModel.secondaryContact.landlinePhone" [defaultCountry]="'CA'"
+                        [disableCountrySelector]="true" helperText="Enter landline number">
+                    </app-landline-phone-input>
+                </div>
+
+                <div class="col-span-1 md:col-span-2" *ngIf="guardErrors.secondaryContactPhoneNumbers">
+                    <app-error-message [errorMessage]="guardErrors.secondaryContactPhoneNumbers || null"></app-error-message>
+                </div>
+            </div>
+        </app-section>
+
+        <app-section title="Preferred Guard Types" subtitle="What types of guard work are you willing to do?">
+            <div class="grid grid-cols-1 gap-6">
+        <app-guard-types-multiselect label="Guard Types" placeholder="-- Select Types --"
+                    [(ngModel)]="guardFormModel.preferredGuardTypes" [options]="guardTypeOptions" [required]="true"
+                    name="preferredGuardTypes">
+                </app-guard-types-multiselect>
+                <app-error-message [errorMessage]="guardErrors.preferredGuardTypes || null"></app-error-message>
+            </div>
+        </app-section>
+
         <app-section title="Identification Documents" subtitle="We verify identity before approving shifts.">
 
             <!-- Error message for identification documents -->
@@ -219,6 +265,14 @@
                                 [(ngModel)]="license.issuingProvince" [options]="provinceOptions"
                                 placeholder="-- Select Province --" [required]="true" [searchable]="true"></app-select-input>
                             <app-error-message [errorMessage]="guardErrors['security_license_' + license.id + '_issuingProvince'] || null"></app-error-message>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <app-base-input label="Issuing Authority" [name]="'securityLicenseIssuingAuthority_' + i"
+                                [(ngModel)]="license.issuingAuthority" [required]="true"
+                                [placeholder]="getSuggestedIssuingAuthority(license.issuingProvince) || 'e.g., Ministry of the Solicitor General'"
+                                helperText="Will auto-populate based on selected province"></app-base-input>
+                            <app-error-message [errorMessage]="guardErrors['security_license_' + license.id + '_issuingAuthority'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">

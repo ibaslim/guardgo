@@ -10,6 +10,9 @@ from configs.metadata_constants import (
     TRAINING_CERTIFICATE_TYPE_OPTIONS,
     POLICE_CLEARANCE_AUTHORITY_TYPE_OPTIONS,
     TRAINING_ISSUER_OPTIONS_MAP,
+    CLIENT_SITE_TYPE_OPTIONS,
+    CLIENT_GUARD_TYPE_OPTIONS,
+    CLIENT_TYPE_OPTIONS,
 )
 
 public_routes = APIRouter(tags=["Public"])
@@ -49,6 +52,25 @@ async def get_guard_metadata():
         "trainingCertificateTypes": TRAINING_CERTIFICATE_TYPE_OPTIONS,
         "trainingIssuerOptionsMap": TRAINING_ISSUER_OPTIONS_MAP,
         "policeClearanceAuthorityTypes": POLICE_CLEARANCE_AUTHORITY_TYPE_OPTIONS,
+        "guardTypeOptions": CLIENT_GUARD_TYPE_OPTIONS,
+    }
+
+
+@public_routes.get(
+    "/api/public/client-metadata",
+    dependencies=[],
+    summary="Get client metadata options",
+    description="Get client profile option lists for UI dropdowns.",
+    tags=["Public", "Config"],
+    operation_id="getClientMetadata",
+    response_description="Client profile metadata.")
+async def get_client_metadata():
+    return {
+        "countries": COUNTRY_OPTIONS,
+        "canadianProvinces": CANADIAN_PROVINCE_OPTIONS,
+        "siteTypeOptions": CLIENT_SITE_TYPE_OPTIONS,
+        "guardTypeOptions": CLIENT_GUARD_TYPE_OPTIONS,
+        "clientTypeOptions": CLIENT_TYPE_OPTIONS,
     }
 
 

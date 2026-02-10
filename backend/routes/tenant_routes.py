@@ -187,7 +187,7 @@ async def update_current_user(user: user_meta_model, current_user=Depends(get_cu
     tags=["Tenant"],
     operation_id="uploadTenantImage",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]))], )
 async def upload_tenant_image(file: UploadFile, current_user=Depends(get_current_user)):
     return await ResourceManager.get_instance().uploadTenantImage(file, current_user)
 
@@ -199,7 +199,7 @@ async def upload_tenant_image(file: UploadFile, current_user=Depends(get_current
     tags=["Tenant"],
     operation_id="deleteTenantImage",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]))], )
 async def delete_tenant_image(current_user=Depends(get_current_user)):
     return await ResourceManager.get_instance().delete_tenant_image(current_user)
 
@@ -239,7 +239,7 @@ async def delete_tenant_identity_document(file_id: str, current_user=Depends(get
     tags=["Tenant"],
     operation_id="uploadTenantSecurityLicenseDocument",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]))], )
 async def upload_tenant_security_license_document(file: UploadFile, current_user=Depends(get_current_user)):
     return await ResourceManager.get_instance().upload_tenant_security_license_document(file, current_user)
 
@@ -251,7 +251,7 @@ async def upload_tenant_security_license_document(file: UploadFile, current_user
     tags=["Tenant"],
     operation_id="deleteTenantSecurityLicenseDocument",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]))], )
 async def delete_tenant_security_license_document(file_id: str, current_user=Depends(get_current_user)):
     return await ResourceManager.get_instance().delete_tenant_security_license_document(file_id, current_user)
 
