@@ -21,18 +21,12 @@ interface ContactPerson {
   phone: string;
 }
 
-interface Site {
-  siteName: string;
-  siteAddress: Address;
-}
-
 interface Client {
   legalEntityName: string;
   companyRegistrationNumber: string;
   primaryContact: ContactPerson;
   billingAddress: Address;
   businessLogo: File | null;
-  sites: Site[];
 }
 
 @Component({
@@ -63,18 +57,7 @@ export class ClientSettingComponent {
       country: '',
       postalCode: ''
     },
-    businessLogo: null,
-    sites: [
-      {
-        siteName: '',
-        siteAddress: {
-          street: '',
-          city: '',
-          country: '',
-          postalCode: ''
-        }
-      }
-    ]
+    businessLogo: null
   };
 
   clientErrors: any = {};
@@ -85,7 +68,7 @@ export class ClientSettingComponent {
     private apiService: ApiService,
     private router: Router,
     private appService: AppService
-  ) {}
+  ) { }
 
   ngOnInit() {
     if (this.clientData && this.hasClientData(this.clientData)) {
@@ -101,21 +84,8 @@ export class ClientSettingComponent {
       data.legalEntityName.trim() ||
       data.companyRegistrationNumber.trim() ||
       data.primaryContact.name.trim() ||
-      data.billingAddress.street.trim() ||
-      (data.sites && data.sites.some(site => site.siteName.trim() || site.siteAddress.street.trim()))
+      data.billingAddress.street.trim()
     );
-  }
-
-  addSite() {
-    this.clientFormModel.sites.push({
-      siteName: '',
-      siteAddress: {
-        street: '',
-        city: '',
-        country: '',
-        postalCode: ''
-      }
-    });
   }
 
   validateClientForm(): boolean {
@@ -163,28 +133,6 @@ export class ClientSettingComponent {
       this.clientErrors.billingPostalCode = 'Billing postal code is required.';
     }
 
-    // Sites validation (first site required)
-    if (!this.clientFormModel.sites || this.clientFormModel.sites.length === 0) {
-      this.clientErrors.sites = 'At least one site is required.';
-    } else {
-      const firstSite = this.clientFormModel.sites[0];
-      if (!firstSite.siteName || firstSite.siteName.trim() === '') {
-        this.clientErrors.siteName0 = 'Site name is required.';
-      }
-      if (!firstSite.siteAddress.street.trim()) {
-        this.clientErrors.siteStreet0 = 'Site street is required.';
-      }
-      if (!firstSite.siteAddress.city.trim()) {
-        this.clientErrors.siteCity0 = 'Site city is required.';
-      }
-      if (!firstSite.siteAddress.country.trim()) {
-        this.clientErrors.siteCountry0 = 'Site country is required.';
-      }
-      if (!firstSite.siteAddress.postalCode.trim()) {
-        this.clientErrors.sitePostalCode0 = 'Site postal code is required.';
-      }
-    }
-
     return Object.keys(this.clientErrors).length === 0;
   }
 
@@ -204,10 +152,6 @@ export class ClientSettingComponent {
           phone: this.clientFormModel.primaryContact.phone
         },
         billing_address: this.clientFormModel.billingAddress,
-        sites: this.clientFormModel.sites.map(site => ({
-          site_name: site.siteName,
-          site_address: site.siteAddress
-        }))
       },
       status: 'active'
     };

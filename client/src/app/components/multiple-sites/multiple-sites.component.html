@@ -1,0 +1,75 @@
+<section
+    class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
+    <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Sites</h2>
+        <div class="flex items-center gap-3">
+            <p class="text-sm text-gray-500 dark:text-gray-400">Add locations we will service.</p>
+            <button type="button" (click)="addSite()"
+                class="hidden md:inline-flex items-center px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+                Add site
+            </button>
+        </div>
+    </div>
+
+    <div class="space-y-4">
+        <div *ngFor="let site of sites; let i = index"
+            class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/70 p-4 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Site {{ i + 1 }}</h3>
+                <div class="flex items-center gap-2">
+                    <span
+                        class="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                        {{ i === 0 ? 'Required' : 'Optional' }}
+                    </span>
+                    <button *ngIf="i !== 0" type="button" (click)="removeSite(i)"
+                        class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 text-sm font-medium">
+                        Remove
+                    </button>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col md:col-span-2">
+                    <app-base-input [label]="'Site Name'" [name]="'siteName' + i" [(ngModel)]="site.siteName"
+                        [required]="i===0" (ngModelChange)="onSiteChange()">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="siteError['siteName' + i]"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input [label]="'Street (line 1)'" [name]="'siteStreet' + i"
+                        [(ngModel)]="site.siteAddress.street" [required]="i===0" (ngModelChange)="onSiteChange()">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="siteError['street' + i]"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input [label]="'City'" [name]="'siteCity' + i" [(ngModel)]="site.siteAddress.city"
+                        [required]="i===0" (ngModelChange)="onSiteChange()">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="siteError['city' + i]"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input [label]="'Country'" [name]="'siteCountry' + i"
+                        [(ngModel)]="site.siteAddress.country" [required]="i===0" (ngModelChange)="onSiteChange()">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="siteError['country' + i]"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input [label]="'Postal Code'" [name]="'sitePostalCode' + i"
+                        [(ngModel)]="site.siteAddress.postalCode" [required]="i===0" (ngModelChange)="onSiteChange()">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="siteError['postalCode' + i]"></app-error-message>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button type="button" (click)="addSite()"
+        class="w-full md:hidden px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+        Add another site
+    </button>
+
+    <app-error-message *ngIf="siteError.site" [errorMessage]="siteError.site"></app-error-message>
+</section>

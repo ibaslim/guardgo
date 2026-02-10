@@ -5,7 +5,8 @@
         </h1>
 
         <form (ngSubmit)="submitClientForm()" class="space-y-6">
-            <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
+            <section
+                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
                 <div class="flex items-center justify-between">
                     <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Company</h2>
                     <p class="text-sm text-gray-500 dark:text-gray-400">Legal details for contracting.</p>
@@ -27,7 +28,8 @@
                 </div>
             </section>
 
-            <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
+            <section
+                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
                 <div class="flex items-center justify-between">
                     <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Primary Contact</h2>
                     <p class="text-sm text-gray-500 dark:text-gray-400">Who should receive coordination updates.</p>
@@ -56,7 +58,8 @@
                 </div>
             </section>
 
-            <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
+            <section
+                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
                 <div class="flex items-center justify-between">
                     <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Billing Address</h2>
                     <p class="text-sm text-gray-500 dark:text-gray-400">Appears on invoices and contracts.</p>
@@ -70,15 +73,15 @@
                     </div>
 
                     <div class="flex flex-col">
-                        <app-base-input label="City" name="billingCity" [(ngModel)]="clientFormModel.billingAddress.city"
-                            [required]="true">
+                        <app-base-input label="City" name="billingCity"
+                            [(ngModel)]="clientFormModel.billingAddress.city" [required]="true">
                         </app-base-input>
                         <app-error-message [errorMessage]="clientErrors.billingCity"></app-error-message>
                     </div>
 
                     <div class="flex flex-col">
-                        <app-base-input label="Country" name="billingCountry" [(ngModel)]="clientFormModel.billingAddress.country"
-                            [required]="true">
+                        <app-base-input label="Country" name="billingCountry"
+                            [(ngModel)]="clientFormModel.billingAddress.country" [required]="true">
                         </app-base-input>
                         <app-error-message [errorMessage]="clientErrors.billingCountry"></app-error-message>
                     </div>
@@ -92,89 +95,29 @@
                 </div>
             </section>
 
-            <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-4">
+            <section
+                class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-4">
                 <div class="flex items-center justify-between">
                     <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Branding</h2>
                     <p class="text-sm text-gray-500 dark:text-gray-400">Optional logo for reports.</p>
                 </div>
                 <div>
                     <app-file-upload label="Upload Business Logo" name="businessLogo"
-                        [(ngModel)]="clientFormModel.businessLogo" helperText="PNG, JPG, PDF up to 10MB" [required]="false">
+                        [(ngModel)]="clientFormModel.businessLogo" helperText="PNG, JPG, PDF up to 10MB"
+                        [required]="false">
                     </app-file-upload>
                     <p class="text-xs text-gray-500 mt-2">Optional, recommended for site signage.</p>
                 </div>
             </section>
 
-            <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-6 space-y-6">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Sites</h2>
-                    <div class="flex items-center gap-3">
-                        <p class="text-sm text-gray-500 dark:text-gray-400">Add locations we will service.</p>
-                        <button type="button" (click)="addSite()"
-                            class="hidden md:inline-flex items-center px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-                            Add site
-                        </button>
-                    </div>
-                </div>
-
-                <div class="space-y-4">
-                    <div *ngFor="let site of clientFormModel.sites; let i = index"
-                        class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/70 p-4 space-y-4">
-                        <div class="flex items-center justify-between">
-                            <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Site {{ i + 1 }}</h3>
-                            <span class="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">{{ i === 0 ? 'Required' : 'Optional' }}</span>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="flex flex-col md:col-span-2">
-                                <app-base-input [label]="'Site Name'" [name]="'siteName' + i"
-                                    [(ngModel)]="site.siteName" [required]="i===0">
-                                </app-base-input>
-                                <app-error-message [errorMessage]="clientErrors['siteName' + i]"></app-error-message>
-                            </div>
-
-                            <div class="flex flex-col">
-                                <app-base-input [label]="'Street (line 1)'" [name]="'siteStreet' + i"
-                                    [(ngModel)]="site.siteAddress.street" [required]="i===0">
-                                </app-base-input>
-                                <app-error-message [errorMessage]="clientErrors['siteStreet' + i]"></app-error-message>
-                            </div>
-
-                            <div class="flex flex-col">
-                                <app-base-input [label]="'City'" [name]="'siteCity' + i"
-                                    [(ngModel)]="site.siteAddress.city" [required]="i===0">
-                                </app-base-input>
-                                <app-error-message [errorMessage]="clientErrors['siteCity' + i]"></app-error-message>
-                            </div>
-
-                            <div class="flex flex-col">
-                                <app-base-input [label]="'Country'" [name]="'siteCountry' + i"
-                                    [(ngModel)]="site.siteAddress.country" [required]="i===0">
-                                </app-base-input>
-                                <app-error-message [errorMessage]="clientErrors['siteCountry' + i]"></app-error-message>
-                            </div>
-
-                            <div class="flex flex-col">
-                                <app-base-input [label]="'Postal Code'" [name]="'sitePostalCode' + i"
-                                    [(ngModel)]="site.siteAddress.postalCode" [required]="i===0">
-                                </app-base-input>
-                                <app-error-message [errorMessage]="clientErrors['sitePostalCode' + i]"></app-error-message>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <button type="button" (click)="addSite()"
-                    class="w-full md:hidden px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-                    Add another site
-                </button>
-            </section>
-
-            <div *ngIf="clientErrors.submit" class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/40 p-4">
+            <div *ngIf="clientErrors.submit"
+                class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/40 p-4">
                 <app-error-message [errorMessage]="clientErrors.submit"></app-error-message>
             </div>
 
             <div class="sticky bottom-0 left-0 right-0 z-10">
-                <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/80 backdrop-blur px-4 py-3 shadow-md">
+                <div
+                    class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/80 backdrop-blur px-4 py-3 shadow-md">
                     <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <p class="text-sm text-gray-600 dark:text-gray-300">Save to activate your client profile.</p>
                         <div class="flex-1 md:flex md:justify-end">
