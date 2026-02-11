@@ -1,25 +1,61 @@
 <app-page title="Client Profile">
     <form (ngSubmit)="submitClientForm()" class="space-y-6">
-        <app-section title="Company" subtitle="Legal details for contracting.">
+        <app-section title="Logo" subtitle="Used on invoices and client-facing materials.">
+            <app-profile-picture-upload [maxSizeKb]="500" [title]="'Company Logo'"
+                [subtitle]="'Square logo recommended for best results.'">
+            </app-profile-picture-upload>
+        </app-section>
+
+        <app-section title="Client Type" subtitle="Tell us who the contract is for.">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col">
-                    <app-base-input label="Legal Entity Name" name="legalEntityName"
+                    <app-select-input label="Client Type" name="clientType"
+                        [(ngModel)]="clientFormModel.clientType" [options]="clientTypeOptions"
+                        placeholder="-- Select Type --" [required]="true" (ngModelChange)="onClientTypeChange()"></app-select-input>
+                </div>
+            </div>
+        </app-section>
+
+        <app-section title="Client Details" subtitle="Legal details for contracting.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col">
+                    <app-base-input [label]="clientFormModel.clientType === 'individual' ? 'Full Name' : 'Legal Entity Name'" name="legalEntityName"
                         [(ngModel)]="clientFormModel.legalEntityName" [required]="true">
                     </app-base-input>
                     <app-error-message [errorMessage]="clientErrors.legalEntityName"></app-error-message>
                 </div>
 
-                <div class="flex flex-col">
+                <div class="flex flex-col" *ngIf="clientFormModel.clientType === 'company'">
+                    <app-base-input label="Industry / Business Sector" name="industry"
+                        [(ngModel)]="clientFormModel.industry" [required]="true">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="clientErrors.industry"></app-error-message>
+                </div>
+
+                <div class="flex flex-col" *ngIf="clientFormModel.clientType === 'company'">
                     <app-base-input label="Company Registration Number" name="companyRegistrationNumber"
                         [(ngModel)]="clientFormModel.companyRegistrationNumber" [required]="true">
                     </app-base-input>
                     <app-error-message [errorMessage]="clientErrors.companyRegistrationNumber"></app-error-message>
                 </div>
+
+                <div class="flex flex-col" *ngIf="clientFormModel.clientType === 'company'">
+                    <app-base-input label="Tax/VAT Number" name="taxVatNumber"
+                        [(ngModel)]="clientFormModel.taxVatNumber">
+                    </app-base-input>
+                </div>
+
+                <div class="flex flex-col" *ngIf="clientFormModel.clientType === 'company'">
+                    <app-base-input label="Company Website (Optional)" name="companyWebsite" type="text"
+                        [(ngModel)]="clientFormModel.companyWebsite">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="clientErrors.companyWebsite"></app-error-message>
+                </div>
             </div>
         </app-section>
 
         <app-section title="Primary Contact" subtitle="Who should receive coordination updates.">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col md:col-span-1">
                     <app-base-input label="Contact Name" name="primaryContactName"
                         [(ngModel)]="clientFormModel.primaryContact.name" [required]="true">
@@ -35,10 +71,57 @@
                 </div>
 
                 <div class="flex flex-col md:col-span-1">
-                    <app-base-input label="Contact Phone" name="primaryContactPhone" type="tel"
-                        [(ngModel)]="clientFormModel.primaryContact.phone" [required]="true">
+                    <app-mobile-phone-input label="Mobile Phone" name="primaryContactMobile"
+                        [(ngModel)]="clientFormModel.primaryContact.mobilePhone" [defaultCountry]="'CA'"
+                        [disableCountrySelector]="true" helperText="Enter mobile number">
+                    </app-mobile-phone-input>
+                </div>
+
+                <div class="flex flex-col md:col-span-1">
+                    <app-landline-phone-input label="Landline Phone (Optional)" name="primaryContactLandline"
+                        [(ngModel)]="clientFormModel.primaryContact.landlinePhone" [defaultCountry]="'CA'"
+                        [disableCountrySelector]="true" helperText="Enter landline number">
+                    </app-landline-phone-input>
+                </div>
+
+                <div class="col-span-1 md:col-span-2" *ngIf="clientErrors.primaryContactPhoneNumbers">
+                    <app-error-message [errorMessage]="clientErrors.primaryContactPhoneNumbers"></app-error-message>
+                </div>
+            </div>
+        </app-section>
+
+        <app-section title="Secondary Contact (Optional)" subtitle="Backup contact for urgent updates.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col md:col-span-1">
+                    <app-base-input label="Contact Name" name="secondaryContactName"
+                        [(ngModel)]="clientFormModel.secondaryContact.name">
                     </app-base-input>
-                    <app-error-message [errorMessage]="clientErrors.primaryContactPhone"></app-error-message>
+                    <app-error-message [errorMessage]="clientErrors.secondaryContactName"></app-error-message>
+                </div>
+
+                <div class="flex flex-col md:col-span-1">
+                    <app-base-input label="Contact Email" name="secondaryContactEmail" type="email"
+                        [(ngModel)]="clientFormModel.secondaryContact.email">
+                    </app-base-input>
+                    <app-error-message [errorMessage]="clientErrors.secondaryContactEmail"></app-error-message>
+                </div>
+
+                <div class="flex flex-col md:col-span-1">
+                    <app-mobile-phone-input label="Mobile Phone" name="secondaryContactMobile"
+                        [(ngModel)]="clientFormModel.secondaryContact.mobilePhone" [defaultCountry]="'CA'"
+                        [disableCountrySelector]="true" helperText="Enter mobile number">
+                    </app-mobile-phone-input>
+                </div>
+
+                <div class="flex flex-col md:col-span-1">
+                    <app-landline-phone-input label="Landline Phone (Optional)" name="secondaryContactLandline"
+                        [(ngModel)]="clientFormModel.secondaryContact.landlinePhone" [defaultCountry]="'CA'"
+                        [disableCountrySelector]="true" helperText="Enter landline number">
+                    </app-landline-phone-input>
+                </div>
+
+                <div class="col-span-1 md:col-span-2" *ngIf="clientErrors.secondaryContactPhoneNumbers">
+                    <app-error-message [errorMessage]="clientErrors.secondaryContactPhoneNumbers"></app-error-message>
                 </div>
             </div>
         </app-section>
@@ -60,10 +143,17 @@
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="Country" name="billingCountry"
-                        [(ngModel)]="clientFormModel.billingAddress.country" [required]="true">
-                    </app-base-input>
+                    <app-select-input label="Country" name="billingCountry"
+                        [(ngModel)]="clientFormModel.billingAddress.country" [options]="countryOptions"
+                        placeholder="-- Select Country --" [required]="true" [searchable]="true" [disabled]="true"></app-select-input>
                     <app-error-message [errorMessage]="clientErrors.billingCountry"></app-error-message>
+                </div>
+
+                <div class="flex flex-col" *ngIf="clientFormModel.billingAddress.country === 'CA'">
+                    <app-select-input label="Province" name="billingProvince"
+                        [(ngModel)]="clientFormModel.billingAddress.province" [options]="provinceOptions"
+                        placeholder="-- Select Province --" [required]="true" [searchable]="true"></app-select-input>
+                    <app-error-message [errorMessage]="clientErrors.billingProvince"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
@@ -75,85 +165,6 @@
             </div>
         </app-section>
 
-        <app-section title="Branding" subtitle="Optional logo for reports.">
-            <div>
-                <app-file-upload label="Upload Business Logo" name="businessLogo"
-                    [(ngModel)]="clientFormModel.businessLogo" helperText="PNG, JPG, PDF up to 10MB"
-                    [required]="false">
-                </app-file-upload>
-                <p class="text-xs text-gray-500 mt-2">Optional, recommended for site signage.</p>
-            </div>
-        </app-section>
-
-        <app-section title="Sites" subtitle="Add locations we will service.">
-            <ng-container section-actions>
-                <app-button
-                    [label]="'Add site'"
-                    type="outline"
-                    [htmlType]="'button'"
-                    [customClass]="'hidden md:inline-flex rounded-lg'"
-                    (click)="addSite()">
-                </app-button>
-            </ng-container>
-
-            <div class="space-y-4">
-                <div *ngFor="let site of clientFormModel.sites; let i = index"
-                    class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/70 p-4 space-y-4">
-                    <div class="flex items-center justify-between">
-                        <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">Site {{ i + 1 }}</h3>
-                        <span
-                            class="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">{{
-                            i === 0 ? 'Required' : 'Optional' }}</span>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="flex flex-col md:col-span-2">
-                            <app-base-input [label]="'Site Name'" [name]="'siteName' + i"
-                                [(ngModel)]="site.siteName" [required]="i===0">
-                            </app-base-input>
-                            <app-error-message [errorMessage]="clientErrors['siteName' + i]"></app-error-message>
-                        </div>
-
-                        <div class="flex flex-col">
-                            <app-base-input [label]="'Street (line 1)'" [name]="'siteStreet' + i"
-                                [(ngModel)]="site.siteAddress.street" [required]="i===0">
-                            </app-base-input>
-                            <app-error-message [errorMessage]="clientErrors['siteStreet' + i]"></app-error-message>
-                        </div>
-
-                        <div class="flex flex-col">
-                            <app-base-input [label]="'City'" [name]="'siteCity' + i"
-                                [(ngModel)]="site.siteAddress.city" [required]="i===0">
-                            </app-base-input>
-                            <app-error-message [errorMessage]="clientErrors['siteCity' + i]"></app-error-message>
-                        </div>
-
-                        <div class="flex flex-col">
-                            <app-base-input [label]="'Country'" [name]="'siteCountry' + i"
-                                [(ngModel)]="site.siteAddress.country" [required]="i===0">
-                            </app-base-input>
-                            <app-error-message [errorMessage]="clientErrors['siteCountry' + i]"></app-error-message>
-                        </div>
-
-                        <div class="flex flex-col">
-                            <app-base-input [label]="'Postal Code'" [name]="'sitePostalCode' + i"
-                                [(ngModel)]="site.siteAddress.postalCode" [required]="i===0">
-                            </app-base-input>
-                            <app-error-message
-                                [errorMessage]="clientErrors['sitePostalCode' + i]"></app-error-message>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <app-button
-                [label]="'Add another site'"
-                type="outline"
-                [htmlType]="'button'"
-                [fullWidth]="true"
-                [customClass]="'md:hidden rounded-lg'"
-                (click)="addSite()">
-            </app-button>
-        </app-section>
 
         <div *ngIf="clientErrors.submit"
             class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/40 p-4">

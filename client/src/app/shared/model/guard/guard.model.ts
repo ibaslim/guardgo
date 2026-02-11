@@ -20,6 +20,13 @@ export interface Address {
   postalCode: string;
 }
 
+export interface ContactPerson {
+  name: string;
+  email: string;
+  mobilePhone: PhoneNumber | null;
+  landlinePhone: PhoneNumber | null;
+}
+
 export interface IdentificationDocument {
   documentType: string;
   number: string;
@@ -52,6 +59,54 @@ export interface SecurityLicense {
   existingFileName?: string; // Name of existing uploaded file
 }
 
+export interface SecurityLicenseDocument {
+  fullLegalName: string;
+  licenseNumber: string;
+  licenseType: string;
+  issuingProvince: string;
+  issuingAuthority: string;
+  issueDate: string;
+  expiryDate: string;
+  file?: File | null;
+  id?: string; // unique identifier for UI purposes
+  existingFileUrl?: string;
+  existingFileName?: string;
+  existingFileId?: string;
+  existingFileMimeType?: string;
+  existingFileSize?: number;
+}
+
+export interface PoliceClearanceRecord {
+  issuingAuthorityType: string;
+  issuingAuthorityOther?: string;
+  issuingProvince: string;
+  issuingCity?: string;
+  issueDate: string;
+  referenceNumber?: string;
+  file?: File | null;
+  id?: string; // unique identifier for UI purposes
+  existingFileUrl?: string;
+  existingFileName?: string;
+  existingFileId?: string;
+  existingFileMimeType?: string;
+  existingFileSize?: number;
+}
+
+export interface TrainingCertificate {
+  certificateName: string;
+  issuingOrganizationType: string;
+  issuingOrganizationOther?: string;
+  issueDate: string;
+  expiryDate?: string;
+  file?: File | null;
+  id?: string; // unique identifier for UI purposes
+  existingFileUrl?: string;
+  existingFileName?: string;
+  existingFileId?: string;
+  existingFileMimeType?: string;
+  existingFileSize?: number;
+}
+
 export interface WeeklyAvailability {
   Monday: string[];
   Tuesday: string[];
@@ -69,6 +124,9 @@ export interface GuardErrors {
   mobilePhone?: string;
   landlinePhone?: string;
   phoneNumbers?: string;
+  secondaryContactName?: string;
+  secondaryContactEmail?: string;
+  secondaryContactPhoneNumbers?: string;
   addressStreet?: string;
   addressCity?: string;
   addressCountry?: string;
@@ -78,6 +136,10 @@ export interface GuardErrors {
   licenseNumber?: string;
   issuingAuthority?: string;
   expiryDate?: string;
+  securityLicenses?: string;
+  policeClearances?: string;
+  trainingCertificates?: string;
+  preferredGuardTypes?: string;
   operationalRadius?: string;
   submit?: string;
   [key: string]: string | undefined; // For dynamic identification document errors
@@ -90,8 +152,13 @@ export interface Guard {
   landlinePhone?: PhoneNumber | null;
   dob: string;
   address: Address;
+  secondaryContact: ContactPerson;
   identification: Identification;
-  securityLicense: SecurityLicense;
+  securityLicense?: SecurityLicense; // Legacy
+  securityLicenses: SecurityLicenseDocument[];
+  policeClearances: PoliceClearanceRecord[];
+  trainingCertificates: TrainingCertificate[];
+  preferredGuardTypes: string[];
   operationalRadius: number | null;
   weeklyAvailability: WeeklyAvailability;
 }

@@ -187,7 +187,7 @@ async def update_current_user(user: user_meta_model, current_user=Depends(get_cu
     tags=["Tenant"],
     operation_id="uploadTenantImage",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]))], )
 async def upload_tenant_image(file: UploadFile, current_user=Depends(get_current_user)):
     return await ResourceManager.get_instance().uploadTenantImage(file, current_user)
 
@@ -199,7 +199,7 @@ async def upload_tenant_image(file: UploadFile, current_user=Depends(get_current
     tags=["Tenant"],
     operation_id="deleteTenantImage",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]))], )
 async def delete_tenant_image(current_user=Depends(get_current_user)):
     return await ResourceManager.get_instance().delete_tenant_image(current_user)
 
@@ -230,6 +230,78 @@ async def upload_tenant_identity_document(file: UploadFile, current_user=Depends
     dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN]))], )
 async def delete_tenant_identity_document(file_id: str, current_user=Depends(get_current_user)):
     return await ResourceManager.get_instance().delete_tenant_identity_document(file_id, current_user)
+
+
+@tenant_routes.post(
+    "/api/tenant/files/security-license",
+    summary="Upload tenant security license document",
+    description="Upload security license documents for the current tenant profile.",
+    tags=["Tenant"],
+    operation_id="uploadTenantSecurityLicenseDocument",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]))], )
+async def upload_tenant_security_license_document(file: UploadFile, current_user=Depends(get_current_user)):
+    return await ResourceManager.get_instance().upload_tenant_security_license_document(file, current_user)
+
+
+@tenant_routes.delete(
+    "/api/tenant/files/security-license/{file_id}",
+    summary="Delete tenant security license document",
+    description="Delete a security license document for the current tenant.",
+    tags=["Tenant"],
+    operation_id="deleteTenantSecurityLicenseDocument",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]))], )
+async def delete_tenant_security_license_document(file_id: str, current_user=Depends(get_current_user)):
+    return await ResourceManager.get_instance().delete_tenant_security_license_document(file_id, current_user)
+
+
+@tenant_routes.post(
+    "/api/tenant/files/police-clearance",
+    summary="Upload tenant police clearance document",
+    description="Upload police clearance documents for the current tenant profile.",
+    tags=["Tenant"],
+    operation_id="uploadTenantPoliceClearanceDocument",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN]))], )
+async def upload_tenant_police_clearance_document(file: UploadFile, current_user=Depends(get_current_user)):
+    return await ResourceManager.get_instance().upload_tenant_police_clearance_document(file, current_user)
+
+
+@tenant_routes.delete(
+    "/api/tenant/files/police-clearance/{file_id}",
+    summary="Delete tenant police clearance document",
+    description="Delete a police clearance document for the current tenant.",
+    tags=["Tenant"],
+    operation_id="deleteTenantPoliceClearanceDocument",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN]))], )
+async def delete_tenant_police_clearance_document(file_id: str, current_user=Depends(get_current_user)):
+    return await ResourceManager.get_instance().delete_tenant_police_clearance_document(file_id, current_user)
+
+
+@tenant_routes.post(
+    "/api/tenant/files/training-certificate",
+    summary="Upload tenant training certificate",
+    description="Upload training certificates for the current tenant profile.",
+    tags=["Tenant"],
+    operation_id="uploadTenantTrainingCertificate",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN]))], )
+async def upload_tenant_training_certificate(file: UploadFile, current_user=Depends(get_current_user)):
+    return await ResourceManager.get_instance().upload_tenant_training_certificate(file, current_user)
+
+
+@tenant_routes.delete(
+    "/api/tenant/files/training-certificate/{file_id}",
+    summary="Delete tenant training certificate",
+    description="Delete a training certificate for the current tenant.",
+    tags=["Tenant"],
+    operation_id="deleteTenantTrainingCertificate",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN]))], )
+async def delete_tenant_training_certificate(file_id: str, current_user=Depends(get_current_user)):
+    return await ResourceManager.get_instance().delete_tenant_training_certificate(file_id, current_user)
 
 
 @tenant_routes.put(

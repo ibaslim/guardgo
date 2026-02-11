@@ -28,6 +28,40 @@ class TenantType(str, Enum):
     GUARD = "guard"
 
 
+class SecurityLicenseType(str, Enum):
+    SECURITY_GUARD = "securityGuard"
+    PRIVATE_INVESTIGATOR = "privateInvestigator"
+    DUAL_SECURITY_GUARD_PRIVATE_INVESTIGATOR = "dualSecurityGuardPrivateInvestigator"
+
+
+class PoliceClearanceAuthorityType(str, Enum):
+    MUNICIPAL_POLICE_SERVICE = "municipalPoliceService"
+    PROVINCIAL_POLICE_SERVICE = "provincialPoliceService"
+    RCMP = "rcmp"
+    RCMP_ACCREDITED_PROVIDER = "rcmpAccreditedProvider"
+    FIRST_NATIONS_POLICE_SERVICE = "firstNationsPoliceService"
+    OTHER = "other"
+
+
+class TrainingCertificateType(str, Enum):
+    BASIC_SECURITY_TRAINING = "basicSecurityTraining"
+    STANDARD_FIRST_AID_CPR_AED = "standardFirstAidCprAed"
+    USE_OF_FORCE_DEFENSIVE_TACTICS = "useOfForceDefensiveTactics"
+    DE_ESCALATION_CONFLICT_MANAGEMENT = "deEscalationConflictManagement"
+    WHMIS = "whmis"
+    BATON_HANDCUFF_TRAINING = "batonHandcuffTraining"
+    OTHER = "other"
+
+
+class TrainingIssuerType(str, Enum):
+    PROVINCIAL_APPROVED_TRAINING_PROVIDER = "provincialApprovedTrainingProvider"
+    PRIVATE_SECURITY_ACADEMY_APPROVED = "privateSecurityAcademyApproved"
+    ST_JOHN_AMBULANCE = "stJohnAmbulance"
+    TRAINING_PROVIDER_ACCREDITED = "trainingProviderAccredited"
+    WORKPLACE_APPROVED_TRAINING_PROVIDER = "workplaceApprovedTrainingProvider"
+    OTHER = "other"
+
+
 # Common embedded models
 class Address(EmbeddedModel):
     street: str = ""
@@ -51,6 +85,29 @@ class GuardDocumentType(str, Enum):
     CNIC = "cnic"
     PASSPORT = "passport"
     DRIVERS_LICENSE = "drivers_license"
+    PROVINCIAL_ID = "provincial_id"
+    CANADIAN_PASSPORT = "canadian_passport"
+    PR_CARD = "pr_card"
+    WORK_PERMIT = "work_permit"
+    STUDY_PERMIT = "study_permit"
+
+
+class ClientType(str, Enum):
+    COMPANY = "company"
+    INDIVIDUAL = "individual"
+
+
+class ClientSiteType(str, Enum):
+    OFFICE = "office"
+    WAREHOUSE = "warehouse"
+    EVENT = "event"
+    RESIDENTIAL = "residential"
+
+
+class ClientGuardType(str, Enum):
+    ARMED = "armed"
+    UNARMED = "unarmed"
+    TACTICAL = "tactical"
 
 
 class GuardAvailability(EmbeddedModel):
@@ -66,6 +123,21 @@ class GuardLicense(EmbeddedModel):
     document_url: Optional[str] = None
 
 
+class GuardSecurityLicense(EmbeddedModel):
+    full_legal_name: str = ""
+    license_number: str = ""
+    license_type: Optional[SecurityLicenseType] = None
+    issuing_province: str = ""
+    issuing_authority: str = ""
+    issue_date: Optional[datetime] = None
+    expiry_date: Optional[datetime] = None
+    document_file_id: Optional[str] = None
+    document_file_url: Optional[str] = None
+    document_file_name: Optional[str] = None
+    document_file_mime_type: Optional[str] = None
+    document_file_size: Optional[int] = None
+
+
 class GuardIdentification(EmbeddedModel):
     id_type: Optional[GuardDocumentType] = None
     id_number: str = ""
@@ -79,17 +151,52 @@ class GuardBackgroundCheck(EmbeddedModel):
     verified_by: Optional[str] = None
 
 
+class GuardPoliceClearance(EmbeddedModel):
+    issuing_authority: Optional[PoliceClearanceAuthorityType] = None
+    issuing_authority_other: Optional[str] = None
+    issuing_province: str = ""
+    issuing_city: Optional[str] = None
+    issue_date: Optional[datetime] = None
+    reference_number: Optional[str] = None
+    document_file_id: Optional[str] = None
+    document_file_url: Optional[str] = None
+    document_file_name: Optional[str] = None
+    document_file_mime_type: Optional[str] = None
+    document_file_size: Optional[int] = None
+
+
+class GuardTrainingCertificate(EmbeddedModel):
+    certificate_name: Optional[TrainingCertificateType] = None
+    issuing_organization: Optional[TrainingIssuerType] = None
+    issuing_organization_other: Optional[str] = None
+    issue_date: Optional[datetime] = None
+    expiry_date: Optional[datetime] = None
+    document_file_id: Optional[str] = None
+    document_file_url: Optional[str] = None
+    document_file_name: Optional[str] = None
+    document_file_mime_type: Optional[str] = None
+    document_file_size: Optional[int] = None
+
+
 class GuardProfile(EmbeddedModel):
     full_name: str = ""
     date_of_birth: Optional[datetime] = None
     home_address: Address = Address()
+    mobile_phone: Optional[str] = None
+    mobile_phone_country: Optional[str] = None
+    landline_phone: Optional[str] = None
+    landline_phone_country: Optional[str] = None
     profile_picture_url: Optional[str] = None
     identification: GuardIdentification = GuardIdentification()
     security_license: GuardLicense = GuardLicense()
+    security_licenses: List[GuardSecurityLicense] = []
+    police_clearances: List[GuardPoliceClearance] = []
+    training_certificates: List[GuardTrainingCertificate] = []
     background_check: GuardBackgroundCheck = GuardBackgroundCheck()
     max_travel_radius_km: Optional[int] = None
     weekly_availability: GuardAvailability = GuardAvailability()
     preferred_guard_types: List[str] = []
+    secondary_contact: Optional[ContactPerson] = None
     service_provider_id: Optional[str] = None
     hourly_rate: Optional[float] = None
     shift_rate: Optional[float] = None
@@ -103,19 +210,22 @@ class ClientSite(EmbeddedModel):
     site_manager_contact: str = ""
     manager_email: str = ""
     number_of_guards_required: Optional[int] = None
-    site_type: Optional[str] = None  # office/warehouse/event/residential
+    site_type: Optional[ClientSiteType] = None  # office/warehouse/event/residential
 
 
 class ClientProfile(EmbeddedModel):
     legal_entity_name: str = ""
-    business_type: Optional[str] = None
+    business_type: Optional[ClientType] = None
+    industry: Optional[str] = None
     company_registration_number: str = ""
+    company_website: Optional[str] = None
     company_logo_url: Optional[str] = None
     primary_contact: ContactPerson = ContactPerson()
+    secondary_contact: Optional[ContactPerson] = None
     billing_address: Address = Address()
     tax_vat_number: Optional[str] = None
     sites: List[ClientSite] = []
-    preferred_guard_types: List[str] = []
+    preferred_guard_types: List[ClientGuardType] = []
     billing_model: str = "per_hour"  # per_hour/per_shift
     subscription_tier: str = "basic"
 
@@ -124,14 +234,23 @@ class ClientProfile(EmbeddedModel):
 class OperatingRegion(EmbeddedModel):
     city: str = ""
     country: str = ""
+    province: str = ""
     coverage_radius_km: Optional[int] = None
 
 
 class SecurityLicense(EmbeddedModel):
     license_number: str = ""
     issuing_authority: str = ""
+    license_type: Optional[SecurityLicenseType] = None
+    issuing_province: str = ""
+    issue_date: Optional[datetime] = None
     expiry_date: Optional[datetime] = None
     document_url: Optional[str] = None
+    document_file_id: Optional[str] = None
+    document_file_url: Optional[str] = None
+    document_file_name: Optional[str] = None
+    document_file_mime_type: Optional[str] = None
+    document_file_size: Optional[int] = None
 
 
 class InsurancePolicy(EmbeddedModel):
@@ -162,7 +281,7 @@ class ServiceProviderProfile(EmbeddedModel):
     default_billing_model: str = "per_hour"
     guard_count: int = 0
     subscription_tier: str = "basic"
-    emergency_contact: str = ""
+    emergency_contact: Optional[ContactPerson] = None
 
 
 class db_tenant_model(Model):
