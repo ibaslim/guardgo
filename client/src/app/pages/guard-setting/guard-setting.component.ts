@@ -164,64 +164,67 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     return getIssuingAuthorityForProvince(provinceCode);
   }
 
-  private mapWeeklyAvailabilityToBackend(availability: WeeklyAvailability | Record<string, string[]>): {
-    morning: boolean;
-    afternoon: boolean;
-    night: boolean;
-  } {
-    const availabilityMap = availability as Record<string, string[]>;
-    const days = Object.keys(availabilityMap || {});
-    const hasSlot = (slot: string) => days.some(day => (availabilityMap[day] || []).includes(slot));
 
-    return {
-      morning: hasSlot('Morning'),
-      afternoon: hasSlot('Evening'),
-      night: hasSlot('Night')
-    };
+  //Convert frontend time-based availability to backend format
+  private mapWeeklyAvailabilityToBackend(availability: WeeklyAvailability): any {
+    const backendFormat: any = {};
+
+    Object.keys(availability).forEach(day => {
+      const dayData = availability[day];
+
+      if (dayData.enabled && dayData.timeRanges.length > 0) {
+        // Filter out empty time ranges (where start or end is missing)
+        const validRanges = dayData.timeRanges.filter(range => range.start && range.end);
+
+        backendFormat[day] = validRanges.map(range => ({
+          start: range.start,
+          end: range.end
+        }));
+      } else {
+        backendFormat[day] = [];
+      }
+    });
+
+    return backendFormat;
   }
 
-  private mapWeeklyAvailabilityFromBackend(availability: any): Record<string, string[]> {
-    const defaultAvailability: Record<string, string[]> = {
-      Monday: [],
-      Tuesday: [],
-      Wednesday: [],
-      Thursday: [],
-      Friday: [],
-      Saturday: [],
-      Sunday: []
+
+  // Convert backend availability format to frontend time-based format
+  private mapWeeklyAvailabilityFromBackend(availability: any): WeeklyAvailability {
+    const defaultAvailability: WeeklyAvailability = {
+      Monday: { enabled: false, timeRanges: [] },
+      Tuesday: { enabled: false, timeRanges: [] },
+      Wednesday: { enabled: false, timeRanges: [] },
+      Thursday: { enabled: false, timeRanges: [] },
+      Friday: { enabled: false, timeRanges: [] },
+      Saturday: { enabled: false, timeRanges: [] },
+      Sunday: { enabled: false, timeRanges: [] }
     };
 
     if (!availability) {
       return defaultAvailability;
     }
 
-    const hasDayKeys = Object.keys(defaultAvailability).some(day => Array.isArray(availability?.[day]));
-    if (hasDayKeys) {
-      return {
-        ...defaultAvailability,
-        ...availability
-      };
-    }
+    // Check if backend data is in the new time-based format
+    Object.keys(defaultAvailability).forEach(day => {
+      if (availability[day] && Array.isArray(availability[day])) {
+        const timeRanges = availability[day];
 
-    const morning = Boolean(availability.morning);
-    const afternoon = Boolean(availability.afternoon);
-    const night = Boolean(availability.night);
-
-    Object.keys(defaultAvailability).forEach((day) => {
-      if (morning) {
-        defaultAvailability[day].push('Morning');
-      }
-      if (afternoon) {
-        defaultAvailability[day].push('Evening');
-      }
-      if (night) {
-        defaultAvailability[day].push('Night');
+        if (timeRanges.length > 0) {
+          defaultAvailability[day] = {
+            enabled: true,
+            timeRanges: timeRanges.map((range: any) => ({
+              start: range.start || '',
+              end: range.end || ''
+            }))
+          };
+        }
       }
     });
 
     return defaultAvailability;
   }
-  
+
   provinceOptions: { value: string; label: string }[] = [];
 
   countryOptions: { value: string; label: string }[] = [];
@@ -268,13 +271,13 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     preferredGuardTypes: [],
     operationalRadius: null,
     weeklyAvailability: {
-      Monday: [],
-      Tuesday: [],
-      Wednesday: [],
-      Thursday: [],
-      Friday: [],
-      Saturday: [],
-      Sunday: []
+      Monday: { enabled: false, timeRanges: [] },
+      Tuesday: { enabled: false, timeRanges: [] },
+      Wednesday: { enabled: false, timeRanges: [] },
+      Thursday: { enabled: false, timeRanges: [] },
+      Friday: { enabled: false, timeRanges: [] },
+      Saturday: { enabled: false, timeRanges: [] },
+      Sunday: { enabled: false, timeRanges: [] }
     }
   };
 
@@ -304,7 +307,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     private apiService: ApiService,
     private router: Router,
     private appService: AppService
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.loadGuardMetadata(() => {
@@ -364,9 +367,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     this.lastAutoLegalName = newName || '';
   }
 
-  /**
-   * Transform backend data format to frontend form format
-   */
+
+  // Transform backend data format to frontend form format
   private transformBackendDataToForm(data: Guard): Guard {
     const profile = (data as any)?.profile || data || {};
     const formData = JSON.parse(JSON.stringify(profile));
@@ -426,7 +428,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         landlinePhone: null
       };
     }
-    
+
     if (profile.secondary_contact) {
       const secondaryContactData = profile.secondary_contact;
       formData.secondaryContact.name = secondaryContactData.name || '';
@@ -462,7 +464,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         formData.address.country = 'CA';
       }
     }
-    
+
     if (!formData.identification) {
       formData.identification = { documents: [] };
     }
@@ -474,7 +476,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         // If backend provides an ID, use that; otherwise create stable ID
         const backendId = doc.id || doc.document_id;
         const stableId = backendId || `doc_type_${doc.document_type || 'unknown'}_idx_${index}`;
-        
+
         return {
           documentType: doc.document_type || doc.documentType || '',
           number: doc.document_number || doc.number || '',
@@ -513,7 +515,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         formData.identification.documents = [];
       }
     }
-    
+
     const rawSecurityLicenses = (formData as any).security_licenses || formData.securityLicenses || [];
     if (Array.isArray(rawSecurityLicenses) && rawSecurityLicenses.length > 0) {
       formData.securityLicenses = rawSecurityLicenses.map((license: any, index: number) => {
@@ -644,7 +646,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     } else if (!formData.preferredGuardTypes) {
       formData.preferredGuardTypes = [];
     }
-    
+
     return formData;
   }
 
@@ -662,13 +664,12 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       (data.policeClearances && data.policeClearances.length > 0) ||
       (data.trainingCertificates && data.trainingCertificates.length > 0) ||
       data.operationalRadius != null ||
-      Object.values(data.weeklyAvailability).some(day => day.length > 0)
+      Object.values(data.weeklyAvailability).some(day => day.enabled && day.timeRanges.length > 0)
     );
   }
 
-  /**
-   * Add a new identification document to the list
-   */
+
+  // Add a new identification document to the list
   addIdentificationDocument(): void {
     const newIndex = this.guardFormModel.identification.documents.length;
     const newDoc: IdentificationDocument = {
@@ -688,7 +689,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
    */
   removeIdentificationDocument(index: number): void {
     const doc = this.guardFormModel.identification.documents[index];
-    
+
     // Clear all errors for this document
     if (doc && doc.id) {
       delete this.guardErrors[`identification_${doc.id}_type`];
@@ -696,7 +697,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       delete this.guardErrors[`identification_${doc.id}_province`];
       delete this.guardErrors[`identification_${doc.id}_expiry`];
     }
-    
+
     // If the removed document was primary, clear the primary selection
     if (
       this.guardFormModel.identification.primaryDocumentId === doc?.id
@@ -707,7 +708,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     if (doc?.existingFileId) {
       this.deleteIdentityFile(doc);
     }
-    
+
     this.guardFormModel.identification.documents.splice(index, 1);
   }
 
@@ -1200,7 +1201,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       const dobDate = new Date(this.guardFormModel.dob);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       if (dobDate >= today) {
         this.guardErrors['dob'] = 'Date of birth must be in the past.';
       } else {
@@ -1209,7 +1210,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         const monthDiff = today.getMonth() - dobDate.getMonth();
         const dayDiff = today.getDate() - dobDate.getDate();
         const actualAge = (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) ? age - 1 : age;
-        
+
         if (actualAge < 18) {
           this.guardErrors['dob'] = 'You must be at least 18 years old.';
         } else if (actualAge > 100) {
@@ -1221,7 +1222,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     // Phone Numbers - At least one required (mobile or landline)
     const hasMobile = this.guardFormModel.mobilePhone && this.guardFormModel.mobilePhone.e164;
     const hasLandline = this.guardFormModel.landlinePhone && this.guardFormModel.landlinePhone.e164;
-    
+
     if (!hasMobile && !hasLandline) {
       this.guardErrors['phoneNumbers'] = 'At least one phone number (mobile or landline) is required.';
     } else if (hasMobile && hasLandline) {
@@ -1261,7 +1262,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         this.guardErrors['addressProvince'] = 'Please select a valid province from the list.';
       }
     }
-    
+
     // Canadian Postal Code validation (A1A 1A1 format)
     if (!this.guardFormModel.address.postalCode.trim()) {
       this.guardErrors['addressPostalCode'] = 'Postal code is required.';
@@ -1426,11 +1427,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(secondaryContact.email)) {
         this.guardErrors['secondaryContactEmail'] = 'Please enter a valid email address.';
       }
-      
+
       // At least one phone required if any field is filled
       const hasSecondaryMobile = secondaryContact.mobilePhone && secondaryContact.mobilePhone.e164;
       const hasSecondaryLandline = secondaryContact.landlinePhone && secondaryContact.landlinePhone.e164;
-      
+
       if (!hasSecondaryMobile && !hasSecondaryLandline) {
         this.guardErrors['secondaryContactPhoneNumbers'] = 'At least one phone number (mobile or landline) is required.';
       } else if (hasSecondaryMobile && hasSecondaryLandline) {
@@ -1453,6 +1454,34 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         this.guardFormModel.operationalRadius < 1)
     ) {
       this.guardErrors['operationalRadius'] = 'Operational radius must be at least 1 mile.';
+    }
+
+    // Weekly Availability validation
+    const hasAtLeastOneDay = Object.keys(this.guardFormModel.weeklyAvailability).some(
+      day => this.guardFormModel.weeklyAvailability[day].enabled
+    );
+
+    if (!hasAtLeastOneDay) {
+      this.guardErrors['weeklyAvailability'] = 'Please select at least one day of availability.';
+    } else {
+      // Validate that enabled days have at least one complete time range
+      let hasIncompleteRanges = false;
+
+      Object.keys(this.guardFormModel.weeklyAvailability).forEach(day => {
+        const dayData = this.guardFormModel.weeklyAvailability[day];
+
+        if (dayData.enabled) {
+          const hasCompleteRange = dayData.timeRanges.some(range => range.start && range.end);
+
+          if (!hasCompleteRange) {
+            hasIncompleteRanges = true;
+          }
+        }
+      });
+
+      if (hasIncompleteRanges) {
+        this.guardErrors['weeklyAvailability'] = 'Please complete time ranges for all selected days.';
+      }
     }
 
     return Object.keys(this.guardErrors).length === 0;
@@ -1548,7 +1577,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           ...(cert.existingFileSize != null && { document_file_size: cert.existingFileSize })
         })),
         preferred_guard_types: this.guardFormModel.preferredGuardTypes,
-        weekly_availability: this.mapWeeklyAvailabilityToBackend(this.guardFormModel.weeklyAvailability)
+        // UPDATED - Use new mapping function
+        weekly_availability: this.mapWeeklyAvailabilityToBackend(this.guardFormModel.weeklyAvailability),
       }
     };
 
@@ -1561,7 +1591,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       payload.profile.landline_phone = this.guardFormModel.landlinePhone.e164;
       payload.profile.landline_phone_country = this.guardFormModel.landlinePhone.country;
     }
-    
+
     // Add secondary contact if any data is present
     const secondaryContact = this.guardFormModel.secondaryContact;
     if (secondaryContact && (
@@ -1579,10 +1609,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         phone: secondaryPhone
       };
     }
-    
+
     // Legacy contact field
-    const legacyContact = this.guardFormModel.mobilePhone?.national || 
-                          this.guardFormModel.landlinePhone?.national || '';
+    const legacyContact = this.guardFormModel.mobilePhone?.national ||
+      this.guardFormModel.landlinePhone?.national || '';
     payload.profile.contact = legacyContact;
 
     // Add operational radius if set

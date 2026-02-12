@@ -107,14 +107,29 @@ export interface TrainingCertificate {
   existingFileSize?: number;
 }
 
+// export interface WeeklyAvailability {
+//   Monday: string[];
+//   Tuesday: string[];
+//   Wednesday: string[];
+//   Thursday: string[];
+//   Friday: string[];
+//   Saturday: string[];
+//   Sunday: string[];
+// }
+
+// NEW - Add this
+export interface TimeRange {
+  start: string;
+  end: string;
+}
+
+export interface DayAvailability {
+  enabled: boolean;
+  timeRanges: TimeRange[];
+}
+
 export interface WeeklyAvailability {
-  Monday: string[];
-  Tuesday: string[];
-  Wednesday: string[];
-  Thursday: string[];
-  Friday: string[];
-  Saturday: string[];
-  Sunday: string[];
+  [day: string]: DayAvailability;
 }
 
 export interface GuardErrors {
@@ -141,6 +156,7 @@ export interface GuardErrors {
   trainingCertificates?: string;
   preferredGuardTypes?: string;
   operationalRadius?: string;
+  weeklyAvailability?: string;
   submit?: string;
   [key: string]: string | undefined; // For dynamic identification document errors
 }
