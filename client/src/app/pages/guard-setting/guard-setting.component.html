@@ -274,21 +274,22 @@
 
                         <div class="flex flex-col">
                             <app-select-input label="Issuing Province" [name]="'securityLicenseProvince_' + i"
-                                [(ngModel)]="license.issuingProvince" [options]="provinceOptions"
-                                placeholder="-- Select Province --" [required]="i === 0"
-                                [searchable]="true"></app-select-input>
-                            <app-error-message
-                                [errorMessage]="guardErrors['security_license_' + license.id + '_issuingProvince'] || null"></app-error-message>
-                        </div>
-
-                        <div class="flex flex-col">
-                            <app-select-input label="Issuing Province" [name]="'securityLicenseProvince_' + i"
                                 [(ngModel)]="license.issuingProvince"
                                 (ngModelChange)="onSecurityLicenseProvinceChange(license, $event)"
                                 [options]="provinceOptions" placeholder="-- Select Province --" [required]="i === 0"
                                 [searchable]="true"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['security_license_' + license.id + '_issuingProvince'] || null"></app-error-message>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <app-base-input label="Issuing Authority" [name]="'securityLicenseAuthority_' + i"
+                                [(ngModel)]="license.issuingAuthority" [required]="i === 0"
+                                [placeholder]="getSuggestedIssuingAuthority(license.issuingProvince) || 'e.g., Ministry of the Solicitor General'"
+                                helperText="Will auto-populate based on selected province">
+                            </app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['security_license_' + license.id + '_issuingAuthority'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
