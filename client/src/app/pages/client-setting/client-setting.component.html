@@ -9,9 +9,9 @@
         <app-section title="Client Type" subtitle="Tell us who the contract is for.">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col">
-                    <app-select-input label="Client Type" name="clientType"
-                        [(ngModel)]="clientFormModel.clientType" [options]="clientTypeOptions"
-                        placeholder="-- Select Type --" [required]="true" (ngModelChange)="onClientTypeChange()"></app-select-input>
+                    <app-select-input label="Client Type" name="clientType" [(ngModel)]="clientFormModel.clientType"
+                        [options]="clientTypeOptions" placeholder="-- Select Type --" [required]="true"
+                        (ngModelChange)="onClientTypeChange()"></app-select-input>
                 </div>
             </div>
         </app-section>
@@ -19,15 +19,19 @@
         <app-section title="Client Details" subtitle="Legal details for contracting.">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col">
-                    <app-base-input [label]="clientFormModel.clientType === 'individual' ? 'Full Name' : 'Legal Entity Name'" name="legalEntityName"
-                        [(ngModel)]="clientFormModel.legalEntityName" [required]="true">
+                    <app-base-input
+                        [label]="clientFormModel.clientType === 'individual' ? 'Full Name' : 'Legal Entity Name'"
+                        name="legalEntityName" [(ngModel)]="clientFormModel.legalEntityName" [required]="true"
+                        [pattern]="clientFormModel.clientType === 'individual' ? '[a-zA-Z\\s]*' : ''"
+                        [helperText]="clientFormModel.clientType === 'individual' ? 'Letters and spaces only' : ''">
                     </app-base-input>
                     <app-error-message [errorMessage]="clientErrors.legalEntityName"></app-error-message>
                 </div>
 
                 <div class="flex flex-col" *ngIf="clientFormModel.clientType === 'company'">
                     <app-base-input label="Industry / Business Sector" name="industry"
-                        [(ngModel)]="clientFormModel.industry" [required]="true">
+                        [(ngModel)]="clientFormModel.industry" [required]="true" pattern="[a-zA-Z\s]*"
+                        helperText="Letters and spaces only">
                     </app-base-input>
                     <app-error-message [errorMessage]="clientErrors.industry"></app-error-message>
                 </div>
@@ -75,6 +79,7 @@
                         [(ngModel)]="clientFormModel.primaryContact.mobilePhone" [defaultCountry]="'CA'"
                         [disableCountrySelector]="true" helperText="Enter mobile number">
                     </app-mobile-phone-input>
+                    <app-error-message [errorMessage]="clientErrors.primaryContactMobilePhone"></app-error-message>
                 </div>
 
                 <div class="flex flex-col md:col-span-1">
@@ -82,6 +87,7 @@
                         [(ngModel)]="clientFormModel.primaryContact.landlinePhone" [defaultCountry]="'CA'"
                         [disableCountrySelector]="true" helperText="Enter landline number">
                     </app-landline-phone-input>
+                    <app-error-message [errorMessage]="clientErrors.primaryContactLandlinePhone"></app-error-message>
                 </div>
 
                 <div class="col-span-1 md:col-span-2" *ngIf="clientErrors.primaryContactPhoneNumbers">
@@ -111,6 +117,7 @@
                         [(ngModel)]="clientFormModel.secondaryContact.mobilePhone" [defaultCountry]="'CA'"
                         [disableCountrySelector]="true" helperText="Enter mobile number">
                     </app-mobile-phone-input>
+                    <app-error-message [errorMessage]="clientErrors.secondaryContactMobilePhone"></app-error-message>
                 </div>
 
                 <div class="flex flex-col md:col-span-1">
@@ -118,6 +125,7 @@
                         [(ngModel)]="clientFormModel.secondaryContact.landlinePhone" [defaultCountry]="'CA'"
                         [disableCountrySelector]="true" helperText="Enter landline number">
                     </app-landline-phone-input>
+                    <app-error-message [errorMessage]="clientErrors.secondaryContactLandlinePhone"></app-error-message>
                 </div>
 
                 <div class="col-span-1 md:col-span-2" *ngIf="clientErrors.secondaryContactPhoneNumbers">
@@ -136,8 +144,8 @@
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="City" name="billingCity"
-                        [(ngModel)]="clientFormModel.billingAddress.city" [required]="true">
+                    <app-base-input label="City" name="billingCity" [(ngModel)]="clientFormModel.billingAddress.city"
+                        [required]="true">
                     </app-base-input>
                     <app-error-message [errorMessage]="clientErrors.billingCity"></app-error-message>
                 </div>
@@ -145,7 +153,8 @@
                 <div class="flex flex-col">
                     <app-select-input label="Country" name="billingCountry"
                         [(ngModel)]="clientFormModel.billingAddress.country" [options]="countryOptions"
-                        placeholder="-- Select Country --" [required]="true" [searchable]="true" [disabled]="true"></app-select-input>
+                        placeholder="-- Select Country --" [required]="true" [searchable]="true"
+                        [disabled]="true"></app-select-input>
                     <app-error-message [errorMessage]="clientErrors.billingCountry"></app-error-message>
                 </div>
 
@@ -172,21 +181,11 @@
         </div>
 
         <app-sticky-action-bar [message]="'Save to activate your client profile.'" [containerClass]="'px-0'">
-            <app-button *ngIf="!isEditMode"
-                [label]="'Submit'"
-                type="primary"
-                [htmlType]="'submit'"
-                [fullWidth]="true"
-                size="lg"
-                [customClass]="'w-full md:w-auto rounded-lg'">
+            <app-button *ngIf="!isEditMode" [label]="'Submit'" type="primary" [htmlType]="'submit'" [fullWidth]="true"
+                size="lg" [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>
-            <app-button *ngIf="isEditMode"
-                [label]="'Save Changes'"
-                type="success"
-                [htmlType]="'submit'"
-                [fullWidth]="true"
-                size="lg"
-                [customClass]="'w-full md:w-auto rounded-lg'">
+            <app-button *ngIf="isEditMode" [label]="'Save Changes'" type="success" [htmlType]="'submit'"
+                [fullWidth]="true" size="lg" [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>
         </app-sticky-action-bar>
     </form>
