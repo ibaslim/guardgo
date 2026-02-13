@@ -274,6 +274,20 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     return getIssuingAuthorityForProvince(provinceCode);
   }
 
+  /**
+ * Handle changes to the issuing province field
+ * Auto-populates the issuing authority based on the selected province
+ */
+  onIssuingProvinceChange(): void {
+    const province = this.providerFormModel.securityLicense.issuingProvince;
+    if (province) {
+      const authority = this.getSuggestedIssuingAuthority(province);
+      if (authority) {
+        this.providerFormModel.securityLicense.issuingAuthority = authority;
+      }
+    }
+  }
+
   private transformBackendDataToForm(data: any): ServiceProvider {
     const profile = data?.profile || data || {};
     const headOfficeAddress = this.mapAddressFromBackend(profile.head_office_address || profile.headOfficeAddress || {});
@@ -284,11 +298,11 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
 
     const mappedRegions = Array.isArray(profile.operating_regions)
       ? profile.operating_regions.map((region: any) => ({
-          city: region.city || '',
-          country: region.country || 'CA',
-          province: region.province || '',
-          coverageRadiusKm: region.coverage_radius_km ?? region.coverageRadiusKm ?? null
-        }))
+        city: region.city || '',
+        country: region.country || 'CA',
+        province: region.province || '',
+        coverageRadiusKm: region.coverage_radius_km ?? region.coverageRadiusKm ?? null
+      }))
       : [];
 
     return {
@@ -335,13 +349,13 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       operatingRegions: mappedRegions.length
         ? mappedRegions
         : [
-            {
-              city: '',
-              country: 'CA',
-              province: '',
-              coverageRadiusKm: null
-            }
-          ],
+          {
+            city: '',
+            country: 'CA',
+            province: '',
+            coverageRadiusKm: null
+          }
+        ],
       guardCategoriesOffered: Array.isArray(profile.guard_categories_offered)
         ? profile.guard_categories_offered
         : []
@@ -411,6 +425,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     }
     if (!this.providerFormModel.headOfficeAddress.city.trim()) {
       this.providerErrors.officeCity = 'Office city is required.';
+    } else if (!/^[a-zA-Z\s]+$/.test(this.providerFormModel.headOfficeAddress.city)) {
+      this.providerErrors.officeCity = 'City can only contain letters and spaces.';
     }
     if (!this.providerFormModel.headOfficeAddress.country.trim()) {
       this.providerErrors.officeCountry = 'Office country is required.';
@@ -430,6 +446,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     // Primary Representative
     if (!this.providerFormModel.primaryRepresentative.name.trim()) {
       this.providerErrors.repName = 'Representative name is required.';
+    } else if (!/^[a-zA-Z\s]+$/.test(this.providerFormModel.primaryRepresentative.name)) {
+      this.providerErrors.repName = 'Representative name can only contain letters and spaces.';
     }
     if (!this.providerFormModel.primaryRepresentative.email.trim()) {
       this.providerErrors.repEmail = 'Representative email is required.';
@@ -438,9 +456,38 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     }
     const hasRepMobile = this.providerFormModel.primaryRepresentative.mobilePhone?.e164;
     const hasRepLandline = this.providerFormModel.primaryRepresentative.landlinePhone?.e164;
+
+    // Validate representative mobile phone format if provided (Canadian: +1 followed by 10 digits)
+    if (hasRepMobile) {
+      const repMobileE164 = this.providerFormModel.primaryRepresentative.mobilePhone!.e164;
+      const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+      if (!canadianPhonePattern.test(repMobileE164)) {
+        this.providerErrors.repMobilePhone = 'Invalid Canadian mobile phone number format.';
+      } else if (this.providerFormModel.primaryRepresentative.mobilePhone!.country !== 'CA') {
+        this.providerErrors.repMobilePhone = 'Only Canadian phone numbers are accepted.';
+      }
+    }
+
+    // Validate representative landline phone format if provided (Canadian: +1 followed by 10 digits)
+    if (hasRepLandline) {
+      const repLandlineE164 = this.providerFormModel.primaryRepresentative.landlinePhone!.e164;
+      const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+      if (!canadianPhonePattern.test(repLandlineE164)) {
+        this.providerErrors.repLandlinePhone = 'Invalid Canadian landline phone number format.';
+      } else if (this.providerFormModel.primaryRepresentative.landlinePhone!.country !== 'CA') {
+        this.providerErrors.repLandlinePhone = 'Only Canadian phone numbers are accepted.';
+      }
+    }
+
+    // At least one phone number is required
     if (!hasRepMobile && !hasRepLandline) {
       this.providerErrors.repPhone = 'Representative phone is required.';
-    } else if (hasRepMobile && hasRepLandline) {
+    }
+
+    // If both phone numbers are provided, they must be from the same country
+    if (hasRepMobile && hasRepLandline) {
       if (this.providerFormModel.primaryRepresentative.mobilePhone?.country !== this.providerFormModel.primaryRepresentative.landlinePhone?.country) {
         this.providerErrors.repPhone = 'Representative phone numbers must be from the same country.';
       }
@@ -456,6 +503,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     if (secondaryHasAny) {
       if (!secondary.name.trim()) {
         this.providerErrors.secondaryContactName = 'Secondary contact name is required.';
+      } else if (!/^[a-zA-Z\s]+$/.test(secondary.name)) {
+        this.providerErrors.secondaryContactName = 'Contact name can only contain letters and spaces.';
       }
       if (!secondary.email.trim()) {
         this.providerErrors.secondaryContactEmail = 'Secondary contact email is required.';
@@ -464,9 +513,38 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       }
       const hasSecondaryMobile = secondary.mobilePhone?.e164;
       const hasSecondaryLandline = secondary.landlinePhone?.e164;
+
+      // Validate secondary mobile phone format if provided (Canadian: +1 followed by 10 digits)
+      if (hasSecondaryMobile) {
+        const secondaryMobileE164 = secondary.mobilePhone!.e164;
+        const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+        if (!canadianPhonePattern.test(secondaryMobileE164)) {
+          this.providerErrors.secondaryContactMobilePhone = 'Invalid Canadian mobile phone number format.';
+        } else if (secondary.mobilePhone!.country !== 'CA') {
+          this.providerErrors.secondaryContactMobilePhone = 'Only Canadian phone numbers are accepted.';
+        }
+      }
+
+      // Validate secondary landline phone format if provided (Canadian: +1 followed by 10 digits)
+      if (hasSecondaryLandline) {
+        const secondaryLandlineE164 = secondary.landlinePhone!.e164;
+        const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+        if (!canadianPhonePattern.test(secondaryLandlineE164)) {
+          this.providerErrors.secondaryContactLandlinePhone = 'Invalid Canadian landline phone number format.';
+        } else if (secondary.landlinePhone!.country !== 'CA') {
+          this.providerErrors.secondaryContactLandlinePhone = 'Only Canadian phone numbers are accepted.';
+        }
+      }
+
+      // At least one phone number is required
       if (!hasSecondaryMobile && !hasSecondaryLandline) {
         this.providerErrors.secondaryContactPhone = 'At least one phone number is required.';
-      } else if (hasSecondaryMobile && hasSecondaryLandline) {
+      }
+
+      // If both phone numbers are provided, they must be from the same country
+      if (hasSecondaryMobile && hasSecondaryLandline) {
         if (secondary.mobilePhone?.country !== secondary.landlinePhone?.country) {
           this.providerErrors.secondaryContactPhone = 'Secondary contact phone numbers must be from the same country.';
         }
@@ -486,6 +564,19 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     if (!this.providerFormModel.securityLicense.issuingAuthority.trim()) {
       this.providerErrors.issuingAuthority = 'Issuing authority is required.';
     }
+
+    // Validate issue date (cannot be in the future)
+    if (this.providerFormModel.securityLicense.issueDate) {
+      const issueDate = new Date(this.providerFormModel.securityLicense.issueDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      issueDate.setHours(0, 0, 0, 0);
+
+      if (issueDate > today) {
+        this.providerErrors.issueDate = 'Issue date cannot be in the future.';
+      }
+    }
+
     if (!this.providerFormModel.securityLicense.expiryDate) {
       this.providerErrors.expiryDate = 'Expiry date is required.';
     } else if (this.providerFormModel.securityLicense.issueDate) {
@@ -504,6 +595,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     this.providerFormModel.operatingRegions.forEach((region, index) => {
       if (!region.city.trim()) {
         this.providerErrors[`region_${index}_city`] = 'City is required.';
+      } else if (!/^[a-zA-Z\s]+$/.test(region.city)) {
+        this.providerErrors[`region_${index}_city`] = 'City can only contain letters and spaces.';
       }
       if (!region.country.trim()) {
         this.providerErrors[`region_${index}_country`] = 'Country is required.';
@@ -650,12 +743,12 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
         },
         emergency_contact: hasSecondaryContact
           ? {
-              name: secondaryContact.name,
-              email: secondaryContact.email,
-              phone: secondaryContact.mobilePhone?.e164
-                || secondaryContact.landlinePhone?.e164
-                || ''
-            }
+            name: secondaryContact.name,
+            email: secondaryContact.email,
+            phone: secondaryContact.mobilePhone?.e164
+              || secondaryContact.landlinePhone?.e164
+              || ''
+          }
           : undefined,
         security_license: {
           license_number: this.providerFormModel.securityLicense.licenseNumber,
