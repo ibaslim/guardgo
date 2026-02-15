@@ -157,7 +157,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     insuranceDetails: {
       policyNumber: '',
       coverageAmount: null,
-      currency: 'USD',
+      currency: 'CAD',
       expiryDate: '',
       coverageDetails: ''
     },
