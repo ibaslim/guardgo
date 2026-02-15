@@ -23,11 +23,17 @@ CYPRESS_ADMIN_PASSWORD='R9&!HNgT#yS@+kY^WnA%pD(euF*BVCaLJw1Mxtbrs'
 #   ACCOUNTS_MAIL_PASSWORD='anything' (Mailpit accepts any password)
 #   ACCOUNTS_SMTP_SERVER=mailpit (matches docker-compose service name)
 # For production, use real SMTP server credentials:
+# ACCOUNTS_MAIL_PASSWORD='test'
+# ACCOUNTS_SMTP_PORT='1025'
+# APP_URL='http://localhost:4200'
+# ACCOUNTS_MAIL=test@mailpit.local
+# ACCOUNTS_SMTP_SERVER=mailpit
+
 ACCOUNTS_MAIL_PASSWORD='test'
-ACCOUNTS_SMTP_PORT='1025'
 APP_URL='http://localhost:4200'
-ACCOUNTS_MAIL=test@mailpit.local
+ACCOUNTS_MAIL=noreply@localhost
 ACCOUNTS_SMTP_SERVER=mailpit
+ACCOUNTS_SMTP_PORT=1025
 
 # PRODUCTION MODE
 AUTH='1'

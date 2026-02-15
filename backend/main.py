@@ -45,7 +45,11 @@ async def lifespan(p_app: FastAPI):
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
 setup_middlewares(app)
 
-app.mount("/assets", StaticFiles(directory=ANGULAR_BUILD_DIR / "assets"), name="assets")
+# Mount assets directory only if it exists
+assets_dir = ANGULAR_BUILD_DIR / "assets"
+if assets_dir.exists():
+    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+    
 app.mount("/static", StaticFiles(directory=SWAGGER_STATIC_DIR), name="static")
 
 

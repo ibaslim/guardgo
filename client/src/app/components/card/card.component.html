@@ -1,4 +1,12 @@
-<div class="bg-white dark:bg-gray-800 rounded shadow p-4 border border-gray-200 dark:border-gray-700">
-  <div *ngIf="title" class="font-bold mb-2 text-gray-900 dark:text-gray-100">{{ title }}</div>
-  <ng-content></ng-content>
+<div [class]="containerClass">
+  <div *ngIf="showHeader" [class]="headerClass">
+    <div>
+      <div *ngIf="title" [class]="titleClass">{{ title }}</div>
+      <ng-content select="[card-header]"></ng-content>
+    </div>
+    <ng-content select="[card-actions]"></ng-content>
+  </div>
+  <div [class]="bodyClass">
+    <ng-content></ng-content>
+  </div>
 </div>

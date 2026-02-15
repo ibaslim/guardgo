@@ -26,6 +26,8 @@ export class BaseInputComponent implements ControlValueAccessor {
   @Input() name = '';
   @Input() helperText: string = '';
   @Input() errorText: string = '';
+  @Input() min?: number;
+  @Input() max?: number;
   value: string | number = '';
   onChange = (value: any) => { };
   onTouched = () => { };

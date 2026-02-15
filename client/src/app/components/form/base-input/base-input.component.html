@@ -1,17 +1,10 @@
 <div class="w-full">
-  <label *ngIf="label" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">{{ label }}<span *ngIf="required" class="text-red-500">*</span></label>
-  <input
-    [type]="type"
-    [attr.name]="name"
-    [attr.placeholder]="effectivePlaceholder"
-    [disabled]="disabled"
-    [readonly]="readonly"
-    [required]="required"
-    [(ngModel)]="value"
-    (ngModelChange)="onChange($event)"
+  <label *ngIf="label" class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">{{ label }}<span
+      *ngIf="required" class="text-red-500">*</span></label>
+  <input [type]="type" [attr.name]="name" [attr.placeholder]="effectivePlaceholder" [disabled]="disabled"
+    [readonly]="readonly" [required]="required" [attr.min]="min" [attr.max]="max" [(ngModel)]="value" (ngModelChange)="onChange($event)"
     (blur)="onTouched()"
-    class="block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
-  />
+    class="block w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed placeholder:text-[clamp(0.688rem,2vw,0.875rem)]" />
   <div *ngIf="helperText" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ helperText }}</div>
   <div *ngIf="errorText" class="mt-1 text-xs text-red-500">{{ errorText }}</div>
 </div>
