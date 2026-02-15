@@ -164,64 +164,67 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     return getIssuingAuthorityForProvince(provinceCode);
   }
 
-  private mapWeeklyAvailabilityToBackend(availability: WeeklyAvailability | Record<string, string[]>): {
-    morning: boolean;
-    afternoon: boolean;
-    night: boolean;
-  } {
-    const availabilityMap = availability as Record<string, string[]>;
-    const days = Object.keys(availabilityMap || {});
-    const hasSlot = (slot: string) => days.some(day => (availabilityMap[day] || []).includes(slot));
 
-    return {
-      morning: hasSlot('Morning'),
-      afternoon: hasSlot('Evening'),
-      night: hasSlot('Night')
-    };
+  //Convert frontend time-based availability to backend format
+  private mapWeeklyAvailabilityToBackend(availability: WeeklyAvailability): any {
+    const backendFormat: any = {};
+
+    Object.keys(availability).forEach(day => {
+      const dayData = availability[day];
+
+      if (dayData.enabled && dayData.timeRanges.length > 0) {
+        // Filter out empty time ranges (where start or end is missing)
+        const validRanges = dayData.timeRanges.filter(range => range.start && range.end);
+
+        backendFormat[day] = validRanges.map(range => ({
+          start: range.start,
+          end: range.end
+        }));
+      } else {
+        backendFormat[day] = [];
+      }
+    });
+
+    return backendFormat;
   }
 
-  private mapWeeklyAvailabilityFromBackend(availability: any): Record<string, string[]> {
-    const defaultAvailability: Record<string, string[]> = {
-      Monday: [],
-      Tuesday: [],
-      Wednesday: [],
-      Thursday: [],
-      Friday: [],
-      Saturday: [],
-      Sunday: []
+
+  // Convert backend availability format to frontend time-based format
+  private mapWeeklyAvailabilityFromBackend(availability: any): WeeklyAvailability {
+    const defaultAvailability: WeeklyAvailability = {
+      Monday: { enabled: false, timeRanges: [] },
+      Tuesday: { enabled: false, timeRanges: [] },
+      Wednesday: { enabled: false, timeRanges: [] },
+      Thursday: { enabled: false, timeRanges: [] },
+      Friday: { enabled: false, timeRanges: [] },
+      Saturday: { enabled: false, timeRanges: [] },
+      Sunday: { enabled: false, timeRanges: [] }
     };
 
     if (!availability) {
       return defaultAvailability;
     }
 
-    const hasDayKeys = Object.keys(defaultAvailability).some(day => Array.isArray(availability?.[day]));
-    if (hasDayKeys) {
-      return {
-        ...defaultAvailability,
-        ...availability
-      };
-    }
+    // Check if backend data is in the new time-based format
+    Object.keys(defaultAvailability).forEach(day => {
+      if (availability[day] && Array.isArray(availability[day])) {
+        const timeRanges = availability[day];
 
-    const morning = Boolean(availability.morning);
-    const afternoon = Boolean(availability.afternoon);
-    const night = Boolean(availability.night);
-
-    Object.keys(defaultAvailability).forEach((day) => {
-      if (morning) {
-        defaultAvailability[day].push('Morning');
-      }
-      if (afternoon) {
-        defaultAvailability[day].push('Evening');
-      }
-      if (night) {
-        defaultAvailability[day].push('Night');
+        if (timeRanges.length > 0) {
+          defaultAvailability[day] = {
+            enabled: true,
+            timeRanges: timeRanges.map((range: any) => ({
+              start: range.start || '',
+              end: range.end || ''
+            }))
+          };
+        }
       }
     });
 
     return defaultAvailability;
   }
-  
+
   provinceOptions: { value: string; label: string }[] = [];
 
   countryOptions: { value: string; label: string }[] = [];
@@ -268,13 +271,13 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     preferredGuardTypes: [],
     operationalRadius: null,
     weeklyAvailability: {
-      Monday: [],
-      Tuesday: [],
-      Wednesday: [],
-      Thursday: [],
-      Friday: [],
-      Saturday: [],
-      Sunday: []
+      Monday: { enabled: false, timeRanges: [] },
+      Tuesday: { enabled: false, timeRanges: [] },
+      Wednesday: { enabled: false, timeRanges: [] },
+      Thursday: { enabled: false, timeRanges: [] },
+      Friday: { enabled: false, timeRanges: [] },
+      Saturday: { enabled: false, timeRanges: [] },
+      Sunday: { enabled: false, timeRanges: [] }
     }
   };
 
@@ -304,7 +307,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     private apiService: ApiService,
     private router: Router,
     private appService: AppService
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.loadGuardMetadata(() => {
@@ -364,9 +367,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     this.lastAutoLegalName = newName || '';
   }
 
-  /**
-   * Transform backend data format to frontend form format
-   */
+
+  // Transform backend data format to frontend form format
   private transformBackendDataToForm(data: Guard): Guard {
     const profile = (data as any)?.profile || data || {};
     const formData = JSON.parse(JSON.stringify(profile));
@@ -426,7 +428,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         landlinePhone: null
       };
     }
-    
+
     if (profile.secondary_contact) {
       const secondaryContactData = profile.secondary_contact;
       formData.secondaryContact.name = secondaryContactData.name || '';
@@ -462,7 +464,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         formData.address.country = 'CA';
       }
     }
-    
+
     if (!formData.identification) {
       formData.identification = { documents: [] };
     }
@@ -474,7 +476,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         // If backend provides an ID, use that; otherwise create stable ID
         const backendId = doc.id || doc.document_id;
         const stableId = backendId || `doc_type_${doc.document_type || 'unknown'}_idx_${index}`;
-        
+
         return {
           documentType: doc.document_type || doc.documentType || '',
           number: doc.document_number || doc.number || '',
@@ -513,7 +515,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         formData.identification.documents = [];
       }
     }
-    
+
     const rawSecurityLicenses = (formData as any).security_licenses || formData.securityLicenses || [];
     if (Array.isArray(rawSecurityLicenses) && rawSecurityLicenses.length > 0) {
       formData.securityLicenses = rawSecurityLicenses.map((license: any, index: number) => {
@@ -644,7 +646,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     } else if (!formData.preferredGuardTypes) {
       formData.preferredGuardTypes = [];
     }
-    
+
     return formData;
   }
 
@@ -662,13 +664,12 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       (data.policeClearances && data.policeClearances.length > 0) ||
       (data.trainingCertificates && data.trainingCertificates.length > 0) ||
       data.operationalRadius != null ||
-      Object.values(data.weeklyAvailability).some(day => day.length > 0)
+      Object.values(data.weeklyAvailability).some(day => day.enabled && day.timeRanges.length > 0)
     );
   }
 
-  /**
-   * Add a new identification document to the list
-   */
+
+  // Add a new identification document to the list
   addIdentificationDocument(): void {
     const newIndex = this.guardFormModel.identification.documents.length;
     const newDoc: IdentificationDocument = {
@@ -688,7 +689,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
    */
   removeIdentificationDocument(index: number): void {
     const doc = this.guardFormModel.identification.documents[index];
-    
+
     // Clear all errors for this document
     if (doc && doc.id) {
       delete this.guardErrors[`identification_${doc.id}_type`];
@@ -696,7 +697,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       delete this.guardErrors[`identification_${doc.id}_province`];
       delete this.guardErrors[`identification_${doc.id}_expiry`];
     }
-    
+
     // If the removed document was primary, clear the primary selection
     if (
       this.guardFormModel.identification.primaryDocumentId === doc?.id
@@ -707,7 +708,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     if (doc?.existingFileId) {
       this.deleteIdentityFile(doc);
     }
-    
+
     this.guardFormModel.identification.documents.splice(index, 1);
   }
 
@@ -1200,7 +1201,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       const dobDate = new Date(this.guardFormModel.dob);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       if (dobDate >= today) {
         this.guardErrors['dob'] = 'Date of birth must be in the past.';
       } else {
@@ -1209,7 +1210,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         const monthDiff = today.getMonth() - dobDate.getMonth();
         const dayDiff = today.getDate() - dobDate.getDate();
         const actualAge = (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) ? age - 1 : age;
-        
+
         if (actualAge < 18) {
           this.guardErrors['dob'] = 'You must be at least 18 years old.';
         } else if (actualAge > 100) {
@@ -1221,11 +1222,40 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     // Phone Numbers - At least one required (mobile or landline)
     const hasMobile = this.guardFormModel.mobilePhone && this.guardFormModel.mobilePhone.e164;
     const hasLandline = this.guardFormModel.landlinePhone && this.guardFormModel.landlinePhone.e164;
-    
+
+    // Validate mobile phone format if provided (Canadian: +1 followed by 10 digits)
+    if (hasMobile) {
+      const mobileE164 = this.guardFormModel.mobilePhone!.e164;
+      const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+      if (!canadianPhonePattern.test(mobileE164)) {
+        this.guardErrors['mobilePhone'] = 'Invalid Canadian mobile phone number format.';
+      } else if (this.guardFormModel.mobilePhone!.country !== 'CA') {
+        // Ensure country is Canada
+        this.guardErrors['mobilePhone'] = 'Only Canadian phone numbers are accepted.';
+      }
+    }
+
+    // Validate landline phone format if provided (Canadian: +1 followed by 10 digits)
+    if (hasLandline) {
+      const landlineE164 = this.guardFormModel.landlinePhone!.e164;
+      const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+      if (!canadianPhonePattern.test(landlineE164)) {
+        this.guardErrors['landlinePhone'] = 'Invalid Canadian landline phone number format.';
+      } else if (this.guardFormModel.landlinePhone!.country !== 'CA') {
+        // Ensure country is Canada
+        this.guardErrors['landlinePhone'] = 'Only Canadian phone numbers are accepted.';
+      }
+    }
+
+    // At least one phone number is required
     if (!hasMobile && !hasLandline) {
       this.guardErrors['phoneNumbers'] = 'At least one phone number (mobile or landline) is required.';
-    } else if (hasMobile && hasLandline) {
-      // If both phone numbers are provided, they must be from the same country
+    }
+
+    // If both phone numbers are provided, they must be from the same country
+    if (hasMobile && hasLandline) {
       if (this.guardFormModel.mobilePhone?.country !== this.guardFormModel.landlinePhone?.country) {
         this.guardErrors['phoneNumbers'] = 'Mobile and landline phone numbers must be from the same country.';
       }
@@ -1261,7 +1291,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         this.guardErrors['addressProvince'] = 'Please select a valid province from the list.';
       }
     }
-    
+
     // Canadian Postal Code validation (A1A 1A1 format)
     if (!this.guardFormModel.address.postalCode.trim()) {
       this.guardErrors['addressPostalCode'] = 'Postal code is required.';
@@ -1277,130 +1307,267 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       this.guardErrors['identification'] = 'At least one identification document is required.';
     } else {
       // Validate each document using document ID
-      this.guardFormModel.identification.documents.forEach((doc) => {
-        const validation = this.validateDocument(doc);
-        if (!validation.valid && doc.id) {
-          // Store errors per field
-          if (validation.errors['type']) {
-            this.guardErrors[`identification_${doc.id}_type`] = validation.errors['type'];
+      this.guardFormModel.identification.documents.forEach((doc, index) => {
+        // First document is required, validate fully
+        if (index === 0) {
+          const validation = this.validateDocument(doc);
+          if (!validation.valid && doc.id) {
+            // Store errors per field
+            if (validation.errors['type']) {
+              this.guardErrors[`identification_${doc.id}_type`] = validation.errors['type'];
+            }
+            if (validation.errors['number']) {
+              this.guardErrors[`identification_${doc.id}_number`] = validation.errors['number'];
+            }
+            if (validation.errors['province']) {
+              this.guardErrors[`identification_${doc.id}_province`] = validation.errors['province'];
+            }
+            if (validation.errors['expiry']) {
+              this.guardErrors[`identification_${doc.id}_expiry`] = validation.errors['expiry'];
+            }
           }
-          if (validation.errors['number']) {
-            this.guardErrors[`identification_${doc.id}_number`] = validation.errors['number'];
-          }
-          if (validation.errors['province']) {
-            this.guardErrors[`identification_${doc.id}_province`] = validation.errors['province'];
-          }
-          if (validation.errors['expiry']) {
-            this.guardErrors[`identification_${doc.id}_expiry`] = validation.errors['expiry'];
+        } else {
+          // Additional documents are optional, but if partially filled, validate
+          const hasAnyData = doc.documentType || doc.number || doc.province || doc.expiryDate;
+          if (hasAnyData) {
+            const validation = this.validateDocument(doc);
+            if (!validation.valid && doc.id) {
+              if (validation.errors['type']) {
+                this.guardErrors[`identification_${doc.id}_type`] = validation.errors['type'];
+              }
+              if (validation.errors['number']) {
+                this.guardErrors[`identification_${doc.id}_number`] = validation.errors['number'];
+              }
+              if (validation.errors['province']) {
+                this.guardErrors[`identification_${doc.id}_province`] = validation.errors['province'];
+              }
+              if (validation.errors['expiry']) {
+                this.guardErrors[`identification_${doc.id}_expiry`] = validation.errors['expiry'];
+              }
+            }
           }
         }
       });
     }
 
-    // Security Licenses, Police Clearances, Training Certificates (Canada only)
+    // Security Licenses, Training Certificates (Canada only)
     const isCanadian = this.guardFormModel.address.country === 'CA';
     if (isCanadian) {
       if (!this.guardFormModel.securityLicenses || this.guardFormModel.securityLicenses.length === 0) {
         this.guardErrors['securityLicenses'] = 'At least one security license is required.';
       } else {
-        this.guardFormModel.securityLicenses.forEach((license) => {
+        this.guardFormModel.securityLicenses.forEach((license, index) => {
           if (!license.id) {
             return;
           }
-          if (!license.fullLegalName.trim()) {
-            this.guardErrors[`security_license_${license.id}_fullLegalName`] = 'Full legal name is required.';
-          }
-          if (!license.licenseNumber.trim()) {
-            this.guardErrors[`security_license_${license.id}_licenseNumber`] = 'License number is required.';
-          } else {
-            const normalized = license.licenseNumber.replace(/[^A-Za-z0-9]/g, '');
-            if (normalized.length < 4 || normalized.length > 32) {
-              this.guardErrors[`security_license_${license.id}_licenseNumber`] = 'License number must be 4-32 letters or numbers (hyphens/slashes/spaces allowed).';
+
+          // First license is required, validate fully
+          if (index === 0) {
+            if (!license.fullLegalName.trim()) {
+              this.guardErrors[`security_license_${license.id}_fullLegalName`] = 'Full legal name is required.';
             }
-          }
-          if (!license.licenseType.trim()) {
-            this.guardErrors[`security_license_${license.id}_licenseType`] = 'License type is required.';
-          }
-          if (!license.issuingProvince.trim()) {
-            this.guardErrors[`security_license_${license.id}_issuingProvince`] = 'Issuing province is required.';
-          } else {
-            const validProvinces = this.provinceOptions.map(p => p.value);
-            if (validProvinces.length && !validProvinces.includes(license.issuingProvince)) {
-              this.guardErrors[`security_license_${license.id}_issuingProvince`] = 'Please select a valid province.';
+            if (!license.licenseNumber.trim()) {
+              this.guardErrors[`security_license_${license.id}_licenseNumber`] = 'License number is required.';
+            } else {
+              const normalized = license.licenseNumber.replace(/[^A-Za-z0-9]/g, '');
+              if (normalized.length < 4 || normalized.length > 32) {
+                this.guardErrors[`security_license_${license.id}_licenseNumber`] = 'License number must be 4-32 letters or numbers (hyphens/slashes/spaces allowed).';
+              }
             }
-          }
-          if (!license.issuingAuthority.trim()) {
-            this.guardErrors[`security_license_${license.id}_issuingAuthority`] = 'Issuing authority is required.';
-          }
-          if (!license.issueDate) {
-            this.guardErrors[`security_license_${license.id}_issueDate`] = 'Issue date is required.';
-          }
-          if (!license.expiryDate) {
-            this.guardErrors[`security_license_${license.id}_expiryDate`] = 'Expiry date is required.';
-          } else {
-            const expiryDate = new Date(license.expiryDate);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            if (expiryDate < today) {
-              this.guardErrors[`security_license_${license.id}_expiryDate`] = 'Security license has expired.';
+            if (!license.licenseType.trim()) {
+              this.guardErrors[`security_license_${license.id}_licenseType`] = 'License type is required.';
             }
-            if (license.issueDate) {
+            if (!license.issuingProvince.trim()) {
+              this.guardErrors[`security_license_${license.id}_issuingProvince`] = 'Issuing province is required.';
+            } else {
+              const validProvinces = this.provinceOptions.map(p => p.value);
+              if (validProvinces.length && !validProvinces.includes(license.issuingProvince)) {
+                this.guardErrors[`security_license_${license.id}_issuingProvince`] = 'Please select a valid province.';
+              }
+            }
+            if (!license.issuingAuthority.trim()) {
+              this.guardErrors[`security_license_${license.id}_issuingAuthority`] = 'Issuing authority is required.';
+            }
+            if (!license.issueDate) {
+              this.guardErrors[`security_license_${license.id}_issueDate`] = 'Issue date is required.';
+            } else {
               const issueDate = new Date(license.issueDate);
-              if (expiryDate < issueDate) {
-                this.guardErrors[`security_license_${license.id}_expiryDate`] = 'Expiry date cannot be before issue date.';
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              if (issueDate > today) {
+                this.guardErrors[`security_license_${license.id}_issueDate`] = 'Issue date cannot be in the future.';
+              }
+            }
+            if (!license.expiryDate) {
+              this.guardErrors[`security_license_${license.id}_expiryDate`] = 'Expiry date is required.';
+            } else {
+              const expiryDate = new Date(license.expiryDate);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              if (expiryDate < today) {
+                this.guardErrors[`security_license_${license.id}_expiryDate`] = 'Security license has expired.';
+              }
+              if (license.issueDate) {
+                const issueDate = new Date(license.issueDate);
+                if (expiryDate < issueDate) {
+                  this.guardErrors[`security_license_${license.id}_expiryDate`] = 'Expiry date cannot be before issue date.';
+                }
+              }
+            }
+          } else {
+            // Additional licenses are optional, but if partially filled, validate
+            const hasAnyData = license.fullLegalName.trim() || license.licenseNumber.trim() ||
+              license.licenseType.trim() || license.issuingProvince.trim() ||
+              license.issuingAuthority.trim() || license.issueDate || license.expiryDate;
+
+            if (hasAnyData) {
+              if (!license.fullLegalName.trim()) {
+                this.guardErrors[`security_license_${license.id}_fullLegalName`] = 'Full legal name is required.';
+              }
+              if (!license.licenseNumber.trim()) {
+                this.guardErrors[`security_license_${license.id}_licenseNumber`] = 'License number is required.';
+              } else {
+                const normalized = license.licenseNumber.replace(/[^A-Za-z0-9]/g, '');
+                if (normalized.length < 4 || normalized.length > 32) {
+                  this.guardErrors[`security_license_${license.id}_licenseNumber`] = 'License number must be 4-32 letters or numbers (hyphens/slashes/spaces allowed).';
+                }
+              }
+              if (!license.licenseType.trim()) {
+                this.guardErrors[`security_license_${license.id}_licenseType`] = 'License type is required.';
+              }
+              if (!license.issuingProvince.trim()) {
+                this.guardErrors[`security_license_${license.id}_issuingProvince`] = 'Issuing province is required.';
+              } else {
+                const validProvinces = this.provinceOptions.map(p => p.value);
+                if (validProvinces.length && !validProvinces.includes(license.issuingProvince)) {
+                  this.guardErrors[`security_license_${license.id}_issuingProvince`] = 'Please select a valid province.';
+                }
+              }
+              if (!license.issuingAuthority.trim()) {
+                this.guardErrors[`security_license_${license.id}_issuingAuthority`] = 'Issuing authority is required.';
+              }
+              if (!license.issueDate) {
+                this.guardErrors[`security_license_${license.id}_issueDate`] = 'Issue date is required.';
+              }
+              if (!license.expiryDate) {
+                this.guardErrors[`security_license_${license.id}_expiryDate`] = 'Expiry date is required.';
+              } else {
+                const expiryDate = new Date(license.expiryDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (expiryDate < today) {
+                  this.guardErrors[`security_license_${license.id}_expiryDate`] = 'Security license has expired.';
+                }
+                if (license.issueDate) {
+                  const issueDate = new Date(license.issueDate);
+                  if (expiryDate < issueDate) {
+                    this.guardErrors[`security_license_${license.id}_expiryDate`] = 'Expiry date cannot be before issue date.';
+                  }
+                }
               }
             }
           }
         });
       }
 
+      // Police Clearances
       if (!this.guardFormModel.policeClearances || this.guardFormModel.policeClearances.length === 0) {
         this.guardErrors['policeClearances'] = 'At least one police clearance is required.';
       } else {
-        this.guardFormModel.policeClearances.forEach((record) => {
+        this.guardFormModel.policeClearances.forEach((record, index) => {
           if (!record.id) {
             return;
           }
-          if (!record.issuingAuthorityType.trim()) {
-            this.guardErrors[`police_clearance_${record.id}_issuingAuthorityType`] = 'Issuing authority type is required.';
-          } else if (record.issuingAuthorityType === 'other' && !record.issuingAuthorityOther?.trim()) {
-            this.guardErrors[`police_clearance_${record.id}_issuingAuthorityOther`] = 'Please specify the issuing authority.';
-          }
-          if (!record.issuingProvince.trim()) {
-            this.guardErrors[`police_clearance_${record.id}_issuingProvince`] = 'Issuing province is required.';
-          } else {
-            const validProvinces = this.provinceOptions.map(p => p.value);
-            if (validProvinces.length && !validProvinces.includes(record.issuingProvince)) {
-              this.guardErrors[`police_clearance_${record.id}_issuingProvince`] = 'Please select a valid province.';
+
+          // First clearance is required, validate fully
+          if (index === 0) {
+            if (!record.issuingAuthorityType.trim()) {
+              this.guardErrors[`police_clearance_${record.id}_issuingAuthorityType`] = 'Issuing authority type is required.';
+            } else if (record.issuingAuthorityType === 'other' && !record.issuingAuthorityOther?.trim()) {
+              this.guardErrors[`police_clearance_${record.id}_issuingAuthorityOther`] = 'Please specify the issuing authority.';
             }
-          }
-          if (!record.issueDate) {
-            this.guardErrors[`police_clearance_${record.id}_issueDate`] = 'Issue date is required.';
+            if (!record.issuingProvince.trim()) {
+              this.guardErrors[`police_clearance_${record.id}_issuingProvince`] = 'Issuing province is required.';
+            } else {
+              const validProvinces = this.provinceOptions.map(p => p.value);
+              if (validProvinces.length && !validProvinces.includes(record.issuingProvince)) {
+                this.guardErrors[`police_clearance_${record.id}_issuingProvince`] = 'Please select a valid province.';
+              }
+            }
+            if (!record.issueDate) {
+              this.guardErrors[`police_clearance_${record.id}_issueDate`] = 'Issue date is required.';
+            } else {
+              const issueDate = new Date(record.issueDate);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              if (issueDate > today) {
+                this.guardErrors[`police_clearance_${record.id}_issueDate`] = 'Issue date cannot be in the future.';
+              }
+            }
+          } else {
+            // Additional clearances are optional, but if partially filled, validate
+            const hasAnyData = record.issuingAuthorityType.trim() || record.issuingAuthorityOther?.trim() ||
+              record.issuingProvince.trim() || record.issuingCity?.trim() ||
+              record.issueDate || record.referenceNumber?.trim();
+
+            if (hasAnyData) {
+              if (!record.issuingAuthorityType.trim()) {
+                this.guardErrors[`police_clearance_${record.id}_issuingAuthorityType`] = 'Issuing authority type is required.';
+              } else if (record.issuingAuthorityType === 'other' && !record.issuingAuthorityOther?.trim()) {
+                this.guardErrors[`police_clearance_${record.id}_issuingAuthorityOther`] = 'Please specify the issuing authority.';
+              }
+              if (!record.issuingProvince.trim()) {
+                this.guardErrors[`police_clearance_${record.id}_issuingProvince`] = 'Issuing province is required.';
+              } else {
+                const validProvinces = this.provinceOptions.map(p => p.value);
+                if (validProvinces.length && !validProvinces.includes(record.issuingProvince)) {
+                  this.guardErrors[`police_clearance_${record.id}_issuingProvince`] = 'Please select a valid province.';
+                }
+              }
+              if (!record.issueDate) {
+                this.guardErrors[`police_clearance_${record.id}_issueDate`] = 'Issue date is required.';
+              }
+            }
           }
         });
       }
 
+      // Training certificates are completely optional
       if (this.guardFormModel.trainingCertificates && this.guardFormModel.trainingCertificates.length > 0) {
         this.guardFormModel.trainingCertificates.forEach((cert) => {
           if (!cert.id) {
             return;
           }
-          if (!cert.certificateName.trim()) {
-            this.guardErrors[`training_certificate_${cert.id}_certificateName`] = 'Certificate name is required.';
-          }
-          if (!cert.issuingOrganizationType.trim()) {
-            this.guardErrors[`training_certificate_${cert.id}_issuingOrganizationType`] = 'Issuing organization is required.';
-          } else if (cert.issuingOrganizationType === 'other' && !cert.issuingOrganizationOther?.trim()) {
-            this.guardErrors[`training_certificate_${cert.id}_issuingOrganizationOther`] = 'Please specify the issuing organization.';
-          }
-          if (!cert.issueDate) {
-            this.guardErrors[`training_certificate_${cert.id}_issueDate`] = 'Issue date is required.';
-          }
-          if (cert.expiryDate && cert.issueDate) {
-            const expiryDate = new Date(cert.expiryDate);
-            const issueDate = new Date(cert.issueDate);
-            if (expiryDate < issueDate) {
-              this.guardErrors[`training_certificate_${cert.id}_expiryDate`] = 'Expiry date cannot be before issue date.';
+
+          // Training certificates are optional, but if any field is filled, validate
+          const hasAnyData = cert.certificateName.trim() || cert.issuingOrganizationType.trim() ||
+            cert.issuingOrganizationOther?.trim() || cert.issueDate || cert.expiryDate;
+
+          if (hasAnyData) {
+            if (!cert.certificateName.trim()) {
+              this.guardErrors[`training_certificate_${cert.id}_certificateName`] = 'Certificate name is required.';
+            }
+            if (!cert.issuingOrganizationType.trim()) {
+              this.guardErrors[`training_certificate_${cert.id}_issuingOrganizationType`] = 'Issuing organization is required.';
+            } else if (cert.issuingOrganizationType === 'other' && !cert.issuingOrganizationOther?.trim()) {
+              this.guardErrors[`training_certificate_${cert.id}_issuingOrganizationOther`] = 'Please specify the issuing organization.';
+            }
+            if (!cert.issueDate) {
+              this.guardErrors[`training_certificate_${cert.id}_issueDate`] = 'Issue date is required.';
+            } else {
+              const issueDate = new Date(cert.issueDate);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              if (issueDate > today) {
+                this.guardErrors[`training_certificate_${cert.id}_issueDate`] = 'Issue date cannot be in the future.';
+              }
+            }
+            if (cert.expiryDate && cert.issueDate) {
+              const expiryDate = new Date(cert.expiryDate);
+              const issueDate = new Date(cert.issueDate);
+              if (expiryDate < issueDate) {
+                this.guardErrors[`training_certificate_${cert.id}_expiryDate`] = 'Expiry date cannot be before issue date.';
+              }
             }
           }
         });
@@ -1420,21 +1587,52 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       // If any field is provided, name and email are required
       if (!secondaryContact.name?.trim()) {
         this.guardErrors['secondaryContactName'] = 'Contact name is required if secondary contact is provided.';
+      } else if (!/^[a-zA-Z\s]+$/.test(secondaryContact.name)) {
+        this.guardErrors['secondaryContactName'] = 'Contact name can only contain letters and spaces.';
       }
       if (!secondaryContact.email?.trim()) {
         this.guardErrors['secondaryContactEmail'] = 'Contact email is required if secondary contact is provided.';
       } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(secondaryContact.email)) {
         this.guardErrors['secondaryContactEmail'] = 'Please enter a valid email address.';
       }
-      
+
       // At least one phone required if any field is filled
       const hasSecondaryMobile = secondaryContact.mobilePhone && secondaryContact.mobilePhone.e164;
       const hasSecondaryLandline = secondaryContact.landlinePhone && secondaryContact.landlinePhone.e164;
-      
+
+      // Validate secondary mobile phone format if provided (Canadian: +1 followed by 10 digits)
+      if (hasSecondaryMobile) {
+        const secondaryMobileE164 = secondaryContact.mobilePhone!.e164;
+        const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+        if (!canadianPhonePattern.test(secondaryMobileE164)) {
+          this.guardErrors['secondaryContactMobilePhone'] = 'Invalid Canadian mobile phone number format.';
+        } else if (secondaryContact.mobilePhone!.country !== 'CA') {
+          // Ensure country is Canada
+          this.guardErrors['secondaryContactMobilePhone'] = 'Only Canadian phone numbers are accepted.';
+        }
+      }
+
+      // Validate secondary landline phone format if provided (Canadian: +1 followed by 10 digits)
+      if (hasSecondaryLandline) {
+        const secondaryLandlineE164 = secondaryContact.landlinePhone!.e164;
+        const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+        if (!canadianPhonePattern.test(secondaryLandlineE164)) {
+          this.guardErrors['secondaryContactLandlinePhone'] = 'Invalid Canadian landline phone number format.';
+        } else if (secondaryContact.landlinePhone!.country !== 'CA') {
+          // Ensure country is Canada
+          this.guardErrors['secondaryContactLandlinePhone'] = 'Only Canadian phone numbers are accepted.';
+        }
+      }
+
+      // At least one phone number is required
       if (!hasSecondaryMobile && !hasSecondaryLandline) {
         this.guardErrors['secondaryContactPhoneNumbers'] = 'At least one phone number (mobile or landline) is required.';
-      } else if (hasSecondaryMobile && hasSecondaryLandline) {
-        // If both phone numbers are provided, they must be from the same country
+      }
+
+      // If both phone numbers are provided, they must be from the same country
+      if (hasSecondaryMobile && hasSecondaryLandline) {
         if (secondaryContact.mobilePhone?.country !== secondaryContact.landlinePhone?.country) {
           this.guardErrors['secondaryContactPhoneNumbers'] = 'Mobile and landline phone numbers must be from the same country.';
         }
@@ -1455,7 +1653,47 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       this.guardErrors['operationalRadius'] = 'Operational radius must be at least 1 mile.';
     }
 
+    // Weekly Availability validation
+    const hasAtLeastOneDay = Object.keys(this.guardFormModel.weeklyAvailability).some(
+      day => this.guardFormModel.weeklyAvailability[day].enabled
+    );
+
+    if (!hasAtLeastOneDay) {
+      this.guardErrors['weeklyAvailability'] = 'Please select at least one day of availability.';
+    } else {
+      // Validate that enabled days have at least one complete time range
+      let hasIncompleteRanges = false;
+
+      Object.keys(this.guardFormModel.weeklyAvailability).forEach(day => {
+        const dayData = this.guardFormModel.weeklyAvailability[day];
+
+        if (dayData.enabled) {
+          const hasCompleteRange = dayData.timeRanges.some(range => range.start && range.end);
+
+          if (!hasCompleteRange) {
+            hasIncompleteRanges = true;
+          }
+        }
+      });
+
+      if (hasIncompleteRanges) {
+        this.guardErrors['weeklyAvailability'] = 'Please complete time ranges for all selected days.';
+      }
+    }
+
     return Object.keys(this.guardErrors).length === 0;
+  }
+
+  onSecurityLicenseProvinceChange(license: SecurityLicenseDocument, provinceCode: string): void {
+    license.issuingProvince = provinceCode;
+
+    // Auto-populate issuing authority based on province
+    if (provinceCode) {
+      const suggestedAuthority = this.getSuggestedIssuingAuthority(provinceCode);
+      if (suggestedAuthority) {
+        license.issuingAuthority = suggestedAuthority;
+      }
+    }
   }
 
   submitGuardForm(): void {
@@ -1548,7 +1786,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           ...(cert.existingFileSize != null && { document_file_size: cert.existingFileSize })
         })),
         preferred_guard_types: this.guardFormModel.preferredGuardTypes,
-        weekly_availability: this.mapWeeklyAvailabilityToBackend(this.guardFormModel.weeklyAvailability)
+        // UPDATED - Use new mapping function
+        weekly_availability: this.mapWeeklyAvailabilityToBackend(this.guardFormModel.weeklyAvailability),
       }
     };
 
@@ -1561,7 +1800,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       payload.profile.landline_phone = this.guardFormModel.landlinePhone.e164;
       payload.profile.landline_phone_country = this.guardFormModel.landlinePhone.country;
     }
-    
+
     // Add secondary contact if any data is present
     const secondaryContact = this.guardFormModel.secondaryContact;
     if (secondaryContact && (
@@ -1579,10 +1818,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         phone: secondaryPhone
       };
     }
-    
+
     // Legacy contact field
-    const legacyContact = this.guardFormModel.mobilePhone?.national || 
-                          this.guardFormModel.landlinePhone?.national || '';
+    const legacyContact = this.guardFormModel.mobilePhone?.national ||
+      this.guardFormModel.landlinePhone?.national || '';
     payload.profile.contact = legacyContact;
 
     // Add operational radius if set
@@ -1604,8 +1843,4 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         }
       });
   }
-
-  // ============================================================================
-  // Identity Document Methods
-  // ============================================================================
 }

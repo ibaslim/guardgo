@@ -25,7 +25,8 @@
                     <app-base-input label="Company Registration Number" name="companyRegistrationNumber"
                         [(ngModel)]="providerFormModel.companyRegistrationNumber" [required]="true">
                     </app-base-input>
-                    <app-error-message [errorMessage]="providerErrors.companyRegistrationNumber || null"></app-error-message>
+                    <app-error-message
+                        [errorMessage]="providerErrors.companyRegistrationNumber || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
@@ -69,7 +70,8 @@
                 <div class="flex flex-col">
                     <app-select-input label="Country" name="officeCountry"
                         [(ngModel)]="providerFormModel.headOfficeAddress.country" [options]="countryOptions"
-                        placeholder="-- Select Country --" [required]="true" [searchable]="true" [disabled]="true"></app-select-input>
+                        placeholder="-- Select Country --" [required]="true" [searchable]="true"
+                        [disabled]="true"></app-select-input>
                     <app-error-message [errorMessage]="providerErrors.officeCountry || null"></app-error-message>
                 </div>
 
@@ -110,6 +112,7 @@
                         [(ngModel)]="providerFormModel.primaryRepresentative.mobilePhone" [defaultCountry]="'CA'"
                         [disableCountrySelector]="true" helperText="Enter mobile number">
                     </app-mobile-phone-input>
+                    <app-error-message [errorMessage]="providerErrors.repMobilePhone || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col md:col-span-1">
@@ -117,6 +120,7 @@
                         [(ngModel)]="providerFormModel.primaryRepresentative.landlinePhone" [defaultCountry]="'CA'"
                         [disableCountrySelector]="true" helperText="Enter landline number">
                     </app-landline-phone-input>
+                    <app-error-message [errorMessage]="providerErrors.repLandlinePhone || null"></app-error-message>
                 </div>
 
                 <div class="col-span-1 md:col-span-2" *ngIf="providerErrors.repPhone">
@@ -138,7 +142,8 @@
                     <app-base-input label="Contact Email" name="secondaryContactEmail" type="email"
                         [(ngModel)]="providerFormModel.secondaryContact.email">
                     </app-base-input>
-                    <app-error-message [errorMessage]="providerErrors.secondaryContactEmail || null"></app-error-message>
+                    <app-error-message
+                        [errorMessage]="providerErrors.secondaryContactEmail || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col md:col-span-1">
@@ -146,6 +151,8 @@
                         [(ngModel)]="providerFormModel.secondaryContact.mobilePhone" [defaultCountry]="'CA'"
                         [disableCountrySelector]="true" helperText="Enter mobile number">
                     </app-mobile-phone-input>
+                    <app-error-message
+                        [errorMessage]="providerErrors.secondaryContactMobilePhone || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col md:col-span-1">
@@ -153,10 +160,13 @@
                         [(ngModel)]="providerFormModel.secondaryContact.landlinePhone" [defaultCountry]="'CA'"
                         [disableCountrySelector]="true" helperText="Enter landline number">
                     </app-landline-phone-input>
+                    <app-error-message
+                        [errorMessage]="providerErrors.secondaryContactLandlinePhone || null"></app-error-message>
                 </div>
 
                 <div class="col-span-1 md:col-span-2" *ngIf="providerErrors.secondaryContactPhone">
-                    <app-error-message [errorMessage]="providerErrors.secondaryContactPhone || null"></app-error-message>
+                    <app-error-message
+                        [errorMessage]="providerErrors.secondaryContactPhone || null"></app-error-message>
                 </div>
             </div>
         </app-section>
@@ -172,15 +182,17 @@
 
                 <div class="flex flex-col">
                     <app-select-input label="License Type" name="licenseType"
-                        [(ngModel)]="providerFormModel.securityLicense.licenseType" [options]="securityLicenseTypeOptions"
-                        placeholder="-- Select License Type --" [required]="true" [searchable]="false"></app-select-input>
+                        [(ngModel)]="providerFormModel.securityLicense.licenseType"
+                        [options]="securityLicenseTypeOptions" placeholder="-- Select License Type --" [required]="true"
+                        [searchable]="false"></app-select-input>
                     <app-error-message [errorMessage]="providerErrors.licenseType || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
                     <app-select-input label="Issuing Province" name="issuingProvince"
                         [(ngModel)]="providerFormModel.securityLicense.issuingProvince" [options]="provinceOptions"
-                        placeholder="-- Select Province --" [required]="true" [searchable]="true"></app-select-input>
+                        placeholder="-- Select Province --" [required]="true" [searchable]="true"
+                        (ngModelChange)="onIssuingProvinceChange()"></app-select-input>
                     <app-error-message [errorMessage]="providerErrors.issuingProvince || null"></app-error-message>
                 </div>
 
@@ -197,6 +209,7 @@
                     <app-base-input label="Issue Date (Optional)" name="issueDate" type="date"
                         [(ngModel)]="providerFormModel.securityLicense.issueDate">
                     </app-base-input>
+                    <app-error-message [errorMessage]="providerErrors.issueDate || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
@@ -215,7 +228,8 @@
                         helperText="PNG, JPG, PDF up to 10MB" [required]="false"
                         [disabled]="securityLicenseUploadInProgress"></app-file-upload>
                     <p class="text-xs text-gray-500 mt-2">Optional upload now avoids later holds.</p>
-                    <p *ngIf="securityLicenseUploadInProgress" class="text-xs text-primary-600 mt-2">Uploading document...</p>
+                    <p *ngIf="securityLicenseUploadInProgress" class="text-xs text-primary-600 mt-2">Uploading
+                        document...</p>
                     <app-error-message [errorMessage]="securityLicenseUploadError || null"></app-error-message>
                 </div>
             </div>
@@ -238,6 +252,7 @@
 
                 <div class="flex flex-col">
                     <app-base-input label="Currency" name="coverageCurrency"
+                        [disabled]="true"
                         [(ngModel)]="providerFormModel.insuranceDetails.currency">
                     </app-base-input>
                 </div>
@@ -259,26 +274,21 @@
 
         <app-section title="Operating Regions" subtitle="Where you can deploy guards.">
             <ng-container section-actions>
-                <app-button
-                    [label]="'Add region'"
-                    type="outline"
-                    [htmlType]="'button'"
-                    [customClass]="'hidden md:inline-flex rounded-lg'"
-                    (click)="addRegion()">
+                <app-button [label]="'Add region'" type="outline" [htmlType]="'button'"
+                    [customClass]="'hidden md:inline-flex rounded-lg'" (click)="addRegion()">
                 </app-button>
             </ng-container>
 
             <div class="space-y-4">
-                <app-card *ngFor="let region of providerFormModel.operatingRegions; let i = index trackBy: trackByIndex" class="block"
-                    [bodyClass]="'mt-4'">
+                <app-card *ngFor="let region of providerFormModel.operatingRegions; let i = index trackBy: trackByIndex"
+                    class="block" [bodyClass]="'mt-4'">
                     <div card-header>
                         <h3 class="font-semibold text-gray-800 dark:text-gray-200">
                             {{ region.city ? region.city : ('Region ' + (i + 1)) }}
                         </h3>
                     </div>
                     <div card-actions *ngIf="providerFormModel.operatingRegions.length > 1">
-                        <app-button label="Remove" type="danger" htmlType="button" size="sm"
-                            (click)="removeRegion(i)">
+                        <app-button label="Remove" type="danger" htmlType="button" size="sm" (click)="removeRegion(i)">
                         </app-button>
                     </div>
 
@@ -287,50 +297,53 @@
                             <app-base-input label="City" [name]="'regionCity' + i"
                                 [(ngModel)]="providerFormModel.operatingRegions[i].city" [required]="i === 0">
                             </app-base-input>
-                            <app-error-message [errorMessage]="providerErrors['region_' + i + '_city'] || null"></app-error-message>
+                            <app-error-message
+                                [errorMessage]="providerErrors['region_' + i + '_city'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-select-input label="Country" [name]="'regionCountry' + i"
                                 [(ngModel)]="providerFormModel.operatingRegions[i].country" [options]="countryOptions"
-                                placeholder="-- Select Country --" [required]="i === 0" [searchable]="true" [disabled]="true"></app-select-input>
-                            <app-error-message [errorMessage]="providerErrors['region_' + i + '_country'] || null"></app-error-message>
+                                placeholder="-- Select Country --" [required]="i === 0" [searchable]="true"
+                                [disabled]="true"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="providerErrors['region_' + i + '_country'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col" *ngIf="providerFormModel.operatingRegions[i].country === 'CA'">
                             <app-select-input label="Province" [name]="'regionProvince' + i"
                                 [(ngModel)]="providerFormModel.operatingRegions[i].province" [options]="provinceOptions"
-                                placeholder="-- Select Province --" [required]="i === 0" [searchable]="true"></app-select-input>
-                            <app-error-message [errorMessage]="providerErrors['region_' + i + '_province'] || null"></app-error-message>
+                                placeholder="-- Select Province --" [required]="i === 0"
+                                [searchable]="true"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="providerErrors['region_' + i + '_province'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Coverage Radius (km)" [name]="'regionRadius' + i" type="number"
                                 [(ngModel)]="providerFormModel.operatingRegions[i].coverageRadiusKm" [min]="1">
                             </app-base-input>
-                            <app-error-message [errorMessage]="providerErrors['region_' + i + '_radius'] || null"></app-error-message>
+                            <app-error-message
+                                [errorMessage]="providerErrors['region_' + i + '_radius'] || null"></app-error-message>
                         </div>
                     </div>
                 </app-card>
 
                 <app-error-message [errorMessage]="providerErrors.operatingRegions || null"></app-error-message>
 
-                <app-button
-                    [label]="'Add another region'"
-                    type="outline"
-                    [htmlType]="'button'"
-                    [fullWidth]="true"
-                    [customClass]="'md:hidden rounded-lg'"
-                    (click)="addRegion()">
-                </app-button>
+                <div class="flex justify-center pt-4 md:hidden">
+                    <app-button [label]="'+ Add Another Region'" type="secondary" [htmlType]="'button'"
+                        [customClass]="'rounded-lg'" (click)="addRegion()">
+                    </app-button>
+                </div>
             </div>
         </app-section>
 
         <app-section title="Guard Categories Offered" subtitle="E.g., Patrol, Concierge, Event.">
             <div class="grid grid-cols-1 gap-6">
                 <app-guard-types-multiselect label="Guard Categories" placeholder="-- Select Categories --"
-                    [(ngModel)]="providerFormModel.guardCategoriesOffered" [options]="guardTypeOptions" [required]="true"
-                    name="guardCategoriesOffered">
+                    [(ngModel)]="providerFormModel.guardCategoriesOffered" [options]="guardTypeOptions"
+                    [required]="true" name="guardCategoriesOffered">
                 </app-guard-types-multiselect>
                 <app-error-message [errorMessage]="providerErrors.guardCategories || null"></app-error-message>
             </div>
@@ -342,21 +355,11 @@
         </div>
 
         <app-sticky-action-bar [message]="'Save to activate your provider profile.'" [containerClass]="'px-0'">
-            <app-button *ngIf="!isEditMode"
-                [label]="'Submit'"
-                type="primary"
-                [htmlType]="'submit'"
-                [fullWidth]="true"
-                size="lg"
-                [customClass]="'w-full md:w-auto rounded-lg'">
+            <app-button *ngIf="!isEditMode" [label]="'Submit'" type="primary" [htmlType]="'submit'" [fullWidth]="true"
+                size="lg" [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>
-            <app-button *ngIf="isEditMode"
-                [label]="'Save Changes'"
-                type="success"
-                [htmlType]="'submit'"
-                [fullWidth]="true"
-                size="lg"
-                [customClass]="'w-full md:w-auto rounded-lg'">
+            <app-button *ngIf="isEditMode" [label]="'Save Changes'" type="success" [htmlType]="'submit'"
+                [fullWidth]="true" size="lg" [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>
         </app-sticky-action-bar>
     </form>

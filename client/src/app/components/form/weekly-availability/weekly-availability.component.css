@@ -1,0 +1,163 @@
+/* TIMEPICKER THEME - LIGHT MODE (DEFAULT) */
+
+::ng-deep .timepicker__header {
+    background-color: rgb(0 169 255) !important;
+    border-bottom: 1px solid rgb(0 150 230) !important;
+}
+
+::ng-deep .timepicker__header-time {
+    color: white !important;
+}
+
+::ng-deep .timepicker__body {
+    background-color: white !important;
+}
+
+::ng-deep .timepicker__actions {
+    background-color: rgb(0 169 255) !important;
+    border-top: 1px solid rgb(0 150 230) !important;
+}
+
+::ng-deep .timepicker-dial__item {
+    color: rgb(17 24 39) !important;
+}
+
+::ng-deep .timepicker-dial__item--active,
+::ng-deep .timepicker-dial__item:hover {
+    background-color: rgb(0 169 255) !important;
+    color: white !important;
+}
+
+::ng-deep .timepicker-button {
+    color: white !important;
+}
+
+::ng-deep .timepicker-button:hover {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+    border-radius: 4px;
+}
+
+::ng-deep .clock-face__clock-hand {
+    background-color: rgb(0 169 255) !important;
+}
+
+::ng-deep .clock-face__clock-hand::before,
+::ng-deep .clock-face__clock-hand::after {
+    background-color: rgb(0 169 255) !important;
+}
+
+::ng-deep .timepicker-dial__item--active::before {
+    background-color: rgb(0 169 255) !important;
+}
+
+::ng-deep .clock-face {
+    background-color: rgb(249 250 251) !important;
+}
+
+::ng-deep .clock-face__number {
+    color: rgb(17 24 39) !important;
+}
+
+::ng-deep .clock-face__number--active {
+    color: rgb(0 169 255) !important;
+}
+
+::ng-deep .timepicker {
+    background-color: white !important;
+}
+
+::ng-deep .timepicker-dial__control {
+    color: white !important;
+}
+
+::ng-deep .timepicker-dial__control--active {
+    color: white !important;
+}
+
+::ng-deep .timepicker__time {
+    color: white !important;
+}
+
+::ng-deep .timepicker-period {
+    color: white !important;
+}
+
+::ng-deep .timepicker-period__btn {
+    color: white !important;
+}
+
+::ng-deep .timepicker-period__btn--active {
+    color: white !important;
+    background-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+::ng-deep .timepicker-period__btn:hover {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* TIMEPICKER THEME - DARK MODE */
+
+::ng-deep .dark .timepicker__header {
+    background-color: rgb(17 24 39) !important;
+    border-bottom: 1px solid rgb(55 65 81) !important;
+}
+
+::ng-deep .dark .timepicker__body {
+    background-color: rgb(17 24 39) !important;
+}
+
+::ng-deep .dark .timepicker__actions {
+    background-color: rgb(17 24 39) !important;
+    border-top: 1px solid rgb(55 65 81) !important;
+}
+
+::ng-deep .dark .timepicker-dial__item {
+    color: rgb(249 250 251) !important;
+}
+
+::ng-deep .dark .timepicker-dial__item--active,
+::ng-deep .dark .timepicker-dial__item:hover {
+    background-color: rgb(55 65 81) !important;
+    color: rgb(249 250 251) !important;
+}
+
+::ng-deep .dark .timepicker-button {
+    color: rgb(249 250 251) !important;
+}
+
+::ng-deep .dark .timepicker-button:hover {
+    background-color: rgb(31 41 55) !important;
+}
+
+::ng-deep .dark .clock-face__clock-hand {
+    background-color: rgb(249 250 251) !important;
+}
+
+::ng-deep .dark .clock-face__clock-hand::before,
+::ng-deep .dark .clock-face__clock-hand::after {
+    background-color: rgb(249 250 251) !important;
+}
+
+::ng-deep .dark .timepicker-dial__item--active::before {
+    background-color: rgb(249 250 251) !important;
+}
+
+::ng-deep .dark .clock-face {
+    background-color: rgb(31 41 55) !important;
+}
+
+::ng-deep .dark .clock-face__number {
+    color: rgb(249 250 251) !important;
+}
+
+::ng-deep .dark .clock-face__number--active {
+    color: rgb(249 250 251) !important;
+}
+
+::ng-deep .dark .timepicker-overlay {
+    background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+::ng-deep .dark .timepicker {
+    background-color: rgb(17 24 39) !important;
+}

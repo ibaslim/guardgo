@@ -9,11 +9,11 @@
 
         <app-section title="Basic Info" subtitle="Who you are and how we reach you.">
             <div class="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                    <div class="flex flex-col">
-                        <app-base-input label="Full Name" name="name" [(ngModel)]="guardFormModel.name"
-                            (ngModelChange)="onGuardNameChanged($event)" [required]="true"></app-base-input>
-                        <app-error-message [errorMessage]="guardErrors.name || null"></app-error-message>
-                    </div>
+                <div class="flex flex-col">
+                    <app-base-input label="Full Name" name="name" [(ngModel)]="guardFormModel.name"
+                        (ngModelChange)="onGuardNameChanged($event)" [required]="true"></app-base-input>
+                    <app-error-message [errorMessage]="guardErrors.name || null"></app-error-message>
+                </div>
 
                 <div class="flex flex-col">
                     <app-mobile-phone-input label="Mobile Phone" name="mobilePhone"
@@ -92,7 +92,8 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col md:col-span-1">
                     <app-base-input label="Contact Name" name="secondaryContactName"
-                        [(ngModel)]="guardFormModel.secondaryContact.name">
+                        [(ngModel)]="guardFormModel.secondaryContact.name" pattern="[a-zA-Z\s]*"
+                        helperText="Letters and spaces only">
                     </app-base-input>
                     <app-error-message [errorMessage]="guardErrors.secondaryContactName || null"></app-error-message>
                 </div>
@@ -119,14 +120,15 @@
                 </div>
 
                 <div class="col-span-1 md:col-span-2" *ngIf="guardErrors.secondaryContactPhoneNumbers">
-                    <app-error-message [errorMessage]="guardErrors.secondaryContactPhoneNumbers || null"></app-error-message>
+                    <app-error-message
+                        [errorMessage]="guardErrors.secondaryContactPhoneNumbers || null"></app-error-message>
                 </div>
             </div>
         </app-section>
 
         <app-section title="Preferred Guard Types" subtitle="What types of guard work are you willing to do?">
             <div class="grid grid-cols-1 gap-6">
-        <app-guard-types-multiselect label="Guard Types" placeholder="-- Select Types --"
+                <app-guard-types-multiselect label="Guard Types" placeholder="-- Select Types --"
                     [(ngModel)]="guardFormModel.preferredGuardTypes" [options]="guardTypeOptions" [required]="true"
                     name="preferredGuardTypes">
                 </app-guard-types-multiselect>
@@ -147,11 +149,13 @@
                     <div card-header>
                         <h3 class="font-semibold text-gray-800 dark:text-gray-200">
                             {{ doc.documentType ? toTitleCase(doc.documentType) : ('Document ' + (i + 1)) }}
+                            <span *ngIf="i > 0" class="text-sm font-normal text-gray-500 dark:text-gray-400">
+                                (Optional)</span>
                         </h3>
                     </div>
                     <div card-actions>
-                        <app-button label="Remove" type="danger" htmlType="button" size="sm"
-                            (click)="removeIdentificationDocument(i)">
+                        <app-button *ngIf="guardFormModel.identification.documents.length > 1" label="Remove"
+                            type="danger" htmlType="button" size="sm" (click)="removeIdentificationDocument(i)">
                         </app-button>
                     </div>
 
@@ -160,7 +164,7 @@
                         <div class="flex flex-col">
                             <app-select-input label="Document Type" [name]="'docType_' + i"
                                 [(ngModel)]="doc.documentType" [options]="documentTypeOptions"
-                                placeholder="-- Select Document Type --" [required]="true"
+                                placeholder="-- Select Document Type --" [required]="i === 0"
                                 [searchable]="true"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['identification_' + doc.id + '_type'] || null"></app-error-message>
@@ -169,7 +173,7 @@
                         <!-- Document Number -->
                         <div class="flex flex-col">
                             <app-base-input [label]="'Document Number'" [name]="'docNumber_' + i"
-                                [(ngModel)]="doc.number" [required]="true"></app-base-input>
+                                [(ngModel)]="doc.number" [required]="i === 0"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['identification_' + doc.id + '_number'] || null"></app-error-message>
                         </div>
@@ -178,7 +182,8 @@
                         <div *ngIf="requiresProvince(doc.documentType)" class="flex flex-col">
                             <app-select-input label="Province" [name]="'province_' + i" [(ngModel)]="doc.province"
                                 [options]="provinceOptions" placeholder="-- Select Province --"
-                                [required]="requiresProvince(doc.documentType)" [searchable]="true"></app-select-input>
+                                [required]="i === 0 && requiresProvince(doc.documentType)"
+                                [searchable]="true"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['identification_' + doc.id + '_province'] || null"></app-error-message>
                         </div>
@@ -187,7 +192,7 @@
                         <div *ngIf="requiresExpiry(doc.documentType)" class="flex flex-col">
                             <app-base-input [label]="'Expiry Date'" [name]="'docExpiry_' + i" type="date"
                                 [(ngModel)]="doc.expiryDate"
-                                [required]="requiresExpiry(doc.documentType)"></app-base-input>
+                                [required]="i === 0 && requiresExpiry(doc.documentType)"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['identification_' + doc.id + '_expiry'] || null"></app-error-message>
                         </div>
@@ -219,122 +224,136 @@
             </div>
         </app-section>
 
-        <app-section title="Security Licenses" subtitle="Required for active duty in Canada." *ngIf="guardFormModel.address.country === 'CA'">
+        <app-section title="Security Licenses" subtitle="Required for active duty in Canada."
+            *ngIf="guardFormModel.address.country === 'CA'">
 
             <app-error-message [errorMessage]="guardErrors.securityLicenses || null"></app-error-message>
 
-            <div *ngIf="guardFormModel.securityLicenses && guardFormModel.securityLicenses.length > 0" class="space-y-4">
-                <app-card *ngFor="let license of guardFormModel.securityLicenses; let i = index" class="block" [bodyClass]="'mt-4'">
+            <div *ngIf="guardFormModel.securityLicenses && guardFormModel.securityLicenses.length > 0"
+                class="space-y-4">
+                <app-card *ngFor="let license of guardFormModel.securityLicenses; let i = index" class="block"
+                    [bodyClass]="'mt-4'">
                     <div card-header>
                         <h3 class="font-semibold text-gray-800 dark:text-gray-200">
-                            {{ license.licenseNumber ? ('License ' + license.licenseNumber) : ('Security License ' + (i + 1)) }}
+                            {{ license.licenseNumber ? ('License ' + license.licenseNumber) : ('Security License ' + (i
+                            + 1)) }}
+                            <span *ngIf="i > 0" class="text-sm font-normal text-gray-500 dark:text-gray-400">
+                                (Optional)</span>
+
                         </h3>
                     </div>
                     <div card-actions>
-                        <app-button
-                            label="Remove"
-                            type="danger"
-                            htmlType="button"
-                            size="sm"
-                            (click)="removeSecurityLicense(i)">
+                        <app-button *ngIf="guardFormModel.securityLicenses.length > 1" label="Remove" type="danger"
+                            htmlType="button" size="sm" (click)="removeSecurityLicense(i)">
                         </app-button>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="flex flex-col">
                             <app-base-input label="Guard’s Full Legal Name" [name]="'securityLicenseFullName_' + i"
-                                [(ngModel)]="license.fullLegalName" [required]="true"></app-base-input>
-                            <app-error-message [errorMessage]="guardErrors['security_license_' + license.id + '_fullLegalName'] || null"></app-error-message>
+                                [(ngModel)]="license.fullLegalName" [required]="i === 0"></app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['security_license_' + license.id + '_fullLegalName'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="License Number" [name]="'securityLicenseNumber_' + i"
-                                [(ngModel)]="license.licenseNumber" [required]="true"></app-base-input>
-                            <app-error-message [errorMessage]="guardErrors['security_license_' + license.id + '_licenseNumber'] || null"></app-error-message>
+                                [(ngModel)]="license.licenseNumber" [required]="i === 0"></app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['security_license_' + license.id + '_licenseNumber'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-select-input label="License Type" [name]="'securityLicenseType_' + i"
                                 [(ngModel)]="license.licenseType" [options]="securityLicenseTypeOptions"
-                                placeholder="-- Select License Type --" [required]="true" [searchable]="false"></app-select-input>
-                            <app-error-message [errorMessage]="guardErrors['security_license_' + license.id + '_licenseType'] || null"></app-error-message>
+                                placeholder="-- Select License Type --" [required]="i === 0"
+                                [searchable]="false"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['security_license_' + license.id + '_licenseType'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-select-input label="Issuing Province" [name]="'securityLicenseProvince_' + i"
-                                [(ngModel)]="license.issuingProvince" [options]="provinceOptions"
-                                placeholder="-- Select Province --" [required]="true" [searchable]="true"></app-select-input>
-                            <app-error-message [errorMessage]="guardErrors['security_license_' + license.id + '_issuingProvince'] || null"></app-error-message>
+                                [(ngModel)]="license.issuingProvince"
+                                (ngModelChange)="onSecurityLicenseProvinceChange(license, $event)"
+                                [options]="provinceOptions" placeholder="-- Select Province --" [required]="i === 0"
+                                [searchable]="true"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['security_license_' + license.id + '_issuingProvince'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
-                            <app-base-input label="Issuing Authority" [name]="'securityLicenseIssuingAuthority_' + i"
-                                [(ngModel)]="license.issuingAuthority" [required]="true"
+                            <app-base-input label="Issuing Authority" [name]="'securityLicenseAuthority_' + i"
+                                [(ngModel)]="license.issuingAuthority" [required]="i === 0"
                                 [placeholder]="getSuggestedIssuingAuthority(license.issuingProvince) || 'e.g., Ministry of the Solicitor General'"
-                                helperText="Will auto-populate based on selected province"></app-base-input>
-                            <app-error-message [errorMessage]="guardErrors['security_license_' + license.id + '_issuingAuthority'] || null"></app-error-message>
+                                helperText="Will auto-populate based on selected province">
+                            </app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['security_license_' + license.id + '_issuingAuthority'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Issue Date" [name]="'securityLicenseIssueDate_' + i" type="date"
-                                [(ngModel)]="license.issueDate" [required]="true"></app-base-input>
-                            <app-error-message [errorMessage]="guardErrors['security_license_' + license.id + '_issueDate'] || null"></app-error-message>
+                                [(ngModel)]="license.issueDate" [required]="i === 0"></app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['security_license_' + license.id + '_issueDate'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Expiry Date" [name]="'securityLicenseExpiryDate_' + i" type="date"
-                                [(ngModel)]="license.expiryDate" [required]="true"></app-base-input>
-                            <app-error-message [errorMessage]="guardErrors['security_license_' + license.id + '_expiryDate'] || null"></app-error-message>
+                                [(ngModel)]="license.expiryDate" [required]="i === 0"></app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['security_license_' + license.id + '_expiryDate'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col md:col-span-2">
                             <app-file-upload label="License Document" [name]="'securityLicenseDocument_' + i"
-                                [(ngModel)]="license.file"
-                                (fileChange)="onSecurityLicenseFileSelected(license, $event)"
+                                [(ngModel)]="license.file" (fileChange)="onSecurityLicenseFileSelected(license, $event)"
                                 [existingFileUrl]="license.existingFileUrl"
-                                [existingFileName]="license.existingFileName"
-                                helperText="PNG, JPG, PDF up to 10MB"
+                                [existingFileName]="license.existingFileName" helperText="PNG, JPG, PDF up to 10MB"
                                 [required]="false"
                                 [disabled]="securityLicenseUploadInProgress[license.id || '']"></app-file-upload>
-                            <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.</p>
-                            <p *ngIf="securityLicenseUploadInProgress[license.id || '']" class="text-xs text-primary-600 mt-2">Uploading document...</p>
-                            <app-error-message [errorMessage]="securityLicenseUploadErrors[license.id || ''] || null"></app-error-message>
+                            <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.
+                            </p>
+                            <p *ngIf="securityLicenseUploadInProgress[license.id || '']"
+                                class="text-xs text-primary-600 mt-2">Uploading document...</p>
+                            <app-error-message
+                                [errorMessage]="securityLicenseUploadErrors[license.id || ''] || null"></app-error-message>
                         </div>
                     </div>
                 </app-card>
             </div>
 
             <div class="flex justify-center pt-4">
-                <app-button
-                    label="+ Add Security License"
-                    type="secondary"
-                    [htmlType]="'button'"
-                    [customClass]="'rounded-lg'"
-                    (click)="addSecurityLicense()">
+                <app-button label="+ Add Security License" type="secondary" [htmlType]="'button'"
+                    [customClass]="'rounded-lg'" (click)="addSecurityLicense()">
                 </app-button>
             </div>
         </app-section>
 
-        <app-section title="Police Clearance" subtitle="Clearance from a police department (Canada only)." *ngIf="guardFormModel.address.country === 'CA'">
+        <app-section title="Police Clearance" subtitle="Clearance from a police department (Canada only)."
+            *ngIf="guardFormModel.address.country === 'CA'">
 
             <app-error-message [errorMessage]="guardErrors.policeClearances || null"></app-error-message>
 
-            <div *ngIf="guardFormModel.policeClearances && guardFormModel.policeClearances.length > 0" class="space-y-4">
-                <app-card *ngFor="let record of guardFormModel.policeClearances; let i = index" class="block" [bodyClass]="'mt-4'">
+            <div *ngIf="guardFormModel.policeClearances && guardFormModel.policeClearances.length > 0"
+                class="space-y-4">
+                <app-card *ngFor="let record of guardFormModel.policeClearances; let i = index" class="block"
+                    [bodyClass]="'mt-4'">
                     <div card-header>
                         <h3 class="font-semibold text-gray-800 dark:text-gray-200">
                             {{ record.issuingAuthorityType === 'other'
-                                ? (record.issuingAuthorityOther || ('Police Clearance ' + (i + 1)))
-                                : (record.issuingAuthorityType ? getPoliceAuthorityLabel(record.issuingAuthorityType) : ('Police Clearance ' + (i + 1))) }}
+                            ? (record.issuingAuthorityOther || ('Police Clearance ' + (i + 1)))
+                            : (record.issuingAuthorityType ? getPoliceAuthorityLabel(record.issuingAuthorityType) :
+                            ('Police Clearance ' + (i + 1))) }}
+                            <span *ngIf="i > 0" class="text-sm font-normal text-gray-500 dark:text-gray-400">
+                                (Optional)</span>
+
                         </h3>
                     </div>
                     <div card-actions>
-                        <app-button
-                            label="Remove"
-                            type="danger"
-                            htmlType="button"
-                            size="sm"
-                            (click)="removePoliceClearance(i)">
+                        <app-button *ngIf="guardFormModel.policeClearances.length > 1" label="Remove" type="danger"
+                            htmlType="button" size="sm" (click)="removePoliceClearance(i)">
                         </app-button>
                     </div>
 
@@ -342,21 +361,27 @@
                         <div class="flex flex-col">
                             <app-select-input label="Issuing Authority Type" [name]="'policeClearanceAuthority_' + i"
                                 [(ngModel)]="record.issuingAuthorityType" [options]="policeClearanceAuthorityOptions"
-                                placeholder="-- Select Authority Type --" [required]="true" [searchable]="true"></app-select-input>
-                            <app-error-message [errorMessage]="guardErrors['police_clearance_' + record.id + '_issuingAuthorityType'] || null"></app-error-message>
+                                placeholder="-- Select Authority Type --" [required]="i === 0"
+                                [searchable]="true"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['police_clearance_' + record.id + '_issuingAuthorityType'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col" *ngIf="record.issuingAuthorityType === 'other'">
-                            <app-base-input label="Issuing Authority (Specify)" [name]="'policeClearanceAuthorityOther_' + i"
-                                [(ngModel)]="record.issuingAuthorityOther" [required]="true"></app-base-input>
-                            <app-error-message [errorMessage]="guardErrors['police_clearance_' + record.id + '_issuingAuthorityOther'] || null"></app-error-message>
+                            <app-base-input label="Issuing Authority (Specify)"
+                                [name]="'policeClearanceAuthorityOther_' + i" [(ngModel)]="record.issuingAuthorityOther"
+                                [required]="i === 0"></app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['police_clearance_' + record.id + '_issuingAuthorityOther'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-select-input label="Issuing Province" [name]="'policeClearanceProvince_' + i"
                                 [(ngModel)]="record.issuingProvince" [options]="provinceOptions"
-                                placeholder="-- Select Province --" [required]="true" [searchable]="true"></app-select-input>
-                            <app-error-message [errorMessage]="guardErrors['police_clearance_' + record.id + '_issuingProvince'] || null"></app-error-message>
+                                placeholder="-- Select Province --" [required]="i === 0"
+                                [searchable]="true"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['police_clearance_' + record.id + '_issuingProvince'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
@@ -366,8 +391,9 @@
 
                         <div class="flex flex-col">
                             <app-base-input label="Issue Date" [name]="'policeClearanceIssueDate_' + i" type="date"
-                                [(ngModel)]="record.issueDate" [required]="true"></app-base-input>
-                            <app-error-message [errorMessage]="guardErrors['police_clearance_' + record.id + '_issueDate'] || null"></app-error-message>
+                                [(ngModel)]="record.issueDate" [required]="i === 0"></app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['police_clearance_' + record.id + '_issueDate'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
@@ -377,119 +403,125 @@
 
                         <div class="flex flex-col md:col-span-2">
                             <app-file-upload label="Clearance Document" [name]="'policeClearanceDocument_' + i"
-                                [(ngModel)]="record.file"
-                                (fileChange)="onPoliceClearanceFileSelected(record, $event)"
-                                [existingFileUrl]="record.existingFileUrl"
-                                [existingFileName]="record.existingFileName"
-                                helperText="PNG, JPG, PDF up to 10MB"
-                                [required]="false"
+                                [(ngModel)]="record.file" (fileChange)="onPoliceClearanceFileSelected(record, $event)"
+                                [existingFileUrl]="record.existingFileUrl" [existingFileName]="record.existingFileName"
+                                helperText="PNG, JPG, PDF up to 10MB" [required]="i === 0"
                                 [disabled]="policeClearanceUploadInProgress[record.id || '']"></app-file-upload>
-                            <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.</p>
-                            <p *ngIf="policeClearanceUploadInProgress[record.id || '']" class="text-xs text-primary-600 mt-2">Uploading document...</p>
-                            <app-error-message [errorMessage]="policeClearanceUploadErrors[record.id || ''] || null"></app-error-message>
+                            <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.
+                            </p>
+                            <p *ngIf="policeClearanceUploadInProgress[record.id || '']"
+                                class="text-xs text-primary-600 mt-2">Uploading document...</p>
+                            <app-error-message
+                                [errorMessage]="policeClearanceUploadErrors[record.id || ''] || null"></app-error-message>
                         </div>
                     </div>
                 </app-card>
             </div>
 
             <div class="flex justify-center pt-4">
-                <app-button
-                    label="+ Add Police Clearance"
-                    type="secondary"
-                    [htmlType]="'button'"
-                    [customClass]="'rounded-lg'"
-                    (click)="addPoliceClearance()">
+                <app-button label="+ Add Police Clearance" type="secondary" [htmlType]="'button'"
+                    [customClass]="'rounded-lg'" (click)="addPoliceClearance()">
                 </app-button>
             </div>
         </app-section>
 
-        <app-section title="Training Certificates" subtitle="Add training certificates (Canada only)." *ngIf="guardFormModel.address.country === 'CA'">
+        <app-section title="Training Certificates" subtitle="Add training certificates (Canada only)."
+            *ngIf="guardFormModel.address.country === 'CA'">
 
             <app-error-message [errorMessage]="guardErrors.trainingCertificates || null"></app-error-message>
 
-            <div *ngIf="guardFormModel.trainingCertificates && guardFormModel.trainingCertificates.length > 0" class="space-y-4">
-                <app-card *ngFor="let cert of guardFormModel.trainingCertificates; let i = index" class="block" [bodyClass]="'mt-4'">
+            <div *ngIf="guardFormModel.trainingCertificates && guardFormModel.trainingCertificates.length > 0"
+                class="space-y-4">
+                <app-card *ngFor="let cert of guardFormModel.trainingCertificates; let i = index" class="block"
+                    [bodyClass]="'mt-4'">
                     <div card-header>
                         <h3 class="font-semibold text-gray-800 dark:text-gray-200">
-                            {{ cert.certificateName ? getTrainingCertificateLabel(cert.certificateName) : ('Training Certificate ' + (i + 1)) }}
+                            {{ cert.certificateName ? getTrainingCertificateLabel(cert.certificateName) : ('Training
+                            Certificate ' + (i + 1)) }}
+                            <span class="text-sm font-normal text-gray-500 dark:text-gray-400"> (Optional)</span>
                         </h3>
                     </div>
                     <div card-actions>
-                        <app-button
-                            label="Remove"
-                            type="danger"
-                            htmlType="button"
-                            size="sm"
-                            (click)="removeTrainingCertificate(i)">
+                        <app-button *ngIf="guardFormModel.trainingCertificates.length > 1" label="Remove" type="danger"
+                            htmlType="button" size="sm" (click)="removeTrainingCertificate(i)">
                         </app-button>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="flex flex-col">
                             <app-select-input label="Certificate Name / Type" [name]="'trainingCertificateName_' + i"
-                                [(ngModel)]="cert.certificateName" (ngModelChange)="onTrainingCertificateTypeChange(cert)"
-                                [options]="trainingCertificateOptions"
-                                placeholder="-- Select Certificate --" [required]="true" [searchable]="true"></app-select-input>
-                            <app-error-message [errorMessage]="guardErrors['training_certificate_' + cert.id + '_certificateName'] || null"></app-error-message>
+                                [(ngModel)]="cert.certificateName"
+                                (ngModelChange)="onTrainingCertificateTypeChange(cert)"
+                                [options]="trainingCertificateOptions" placeholder="-- Select Certificate --"
+                                [searchable]="true"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['training_certificate_' + cert.id + '_certificateName'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-select-input label="Issuing Organization" [name]="'trainingCertificateOrg_' + i"
-                                [(ngModel)]="cert.issuingOrganizationType" [options]="getTrainingIssuerOptions(cert.certificateName)"
-                                placeholder="-- Select Issuer --" [required]="true" [searchable]="true"></app-select-input>
-                            <app-error-message [errorMessage]="guardErrors['training_certificate_' + cert.id + '_issuingOrganizationType'] || null"></app-error-message>
+                                [(ngModel)]="cert.issuingOrganizationType"
+                                [options]="getTrainingIssuerOptions(cert.certificateName)"
+                                placeholder="-- Select Issuer --" [searchable]="true"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['training_certificate_' + cert.id + '_issuingOrganizationType'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col" *ngIf="cert.issuingOrganizationType === 'other'">
-                            <app-base-input label="Issuing Organization (Specify)" [name]="'trainingCertificateOrgOther_' + i"
-                                [(ngModel)]="cert.issuingOrganizationOther" [required]="true"></app-base-input>
-                            <app-error-message [errorMessage]="guardErrors['training_certificate_' + cert.id + '_issuingOrganizationOther'] || null"></app-error-message>
+                            <app-base-input label="Issuing Organization (Specify)"
+                                [name]="'trainingCertificateOrgOther_' + i"
+                                [(ngModel)]="cert.issuingOrganizationOther"></app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['training_certificate_' + cert.id + '_issuingOrganizationOther'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Issue Date" [name]="'trainingCertificateIssueDate_' + i" type="date"
-                                [(ngModel)]="cert.issueDate" [required]="true"></app-base-input>
-                            <app-error-message [errorMessage]="guardErrors['training_certificate_' + cert.id + '_issueDate'] || null"></app-error-message>
+                                [(ngModel)]="cert.issueDate"></app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['training_certificate_' + cert.id + '_issueDate'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
-                            <app-base-input label="Expiry Date (Optional)" [name]="'trainingCertificateExpiryDate_' + i" type="date"
-                                [(ngModel)]="cert.expiryDate"></app-base-input>
-                            <app-error-message [errorMessage]="guardErrors['training_certificate_' + cert.id + '_expiryDate'] || null"></app-error-message>
+                            <app-base-input label="Expiry Date (Optional)" [name]="'trainingCertificateExpiryDate_' + i"
+                                type="date" [(ngModel)]="cert.expiryDate"></app-base-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['training_certificate_' + cert.id + '_expiryDate'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col md:col-span-2">
                             <app-file-upload label="Certificate Document" [name]="'trainingCertificateDocument_' + i"
-                                [(ngModel)]="cert.file"
-                                (fileChange)="onTrainingCertificateFileSelected(cert, $event)"
-                                [existingFileUrl]="cert.existingFileUrl"
-                                [existingFileName]="cert.existingFileName"
-                                helperText="PNG, JPG, PDF up to 10MB"
-                                [required]="false"
+                                [(ngModel)]="cert.file" (fileChange)="onTrainingCertificateFileSelected(cert, $event)"
+                                [existingFileUrl]="cert.existingFileUrl" [existingFileName]="cert.existingFileName"
+                                helperText="PNG, JPG, PDF up to 10MB" [required]="false"
                                 [disabled]="trainingCertificateUploadInProgress[cert.id || '']"></app-file-upload>
-                            <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.</p>
-                            <p *ngIf="trainingCertificateUploadInProgress[cert.id || '']" class="text-xs text-primary-600 mt-2">Uploading document...</p>
-                            <app-error-message [errorMessage]="trainingCertificateUploadErrors[cert.id || ''] || null"></app-error-message>
+                            <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.
+                            </p>
+                            <p *ngIf="trainingCertificateUploadInProgress[cert.id || '']"
+                                class="text-xs text-primary-600 mt-2">Uploading document...</p>
+                            <app-error-message
+                                [errorMessage]="trainingCertificateUploadErrors[cert.id || ''] || null"></app-error-message>
                         </div>
                     </div>
                 </app-card>
             </div>
 
             <div class="flex justify-center pt-4">
-                <app-button
-                    label="+ Add Training Certificate"
-                    type="secondary"
-                    [htmlType]="'button'"
-                    [customClass]="'rounded-lg'"
-                    (click)="addTrainingCertificate()">
+                <app-button label="+ Add Training Certificate" type="secondary" [htmlType]="'button'"
+                    [customClass]="'rounded-lg'" (click)="addTrainingCertificate()">
                 </app-button>
             </div>
         </app-section>
 
         <app-section title="Weekly Availability" subtitle="Set preferred shift windows."
             containerClass="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-4 sm:p-6 space-y-4 sm:space-y-6">
+
             <app-weekly-availability label="Weekly Availability" name="availability"
-                [(ngModel)]="guardFormModel.weeklyAvailability"></app-weekly-availability>
+                [(ngModel)]="guardFormModel.weeklyAvailability">
+            </app-weekly-availability>
+
+            <!-- Add error message if validation fails -->
+            <app-error-message [errorMessage]="guardErrors.weeklyAvailability || null"></app-error-message>
         </app-section>
 
         <div *ngIf="guardErrors.submit"

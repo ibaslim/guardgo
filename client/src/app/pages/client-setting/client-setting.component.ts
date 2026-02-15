@@ -135,7 +135,7 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     private apiService: ApiService,
     private router: Router,
     private appService: AppService
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.loadClientMetadata(() => {
@@ -260,16 +260,16 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     const rawSites = profile.sites || [];
     const mappedSites: Site[] = Array.isArray(rawSites)
       ? rawSites.map((site: any) => {
-          const siteAddress = this.mapAddressFromBackend(site.site_address || site.siteAddress || {});
-          return {
-            siteName: site.site_name || site.siteName || '',
-            siteAddress,
-            siteManagerContact: site.site_manager_contact || site.siteManagerContact || '',
-            managerEmail: site.manager_email || site.managerEmail || '',
-            numberOfGuardsRequired: site.number_of_guards_required ?? site.numberOfGuardsRequired ?? null,
-            siteType: this.normalizeOptionValue(site.site_type || site.siteType || '', this.siteTypeOptions)
-          };
-        })
+        const siteAddress = this.mapAddressFromBackend(site.site_address || site.siteAddress || {});
+        return {
+          siteName: site.site_name || site.siteName || '',
+          siteAddress,
+          siteManagerContact: site.site_manager_contact || site.siteManagerContact || '',
+          managerEmail: site.manager_email || site.managerEmail || '',
+          numberOfGuardsRequired: site.number_of_guards_required ?? site.numberOfGuardsRequired ?? null,
+          siteType: this.normalizeOptionValue(site.site_type || site.siteType || '', this.siteTypeOptions)
+        };
+      })
       : [];
 
     return {
@@ -311,6 +311,8 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       this.clientErrors.legalEntityName = this.clientFormModel.clientType === 'individual'
         ? 'Full name is required.'
         : 'Legal Entity Name is required.';
+    } else if (this.clientFormModel.clientType === 'individual' && !/^[a-zA-Z\s]+$/.test(this.clientFormModel.legalEntityName)) {
+      this.clientErrors.legalEntityName = 'Full name can only contain letters and spaces.';
     }
 
     // Company Registration Number
@@ -320,8 +322,12 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       }
     }
 
-    if (this.clientFormModel.clientType === 'company' && !this.clientFormModel.industry.trim()) {
-      this.clientErrors.industry = 'Industry/Business sector is required.';
+    if (this.clientFormModel.clientType === 'company') {
+      if (!this.clientFormModel.industry.trim()) {
+        this.clientErrors.industry = 'Industry/Business sector is required.';
+      } else if (!/^[a-zA-Z\s]+$/.test(this.clientFormModel.industry)) {
+        this.clientErrors.industry = 'Industry can only contain letters and spaces.';
+      }
     }
 
     if (this.clientFormModel.companyWebsite?.trim()) {
@@ -334,6 +340,8 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     // Primary Contact
     if (!this.clientFormModel.primaryContact.name.trim()) {
       this.clientErrors.primaryContactName = 'Primary contact name is required.';
+    } else if (!/^[a-zA-Z\s]+$/.test(this.clientFormModel.primaryContact.name)) {
+      this.clientErrors.primaryContactName = 'Contact name can only contain letters and spaces.';
     }
     if (!this.clientFormModel.primaryContact.email.trim()) {
       this.clientErrors.primaryContactEmail = 'Primary contact email is required.';
@@ -342,9 +350,38 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     }
     const hasMobile = this.clientFormModel.primaryContact.mobilePhone?.e164;
     const hasLandline = this.clientFormModel.primaryContact.landlinePhone?.e164;
+
+    // Validate mobile phone format if provided (Canadian: +1 followed by 10 digits)
+    if (hasMobile) {
+      const mobileE164 = this.clientFormModel.primaryContact.mobilePhone!.e164;
+      const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+      if (!canadianPhonePattern.test(mobileE164)) {
+        this.clientErrors.primaryContactMobilePhone = 'Invalid Canadian mobile phone number format.';
+      } else if (this.clientFormModel.primaryContact.mobilePhone!.country !== 'CA') {
+        this.clientErrors.primaryContactMobilePhone = 'Only Canadian phone numbers are accepted.';
+      }
+    }
+
+    // Validate landline phone format if provided (Canadian: +1 followed by 10 digits)
+    if (hasLandline) {
+      const landlineE164 = this.clientFormModel.primaryContact.landlinePhone!.e164;
+      const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+      if (!canadianPhonePattern.test(landlineE164)) {
+        this.clientErrors.primaryContactLandlinePhone = 'Invalid Canadian landline phone number format.';
+      } else if (this.clientFormModel.primaryContact.landlinePhone!.country !== 'CA') {
+        this.clientErrors.primaryContactLandlinePhone = 'Only Canadian phone numbers are accepted.';
+      }
+    }
+
+    // At least one phone number is required
     if (!hasMobile && !hasLandline) {
       this.clientErrors.primaryContactPhoneNumbers = 'At least one phone number (mobile or landline) is required.';
-    } else if (hasMobile && hasLandline) {
+    }
+
+    // If both phone numbers are provided, they must be from the same country
+    if (hasMobile && hasLandline) {
       if (this.clientFormModel.primaryContact.mobilePhone?.country !== this.clientFormModel.primaryContact.landlinePhone?.country) {
         this.clientErrors.primaryContactPhoneNumbers = 'Mobile and landline phone numbers must be from the same country.';
       }
@@ -360,6 +397,8 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     if (secondaryHasAny) {
       if (!secondary.name.trim()) {
         this.clientErrors.secondaryContactName = 'Secondary contact name is required.';
+      } else if (!/^[a-zA-Z\s]+$/.test(secondary.name)) {
+        this.clientErrors.secondaryContactName = 'Contact name can only contain letters and spaces.';
       }
       if (!secondary.email.trim()) {
         this.clientErrors.secondaryContactEmail = 'Secondary contact email is required.';
@@ -369,9 +408,38 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
 
       const secondaryHasMobile = secondary.mobilePhone?.e164;
       const secondaryHasLandline = secondary.landlinePhone?.e164;
+
+      // Validate secondary mobile phone format if provided (Canadian: +1 followed by 10 digits)
+      if (secondaryHasMobile) {
+        const secondaryMobileE164 = secondary.mobilePhone!.e164;
+        const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+        if (!canadianPhonePattern.test(secondaryMobileE164)) {
+          this.clientErrors.secondaryContactMobilePhone = 'Invalid Canadian mobile phone number format.';
+        } else if (secondary.mobilePhone!.country !== 'CA') {
+          this.clientErrors.secondaryContactMobilePhone = 'Only Canadian phone numbers are accepted.';
+        }
+      }
+
+      // Validate secondary landline phone format if provided (Canadian: +1 followed by 10 digits)
+      if (secondaryHasLandline) {
+        const secondaryLandlineE164 = secondary.landlinePhone!.e164;
+        const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+        if (!canadianPhonePattern.test(secondaryLandlineE164)) {
+          this.clientErrors.secondaryContactLandlinePhone = 'Invalid Canadian landline phone number format.';
+        } else if (secondary.landlinePhone!.country !== 'CA') {
+          this.clientErrors.secondaryContactLandlinePhone = 'Only Canadian phone numbers are accepted.';
+        }
+      }
+
+      // At least one phone number is required
       if (!secondaryHasMobile && !secondaryHasLandline) {
         this.clientErrors.secondaryContactPhoneNumbers = 'At least one phone number (mobile or landline) is required.';
-      } else if (secondaryHasMobile && secondaryHasLandline) {
+      }
+
+      // If both phone numbers are provided, they must be from the same country
+      if (secondaryHasMobile && secondaryHasLandline) {
         if (secondary.mobilePhone?.country !== secondary.landlinePhone?.country) {
           this.clientErrors.secondaryContactPhoneNumbers = 'Mobile and landline phone numbers must be from the same country.';
         }
@@ -384,6 +452,8 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     }
     if (!this.clientFormModel.billingAddress.city.trim()) {
       this.clientErrors.billingCity = 'Billing city is required.';
+    } else if (!/^[a-zA-Z\s]+$/.test(this.clientFormModel.billingAddress.city)) {
+      this.clientErrors.billingCity = 'City can only contain letters and spaces.';
     }
     if (!this.clientFormModel.billingAddress.country.trim()) {
       this.clientErrors.billingCountry = 'Billing country is required.';
@@ -443,12 +513,12 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
           || this.clientFormModel.secondaryContact.mobilePhone?.e164
           || this.clientFormModel.secondaryContact.landlinePhone?.e164
           ? {
-              name: this.clientFormModel.secondaryContact.name,
-              email: this.clientFormModel.secondaryContact.email,
-              phone: this.clientFormModel.secondaryContact.mobilePhone?.e164
-                || this.clientFormModel.secondaryContact.landlinePhone?.e164
-                || ''
-            }
+            name: this.clientFormModel.secondaryContact.name,
+            email: this.clientFormModel.secondaryContact.email,
+            phone: this.clientFormModel.secondaryContact.mobilePhone?.e164
+              || this.clientFormModel.secondaryContact.landlinePhone?.e164
+              || ''
+          }
           : undefined,
         billing_address: {
           street: this.clientFormModel.billingAddress.street,
