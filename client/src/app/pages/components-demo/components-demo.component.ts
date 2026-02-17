@@ -7,6 +7,7 @@ import { CardComponent } from '../../components/card/card.component';
 import { TableComponent } from '../../components/table/table.component';
 import { ModalComponent } from '../../components/modal/modal.component';
 import { SideDrawerComponent } from '../../components/side-drawer/side-drawer.component';
+import { IconComponent } from '../../components/icon/icon.component';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 
@@ -23,6 +24,7 @@ import { CommonModule } from '@angular/common';
     TableComponent,
     ModalComponent,
     SideDrawerComponent,
+    IconComponent,
     FormsModule
   ],
   templateUrl: './components-demo.component.html'
