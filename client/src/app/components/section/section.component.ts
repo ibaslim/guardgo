@@ -5,7 +5,10 @@ import { CommonModule } from '@angular/common';
   selector: 'app-section',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './section.component.html'
+  templateUrl: './section.component.html',
+  host: {
+    'class': 'block'
+  }
 })
 export class SectionComponent {
   @Input() title = '';

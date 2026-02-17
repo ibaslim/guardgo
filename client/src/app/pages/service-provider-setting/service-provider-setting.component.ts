@@ -117,6 +117,7 @@ interface ServiceProvider {
 })
 export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
 
+  @Input() showPageWrapper: boolean = true;
   @Input() providerData?: ServiceProvider;
 
   providerFormModel: ServiceProvider = {

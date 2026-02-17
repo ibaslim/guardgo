@@ -1,5 +1,15 @@
-<app-page title="Guard Profile">
-    <form (ngSubmit)="submitGuardForm()" class="space-y-6">
+<ng-container *ngIf="showPageWrapper; else formOnly">
+    <app-page title="Guard Profile">
+        <ng-container *ngTemplateOutlet="formContent"></ng-container>
+    </app-page>
+</ng-container>
+
+<ng-template #formOnly>
+    <ng-container *ngTemplateOutlet="formContent"></ng-container>
+</ng-template>
+
+<ng-template #formContent>
+    <form (ngSubmit)="submitGuardForm()" class="space-y-8">
         <!-- Profile Picture Section -->
         <app-section title="Profile Picture" subtitle="Your photo helps clients recognize you.">
             <app-profile-picture-upload [maxSizeKb]="500" [title]="'Profile Picture'"
@@ -540,4 +550,4 @@
             </app-button>
         </app-sticky-action-bar>
     </form>
-</app-page>
+</ng-template>
