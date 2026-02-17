@@ -238,3 +238,65 @@
     </app-modal>
   </section>
 
+  <!-- Side Drawer -->
+  <section>
+    <h2 class="text-xl font-semibold mb-2">Side Drawer</h2>
+    <div class="mb-3 flex flex-wrap gap-2">
+      <app-button label="SM" type="secondary" (click)="drawerSize = 'sm'"></app-button>
+      <app-button label="MD" type="secondary" (click)="drawerSize = 'md'"></app-button>
+      <app-button label="LG" type="secondary" (click)="drawerSize = 'lg'"></app-button>
+      <app-button label="XL" type="secondary" (click)="drawerSize = 'xl'"></app-button>
+      <app-button label="FULL" type="secondary" (click)="drawerSize = 'full'"></app-button>
+    </div>
+    <app-button [label]="'Open Side Drawer (' + drawerSize.toUpperCase() + ')'" type="primary" (click)="showDrawer = true"></app-button>
+
+    <app-side-drawer [show]="showDrawer" [size]="drawerSize" (close)="showDrawer = false">
+      <div drawer-header>
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Guard Assignment Details</h3>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Review and update assignment info.</p>
+      </div>
+
+      <div drawer-body class="space-y-4">
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Client</p>
+          <p class="text-sm text-gray-900 dark:text-gray-100">Acme Retail - Downtown Branch</p>
+        </div>
+
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Assigned Guard</p>
+          <p class="text-sm text-gray-900 dark:text-gray-100">John Carter</p>
+        </div>
+
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <p class="text-sm font-medium text-gray-700 dark:text-gray-300">Shift Notes</p>
+          <p class="text-sm text-gray-900 dark:text-gray-100">
+            Ensure site check-in by 08:00 AM. Carry photo ID and incident reporting device.
+          </p>
+        </div>
+
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+          <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Long Content Demo</p>
+          <ul class="space-y-2 text-sm text-gray-900 dark:text-gray-100">
+            <li *ngFor="let item of [1,2,3,4,5,6,7,8,9,10,11,12]">Checkpoint #{{ item }} completed.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4" *ngFor="let section of [1,2,3,4,5,6,7,8]">
+          <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Additional Section #{{ section }}</p>
+          <p class="text-sm text-gray-900 dark:text-gray-100 mb-2">
+            This is filler content to validate drawer body scrolling behavior with a large dataset.
+            Header and footer should remain fixed while this area scrolls.
+          </p>
+          <ul class="space-y-1 text-sm text-gray-900 dark:text-gray-100">
+            <li *ngFor="let row of [1,2,3,4,5,6]">Section {{ section }} - Item {{ row }}</li>
+          </ul>
+        </div>
+      </div>
+
+      <div drawer-footer class="flex items-center justify-end gap-2">
+        <app-button label="Close" type="secondary" (click)="showDrawer = false"></app-button>
+        <app-button label="Save Changes" type="primary" (click)="showDrawer = false"></app-button>
+      </div>
+    </app-side-drawer>
+  </section>
+

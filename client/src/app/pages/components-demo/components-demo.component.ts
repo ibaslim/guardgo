@@ -6,6 +6,7 @@ import { AvatarComponent } from '../../components/avatar/avatar.component';
 import { CardComponent } from '../../components/card/card.component';
 import { TableComponent } from '../../components/table/table.component';
 import { ModalComponent } from '../../components/modal/modal.component';
+import { SideDrawerComponent } from '../../components/side-drawer/side-drawer.component';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 
@@ -21,10 +22,10 @@ import { CommonModule } from '@angular/common';
     CardComponent,
     TableComponent,
     ModalComponent,
+    SideDrawerComponent,
     FormsModule
   ],
-  templateUrl: './components-demo.component.html',
-  styleUrls: ['./components-demo.component.scss']
+  templateUrl: './components-demo.component.html'
 })
 export class ComponentsDemoComponent {
     showUserMenu = false;
@@ -46,6 +47,8 @@ export class ComponentsDemoComponent {
     }
   // Removed compact mode and columns feature
   showModal = false;
+  showDrawer = false;
+  drawerSize: 'sm' | 'md' | 'lg' | 'xl' | 'full' = 'lg';
   showClosableAlert = true;
   // Removed tableColumns
   tableData = [

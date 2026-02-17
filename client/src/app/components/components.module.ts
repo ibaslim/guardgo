@@ -8,6 +8,7 @@ import { AlertComponent } from './alert/alert.component';
 import { LoaderComponent } from './loader/loader.component';
 import { BadgeComponent } from './badge/badge.component';
 import { AvatarComponent } from './avatar/avatar.component';
+import { SideDrawerComponent } from './side-drawer/side-drawer.component';
 
 @NgModule({
   imports: [
@@ -19,7 +20,8 @@ import { AvatarComponent } from './avatar/avatar.component';
     AlertComponent,
     LoaderComponent,
     BadgeComponent,
-    AvatarComponent
+    AvatarComponent,
+    SideDrawerComponent
   ],
   declarations: [
   ],
@@ -31,7 +33,8 @@ import { AvatarComponent } from './avatar/avatar.component';
     AlertComponent,
     LoaderComponent,
     BadgeComponent,
-    AvatarComponent
+    AvatarComponent,
+    SideDrawerComponent
   ]
 })
 export class ComponentsModule {}

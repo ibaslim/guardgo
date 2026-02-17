@@ -5,8 +5,7 @@ import { CommonModule } from '@angular/common';
   selector: 'app-modal',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './modal.component.html',
-  styleUrls: ['./modal.component.scss']
+  templateUrl: './modal.component.html'
 })
 export class ModalComponent {
   @Input() show = false;
@@ -14,7 +13,7 @@ export class ModalComponent {
   @Output() close = new EventEmitter<void>();
 
   @HostListener('document:keydown.escape', ['$event'])
-  onEsc(event: KeyboardEvent) {
+  onEsc(_: Event): void {
     if (this.show) {
       this.close.emit();
     }
