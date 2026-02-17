@@ -1,0 +1,14 @@
+<div [class]="resolvedContainerClass">
+  <div class="flex items-start gap-2">
+    <div *ngIf="showIcon" [class]="resolvedIconClass">
+      <ng-content select="[banner-icon]"></ng-content>
+    </div>
+    <div class="flex-1 space-y-1">
+      <h4 *ngIf="title" [class]="resolvedTitleClass">{{ title }}</h4>
+      <p *ngIf="message" [class]="resolvedBodyClass">{{ message }}</p>
+      <div *ngIf="!message" [class]="resolvedBodyClass">
+        <ng-content select="[banner-body]"></ng-content>
+      </div>
+    </div>
+  </div>
+</div>

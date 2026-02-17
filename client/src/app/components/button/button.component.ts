@@ -17,6 +17,12 @@ export class ButtonComponent {
   @Input() customClass = '';
   @Input() ariaLabel = '';
   @Input() loading = false;
+  @Input() iconOnly = false;
+  @Input() hasIcon = false;
+
+  get showIconSlot(): boolean {
+    return this.iconOnly || this.hasIcon;
+  }
 
   get sizeClass(): string {
     switch (this.size) {

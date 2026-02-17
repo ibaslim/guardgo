@@ -2,6 +2,9 @@ import { CommonModule } from '@angular/common';
 import { Component, forwardRef } from '@angular/core';
 import { FormsModule, NG_VALUE_ACCESSOR, ControlValueAccessor } from '@angular/forms';
 import { NgxMaterialTimepickerModule } from 'ngx-material-timepicker';
+import { BannerComponent } from '../../banner/banner.component';
+import { ButtonComponent } from '../../button/button.component';
+import { CheckboxComponent } from '../checkbox/checkbox.component';
 
 interface TimeRange {
   start: string;
@@ -16,7 +19,7 @@ interface DayAvailability {
 @Component({
   selector: 'app-weekly-availability',
   standalone: true,
-  imports: [CommonModule, FormsModule, NgxMaterialTimepickerModule],
+  imports: [CommonModule, FormsModule, NgxMaterialTimepickerModule, BannerComponent, ButtonComponent, CheckboxComponent],
   templateUrl: './weekly-availability.component.html',
   styleUrl: './weekly-availability.component.css',
   providers: [
@@ -64,14 +67,13 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
   }
 
   // Toggle day enabled/disabled
-  toggleDay(day: string, event: Event) {
-    const checked = (event.target as HTMLInputElement).checked;
-    this.availability[day].enabled = checked;
+  toggleDay(day: string, enabled: boolean) {
+    this.availability[day].enabled = enabled;
 
-    if (checked && this.availability[day].timeRanges.length === 0) {
+    if (enabled && this.availability[day].timeRanges.length === 0) {
       // Add first mandatory time range
       this.availability[day].timeRanges.push({ start: '', end: '' });
-    } else if (!checked) {
+    } else if (!enabled) {
       // Clear time ranges when disabled
       this.availability[day].timeRanges = [];
     }
