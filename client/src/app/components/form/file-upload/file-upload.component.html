@@ -51,8 +51,8 @@
   <!-- File Upload Area -->
   <div class="flex items-center justify-center w-full">
     <label
-      class="file-upload-dropzone flex flex-col items-center w-full px-4 py-6 bg-white dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 cursor-pointer transition hover:border-blue-500 dark:hover:border-blue-400"
-      [class.dropzone-active]="isDragOver"
+      class="flex flex-col items-center w-full px-4 py-6 bg-white dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 cursor-pointer transition hover:border-blue-500 dark:hover:border-blue-400"
+      [ngClass]="isDragOver ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : ''"
       [class.cursor-not-allowed]="disabled"
       [attr.aria-disabled]="disabled"
     >

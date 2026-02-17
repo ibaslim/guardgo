@@ -5,8 +5,7 @@ import { CommonModule } from '@angular/common';
   selector: 'app-alert',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './alert.component.html',
-  styleUrls: ['./alert.component.scss']
+  templateUrl: './alert.component.html'
 })
 export class AlertComponent {
   @Input() type: 'success' | 'error' | 'info' | 'warning' = 'info';

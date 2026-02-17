@@ -25,8 +25,7 @@ import { WeeklyAvailabilityComponent } from "../../components/form/weekly-availa
     FileUploadComponent,
     WeeklyAvailabilityComponent
 ],
-  templateUrl: './forms-page.component.html',
-  styleUrls: ['./forms-page.component.scss']
+  templateUrl: './forms-page.component.html'
 })
 export class FormsPageComponent {
   formModel = {

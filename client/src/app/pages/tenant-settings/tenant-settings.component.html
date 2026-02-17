@@ -1,0 +1,33 @@
+<app-page title="Settings">
+    <div *ngIf="isLoading" class="flex justify-center items-center py-12">
+        <app-loader></app-loader>
+    </div>
+
+    <div *ngIf="!isLoading && errorMessage" class="py-4">
+        <app-alert type="error" [message]="errorMessage"></app-alert>
+    </div>
+
+    <div *ngIf="!isLoading && !errorMessage && tenantType">
+        <app-guard-setting 
+            *ngIf="tenantType === 'guard'" 
+            [showPageWrapper]="false" 
+            [guardData]="tenantData">
+        </app-guard-setting>
+
+        <app-client-setting 
+            *ngIf="tenantType === 'client'" 
+            [showPageWrapper]="false" 
+            [clientData]="tenantData">
+        </app-client-setting>
+
+        <app-service-provider-setting 
+            *ngIf="tenantType === 'service_provider'" 
+            [showPageWrapper]="false" 
+            [providerData]="tenantData">
+        </app-service-provider-setting>
+
+        <div *ngIf="tenantType === 'admin'" class="py-8">
+            <app-alert type="info" message="Admin accounts do not have editable profile settings."></app-alert>
+        </div>
+    </div>
+</app-page>

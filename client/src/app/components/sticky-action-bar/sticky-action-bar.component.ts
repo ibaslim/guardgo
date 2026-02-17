@@ -5,8 +5,7 @@ import { CommonModule } from '@angular/common';
   selector: 'app-sticky-action-bar',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './sticky-action-bar.component.html',
-  styleUrls: ['./sticky-action-bar.component.scss']
+  templateUrl: './sticky-action-bar.component.html'
 })
 export class StickyActionBarComponent {
   /**

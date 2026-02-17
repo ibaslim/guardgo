@@ -11,8 +11,7 @@ import { FileInputComponent } from '../form/file-input/file-input.component';
   selector: 'app-profile-picture-upload',
   standalone: true,
   imports: [CommonModule, ErrorMessageComponent, ButtonComponent, FileInputComponent],
-  templateUrl: './profile-picture-upload.component.html',
-  styleUrls: ['./profile-picture-upload.component.scss']
+    templateUrl: './profile-picture-upload.component.html'
 })
 export class ProfilePictureUploadComponent implements OnInit, OnDestroy {
   @Input() maxSizeKb: number = 500;

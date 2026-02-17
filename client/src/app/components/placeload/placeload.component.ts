@@ -5,8 +5,7 @@ import { CommonModule } from '@angular/common';
   selector: 'app-placeload',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './placeload.component.html',
-  styleUrls: ['./placeload.component.scss']
+  templateUrl: './placeload.component.html'
 })
 export class PlaceloadComponent {
   @Input() width = '100%';

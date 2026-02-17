@@ -1,0 +1,56 @@
+<div
+  class="fixed inset-0 z-50"
+  [class.pointer-events-none]="!show"
+  [attr.aria-hidden]="!show"
+>
+  <div
+    class="drawer-backdrop absolute inset-0 bg-black/50 transition-opacity duration-300"
+    [class.opacity-0]="!show"
+    [class.opacity-100]="show"
+    (mousedown)="onBackdropClick($event)"
+  ></div>
+
+  <aside
+    class="absolute inset-y-0 right-0 w-full max-w-full transform transition-transform duration-300 ease-in-out"
+    [ngClass]="{
+      'md:w-[35vw]': size === 'sm',
+      'md:w-[45vw]': size === 'md',
+      'md:w-[50vw]': size === 'lg',
+      'md:w-[65vw]': size === 'xl',
+      'md:w-[90vw]': size === 'full'
+    }"
+    [class.translate-x-full]="!show"
+    [class.translate-x-0]="show"
+    (mousedown)="$event.stopPropagation()"
+    role="dialog"
+    aria-modal="true"
+  >
+    <div class="h-full flex flex-col bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl">
+      <div class="shrink-0 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <ng-content select="[drawer-header]"></ng-content>
+          </div>
+          <button
+            type="button"
+            class="shrink-0 rounded-md p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-gray-100 dark:hover:bg-gray-800 transition"
+            (click)="close.emit()"
+            aria-label="Close drawer"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
+        <ng-content select="[drawer-body]"></ng-content>
+      </div>
+
+      <div class="shrink-0 px-4 sm:px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+        <ng-content select="[drawer-footer]"></ng-content>
+      </div>
+    </div>
+  </aside>
+</div>

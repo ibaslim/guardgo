@@ -51,6 +51,7 @@ import { toTitleCase } from '../../shared/helpers/format.helper';
 })
 export class GuardSettingComponent implements OnInit, OnDestroy {
 
+  @Input() showPageWrapper: boolean = true;
   @Input() guardData?: Guard;
 
   isEditMode = false;

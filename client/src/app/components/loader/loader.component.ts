@@ -5,8 +5,7 @@ import { CommonModule } from '@angular/common';
   selector: 'app-loader',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './loader.component.html',
-  styleUrls: ['./loader.component.scss']
+  templateUrl: './loader.component.html'
 })
 export class LoaderComponent {
   @Input() size: 'sm' | 'md' | 'lg' = 'md';

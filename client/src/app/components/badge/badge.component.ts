@@ -5,8 +5,7 @@ import { CommonModule } from '@angular/common';
   selector: 'app-badge',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './badge.component.html',
-  styleUrls: ['./badge.component.scss']
+  templateUrl: './badge.component.html'
 })
 export class BadgeComponent {
   @Input() color: 'primary' | 'secondary' | 'success' | 'danger' = 'primary';
