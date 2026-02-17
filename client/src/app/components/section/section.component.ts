@@ -6,7 +6,9 @@ import { CommonModule } from '@angular/common';
   standalone: true,
   imports: [CommonModule],
   templateUrl: './section.component.html',
-  styleUrls: ['./section.component.scss']
+  host: {
+    'class': 'block'
+  }
 })
 export class SectionComponent {
   @Input() title = '';

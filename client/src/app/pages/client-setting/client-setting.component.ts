@@ -87,6 +87,7 @@ interface Client {
 })
 export class ClientSettingComponent implements OnInit, OnDestroy {
 
+  @Input() showPageWrapper: boolean = true;
   @Input() clientData?: Client;
 
   clientFormModel: Client = {

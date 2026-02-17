@@ -12,7 +12,6 @@ import { PhoneInputBaseComponent } from './phone-input-base.component';
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './mobile-phone-input.component.html',
-  styleUrls: ['./mobile-phone-input.component.scss'],
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,

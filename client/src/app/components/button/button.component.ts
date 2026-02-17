@@ -5,8 +5,7 @@ import { CommonModule } from '@angular/common';
   selector: 'app-button',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './button.component.html',
-  styleUrls: ['./button.component.scss']
+  templateUrl: './button.component.html'
 })
 export class ButtonComponent {
   @Input() type: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'info' | 'outline' | 'link' = 'primary';
@@ -18,6 +17,12 @@ export class ButtonComponent {
   @Input() customClass = '';
   @Input() ariaLabel = '';
   @Input() loading = false;
+  @Input() iconOnly = false;
+  @Input() hasIcon = false;
+
+  get showIconSlot(): boolean {
+    return this.iconOnly || this.hasIcon;
+  }
 
   get sizeClass(): string {
     switch (this.size) {

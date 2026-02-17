@@ -3,7 +3,7 @@
     <div class="relative">
       <input type="checkbox" [checked]="value" [disabled]="disabled" (change)="toggle()" class="sr-only" />
       <div class="block w-10 h-6 rounded-full transition" [ngClass]="value ? 'bg-blue-600 dark:bg-blue-500' : 'bg-gray-300 dark:bg-gray-700'"></div>
-      <div class="dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition" [class.translate-x-4]="value"></div>
+      <div class="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200" [ngClass]="value ? 'translate-x-4' : 'translate-x-0'"></div>
     </div>
     <span class="ml-3 text-gray-900 dark:text-gray-100" *ngIf="label">{{ label }}</span>
   </label>

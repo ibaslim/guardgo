@@ -8,7 +8,6 @@ import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/f
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './select-input.component.html',
-  styleUrls: ['./select-input.component.scss'],
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,

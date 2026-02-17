@@ -5,8 +5,7 @@ import { CommonModule } from '@angular/common';
   selector: 'app-page',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './page.component.html',
-  styleUrls: ['./page.component.scss']
+  templateUrl: './page.component.html'
 })
 export class PageComponent {
   @Input() title = '';

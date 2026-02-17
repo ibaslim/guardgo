@@ -5,8 +5,7 @@ import { CommonModule } from '@angular/common';
   selector: 'app-avatar',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './avatar.component.html',
-  styleUrls: ['./avatar.component.scss']
+  templateUrl: './avatar.component.html'
 })
 export class AvatarComponent {
   @Input() src?: string;

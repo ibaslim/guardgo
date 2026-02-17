@@ -1,5 +1,15 @@
-<app-page title="Service Provider Profile">
-    <form (ngSubmit)="submitProviderForm()" class="space-y-6">
+<ng-container *ngIf="showPageWrapper; else formOnly">
+    <app-page title="Service Provider Profile">
+        <ng-container *ngTemplateOutlet="formContent"></ng-container>
+    </app-page>
+</ng-container>
+
+<ng-template #formOnly>
+    <ng-container *ngTemplateOutlet="formContent"></ng-container>
+</ng-template>
+
+<ng-template #formContent>
+    <form (ngSubmit)="submitProviderForm()" class="space-y-8">
         <app-section title="Logo" subtitle="Used on proposals and client-facing materials.">
             <app-profile-picture-upload [maxSizeKb]="500" [title]="'Company Logo'"
                 [subtitle]="'Square logo recommended for best results.'">
@@ -363,4 +373,4 @@
             </app-button>
         </app-sticky-action-bar>
     </form>
-</app-page>
+</ng-template>

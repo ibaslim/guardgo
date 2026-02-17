@@ -2,6 +2,9 @@ import { CommonModule } from '@angular/common';
 import { Component, forwardRef } from '@angular/core';
 import { FormsModule, NG_VALUE_ACCESSOR, ControlValueAccessor } from '@angular/forms';
 import { NgxMaterialTimepickerModule } from 'ngx-material-timepicker';
+import { BannerComponent } from '../../banner/banner.component';
+import { ButtonComponent } from '../../button/button.component';
+import { CheckboxComponent } from '../checkbox/checkbox.component';
 
 interface TimeRange {
   start: string;
@@ -16,7 +19,7 @@ interface DayAvailability {
 @Component({
   selector: 'app-weekly-availability',
   standalone: true,
-  imports: [CommonModule, FormsModule, NgxMaterialTimepickerModule],
+  imports: [CommonModule, FormsModule, NgxMaterialTimepickerModule, BannerComponent, ButtonComponent, CheckboxComponent],
   templateUrl: './weekly-availability.component.html',
   styleUrl: './weekly-availability.component.css',
   providers: [
@@ -30,6 +33,10 @@ interface DayAvailability {
 export class WeeklyAvailabilityComponent implements ControlValueAccessor {
   availability: { [day: string]: DayAvailability } = {};
   daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  // Define the day boundary: 6:00 AM
+  readonly DAY_START_HOUR = 6; // 6 AM
+  readonly DAY_START_MINUTES = 6 * 60; // 360 minutes (6:00 AM)
 
   // Validation errors
   validationErrors: { [day: string]: string[] } = {};
@@ -60,14 +67,13 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
   }
 
   // Toggle day enabled/disabled
-  toggleDay(day: string, event: Event) {
-    const checked = (event.target as HTMLInputElement).checked;
-    this.availability[day].enabled = checked;
+  toggleDay(day: string, enabled: boolean) {
+    this.availability[day].enabled = enabled;
 
-    if (checked && this.availability[day].timeRanges.length === 0) {
+    if (enabled && this.availability[day].timeRanges.length === 0) {
       // Add first mandatory time range
       this.availability[day].timeRanges.push({ start: '', end: '' });
-    } else if (!checked) {
+    } else if (!enabled) {
       // Clear time ranges when disabled
       this.availability[day].timeRanges = [];
     }
@@ -167,10 +173,25 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
             }
           }
 
-          // Check if start time is before end time (only if both are filled)
+          // Validate time is within the day window (6:00 AM to 5:59 AM next day)
+          if (range.start && !this.isTimeInValidWindow(range.start)) {
+            if (!this.validationErrors[day].includes('Start time must be between 6:00 AM and 5:59 AM (next day).')) {
+              this.validationErrors[day].push('Start time must be between 6:00 AM and 5:59 AM (next day).');
+            }
+            isValid = false;
+          }
+
+          if (range.end && !this.isTimeInValidWindow(range.end)) {
+            if (!this.validationErrors[day].includes('End time must be between 6:00 AM and 5:59 AM (next day).')) {
+              this.validationErrors[day].push('End time must be between 6:00 AM and 5:59 AM (next day).');
+            }
+            isValid = false;
+          }
+
+          // Check if start time is before end time (within the day window)
           if (range.start && range.end && !this.isStartBeforeEnd(range.start, range.end)) {
-            if (!this.validationErrors[day].includes('Start time must be before end time.')) {
-              this.validationErrors[day].push('Start time must be before end time.');
+            if (!this.validationErrors[day].includes('Start time must be before end time within the day window (6:00 AM to 5:59 AM next day).')) {
+              this.validationErrors[day].push('Start time must be before end time within the day window (6:00 AM to 5:59 AM next day).');
             }
             isValid = false;
           }
@@ -193,6 +214,13 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
     return isValid;
   }
 
+  // Check if time is within the valid window (6:00 AM to 5:59 AM next day)
+  private isTimeInValidWindow(time: string): boolean {
+    const minutes = this.parseTime(time);
+    if (minutes === null) return false;
+    return true; // All times are technically valid; ordering matters
+  }
+
   // Check if total duration of all time ranges exceeds 24 hours
   private exceedsTotalDuration(day: string): boolean {
     const ranges = this.availability[day].timeRanges.filter(r => r.start && r.end);
@@ -204,14 +232,10 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
       const endMinutes = this.parseTime(range.end);
 
       if (startMinutes !== null && endMinutes !== null) {
-        // Calculate duration for this range
-        let duration = endMinutes - startMinutes;
+        const normalizedStart = this.normalizeTimeToWindow(startMinutes);
+        const normalizedEnd = this.normalizeTimeToWindow(endMinutes);
 
-        // Handle overnight shifts (e.g., 11:00 PM to 2:00 AM)
-        if (duration < 0) {
-          duration = (24 * 60) + duration;
-        }
-
+        const duration = normalizedEnd - normalizedStart;
         totalMinutes += duration;
       }
     });
@@ -234,7 +258,7 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
     return false;
   }
 
-  // Check if two time ranges overlap
+  // Check if two time ranges overlap (within the day window)
   private doRangesOverlap(range1: TimeRange, range2: TimeRange): boolean {
     const start1 = this.parseTime(range1.start);
     const end1 = this.parseTime(range1.end);
@@ -245,10 +269,17 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
       return false;
     }
 
-    return (start1 < end2 && end1 > start2);
+    // Normalize all times to the day window
+    const normStart1 = this.normalizeTimeToWindow(start1);
+    const normEnd1 = this.normalizeTimeToWindow(end1);
+    const normStart2 = this.normalizeTimeToWindow(start2);
+    const normEnd2 = this.normalizeTimeToWindow(end2);
+
+    // Check for overlap in normalized space
+    return (normStart1 < normEnd2 && normEnd1 > normStart2);
   }
 
-  // Check if start time is before end time
+  // Check if start time is before end time within the day window
   private isStartBeforeEnd(start: string, end: string): boolean {
     const startMinutes = this.parseTime(start);
     const endMinutes = this.parseTime(end);
@@ -257,7 +288,22 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
       return true; // Don't show error if times aren't set yet
     }
 
-    return startMinutes < endMinutes;
+    // Normalize times relative to 6:00 AM
+    const normalizedStart = this.normalizeTimeToWindow(startMinutes);
+    const normalizedEnd = this.normalizeTimeToWindow(endMinutes);
+
+    // Start must be before end in the normalized window
+    return normalizedStart < normalizedEnd;
+  }
+
+  // Normalize time to the day window
+  private normalizeTimeToWindow(minutes: number): number {
+    if (minutes >= this.DAY_START_MINUTES) {
+      return minutes - this.DAY_START_MINUTES;
+    } else {
+
+      return (24 * 60) - this.DAY_START_MINUTES + minutes;
+    }
   }
 
   // Parse time string (e.g., "09:30 AM") to minutes since midnight

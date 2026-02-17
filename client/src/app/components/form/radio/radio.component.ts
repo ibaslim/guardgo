@@ -7,7 +7,6 @@ import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/f
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './radio.component.html',
-  styleUrls: ['./radio.component.scss'],
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,

@@ -10,8 +10,7 @@ import { AvatarComponent } from '../avatar/avatar.component';
   selector: 'app-table',
   standalone: true,
   imports: [CommonModule, FormsModule, BadgeComponent, AvatarComponent],
-  templateUrl: './table.component.html',
-  styleUrls: ['./table.component.scss']
+  templateUrl: './table.component.html'
 })
 export class TableComponent {
   getBadgeColor(value: string): 'primary' | 'secondary' | 'success' | 'danger' {

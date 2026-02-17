@@ -5,8 +5,7 @@ import { CommonModule } from '@angular/common';
   selector: 'app-file-input',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './file-input.component.html',
-  styleUrls: ['./file-input.component.scss']
+  templateUrl: './file-input.component.html'
 })
 export class FileInputComponent {
   @Input() label: string = 'Upload File';

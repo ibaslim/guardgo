@@ -14,6 +14,7 @@ import { AnalyticsComponent } from './pages/analytics/analytics.component';
 import { OnboardingComponent } from './pages/onboarding/onboarding.component';
 import { ClientSettingComponent } from './pages/client-setting/client-setting.component';
 import { GuardSettingComponent } from './pages/guard-setting/guard-setting.component';
+import { TenantSettingsComponent } from './pages/tenant-settings/tenant-settings.component';
 
 export const routes: Routes = [
 
@@ -98,6 +99,11 @@ export const routes: Routes = [
       {
         path: 'forms',
         loadComponent: () => import('./pages/forms/forms-page.component').then(m => m.FormsPageComponent),
+        canActivate: [onboardingGuard]
+      },
+      {
+        path: 'settings',
+        component: TenantSettingsComponent,
         canActivate: [onboardingGuard]
       },
       {

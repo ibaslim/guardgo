@@ -1,0 +1,12 @@
+<label [attr.for]="resolvedId || null" [ngClass]="[containerClass, disabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer']">
+  <input
+    type="checkbox"
+    [attr.id]="resolvedId || null"
+    [attr.name]="name"
+    [checked]="value"
+    [disabled]="disabled"
+    (change)="toggle($event)"
+    [class]="checkboxClass + (disabled ? ' cursor-not-allowed' : ' cursor-pointer')"
+  />
+  <span *ngIf="label" [class]="labelClass + (disabled ? ' cursor-not-allowed' : ' cursor-pointer')">{{ label }}</span>
+</label>
