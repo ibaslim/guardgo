@@ -1,0 +1,17 @@
+<app-big-banner type="pending" title="Profile Under Review" message="Thank you for submitting your profile!"
+    [userName]="userName" [userEmail]="userEmail" [additionalInfo]="additionalInfoHtml">
+
+    <!-- Main content -->
+    <p>
+        Your profile is currently being reviewed by our admin team. This process typically takes
+        <strong>24-48 hours</strong>.
+    </p>
+
+    <!-- Support slot -->
+    <p support>
+        Need help? Contact our support team at
+        <a href="mailto:support@example.com" class="text-blue-600 dark:text-blue-400 hover:underline">
+            supportexample.com
+        </a>
+    </p>
+</app-big-banner>

@@ -1836,7 +1836,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         next: (response) => {
           this.isSubmitting = false;
           this.appService.setTenantStatus('active', false);
-          this.router.navigate(['/dashboard']);
+          this.router.navigate(['/dashboard/pending-verification']);
         },
         error: (err) => {
           this.isSubmitting = false;

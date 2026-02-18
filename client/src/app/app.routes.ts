@@ -12,9 +12,8 @@ import { ConfigResolver } from './shared/resolvers/config.resolver';
 import { UsersComponent } from './pages/users/users.component';
 import { AnalyticsComponent } from './pages/analytics/analytics.component';
 import { OnboardingComponent } from './pages/onboarding/onboarding.component';
-import { ClientSettingComponent } from './pages/client-setting/client-setting.component';
-import { GuardSettingComponent } from './pages/guard-setting/guard-setting.component';
 import { TenantSettingsComponent } from './pages/tenant-settings/tenant-settings.component';
+import { PendingVerificationComponent } from './pages/pending-verification/pending-verification.component';
 
 export const routes: Routes = [
 
@@ -109,7 +108,14 @@ export const routes: Routes = [
       {
         path: 'onboarding',
         component: OnboardingComponent
+      },
+      {
+        path: 'pending-verification',
+        component: PendingVerificationComponent,
+        canActivate: [onboardingGuard],
+        data: { animation: 'PendingVerificationPage' }
       }
+
     ]
   },
   {

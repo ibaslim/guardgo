@@ -536,7 +536,7 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       next: (response) => {
         console.log('Client profile submitted successfully', response);
         this.appService.setTenantStatus('active', false);
-        this.router.navigate(['/dashboard']);
+        this.router.navigate(['/dashboard/pending-verification']);
       },
       error: (err) => {
         console.error('Error submitting client profile:', err);
