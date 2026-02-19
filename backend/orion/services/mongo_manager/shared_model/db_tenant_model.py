@@ -17,8 +17,10 @@ class IocCategory(EmbeddedModel):
 
 class TenantStatus(str, Enum):
     ONBOARDING = "onboarding"
+    PENDING_VERIFICATION = "pending_verification"
     ACTIVE = "active"
-    DISABLE = "disable"
+    INACTIVE = "inactive"
+    BANNED = "banned"
 
 
 class TenantType(str, Enum):
@@ -290,7 +292,7 @@ class db_tenant_model(Model):
     is_default: bool = False
     verified: bool = False
     user_quota: int = 0
-    status: TenantStatus = TenantStatus.DISABLE
+    status: TenantStatus = TenantStatus.INACTIVE
     licenses: List[str] = []
     iocs: List[IocCategory] = []
 
@@ -306,7 +308,7 @@ class db_tenant_model(Model):
     @model_validator(mode="before")
     @classmethod
     def _backfill_defaults(cls, values):
-        # Defensive defaults for legacy documents
+        # Defensive defaults
         if isinstance(values, dict):
             values.setdefault("tenant_type", TenantType.CLIENT)
             values.setdefault("profile", None)
@@ -344,7 +346,7 @@ class TenantPayload(BaseModel):
     subscription: bool = False
     verified: bool = False
     user_quota: int = 0
-    status: TenantStatus = TenantStatus.DISABLE
+    status: TenantStatus = TenantStatus.INACTIVE
     licenses: List[str] = []
     iocs: List[IocCategory] = []
     created_at: Optional[datetime] = None

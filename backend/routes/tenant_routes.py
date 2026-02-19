@@ -7,7 +7,7 @@ from orion.api.interactive.account_manager.models.user_param_model import user_p
 from orion.api.interactive.resource_manager.resource_manager import ResourceManager
 from orion.api.interactive.tenant_manager.models.tenant_param_model import tenant_param_model
 from orion.services.mongo_manager.shared_model.db_auth_models import user_role, UserStatus
-from orion.services.mongo_manager.shared_model.db_tenant_model import TenantRequest, db_tenant_model, TenantPayload
+from orion.services.mongo_manager.shared_model.db_tenant_model import TenantRequest, db_tenant_model, TenantPayload, TenantStatus
 from orion.api.interactive.tenant_manager.tenant_manager import TenantManager
 from orion.api.interactive.account_manager.models.user_model import user_model
 from bson import ObjectId
@@ -87,6 +87,73 @@ async def update_tenant(data: TenantPayload, current_user=Depends(get_current_us
     dependencies=[Depends(role_required([user_role.ADMIN]))], )
 async def get_all_tenants():
     return await TenantManager.get_instance().get_all_tenant()
+
+
+@tenant_routes.get(
+    "/api/tenants/datatable",
+    summary="Get tenants datatable",
+    description="Get tenants with pagination, filters, keyword search, and sorting.",
+    tags=["Tenant"],
+    operation_id="getTenantsDatatable",
+    response_description="Paginated tenant rows.",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
+async def get_tenants_datatable(
+        page: int = 1,
+        rows: int = 10,
+        tenant_type: str | None = None,
+        tenant_status: str | None = None,
+        keyword: str | None = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc"):
+    return await TenantManager.get_instance().get_tenants_datatable(
+        page=page,
+        rows=rows,
+        tenant_type=tenant_type,
+        tenant_status=tenant_status,
+        keyword=keyword,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
+
+@tenant_routes.patch(
+    "/api/tenants/{tenant_id}/verify",
+    summary="Verify tenant",
+    description="Mark tenant as verified and set status to active.",
+    tags=["Tenant"],
+    operation_id="verifyTenant",
+    response_description="Updated tenant status.",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
+async def verify_tenant(tenant_id: str, current_user=Depends(get_current_user)):
+    return await TenantManager.get_instance().set_tenant_status(tenant_id, TenantStatus.ACTIVE)
+
+
+@tenant_routes.patch(
+    "/api/tenants/{tenant_id}/deactivate",
+    summary="Deactivate tenant",
+    description="Set tenant status to inactive.",
+    tags=["Tenant"],
+    operation_id="deactivateTenant",
+    response_description="Updated tenant status.",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
+async def deactivate_tenant(tenant_id: str, current_user=Depends(get_current_user)):
+    return await TenantManager.get_instance().set_tenant_status(tenant_id, TenantStatus.INACTIVE)
+
+
+@tenant_routes.patch(
+    "/api/tenants/{tenant_id}/ban",
+    summary="Ban tenant",
+    description="Set tenant status to banned.",
+    tags=["Tenant"],
+    operation_id="banTenant",
+    response_description="Updated tenant status.",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
+async def ban_tenant(tenant_id: str, current_user=Depends(get_current_user)):
+    return await TenantManager.get_instance().set_tenant_status(tenant_id, TenantStatus.BANNED)
 
 
 # ============================================================================

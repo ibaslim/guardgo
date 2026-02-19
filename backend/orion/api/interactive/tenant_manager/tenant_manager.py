@@ -1,7 +1,7 @@
 import re
 import threading
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from bson import ObjectId
@@ -113,6 +113,8 @@ class TenantManager:
         if tenant.is_default:
             raise HTTPException(status_code=401, detail="Default account cant be updated")
 
+        previous_status = tenant.status
+
         dek = await KeyManager.get_instance().get_profile_dek(str(tenant.id))
         enc = Fernet(dek)
 
@@ -141,6 +143,9 @@ class TenantManager:
                 ioc_id=enc.encrypt(ioc.ioc_id.encode()).decode(),
                 name=enc.encrypt(ioc.name.encode()).decode(),
                 values=[enc.encrypt(v.encode()).decode() for v in (ioc.values or [])]) for ioc in (data.iocs or [])]
+
+        if previous_status == TenantStatus.ONBOARDING:
+            tenant.status = TenantStatus.PENDING_VERIFICATION
 
         await self._engine.save(tenant)
 
@@ -254,6 +259,8 @@ class TenantManager:
             if not tenant:
                 raise HTTPException(status_code=404, detail="Tenant not found")
 
+            previous_status = tenant.status
+
             # Role guard: only ADMIN or matching domain admin
             role = getattr(current_user, "role", None)
             allowed = role == user_role.ADMIN or (
@@ -275,6 +282,7 @@ class TenantManager:
                 licenses=data.licenses,
                 iocs=data.iocs,
             )
+            previous_status = tenant.status
 
         # Update base fields
         tenant.tenant_type = data.tenant_type
@@ -295,6 +303,9 @@ class TenantManager:
             merged = TenantManager._deep_merge(existing, data.profile)
             tenant.profile = merged
 
+        if is_update and previous_status == TenantStatus.ONBOARDING:
+            tenant.status = TenantStatus.PENDING_VERIFICATION
+
         tenant.updated_at = datetime.utcnow()
         if data.verified and not tenant.verified_date:
             tenant.verified_date = datetime.utcnow()
@@ -309,68 +320,217 @@ class TenantManager:
             "profile": tenant.profile or {},
         }
 
+    async def set_tenant_status(self, tenant_id: str, target_status: TenantStatus):
+        tenant = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(tenant_id))
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        tenant.status = target_status
+        tenant.updated_at = datetime.utcnow()
+
+        if target_status == TenantStatus.ACTIVE:
+            tenant.verified = True
+            tenant.verified_date = datetime.utcnow()
+
+        await self._engine.save(tenant)
+
+        return {
+            "message": "Tenant status updated",
+            "id": str(tenant.id),
+            "status": tenant.status,
+            "verified": tenant.verified,
+            "verified_date": tenant.verified_date,
+        }
+
+    @staticmethod
+    def _extract_tenant_name(profile: Optional[Dict[str, Any]]) -> str:
+        if not isinstance(profile, dict):
+            return ""
+        for key in ["legal_company_name", "trading_name", "legal_entity_name", "full_name", "company_name", "name"]:
+            value = profile.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
+
+    async def get_tenants_datatable(
+            self,
+            page: int = 1,
+            rows: int = 10,
+            tenant_type: Optional[str] = None,
+            tenant_status: Optional[str] = None,
+            keyword: Optional[str] = None,
+            sort_by: str = "created_at",
+            sort_order: str = "desc"):
+        collection = self._engine.get_collection(db_tenant_model)
+        docs = await collection.find({"is_default": False}).to_list(length=None)
+
+        # Ensure no tenant id validation or ObjectId parsing occurs in datatable logic
+        # This endpoint should not raise 'Invalid tenant id' unless explicitly passed and validated
+
+        normalized_type = (tenant_type or "").strip().lower()
+        normalized_status = (tenant_status or "").strip().lower()
+        normalized_keyword = (keyword or "").strip().lower()
+
+        filtered_docs: List[Dict[str, Any]] = []
+        for doc in docs:
+            current_type = str(doc.get("tenant_type") or "").strip().lower()
+            current_status = str(doc.get("status") or "").strip().lower()
+            profile = doc.get("profile") or {}
+            display_name = self._extract_tenant_name(profile)
+
+            if normalized_type and current_type != normalized_type:
+                continue
+
+            if normalized_status and current_status != normalized_status:
+                continue
+
+            if normalized_keyword:
+                searchable_blob = " ".join([
+                    str(doc.get("_id") or ""),
+                    current_type,
+                    current_status,
+                    display_name.lower(),
+                    str(profile).lower(),
+                ])
+                if normalized_keyword not in searchable_blob:
+                    continue
+
+            filtered_docs.append(doc)
+
+        reverse = (sort_order or "desc").lower() != "asc"
+        allowed_sort_fields = {
+            "tenant_type", "status", "created_at", "updated_at", "verified_date",
+            "user_quota", "verified", "subscription", "name", "id"
+        }
+        selected_sort = sort_by if sort_by in allowed_sort_fields else "created_at"
+
+        def sort_key(doc: Dict[str, Any]):
+            if selected_sort == "name":
+                return self._extract_tenant_name(doc.get("profile") or {}).lower()
+            if selected_sort == "id":
+                return str(doc.get("_id") or "")
+            value = doc.get(selected_sort)
+            return (value is None, value)
+
+        filtered_docs.sort(key=sort_key, reverse=reverse)
+
+        safe_rows = rows if rows and rows > 0 else 10
+        safe_page = page if page and page > 0 else 1
+        total_items = len(filtered_docs)
+        total_pages = (total_items + safe_rows - 1) // safe_rows if total_items > 0 else 0
+        start = (safe_page - 1) * safe_rows
+        end = start + safe_rows
+        page_docs = filtered_docs[start:end]
+
+        data = []
+        for doc in page_docs:
+            profile = doc.get("profile") or {}
+            data.append({
+                "id": str(doc.get("_id")),
+                "name": self._extract_tenant_name(profile),
+                "tenant_type": doc.get("tenant_type"),
+                "status": doc.get("status"),
+                "verified": bool(doc.get("verified", False)),
+                "subscription": bool(doc.get("subscription", False)),
+                "user_quota": int(doc.get("user_quota", 0) or 0),
+                "created_at": doc.get("created_at"),
+                "updated_at": doc.get("updated_at"),
+                "verified_date": doc.get("verified_date"),
+            })
+
+        return {
+            "items": data,
+            "pagination": {
+                "page": safe_page,
+                "rows": safe_rows,
+                "total_items": total_items,
+                "total_pages": total_pages,
+            },
+            "filters": {
+                "tenant_type": tenant_type,
+                "tenant_status": tenant_status,
+                "keyword": keyword,
+                "sort_by": selected_sort,
+                "sort_order": "desc" if reverse else "asc",
+            }
+        }
+
+    async def _serialize_tenant(self, tenant: db_tenant_model) -> Dict[str, Any]:
+        profile = tenant.profile or {}
+
+        try:
+            dek = await KeyManager.get_instance().get_profile_dek(ObjectId(tenant.id))
+            enc: Fernet | None = Fernet(dek) if dek else None
+        except Exception:
+            enc = None
+
+        licenses = []
+        for l in (tenant.licenses or []):
+            if enc:
+                try:
+                    licenses.append(enc.decrypt(l.encode()).decode())
+                    continue
+                except Exception:
+                    pass
+            licenses.append(l)
+
+        iocs = []
+        for ioc in (tenant.iocs or []):
+            if enc:
+                try:
+                    ioc_id = enc.decrypt(ioc.ioc_id.encode()).decode()
+                except Exception:
+                    ioc_id = ioc.ioc_id
+                try:
+                    name = enc.decrypt(ioc.name.encode()).decode()
+                except Exception:
+                    name = ioc.name
+            else:
+                ioc_id = ioc.ioc_id
+                name = ioc.name
+            values = []
+            for v in (ioc.values or []):
+                if enc:
+                    try:
+                        values.append(enc.decrypt(v.encode()).decode())
+                        continue
+                    except Exception:
+                        pass
+                values.append(v)
+            iocs.append(IocCategory(ioc_id=ioc_id, name=name, values=values))
+
+        return {
+            "id": str(tenant.id),
+            "tenant_type": tenant.tenant_type,
+            "profile": profile,
+            "subscription": tenant.subscription,
+            "verified": tenant.verified,
+            "user_quota": tenant.user_quota,
+            "status": tenant.status,
+            "licenses": licenses,
+            "iocs": iocs,
+            "created_at": tenant.created_at,
+            "updated_at": tenant.updated_at,
+            "verified_date": tenant.verified_date,
+        }
+
+    async def get_tenant_by_id(self, tenant_id: str) -> Dict[str, Any]:
+        try:
+            object_id = ObjectId(tenant_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid tenant id")
+
+        tenant = await self._engine.find_one(db_tenant_model, db_tenant_model.id == object_id)
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        return await self._serialize_tenant(tenant)
+
     async def get_all_tenant(self) -> List[db_tenant_model]:
         tenants = await self._engine.find(db_tenant_model, db_tenant_model.is_default == False)
         result = []
         for tenant in tenants:
-            profile = tenant.profile or {}
-
-            # Decrypt legacy encrypted fields that still exist (licenses, iocs).
-            try:
-                dek = await KeyManager.get_instance().get_profile_dek(ObjectId(tenant.id))
-                enc: Fernet | None = Fernet(dek) if dek else None
-            except Exception:
-                enc = None
-
-            licenses = []
-            for l in (tenant.licenses or []):
-                if enc:
-                    try:
-                        licenses.append(enc.decrypt(l.encode()).decode())
-                        continue
-                    except Exception:
-                        pass
-                licenses.append(l)
-
-            iocs = []
-            for ioc in (tenant.iocs or []):
-                if enc:
-                    try:
-                        ioc_id = enc.decrypt(ioc.ioc_id.encode()).decode()
-                    except Exception:
-                        ioc_id = ioc.ioc_id
-                    try:
-                        name = enc.decrypt(ioc.name.encode()).decode()
-                    except Exception:
-                        name = ioc.name
-                else:
-                    ioc_id = ioc.ioc_id
-                    name = ioc.name
-                values = []
-                for v in (ioc.values or []):
-                    if enc:
-                        try:
-                            values.append(enc.decrypt(v.encode()).decode())
-                            continue
-                        except Exception:
-                            pass
-                    values.append(v)
-                iocs.append(IocCategory(ioc_id=ioc_id, name=name, values=values))
-
-            result.append({
-                "id": str(tenant.id),
-                "tenant_type": tenant.tenant_type,
-                "profile": profile,
-                "subscription": tenant.subscription,
-                "verified": tenant.verified,
-                "user_quota": tenant.user_quota,
-                "status": tenant.status,
-                "licenses": licenses,
-                "iocs": iocs,
-                "created_at": tenant.created_at,
-                "updated_at": tenant.updated_at,
-                "verified_date": tenant.verified_date,
-            })
+            result.append(await self._serialize_tenant(tenant))
 
         return result
 
