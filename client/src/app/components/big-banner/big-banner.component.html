@@ -1,24 +1,22 @@
-<div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-2xl w-full space-y-8">
+<div class="min-h-screen flex items-center justify-center px-4 sm:px-6 lg:px-8">
+    <div
+        [ngClass]="getBackgroundClass() + ' ' + getSizeClass() + ' rounded-xl shadow-xl border dark:border-gray-700 bg-white dark:bg-gray-800'">
 
         <!-- Title -->
-        <div class="text-center">
-            <h2 class="text-4xl font-bold text-gray-900 dark:text-gray-100">{{ title }}</h2>
-            <p *ngIf="message" class="mt-2 text-lg text-gray-600 dark:text-gray-400">{{ message }}</p>
+        <div class="text-center mb-6" *ngIf="title">
+            <h2 [ngClass]="getTitleClass() + ' font-bold text-base text-gray-600 dark:text-gray-300 mb-4'">{{ title }}
+            </h2>
+            <p [ngClass]="getMessageClass() + ' mt-2 text-gray-600 dark:text-gray-400'" *ngIf="message">{{ message }}
+            </p>
         </div>
 
-        <!-- Main Content Card -->
-        <div class="bg-white dark:bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow rounded-lg p-6 border border-gray-200 dark:border-gray-700"
-            [ngClass]="getInfoBoxColorClass()">
-
-            <!-- Projected Content -->
-            <div class="space-y-4 text-base text-gray-700 dark:text-gray-300">
-                <ng-content></ng-content>
-            </div>
+        <!-- Projected Content -->
+        <div>
+            <ng-content></ng-content>
         </div>
 
         <!-- Optional Support / Footer Slot -->
-        <div class="text-center text-xs text-gray-500 dark:text-gray-400">
+        <div class="text-center text-xs text-gray-500 dark:text-gray-400 mt-6">
             <ng-content select="[support]"></ng-content>
         </div>
 

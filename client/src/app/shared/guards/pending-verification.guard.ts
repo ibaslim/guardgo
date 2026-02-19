@@ -14,10 +14,15 @@ export const pendingVerificationGuard: CanActivateFn = (route, state) => {
     currentUrl.startsWith('/dashboard/pending-verification');
 
   // Only 'active' tenants can access pending-verification
-  if (tenantStatus === 'active') {
+  if (tenantStatus !== 'onboarding') {
     if (isPendingRoute) return true;
     return router.createUrlTree(['/dashboard/pending-verification']);
   }
+
+  // if (tenantStatus === 'pending_verification') {
+  //   if (isPendingRoute) return true;
+  //   return router.createUrlTree(['/dashboard/pending-verification']);
+  // }
 
   // Block pending-verification for non-active tenants
   if (isPendingRoute) {
