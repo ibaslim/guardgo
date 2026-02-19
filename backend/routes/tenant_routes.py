@@ -1,5 +1,6 @@
+
 from fastapi import APIRouter, HTTPException
-from fastapi import Depends, UploadFile
+from fastapi import Depends, UploadFile, Path
 from configs.app_dependency import license_required, role_required, status_required, get_current_user
 from orion.api.interactive.account_manager.account_manager import AccountManager
 from orion.api.interactive.account_manager.models.user_meta_model import user_meta_model
@@ -115,6 +116,21 @@ async def get_tenants_datatable(
         sort_by=sort_by,
         sort_order=sort_order,
     )
+
+
+@tenant_routes.get(
+    "/api/tenants/{tenant_id}",
+    summary="Get tenant by id",
+    description="Retrieve the complete tenant object by tenant id (admin only).",
+    tags=["Tenant"],
+    operation_id="getTenantById",
+    response_description="Complete tenant data.",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
+async def get_tenant_by_id(
+    tenant_id: str = Path(..., description="Tenant ObjectId as string")
+):
+    return await TenantManager.get_instance().get_tenant_by_id(tenant_id)
 
 
 @tenant_routes.patch(
