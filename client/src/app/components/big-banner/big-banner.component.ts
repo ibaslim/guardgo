@@ -1,6 +1,5 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { SafeHtml } from '@angular/platform-browser';
 
 export type BannerType = 'pending' | 'error' | 'success' | 'warning' | 'maintenance' | 'info';
 
@@ -15,11 +14,7 @@ export class BigBannerComponent {
   @Input() type: BannerType = 'info';
   @Input() title: string = '';
   @Input() message: string = '';
-  @Input() additionalInfo?: string | SafeHtml;
-  @Input() userEmail?: string;
-  @Input() userName?: string;
 
-  // For additional info box
   getInfoBoxColorClass(): string {
     switch (this.type) {
       case 'pending': return 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800';
@@ -29,30 +24,6 @@ export class BigBannerComponent {
       case 'maintenance': return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
       case 'info': return 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
       default: return 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800';
-    }
-  }
-
-  getInfoIconColorClass(): string {
-    switch (this.type) {
-      case 'pending': return 'text-yellow-600 dark:text-yellow-400';
-      case 'error': return 'text-red-600 dark:text-red-400';
-      case 'success': return 'text-green-600 dark:text-green-400';
-      case 'warning': return 'text-orange-600 dark:text-orange-400';
-      case 'maintenance': return 'text-blue-600 dark:text-blue-400';
-      case 'info': return 'text-blue-600 dark:text-blue-400';
-      default: return 'text-gray-600 dark:text-gray-400';
-    }
-  }
-
-  getInfoTextColorClass(): string {
-    switch (this.type) {
-      case 'pending': return 'text-yellow-900 dark:text-yellow-200';
-      case 'error': return 'text-red-900 dark:text-red-200';
-      case 'success': return 'text-green-900 dark:text-green-200';
-      case 'warning': return 'text-orange-900 dark:text-orange-200';
-      case 'maintenance': return 'text-blue-900 dark:text-blue-200';
-      case 'info': return 'text-blue-900 dark:text-blue-200';
-      default: return 'text-gray-900 dark:text-gray-200';
     }
   }
 }

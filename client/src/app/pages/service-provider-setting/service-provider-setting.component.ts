@@ -798,7 +798,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       next: (response) => {
         console.log('Service provider profile submitted successfully', response);
         this.appService.setTenantStatus('active', false);
-        this.router.navigate(['/dashboard/pending-verification']);
+        this.router.navigate(['/dashboard']);
       },
       error: (err) => {
         console.error('Error submitting service provider profile:', err);

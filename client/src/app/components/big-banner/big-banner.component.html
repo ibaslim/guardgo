@@ -8,46 +8,19 @@
         </div>
 
         <!-- Main Content Card -->
-        <div
-            class="bg-white dark:bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-            <div class="space-y-4">
+        <div class="bg-white dark:bg-gray-800 shadow-xl hover:shadow-2xl transition-shadow rounded-lg p-6 border border-gray-200 dark:border-gray-700"
+            [ngClass]="getInfoBoxColorClass()">
 
-                <!-- User Greeting -->
-                <p *ngIf="userName" class="text-base text-gray-700 dark:text-gray-300">
-                    Hi <strong class="text-gray-900 dark:text-gray-100">{{ userName }}</strong>,
-                </p>
-
-                <!-- Main Content -->
-                <div class="text-base text-gray-700 dark:text-gray-300">
-                    <ng-content></ng-content>
-                </div>
-
-                <!-- Additional Info Box -->
-                <div *ngIf="additionalInfo" [ngClass]="[getInfoBoxColorClass(), 'border rounded-lg p-4']">
-                    <div class="flex items-start gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg"
-                            [ngClass]="[getInfoIconColorClass(), 'h-5 w-5 flex-shrink-0 mt-0.5']" viewBox="0 0 20 20"
-                            fill="currentColor">
-                            <path fill-rule="evenodd"
-                                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                                clip-rule="evenodd" />
-                        </svg>
-                        <div class="flex-1">
-                            <div [ngClass]="[getInfoTextColorClass(), 'text-sm']" [innerHTML]="additionalInfo"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- User Email -->
-                <p *ngIf="userEmail" class="text-sm text-gray-600 dark:text-gray-400">
-                    We'll send updates to <strong class="text-gray-900 dark:text-gray-100">{{ userEmail }}</strong>
-                </p>
+            <!-- Projected Content -->
+            <div class="space-y-4 text-base text-gray-700 dark:text-gray-300">
+                <ng-content></ng-content>
             </div>
         </div>
 
-        <!-- Support Slot -->
+        <!-- Optional Support / Footer Slot -->
         <div class="text-center text-xs text-gray-500 dark:text-gray-400">
             <ng-content select="[support]"></ng-content>
         </div>
+
     </div>
 </div>
