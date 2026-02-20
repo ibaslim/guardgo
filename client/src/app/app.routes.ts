@@ -107,6 +107,16 @@ export const routes: Routes = [
         canActivate: [onboardingGuard]
       },
       {
+        path: 'tenants/:id',
+        loadComponent: () => import('./pages/tenants').then(m => m.TenantsComponent),
+        canActivate: [onboardingGuard]
+      },
+      {
+        path: 'tenants',
+        loadComponent: () => import('./pages/tenants').then(m => m.TenantsComponent),
+        canActivate: [onboardingGuard]
+      },
+      {
         path: 'onboarding',
         component: OnboardingComponent
       }

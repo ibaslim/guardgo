@@ -90,8 +90,8 @@ class SignupManager:
             licenses=["maintainer", "free"],
             status=TenantStatus.ONBOARDING,
             tenant_type=tenant_type_enum,
-            profile={"name": company}
-            )
+            profile={"name": 'N/A'},
+        )
         await TenantManager.get_instance().create_tenant(tenant)
 
         user = db_user_account(
@@ -120,7 +120,7 @@ class SignupManager:
             # Log mail error but don't fail signup - user can request resend
             print(f"Failed to send verification email to {user.email}: {e}")
 
-        return {"message": "Signup successful. Your account is under verification.", "status": "pending", "email": email, "user_id": str(user.id)}
+        return {"message": "Signup successful", "status": "pending", "email": email, "user_id": str(user.id)}
 
     @staticmethod
     async def resend_verification_email(data: SignupRequest):
