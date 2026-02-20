@@ -12,9 +12,9 @@ import { ConfigResolver } from './shared/resolvers/config.resolver';
 import { UsersComponent } from './pages/users/users.component';
 import { AnalyticsComponent } from './pages/analytics/analytics.component';
 import { OnboardingComponent } from './pages/onboarding/onboarding.component';
-import { ClientSettingComponent } from './pages/client-setting/client-setting.component';
-import { GuardSettingComponent } from './pages/guard-setting/guard-setting.component';
 import { TenantSettingsComponent } from './pages/tenant-settings/tenant-settings.component';
+import { PendingVerificationComponent } from './pages/pending-verification/pending-verification.component';
+import { pendingVerificationGuard } from './shared/guards/pending-verification.guard';
 
 export const routes: Routes = [
 
@@ -65,7 +65,7 @@ export const routes: Routes = [
   {
     path: 'dashboard',
     component: DashboardLayoutComponent,
-    canActivate: [AuthGuard, onboardingGuard],
+    canActivate: [AuthGuard],
     resolve: {
       config: ConfigResolver,
     },
@@ -79,37 +79,41 @@ export const routes: Routes = [
       {
         path: 'overview',
         component: DashboardComponent,
-        canActivate: [onboardingGuard]
+        canActivate: [onboardingGuard, pendingVerificationGuard]
       },
       {
         path: 'users',
         component: UsersComponent,
-        canActivate: [onboardingGuard]
+        canActivate: [onboardingGuard, pendingVerificationGuard]
       },
       {
         path: 'analytics',
         component: AnalyticsComponent,
-        canActivate: [onboardingGuard]
+        canActivate: [onboardingGuard, pendingVerificationGuard]
       },
       {
         path: 'components-demo',
         loadComponent: () => import('./pages/components-demo/components-demo.component').then(m => m.ComponentsDemoComponent),
-        canActivate: [onboardingGuard]
       },
       {
         path: 'forms',
         loadComponent: () => import('./pages/forms/forms-page.component').then(m => m.FormsPageComponent),
-        canActivate: [onboardingGuard]
       },
       {
         path: 'settings',
         component: TenantSettingsComponent,
-        canActivate: [onboardingGuard]
       },
       {
         path: 'onboarding',
-        component: OnboardingComponent
+        component: OnboardingComponent,
+        canActivate: [onboardingGuard]
+      },
+      {
+        path: 'pending-verification',
+        component: PendingVerificationComponent,
+        canActivate: [pendingVerificationGuard]
       }
+
     ]
   },
   {
