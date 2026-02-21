@@ -1,9 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ClientSettingComponent } from "../client-setting/client-setting.component";
-import { GuardSettingComponent } from '../guard-setting/guard-setting.component';
-import { ServiceProviderSettingComponent } from '../service-provider-setting/service-provider-setting.component';
+import { TenantSettingsComponent } from '../tenant-settings/tenant-settings.component';
 import { AppService } from '../../services/core/app/app.service';
 
 @Component({
@@ -12,9 +10,7 @@ import { AppService } from '../../services/core/app/app.service';
   imports: [
     CommonModule,
     FormsModule,
-    GuardSettingComponent,
-    ClientSettingComponent,
-    ServiceProviderSettingComponent
+    TenantSettingsComponent
   ],
   templateUrl: './onboarding.component.html',
   styleUrl: './onboarding.component.css'

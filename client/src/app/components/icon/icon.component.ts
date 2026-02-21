@@ -2,7 +2,7 @@ import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
-type IconName = 
+export type IconName = 
   | 'alert-circle' | 'bell' | 'camera' | 'check' | 'check-circle' | 'chevron-down' 
   | 'chevron-left' | 'chevron-right' | 'chevron-up' | 'circle' | 'clock' | 'x' 
   | 'copy' | 'download' | 'edit' | 'eye' | 'eye-off' | 'filter' | 'file-text' 
@@ -94,6 +94,7 @@ const ICON_SVGS: Record<IconName, string> = {
 
     svg.icon {
       flex-shrink: 0;
+      pointer-events: none;
     }
   `]
 })

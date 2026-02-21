@@ -118,7 +118,9 @@ interface ServiceProvider {
 export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
 
   @Input() showPageWrapper: boolean = true;
+  @Input() readonly: boolean = false;
   @Input() providerData?: ServiceProvider;
+  @Input() profileTenantId?: string;
 
   providerFormModel: ServiceProvider = {
     legalCompanyName: '',
@@ -206,6 +208,13 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
         this.providerFormModel.headOfficeAddress.country = 'CA';
       }
     });
+  }
+
+  getProfileImageUrl(): string | null {
+    if (this.profileTenantId) {
+      return `/api/s/static/tenant/${this.profileTenantId}?t=${new Date().getTime()}`;
+    }
+    return null;
   }
 
   ngOnDestroy(): void {
@@ -700,6 +709,10 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   }
 
   submitProviderForm() {
+    if (this.readonly) {
+      return;
+    }
+
     if (!this.validateProviderForm()) {
       return;
     }

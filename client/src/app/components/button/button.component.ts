@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -8,6 +8,7 @@ import { CommonModule } from '@angular/common';
   templateUrl: './button.component.html'
 })
 export class ButtonComponent {
+  @Output() pressed = new EventEmitter<Event>();
   @Input() type: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'info' | 'outline' | 'link' = 'primary';
   @Input() htmlType: 'button' | 'submit' | 'reset' = 'button';
   @Input() disabled = false;
@@ -33,5 +34,14 @@ export class ButtonComponent {
       default:
         return 'px-4 py-2 text-sm';
     }
+  }
+
+  handleClick(event: Event) {
+    if (this.disabled || this.loading) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    this.pressed.emit(event);
   }
 }

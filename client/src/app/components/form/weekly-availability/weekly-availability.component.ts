@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, forwardRef } from '@angular/core';
+import { Component, forwardRef, Input } from '@angular/core';
 import { FormsModule, NG_VALUE_ACCESSOR, ControlValueAccessor } from '@angular/forms';
 import { NgxMaterialTimepickerModule } from 'ngx-material-timepicker';
 import { BannerComponent } from '../../banner/banner.component';
@@ -31,6 +31,7 @@ interface DayAvailability {
   ]
 })
 export class WeeklyAvailabilityComponent implements ControlValueAccessor {
+  @Input() disabled: boolean = false; // when true, component is read-only / non-interactive
   availability: { [day: string]: DayAvailability } = {};
   daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -68,6 +69,7 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
 
   // Toggle day enabled/disabled
   toggleDay(day: string, enabled: boolean) {
+    if (this.disabled) return;
     this.availability[day].enabled = enabled;
 
     if (enabled && this.availability[day].timeRanges.length === 0) {
@@ -84,12 +86,14 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
 
   // Add more time range for a day
   addTimeRange(day: string) {
+    if (this.disabled) return;
     this.availability[day].timeRanges.push({ start: '', end: '' });
     this.notifyChange();
   }
 
   // Remove a time range
   removeTimeRange(day: string, index: number) {
+    if (this.disabled) return;
     if (this.availability[day].timeRanges.length > 1) {
       this.availability[day].timeRanges.splice(index, 1);
       this.validateAvailability();
@@ -99,6 +103,7 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
 
   // Called when time picker changes
   onTimeChange() {
+    if (this.disabled) return;
     this.validateAvailability();
     this.notifyChange();
   }
@@ -325,6 +330,7 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
 
   // Select all days
   selectAll() {
+    if (this.disabled) return;
     this.daysOfWeek.forEach(day => {
       this.availability[day].enabled = true;
       if (this.availability[day].timeRanges.length === 0) {
@@ -337,12 +343,18 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
 
   // Clear all days
   clearAll() {
+    if (this.disabled) return;
     this.daysOfWeek.forEach(day => {
       this.availability[day].enabled = false;
       this.availability[day].timeRanges = [];
     });
     this.validateAvailability();
     this.notifyChange();
+  }
+
+  // Optional: support reactive forms disabled state
+  setDisabledState?(isDisabled: boolean): void {
+    this.disabled = isDisabled;
   }
 
   // Get errors for a specific day

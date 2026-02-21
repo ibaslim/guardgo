@@ -88,7 +88,9 @@ interface Client {
 export class ClientSettingComponent implements OnInit, OnDestroy {
 
   @Input() showPageWrapper: boolean = true;
+  @Input() readonly: boolean = false;
   @Input() clientData?: Client;
+  @Input() profileTenantId?: string;
 
   clientFormModel: Client = {
     legalEntityName: '',
@@ -151,6 +153,13 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
         this.clientFormModel.billingAddress.country = 'CA';
       }
     });
+  }
+
+  getProfileImageUrl(): string | null {
+    if (this.profileTenantId) {
+      return `/api/s/static/tenant/${this.profileTenantId}?t=${new Date().getTime()}`;
+    }
+    return null;
   }
 
   ngOnDestroy(): void {
@@ -485,6 +494,10 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
   }
 
   submitClientForm() {
+    if (this.readonly) {
+      return;
+    }
+
     if (!this.validateClientForm()) {
       return;
     }

@@ -71,7 +71,7 @@ class auth_manager:
         engine = mongo_controller.get_instance().get_engine()
         tenant = await engine.find_one(
             db_tenant_model, db_tenant_model.id == ObjectId(user.tenant_uuid))
-        if tenant and tenant.status == TenantStatus.DISABLE:
+        if tenant and tenant.status == TenantStatus.BANNED:
             raise HTTPException(status_code=401, detail="account blocked")
 
         if (role_name == "member" and not bool(getattr(user, "subscription", False)) and acct_at is not None and (
