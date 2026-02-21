@@ -289,6 +289,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   isSubmitting = false;
   private destroy$ = new Subject<void>();
   private lastAutoLegalName = '';
+  private _cachedProfileImageUrl: string | null = null;
+  private _cachedProfileTenantId: string | undefined | null = null;
 
   // Identity document upload state
   identityUploadInProgress: Record<string, boolean> = {};
@@ -332,10 +334,13 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   getProfileImageUrl(): string | null {
-    if (this.profileTenantId) {
-      return `/api/s/static/tenant/${this.profileTenantId}?t=${new Date().getTime()}`;
+    // Cache the generated URL to avoid changing it on each change-detection pass
+    if (!this.profileTenantId) return null;
+    if (!this._cachedProfileImageUrl || this._cachedProfileTenantId !== this.profileTenantId) {
+      this._cachedProfileTenantId = this.profileTenantId;
+      this._cachedProfileImageUrl = `/api/s/static/tenant/${this.profileTenantId}?t=${Date.now()}`;
     }
-    return null;
+    return this._cachedProfileImageUrl;
   }
 
   ngOnDestroy(): void {

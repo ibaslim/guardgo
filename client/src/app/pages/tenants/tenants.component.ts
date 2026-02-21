@@ -7,11 +7,14 @@ import { BadgeComponent } from '../../components/badge/badge.component';
 import { SideDrawerComponent } from '../../components/side-drawer/side-drawer.component';
 import { IconComponent } from '../../components/icon/icon.component';
 import { ButtonComponent } from '../../components/button/button.component';
+import { ModalComponent } from '../../components/modal/modal.component';
 import { TableThComponent } from '../../components/table/table-th.component';
 import { TableTdComponent } from '../../components/table/table-td.component';
 import { SelectInputComponent } from '../../components/form/select-input/select-input.component';
 import { TenantSettingsComponent } from '../tenant-settings/tenant-settings.component';
 import { ApiService } from '../../shared/services/api.service';
+import { AppService } from '../../services/core/app/app.service';
+import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
 import { readableTitle } from '../../shared/helpers/format.helper';
 import { HttpParams } from '@angular/common/http';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -19,7 +22,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 @Component({
   selector: 'app-tenants',
   standalone: true,
-  imports: [CommonModule, FormsModule, TableComponent, BadgeComponent, SideDrawerComponent, IconComponent, TableThComponent, TableTdComponent, ButtonComponent, SelectInputComponent, TenantSettingsComponent],
+  imports: [CommonModule, FormsModule, TableComponent, BadgeComponent, SideDrawerComponent, IconComponent, TableThComponent, TableTdComponent, ButtonComponent, ModalComponent, SelectInputComponent, TenantSettingsComponent],
   templateUrl: './tenants.component.html',
 })
 export class TenantsComponent implements OnInit {
@@ -52,12 +55,17 @@ export class TenantsComponent implements OnInit {
   showDrawer = false;
   tenantDetail: any = null;
   selectedRows: any[] = [];
+  // UI state for modal/alerts
+  showConfirmModal = false;
+  pendingAction: 'verify' | 'deactivate' | 'ban' | null = null;
+  confirmLabel = '';
+  confirmButtonType: 'primary' | 'secondary' | 'warning' | 'danger' = 'primary';
 
   onSelectionChange(selected: any[]) {
     this.selectedRows = selected || [];
   }
 
-  constructor(private api: ApiService, private router: Router, private route: ActivatedRoute) {}
+  constructor(private api: ApiService, private router: Router, private route: ActivatedRoute, protected appService: AppService, private notification: MessageNotificationService) {}
 
   // expose helper to template
   readableTitle = readableTitle;
@@ -171,6 +179,58 @@ export class TenantsComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  isAdmin(): boolean {
+    const session = this.appService.userSessionData();
+    return !!(session && session.user && session.user.role === 'admin');
+  }
+
+  confirmChange(action: 'verify' | 'deactivate' | 'ban') {
+    if (!this.tenantDetail || !this.tenantDetail.id) return;
+    const map: any = { verify: 'Verify', deactivate: 'Deactivate', ban: 'Ban' };
+    this.pendingAction = action;
+    // If verifying a previously inactive or banned tenant, present as "Re-activate"
+    if (action === 'verify' && (this.tenantDetail?.status === 'inactive' || this.tenantDetail?.status === 'banned')) {
+      this.confirmLabel = 'Re-activate';
+    } else {
+      this.confirmLabel = map[action];
+    }
+    // set confirm button style per action
+    const typeMap: any = { verify: 'primary', deactivate: 'warning', ban: 'danger' };
+    this.confirmButtonType = typeMap[action] || 'primary';
+    this.showConfirmModal = true;
+  }
+
+  performStatusAction(action: 'verify' | 'deactivate' | 'ban') {
+    if (!this.tenantDetail || !this.tenantDetail.id) return;
+    const id = this.tenantDetail.id || this.tenantDetail._id;
+    this.api.patch<any>(`tenants/${id}/${action}`).subscribe({
+      next: res => {
+        this.notification.show(res?.message || 'Tenant status updated', 'success', 4000);
+        this.showConfirmModal = false;
+        this.pendingAction = null;
+        // reload tenant detail and list
+        this.loadTenantById(id);
+        this.loadPage(this.page);
+      },
+      error: err => {
+        this.notification.show(err?.error?.detail || 'Failed to update tenant status', 'fail', 6000);
+        this.showConfirmModal = false;
+        this.pendingAction = null;
+      }
+    });
+  }
+
+  onConfirmModalClose() {
+    this.showConfirmModal = false;
+    this.pendingAction = null;
+  }
+
+  handleConfirm() {
+    if (this.pendingAction) {
+      this.performStatusAction(this.pendingAction);
+    }
   }
 
   onCloseDrawer() {

@@ -17,6 +17,9 @@ from orion.api.interactive.tenant_manager.models.tenant_profile_update import Te
 from orion.services.mongo_manager.shared_model.db_auth_models import UserStatus, db_user_account, user_role
 from orion.services.encryption_manager.key_manager import KeyManager
 from orion.constants.constant import CONSTANTS
+from orion.constants import constant
+from orion.services.mail_manager.mail_manager import mail_manager
+from orion.services.mongo_manager.shared_model.db_tenant_model import TenantStatusAudit
 
 
 class TenantManager:
@@ -148,6 +151,14 @@ class TenantManager:
             tenant.status = TenantStatus.PENDING_VERIFICATION
 
         await self._engine.save(tenant)
+
+        # If status changed from onboarding -> pending_verification, record audit and notify
+        if previous_status == TenantStatus.ONBOARDING and tenant.status == TenantStatus.PENDING_VERIFICATION:
+            try:
+                await self._post_status_change(tenant, previous_status, actor=getattr(current_user, "username", None), actor_role=getattr(current_user, "role", None))
+            except Exception:
+                # Don't fail the update if notification/audit fails
+                pass
 
         allowed_licenses = set(data.licenses or [])
         if "maintainer" in allowed_licenses and current_user.role not in ["admin"]:
@@ -312,6 +323,13 @@ class TenantManager:
 
         await self._engine.save(tenant)
 
+        # If this was an update that moved onboarding -> pending_verification, run post-change actions
+        if is_update and previous_status == TenantStatus.ONBOARDING and tenant.status == TenantStatus.PENDING_VERIFICATION:
+            try:
+                await self._post_status_change(tenant, previous_status, actor=getattr(current_user, "username", None), actor_role=getattr(current_user, "role", None))
+            except Exception:
+                pass
+
         return {
             "message": "Tenant updated" if is_update else "Tenant created",
             "id": str(tenant.id),
@@ -320,10 +338,19 @@ class TenantManager:
             "profile": tenant.profile or {},
         }
 
-    async def set_tenant_status(self, tenant_id: str, target_status: TenantStatus):
+    async def set_tenant_status(self, tenant_id: str, target_status: TenantStatus, current_user=None):
         tenant = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(tenant_id))
         if not tenant:
             raise HTTPException(status_code=404, detail="Tenant not found")
+        previous_status = tenant.status
+
+        # Idempotent: if no change, do nothing
+        if previous_status == target_status:
+            return {
+                "message": "No change - tenant already in target status",
+                "id": str(tenant.id),
+                "status": tenant.status,
+            }
 
         tenant.status = target_status
         tenant.updated_at = datetime.utcnow()
@@ -334,6 +361,13 @@ class TenantManager:
 
         await self._engine.save(tenant)
 
+        # Record audit + send notifications
+        try:
+            await self._post_status_change(tenant, previous_status, actor=getattr(current_user, "username", None), actor_role=getattr(current_user, "role", None))
+        except Exception:
+            # Don't fail the request if notification/audit fails
+            pass
+
         return {
             "message": "Tenant status updated",
             "id": str(tenant.id),
@@ -341,6 +375,87 @@ class TenantManager:
             "verified": tenant.verified,
             "verified_date": tenant.verified_date,
         }
+
+    async def _post_status_change(self, tenant: db_tenant_model, previous_status: TenantStatus, actor: Optional[str] = None, actor_role: Optional[str] = None, reason: Optional[str] = None):
+        # Persist audit record
+        audit = TenantStatusAudit(
+            tenant_id=str(tenant.id),
+            previous_status=previous_status,
+            new_status=tenant.status,
+            actor=actor,
+            actor_role=str(actor_role) if actor_role is not None else None,
+            reason=reason,
+            created_at=datetime.utcnow(),
+        )
+        try:
+            await self._engine.save(audit)
+        except Exception:
+            pass
+
+        # Notify tenant admins / contacts
+        try:
+            users = await self._engine.find(db_user_account, db_user_account.tenant_uuid == str(tenant.id))
+            emails = [u.email for u in users if getattr(u, "email", None)]
+            if not emails:
+                return
+
+            # Choose subject + body based on new status
+            if tenant.status == TenantStatus.PENDING_VERIFICATION:
+                subject = "Your account is awaiting verification"
+                lurlHeading = ""
+                url = ""
+                header_text = "Account Pending Verification"
+                body_text = "Your account is awaiting verification. We will review your details and notify you when verification is complete."
+            elif tenant.status == TenantStatus.ACTIVE:
+                subject = "Your account has been verified"
+                lurlHeading = ""
+                url = ""
+                header_text = "Account Verified"
+                body_text = "Your account has been verified and is now active. You can sign in and access services as normal."
+            elif tenant.status == TenantStatus.INACTIVE:
+                subject = "Your account has been deactivated"
+                lurlHeading = ""
+                url = ""
+                header_text = "Account Deactivated"
+                body_text = "Your account has been deactivated by an administrator. If you believe this is in error, please contact support."
+            elif tenant.status == TenantStatus.BANNED:
+                subject = "Your account has been banned"
+                lurlHeading = ""
+                url = ""
+                header_text = "Account Banned"
+                body_text = "Your account has been banned due to a policy violation. Contact support if you need more information."
+            else:
+                subject = f"Tenant status changed to {tenant.status}"
+                lurlHeading = ""
+                url = ""
+                header_text = f"Tenant Status: {tenant.status}"
+                body_text = f"Your tenant status has been updated to {tenant.status}."
+
+            html_content = constant.mail_template.render(
+                username=actor or "",
+                email=emails[0] or "",
+                subject=subject,
+                lurlHeading=lurlHeading,
+                url=url,
+                header=header_text,
+                body_text=body_text,
+            )
+            # Debug/log recipients and subject to help trace delivery issues
+            try:
+                print(f"[TenantManager] Sending status-change mail: subject='{subject}' to {len(emails)} recipients: {emails}")
+                # Send individually using the same API used by signup to reduce differences
+                for to in emails:
+                    try:
+                        await mail_manager.get_instance().send_verification_mail(to=to, subject=subject, body=html_content)
+                        print(f"[TenantManager] Mail sent to {to} for tenant {tenant.id}")
+                    except Exception as e_inner:
+                        print(f"[TenantManager] ERROR sending status-change mail to {to} for tenant {tenant.id}: {str(e_inner)}")
+            except Exception as e:
+                # Log the error for diagnostics but don't fail the status change
+                print(f"[TenantManager] ERROR sending status-change mail for tenant {tenant.id}: {str(e)}")
+        except Exception:
+            # swallow errors from mail sending
+            pass
 
     @staticmethod
     def _extract_tenant_name(profile: Optional[Dict[str, Any]]) -> str:

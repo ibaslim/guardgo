@@ -116,13 +116,21 @@
 </div>
 
 <app-side-drawer [show]="showDrawer" size="lg" (close)="onCloseDrawer()">
-  <div drawer-header>
-    <h3 class="text-lg font-semibold">{{ tenantDetail?.name || 'Tenant' }}</h3>
-    <div class="text-sm text-gray-500">{{ readableTitle(tenantDetail?.tenant_type) }}</div>
+  <div drawer-header class="flex items-start justify-between">
+    <div>
+      <div class="flex items-center gap-3">
+        <h3 class="text-lg font-semibold">{{ tenantDetail?.name || 'Tenant' }}</h3>
+        <app-badge [label]="tenantDetail?.status"></app-badge>
+      </div>
+      <div class="text-sm text-gray-500 mt-1">{{ readableTitle(tenantDetail?.tenant_type) }}</div>
+    </div>
   </div>
 
   <div drawer-body>
     <div *ngIf="tenantDetail; else loadingDetail">
+      <div class="mb-3">
+        <!-- Notifications shown via global MessageNotificationComponent -->
+      </div>
       <app-tenant-settings [tenantDataInput]="tenantDetail" [readonly]="true" [showPageWrapper]="false"></app-tenant-settings>
     </div>
     <ng-template #loadingDetail>
@@ -131,9 +139,27 @@
   </div>
 
   <div drawer-footer>
-    <div class="flex justify-end">
-      <app-button size="sm" type="secondary" label="Close" [customClass]="'px-3 py-1 text-sm'" ariaLabel="Close drawer"
-        (pressed)="onCloseDrawer()"></app-button>
+    <div class="flex justify-end items-center gap-2">
+      <ng-container *ngIf="appService.userSessionData().user.role === 'admin'">
+        <app-button *ngIf="tenantDetail?.status !== 'active'" size="sm" type="primary" [label]="(tenantDetail?.status === 'inactive' || tenantDetail?.status === 'banned') ? 'Re-activate' : 'Verify'"
+          [customClass]="'px-3 py-1 text-sm'" ariaLabel="Verify tenant" (pressed)="confirmChange('verify')"></app-button>
+        <app-button *ngIf="tenantDetail?.status === 'active'" size="sm" type="warning" label="Deactivate"
+          [customClass]="'px-3 py-1 text-sm'" ariaLabel="Deactivate tenant" (pressed)="confirmChange('deactivate')"></app-button>
+        <app-button *ngIf="tenantDetail?.status !== 'banned'" size="sm" type="danger" label="Ban"
+          [customClass]="'px-3 py-1 text-sm'" ariaLabel="Ban tenant" (pressed)="confirmChange('ban')"></app-button>
+      </ng-container>
+      <div>
+        <app-button size="sm" type="secondary" label="Close" [customClass]="'px-3 py-1 text-sm'" ariaLabel="Close drawer"
+          (pressed)="onCloseDrawer()"></app-button>
+      </div>
     </div>
   </div>
 </app-side-drawer>
+
+<app-modal [show]="showConfirmModal" title="Confirm action" (close)="onConfirmModalClose()">
+  <p>Are you sure you want to {{ confirmLabel }} this tenant?</p>
+  <div modal-actions class="flex items-center gap-2">
+    <app-button size="sm" type="secondary" label="Cancel" (pressed)="onConfirmModalClose()"></app-button>
+    <app-button size="sm" [type]="confirmButtonType" label="{{ confirmLabel }}" (pressed)="handleConfirm()"></app-button>
+  </div>
+</app-modal>

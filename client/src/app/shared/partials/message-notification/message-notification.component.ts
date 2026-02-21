@@ -10,4 +10,12 @@ import { MessageNotificationService } from '../../../services/message_notificati
 })
 export class MessageNotificationComponent {
   constructor(protected notificationService: MessageNotificationService) {}
+
+  get messageValue(): string | null {
+    const m = this.notificationService.message();
+    if (m) {
+      try { console.debug('[MessageNotificationComponent] rendering message:', m); } catch (e) {}
+    }
+    return m;
+  }
 }

@@ -143,7 +143,7 @@ async def get_tenant_by_id(
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))], )
 async def verify_tenant(tenant_id: str, current_user=Depends(get_current_user)):
-    return await TenantManager.get_instance().set_tenant_status(tenant_id, TenantStatus.ACTIVE)
+    return await TenantManager.get_instance().set_tenant_status(tenant_id, TenantStatus.ACTIVE, current_user=current_user)
 
 
 @tenant_routes.patch(
@@ -156,7 +156,7 @@ async def verify_tenant(tenant_id: str, current_user=Depends(get_current_user)):
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))], )
 async def deactivate_tenant(tenant_id: str, current_user=Depends(get_current_user)):
-    return await TenantManager.get_instance().set_tenant_status(tenant_id, TenantStatus.INACTIVE)
+    return await TenantManager.get_instance().set_tenant_status(tenant_id, TenantStatus.INACTIVE, current_user=current_user)
 
 
 @tenant_routes.patch(
@@ -169,7 +169,7 @@ async def deactivate_tenant(tenant_id: str, current_user=Depends(get_current_use
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))], )
 async def ban_tenant(tenant_id: str, current_user=Depends(get_current_user)):
-    return await TenantManager.get_instance().set_tenant_status(tenant_id, TenantStatus.BANNED)
+    return await TenantManager.get_instance().set_tenant_status(tenant_id, TenantStatus.BANNED, current_user=current_user)
 
 
 # ============================================================================

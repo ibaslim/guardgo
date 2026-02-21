@@ -4,6 +4,7 @@ from datetime import datetime
 
 from odmantic import Model, EmbeddedModel, Field
 from pydantic import BaseModel, model_validator
+from datetime import datetime
 
 
 class IocCategory(EmbeddedModel):
@@ -352,3 +353,13 @@ class TenantPayload(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     verified_date: Optional[datetime] = None
+
+
+class TenantStatusAudit(Model):
+    tenant_id: str = ""
+    previous_status: Optional[TenantStatus] = None
+    new_status: Optional[TenantStatus] = None
+    actor: Optional[str] = None
+    actor_role: Optional[str] = None
+    reason: Optional[str] = None
+    created_at: Optional[datetime] = Field(default=None)
