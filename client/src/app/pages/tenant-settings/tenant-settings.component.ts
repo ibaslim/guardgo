@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -7,6 +7,7 @@ import { GuardSettingComponent } from '../guard-setting/guard-setting.component'
 import { ClientSettingComponent } from '../client-setting/client-setting.component';
 import { ServiceProviderSettingComponent } from '../service-provider-setting/service-provider-setting.component';
 import { ApiService } from '../../shared/services/api.service';
+import { readableTitle } from '../../shared/helpers/format.helper';
 import { LoaderComponent } from '../../components/loader/loader.component';
 import { AlertComponent } from '../../components/alert/alert.component';
 
@@ -25,6 +26,9 @@ import { AlertComponent } from '../../components/alert/alert.component';
   templateUrl: './tenant-settings.component.html'
 })
 export class TenantSettingsComponent implements OnInit, OnDestroy {
+  @Input() showPageWrapper: boolean = true;
+  @Input() tenantDataInput: any = null;
+  @Input() readonly: boolean = false;
   private destroy$ = new Subject<void>();
 
   tenantType: 'guard' | 'client' | 'service_provider' | 'admin' | null = null;
@@ -35,12 +39,33 @@ export class TenantSettingsComponent implements OnInit, OnDestroy {
   constructor(private apiService: ApiService) {}
 
   ngOnInit(): void {
-    this.fetchTenantData();
+    if (this.tenantDataInput) {
+      this.tenantData = this.tenantDataInput;
+      this.isLoading = false;
+      this.tenantType = this.tenantData?.tenant_type || this.tenantType;
+    } else {
+      this.fetchTenantData();
+    }
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['tenantDataInput'] && !changes['tenantDataInput'].isFirstChange()) {
+      this.tenantData = this.tenantDataInput;
+      this.tenantType = this.tenantData?.tenant_type || this.tenantType;
+      this.isLoading = false;
+    }
   }
 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  // Return a readable title for readonly profile view: "{Tenant Type} Profile"
+  getReadonlyProfileTitle(): string {
+    const t = this.tenantData?.tenant_type || this.tenantData?.type || this.tenantType || '';
+    const human = readableTitle(t);
+    return human ? `${human} Profile` : 'Profile';
   }
 
   fetchTenantData(): void {

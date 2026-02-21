@@ -10,14 +10,16 @@ import { ButtonComponent } from '../../components/button/button.component';
 import { TableThComponent } from '../../components/table/table-th.component';
 import { TableTdComponent } from '../../components/table/table-td.component';
 import { SelectInputComponent } from '../../components/form/select-input/select-input.component';
+import { TenantSettingsComponent } from '../tenant-settings/tenant-settings.component';
 import { ApiService } from '../../shared/services/api.service';
+import { readableTitle } from '../../shared/helpers/format.helper';
 import { HttpParams } from '@angular/common/http';
 import { Router, ActivatedRoute } from '@angular/router';
 
 @Component({
   selector: 'app-tenants',
   standalone: true,
-  imports: [CommonModule, FormsModule, TableComponent, BadgeComponent, SideDrawerComponent, IconComponent, TableThComponent, TableTdComponent, ButtonComponent, SelectInputComponent],
+  imports: [CommonModule, FormsModule, TableComponent, BadgeComponent, SideDrawerComponent, IconComponent, TableThComponent, TableTdComponent, ButtonComponent, SelectInputComponent, TenantSettingsComponent],
   templateUrl: './tenants.component.html',
 })
 export class TenantsComponent implements OnInit {
@@ -41,6 +43,7 @@ export class TenantsComponent implements OnInit {
   tenantStatusOptions = [
     { label: 'All', value: '' },
     { label: 'Onboarding', value: 'onboarding' },
+    { label: 'Pending Verification', value: 'pending_verification' },
     { label: 'Active', value: 'active' },
     { label: 'Inactive', value: 'inactive' },
     { label: 'Banned', value: 'banned' }
@@ -55,6 +58,9 @@ export class TenantsComponent implements OnInit {
   }
 
   constructor(private api: ApiService, private router: Router, private route: ActivatedRoute) {}
+
+  // expose helper to template
+  readableTitle = readableTitle;
 
   ngOnInit(): void {
     this.loadPage(1);

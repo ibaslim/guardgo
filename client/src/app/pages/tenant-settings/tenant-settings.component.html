@@ -1,4 +1,4 @@
-<app-page title="Settings">
+<app-page [title]="readonly ? getReadonlyProfileTitle() : 'Settings'">
     <div *ngIf="isLoading" class="flex justify-center items-center py-12">
         <app-loader></app-loader>
     </div>
@@ -11,19 +11,25 @@
         <app-guard-setting 
             *ngIf="tenantType === 'guard'" 
             [showPageWrapper]="false" 
-            [guardData]="tenantData">
+            [guardData]="tenantData?.profile || tenantData"
+            [profileTenantId]="tenantData?.id"
+            [readonly]="readonly">
         </app-guard-setting>
 
         <app-client-setting 
             *ngIf="tenantType === 'client'" 
             [showPageWrapper]="false" 
-            [clientData]="tenantData">
+            [clientData]="tenantData?.profile || tenantData"
+            [profileTenantId]="tenantData?.id"
+            [readonly]="readonly">
         </app-client-setting>
 
         <app-service-provider-setting 
             *ngIf="tenantType === 'service_provider'" 
             [showPageWrapper]="false" 
-            [providerData]="tenantData">
+            [providerData]="tenantData?.profile || tenantData"
+            [profileTenantId]="tenantData?.id"
+            [readonly]="readonly">
         </app-service-provider-setting>
 
         <div *ngIf="tenantType === 'admin'" class="py-8">

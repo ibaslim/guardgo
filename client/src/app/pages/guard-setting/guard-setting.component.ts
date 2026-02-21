@@ -52,7 +52,9 @@ import { toTitleCase } from '../../shared/helpers/format.helper';
 export class GuardSettingComponent implements OnInit, OnDestroy {
 
   @Input() showPageWrapper: boolean = true;
+  @Input() readonly: boolean = false;
   @Input() guardData?: Guard;
+  @Input() profileTenantId?: string;
 
   isEditMode = false;
 
@@ -319,9 +321,21 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         this.isEditMode = false;
       }
 
+      // If a profileTenantId is provided (viewing another tenant), ensure any profile-specific data can be shown
+      if (this.profileTenantId) {
+        // no-op here; template will use profileTenantId to render profile picture for readonly view
+      }
+
       this.ensureCanadaDocumentDefaults();
       this.lastAutoLegalName = this.guardFormModel.name || '';
     });
+  }
+
+  getProfileImageUrl(): string | null {
+    if (this.profileTenantId) {
+      return `/api/s/static/tenant/${this.profileTenantId}?t=${new Date().getTime()}`;
+    }
+    return null;
   }
 
   ngOnDestroy(): void {
@@ -672,6 +686,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
 
   // Add a new identification document to the list
   addIdentificationDocument(): void {
+    if (this.readonly) {
+      return;
+    }
     const newIndex = this.guardFormModel.identification.documents.length;
     const newDoc: IdentificationDocument = {
       documentType: '',
@@ -689,6 +706,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
    * Remove an identification document from the list
    */
   removeIdentificationDocument(index: number): void {
+    if (this.readonly) {
+      return;
+    }
     const doc = this.guardFormModel.identification.documents[index];
 
     // Clear all errors for this document
@@ -717,6 +737,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
    * Handle identity document file selection and upload
    */
   onIdentityFileSelected(doc: IdentificationDocument, file: File | null): void {
+    if (this.readonly) {
+      return;
+    }
     if (!doc?.id) {
       return;
     }
@@ -764,6 +787,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
    * Delete uploaded identity document file
    */
   deleteIdentityFile(doc: IdentificationDocument): void {
+    if (this.readonly) {
+      return;
+    }
     if (!doc?.existingFileId) {
       return;
     }
@@ -793,6 +819,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   // ============================================================================
 
   addSecurityLicense(): void {
+    if (this.readonly) {
+      return;
+    }
     const newIndex = this.guardFormModel.securityLicenses.length;
     const newLicense: SecurityLicenseDocument = {
       fullLegalName: this.guardFormModel.name || '',
@@ -809,6 +838,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   removeSecurityLicense(index: number): void {
+    if (this.readonly) {
+      return;
+    }
     const license = this.guardFormModel.securityLicenses[index];
 
     if (license?.id) {
@@ -829,6 +861,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   onSecurityLicenseFileSelected(license: SecurityLicenseDocument, file: File | null): void {
+    if (this.readonly) {
+      return;
+    }
     if (!license?.id) {
       return;
     }
@@ -873,6 +908,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   deleteSecurityLicenseFile(license: SecurityLicenseDocument): void {
+    if (this.readonly) {
+      return;
+    }
     if (!license?.existingFileId) {
       return;
     }
@@ -902,6 +940,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   // ============================================================================
 
   addPoliceClearance(): void {
+    if (this.readonly) {
+      return;
+    }
     const newIndex = this.guardFormModel.policeClearances.length;
     const newRecord: PoliceClearanceRecord = {
       issuingAuthorityType: '',
@@ -917,6 +958,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   removePoliceClearance(index: number): void {
+    if (this.readonly) {
+      return;
+    }
     const record = this.guardFormModel.policeClearances[index];
 
     if (record?.id) {
@@ -933,6 +977,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   onPoliceClearanceFileSelected(record: PoliceClearanceRecord, file: File | null): void {
+    if (this.readonly) {
+      return;
+    }
     if (!record?.id) {
       return;
     }
@@ -977,6 +1024,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   deletePoliceClearanceFile(record: PoliceClearanceRecord): void {
+    if (this.readonly) {
+      return;
+    }
     if (!record?.existingFileId) {
       return;
     }
@@ -1006,6 +1056,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   // ============================================================================
 
   addTrainingCertificate(): void {
+    if (this.readonly) {
+      return;
+    }
     const newIndex = this.guardFormModel.trainingCertificates.length;
     const newCert: TrainingCertificate = {
       certificateName: '',
@@ -1020,6 +1073,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   removeTrainingCertificate(index: number): void {
+    if (this.readonly) {
+      return;
+    }
     const cert = this.guardFormModel.trainingCertificates[index];
 
     if (cert?.id) {
@@ -1038,6 +1094,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   onTrainingCertificateFileSelected(cert: TrainingCertificate, file: File | null): void {
+    if (this.readonly) {
+      return;
+    }
     if (!cert?.id) {
       return;
     }
@@ -1092,6 +1151,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   deleteTrainingCertificateFile(cert: TrainingCertificate): void {
+    if (this.readonly) {
+      return;
+    }
     if (!cert?.existingFileId) {
       return;
     }
