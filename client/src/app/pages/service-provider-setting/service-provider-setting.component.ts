@@ -807,10 +807,14 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       status: 'active'
     };
 
+    const isOnboarding = this.appService.userSessionData().tenant.has_onboarding;
+    tenantUpdatePayload.status = isOnboarding ? 'pending_verification' : 'active';
+
     this.apiService.put('tenant', tenantUpdatePayload).subscribe({
       next: (response) => {
         console.log('Service provider profile submitted successfully', response);
-        this.appService.setTenantStatus('active', false);
+        const newStatus = isOnboarding ? 'pending_verification' : 'active';
+        this.appService.setTenantStatus(newStatus, false);
         this.router.navigate(['/dashboard']);
       },
       error: (err) => {

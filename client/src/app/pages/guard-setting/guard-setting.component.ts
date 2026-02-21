@@ -1897,12 +1897,17 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       payload.profile.max_travel_radius_km = Math.round(this.guardFormModel.operationalRadius * 1.60934);
     }
 
+    // Determine desired post-submit tenant status. If user is completing onboarding, move to pending_verification.
+    const isOnboarding = this.appService.userSessionData().tenant.has_onboarding;
+    payload.status = isOnboarding ? 'pending_verification' : 'active';
+
     this.apiService.put('tenant', payload)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
           this.isSubmitting = false;
-          this.appService.setTenantStatus('active', false);
+          const newStatus = isOnboarding ? 'pending_verification' : 'active';
+          this.appService.setTenantStatus(newStatus, false);
           this.router.navigate(['/dashboard']);
         },
         error: (err) => {
