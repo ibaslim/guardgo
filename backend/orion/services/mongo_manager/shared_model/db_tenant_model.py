@@ -4,6 +4,7 @@ from datetime import datetime
 
 from odmantic import Model, EmbeddedModel, Field
 from pydantic import BaseModel, model_validator
+from datetime import datetime
 
 
 class IocCategory(EmbeddedModel):
@@ -17,8 +18,10 @@ class IocCategory(EmbeddedModel):
 
 class TenantStatus(str, Enum):
     ONBOARDING = "onboarding"
+    PENDING_VERIFICATION = "pending_verification"
     ACTIVE = "active"
-    DISABLE = "disable"
+    INACTIVE = "inactive"
+    BANNED = "banned"
 
 
 class TenantType(str, Enum):
@@ -290,7 +293,7 @@ class db_tenant_model(Model):
     is_default: bool = False
     verified: bool = False
     user_quota: int = 0
-    status: TenantStatus = TenantStatus.DISABLE
+    status: TenantStatus = TenantStatus.INACTIVE
     licenses: List[str] = []
     iocs: List[IocCategory] = []
 
@@ -306,7 +309,7 @@ class db_tenant_model(Model):
     @model_validator(mode="before")
     @classmethod
     def _backfill_defaults(cls, values):
-        # Defensive defaults for legacy documents
+        # Defensive defaults
         if isinstance(values, dict):
             values.setdefault("tenant_type", TenantType.CLIENT)
             values.setdefault("profile", None)
@@ -344,9 +347,19 @@ class TenantPayload(BaseModel):
     subscription: bool = False
     verified: bool = False
     user_quota: int = 0
-    status: TenantStatus = TenantStatus.DISABLE
+    status: TenantStatus = TenantStatus.INACTIVE
     licenses: List[str] = []
     iocs: List[IocCategory] = []
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     verified_date: Optional[datetime] = None
+
+
+class TenantStatusAudit(Model):
+    tenant_id: str = ""
+    previous_status: Optional[TenantStatus] = None
+    new_status: Optional[TenantStatus] = None
+    actor: Optional[str] = None
+    actor_role: Optional[str] = None
+    reason: Optional[str] = None
+    created_at: Optional[datetime] = Field(default=None)

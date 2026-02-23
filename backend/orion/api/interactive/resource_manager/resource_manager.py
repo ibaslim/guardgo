@@ -152,6 +152,16 @@ class ResourceManager:
         }
 
     async def get_tenant_identity_document(self, file_id: str, current_user):
+        # Allow admins to locate files across all tenant folders
+        if getattr(current_user, 'role', None) == 'admin':
+            for tenant_folder in self.TENANT_IDENTITY_DIR.iterdir():
+                if not tenant_folder.is_dir():
+                    continue
+                matches = list(tenant_folder.glob(f"{file_id}.*"))
+                if matches:
+                    return FileResponse(matches[0])
+            raise HTTPException(status_code=404, detail="File not found")
+
         tenant_dir = self.TENANT_IDENTITY_DIR / f"{current_user.tenant_uuid}"
         if not tenant_dir.exists():
             raise HTTPException(status_code=404, detail="File not found")
@@ -215,6 +225,16 @@ class ResourceManager:
         }
 
     async def get_tenant_security_license_document(self, file_id: str, current_user):
+        # Allow admins to locate files across all tenant folders
+        if getattr(current_user, 'role', None) == 'admin':
+            for tenant_folder in self.TENANT_SECURITY_LICENSE_DIR.iterdir():
+                if not tenant_folder.is_dir():
+                    continue
+                matches = list(tenant_folder.glob(f"{file_id}.*"))
+                if matches:
+                    return FileResponse(matches[0])
+            raise HTTPException(status_code=404, detail="File not found")
+
         tenant_dir = self.TENANT_SECURITY_LICENSE_DIR / f"{current_user.tenant_uuid}"
         if not tenant_dir.exists():
             raise HTTPException(status_code=404, detail="File not found")
@@ -278,6 +298,16 @@ class ResourceManager:
         }
 
     async def get_tenant_police_clearance_document(self, file_id: str, current_user):
+        # Allow admins to locate files across all tenant folders
+        if getattr(current_user, 'role', None) == 'admin':
+            for tenant_folder in self.TENANT_POLICE_CLEARANCE_DIR.iterdir():
+                if not tenant_folder.is_dir():
+                    continue
+                matches = list(tenant_folder.glob(f"{file_id}.*"))
+                if matches:
+                    return FileResponse(matches[0])
+            raise HTTPException(status_code=404, detail="File not found")
+
         tenant_dir = self.TENANT_POLICE_CLEARANCE_DIR / f"{current_user.tenant_uuid}"
         if not tenant_dir.exists():
             raise HTTPException(status_code=404, detail="File not found")
@@ -341,6 +371,16 @@ class ResourceManager:
         }
 
     async def get_tenant_training_certificate(self, file_id: str, current_user):
+        # Allow admins to locate files across all tenant folders
+        if getattr(current_user, 'role', None) == 'admin':
+            for tenant_folder in self.TENANT_TRAINING_CERT_DIR.iterdir():
+                if not tenant_folder.is_dir():
+                    continue
+                matches = list(tenant_folder.glob(f"{file_id}.*"))
+                if matches:
+                    return FileResponse(matches[0])
+            raise HTTPException(status_code=404, detail="File not found")
+
         tenant_dir = self.TENANT_TRAINING_CERT_DIR / f"{current_user.tenant_uuid}"
         if not tenant_dir.exists():
             raise HTTPException(status_code=404, detail="File not found")

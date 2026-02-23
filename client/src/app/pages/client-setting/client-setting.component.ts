@@ -88,7 +88,9 @@ interface Client {
 export class ClientSettingComponent implements OnInit, OnDestroy {
 
   @Input() showPageWrapper: boolean = true;
+  @Input() readonly: boolean = false;
   @Input() clientData?: Client;
+  @Input() profileTenantId?: string;
 
   clientFormModel: Client = {
     legalEntityName: '',
@@ -153,6 +155,13 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     });
   }
 
+  getProfileImageUrl(): string | null {
+    if (this.profileTenantId) {
+      return `/api/s/static/tenant/${this.profileTenantId}?t=${new Date().getTime()}`;
+    }
+    return null;
+  }
+
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
@@ -187,22 +196,53 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
   }
 
   hasClientData(data: Client): boolean {
+    const safe = (v: any) => (v === null || v === undefined) ? '' : String(v);
+
+    const legalName = safe((data as any).legalEntityName || (data as any).legal_entity_name || (data as any).legal_name || '');
+    const companyReg = safe((data as any).companyRegistrationNumber || (data as any).company_registration_number || '');
+    const industry = safe((data as any).industry || (data as any).business_sector || '');
+    const website = safe((data as any).companyWebsite || (data as any).company_website || '');
+    const tax = safe((data as any).taxVatNumber || (data as any).tax_vat_number || '');
+
+    const primary = (data as any).primaryContact || (data as any).primary_contact || {};
+    const secondary = (data as any).secondaryContact || (data as any).secondary_contact || {};
+    const billing = (data as any).billingAddress || (data as any).billing_address || {};
+
+    const primaryName = safe(primary.name || '');
+    const primaryMobile = primary.mobilePhone?.e164 || primary.phone || '';
+    const primaryLandline = primary.landlinePhone?.e164 || '';
+
+    const secondaryName = safe(secondary.name || '');
+    const secondaryEmail = safe(secondary.email || '');
+    const secondaryMobile = secondary.mobilePhone?.e164 || secondary.phone || '';
+    const secondaryLandline = secondary.landlinePhone?.e164 || '';
+
+    const billingStreet = safe(billing.street || billing.address_line || '');
+
+    const preferred = Array.isArray((data as any).preferredGuardTypes)
+      ? (data as any).preferredGuardTypes
+      : Array.isArray((data as any).preferred_guard_types)
+        ? (data as any).preferred_guard_types
+        : [];
+
+    const sites = Array.isArray((data as any).sites) ? (data as any).sites : [];
+
     return !!(
-      data.legalEntityName.trim() ||
-      data.companyRegistrationNumber.trim() ||
-      data.industry?.trim() ||
-      data.companyWebsite?.trim() ||
-      data.taxVatNumber?.trim() ||
-      data.primaryContact.name.trim() ||
-      data.primaryContact.mobilePhone?.e164 ||
-      data.primaryContact.landlinePhone?.e164 ||
-      data.secondaryContact?.name.trim() ||
-      data.secondaryContact?.email.trim() ||
-      data.secondaryContact?.mobilePhone?.e164 ||
-      data.secondaryContact?.landlinePhone?.e164 ||
-      data.billingAddress.street.trim() ||
-      data.preferredGuardTypes?.some((type: string) => type.trim()) ||
-      (data.sites && data.sites.some((site: Site) => site.siteName.trim() || site.siteAddress.street.trim()))
+      legalName.trim() ||
+      companyReg.trim() ||
+      industry.trim() ||
+      website.trim() ||
+      tax.trim() ||
+      primaryName.trim() ||
+      primaryMobile ||
+      primaryLandline ||
+      secondaryName.trim() ||
+      secondaryEmail.trim() ||
+      secondaryMobile ||
+      secondaryLandline ||
+      billingStreet.trim() ||
+      preferred.some((t: string) => safe(t).trim()) ||
+      sites.some((site: any) => safe(site.siteName || site.site_name || '').trim() || safe(site.siteAddress?.street || site.site_address?.street || '').trim())
     );
   }
 
@@ -485,6 +525,10 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
   }
 
   submitClientForm() {
+    if (this.readonly) {
+      return;
+    }
+
     if (!this.validateClientForm()) {
       return;
     }
@@ -532,10 +576,14 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       status: 'active'
     };
 
+    const isOnboarding = this.appService.userSessionData().tenant.has_onboarding;
+    tenantUpdatePayload.status = isOnboarding ? 'pending_verification' : 'active';
+
     this.apiService.put('tenant', tenantUpdatePayload).subscribe({
       next: (response) => {
         console.log('Client profile submitted successfully', response);
-        this.appService.setTenantStatus('active', false);
+        const newStatus = isOnboarding ? 'pending_verification' : 'active';
+        this.appService.setTenantStatus(newStatus, false);
         this.router.navigate(['/dashboard']);
       },
       error: (err) => {

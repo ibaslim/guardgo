@@ -6,7 +6,7 @@
     z-index: 9999;
     display: flex;
     justify-content: center;
-    width: 100%;
+    width: auto;
     pointer-events: none;
 }
 
@@ -17,34 +17,12 @@
     border-radius: 8px;
     border: 1px solid #fcc5;
     font-weight: 500;
-    opacity: 0;
-    transform: translateY(-10px);
-    animation: fadeInOut 3s forwards ease-in-out;
+    opacity: 1;
+    transform: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
     box-shadow: 0 4px 12px rgb(183 28 28 / 40%);
+    pointer-events: auto;
 }
-
-@keyframes fadeInOut {
-    0% {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-
-    10% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-
-    90% {
-        opacity: 1;
-        transform: translateY(0);
-    }
-
-    100% {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-}
-
 .notification-card.success {
   background: #1b5e20;
   border: 1px solid #cfc5;

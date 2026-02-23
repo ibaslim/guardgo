@@ -1,4 +1,4 @@
-<button [attr.type]="htmlType" [attr.aria-label]="ariaLabel || null" [ngClass]="{
+<button (click)="handleClick($event)" [attr.type]="htmlType" [attr.aria-label]="ariaLabel || null" [ngClass]="{
     'bg-blue-500 text-white shadow-sm hover:bg-blue-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 dark:bg-blue-600 dark:hover:bg-blue-500': type === 'primary' && !disabled,
     'bg-white text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:text-white dark:ring-gray-500 dark:hover:bg-gray-600': type === 'secondary' && !disabled,
     'bg-green-600 text-white shadow-sm hover:bg-green-700 focus-visible:outline-green-600': type === 'success' && !disabled,
@@ -13,6 +13,9 @@
   <span *ngIf="showIconSlot" class="inline-flex items-center justify-center leading-none">
     <ng-content select="[icon]"></ng-content>
   </span>
-  <span *ngIf="!loading">{{ label }}</span>
+  <ng-container *ngIf="!loading">
+    <ng-content *ngIf="!label"></ng-content>
+    <span *ngIf="label">{{ label }}</span>
+  </ng-container>
   <span *ngIf="loading">Loading...</span>
 </button>

@@ -1,0 +1,165 @@
+<div class="p-4">
+  <h2 class="text-lg font-semibold mb-4">Tenants</h2>
+
+  <ng-template #tenantHeader let-setSort="setSort" let-sortColumn="sortColumn" let-sortDirection="sortDirection">
+    <tr>
+      <th app-table-th (click)="setSort('id')" class="cursor-pointer">ID</th>
+      <th app-table-th (click)="setSort('profile.name')" class="cursor-pointer">Name</th>
+      <th app-table-th (click)="setSort('tenant_type')" class="cursor-pointer">TYPE</th>
+      <th app-table-th (click)="setSort('status')" class="cursor-pointer">STATUS</th>
+      <th app-table-th (click)="setSort('created_at')" class="cursor-pointer">CREATED AT</th>
+      <th app-table-th (click)="setSort('updated_at')" class="cursor-pointer">UPDATED AT</th>
+      <th app-table-th>ACTIONS</th>
+    </tr>
+  </ng-template>
+
+  <div class="mb-4 flex flex-col md:flex-row md:items-start md:gap-4">
+    <div class="mt-3 md:mt-0 flex-1 min-w-0 max-w-xs">
+      <div class="mt-1">
+        <input type="text" [(ngModel)]="keyword" (keydown.enter)="onSearch(keyword)" placeholder="Search tenants..."
+          aria-label="Search tenants"
+          class="block w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none" />
+      </div>
+    </div>
+    <div class="mt-3 md:mt-0 md:ml-2" style="min-width:200px;">
+      <div class="mt-1">
+        <app-select-input [options]="tenantTypeOptions" [(ngModel)]="tenant_type"
+          (ngModelChange)="onTenantTypeChange($event)" [searchable]="false" placeholder="Type"
+          aria-label="Tenant type"></app-select-input>
+      </div>
+    </div>
+    <div class="mt-3 md:mt-0 md:ml-2" style="min-width:200px;">
+      <div class="mt-1">
+        <app-select-input [options]="tenantStatusOptions" [(ngModel)]="tenant_status"
+          (ngModelChange)="onTenantStatusChange($event)" [searchable]="false" placeholder="Status"
+          aria-label="Tenant status"></app-select-input>
+      </div>
+    </div>
+    <div class="mt-3 md:mt-0 md:ml-2" style="min-width:120px;">
+      <div class="mt-1">
+        <app-select-input
+          [options]="[{ label: '10', value: 10 }, { label: '25', value: 25 }, { label: '50', value: 50 }, { label: '100', value: 100 }]"
+          [(ngModel)]="rows" (ngModelChange)="onPageSizeChange($event)" [searchable]="false" placeholder="Rows"
+          aria-label="Rows per page"></app-select-input>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between gap-4 mb-4">
+    <div class="flex items-center flex-wrap gap-2">
+      <ng-container *ngIf="keyword">
+        <div class="inline-flex items-center bg-gray-100 dark:bg-gray-800 text-sm rounded-full px-2 py-0.5">
+          <span class="mr-1 text-sm">Search: "{{ keyword }}"</span>
+          <app-button size="sm" type="outline" [iconOnly]="true"
+            [customClass]="'p-1 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'"
+            ariaLabel="Clear search" (pressed)="removeKeyword()">
+            <app-icon icon name="x" [size]="12"></app-icon>
+          </app-button>
+        </div>
+      </ng-container>
+      <ng-container *ngIf="tenant_type">
+        <div class="inline-flex items-center bg-gray-100 dark:bg-gray-800 text-sm rounded-full px-2 py-0.5">
+          <span class="mr-1 text-sm">Type: {{ tenant_type || 'All' }}</span>
+          <app-button size="sm" type="outline" [iconOnly]="true"
+            [customClass]="'p-1 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'"
+            ariaLabel="Clear type" (pressed)="removeType()">
+            <app-icon icon name="x" [size]="12"></app-icon>
+          </app-button>
+        </div>
+      </ng-container>
+      <ng-container *ngIf="tenant_status">
+        <div class="inline-flex items-center bg-gray-100 dark:bg-gray-800 text-sm rounded-full px-2 py-0.5">
+          <span class="mr-1 text-sm">Status: {{ tenant_status || 'All' }}</span>
+          <app-button size="sm" type="outline" [iconOnly]="true"
+            [customClass]="'p-1 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'"
+            ariaLabel="Clear status" (pressed)="removeStatus()">
+            <app-icon icon name="x" [size]="12"></app-icon>
+          </app-button>
+        </div>
+      </ng-container>
+    </div>
+    <div>
+      <app-button size="sm" type="secondary" label="Reset filters" [customClass]="'px-3 py-1 text-sm'"
+        ariaLabel="Reset filters" (pressed)="resetFilters()"></app-button>
+    </div>
+  </div>
+
+  <app-table [data]="tenants" [loading]="loading" [pageSize]="rows" [showFilter]="false" [showPagination]="true"
+    [rowTemplate]="tenantRow" [headerTemplate]="tenantHeader" [columnCount]="7" [serverSide]="true"
+    [externalPage]="page" [externalTotalPages]="totalPages" (pageChange)="loadPage($event)"
+    [showPageSizeSelector]="false" [selectable]="'multiple'" [rowActions]="tenantActions"
+    (selectionChange)="onSelectionChange($event)" (search)="onSearch($event)" (sortChange)="onSortChange($event)"
+    (pageSizeChange)="onPageSizeChange($event)">
+  </app-table>
+
+  <ng-template #tenantActions let-row>
+    <app-button type="secondary" [iconOnly]="true" [customClass]="'p-1 rounded'" ariaLabel="View tenant"
+      (pressed)="$event.stopPropagation(); openTenant(row)">
+      <app-icon icon name="eye" [size]="18"></app-icon>
+    </app-button>
+  </ng-template>
+
+  <ng-template #tenantRow let-row>
+    <td app-table-td>{{ row.id || row._id }}</td>
+    <td app-table-td>{{ row.profile?.name || row.name }}</td>
+    <td app-table-td>{{ row.type || row.tenant_type }}</td>
+    <td app-table-td><app-badge [label]="row.status"></app-badge></td>
+    <td app-table-td>{{ row.created_at }}</td>
+    <td app-table-td>{{ row.updated_at }}</td>
+    <td app-table-td>
+      <app-button type="secondary" [iconOnly]="true" [customClass]="'p-1 rounded'" ariaLabel="View tenant"
+        (pressed)="$event.stopPropagation(); openTenant(row)">
+        <app-icon icon name="eye" [size]="18"></app-icon>
+      </app-button>
+    </td>
+  </ng-template>
+</div>
+
+<app-side-drawer [show]="showDrawer" size="lg" (close)="onCloseDrawer()">
+  <div drawer-header class="flex items-start justify-between">
+    <div>
+      <div class="flex items-center gap-3">
+        <h3 class="text-lg font-semibold">{{ tenantDetail?.name || 'Tenant' }}</h3>
+        <app-badge [label]="tenantDetail?.status"></app-badge>
+      </div>
+      <div class="text-sm text-gray-500 mt-1">{{ readableTitle(tenantDetail?.tenant_type) }}</div>
+    </div>
+  </div>
+
+  <div drawer-body>
+    <div *ngIf="tenantDetail; else loadingDetail">
+      <div class="mb-3">
+        <!-- Notifications shown via global MessageNotificationComponent -->
+      </div>
+      <app-tenant-settings [tenantDataInput]="tenantDetail" [readonly]="true" [showPageWrapper]="false"></app-tenant-settings>
+    </div>
+    <ng-template #loadingDetail>
+      <div class="text-center text-gray-500">Loading...</div>
+    </ng-template>
+  </div>
+
+  <div drawer-footer>
+    <div class="flex justify-end items-center gap-2">
+      <ng-container *ngIf="appService.userSessionData().user.role === 'admin'">
+        <app-button *ngIf="tenantDetail?.status !== 'active'" size="sm" type="primary" [label]="(tenantDetail?.status === 'inactive' || tenantDetail?.status === 'banned') ? 'Re-activate' : 'Verify'"
+          [customClass]="'px-3 py-1 text-sm'" ariaLabel="Verify tenant" (pressed)="confirmChange('verify')"></app-button>
+        <app-button *ngIf="tenantDetail?.status === 'active'" size="sm" type="warning" label="Deactivate"
+          [customClass]="'px-3 py-1 text-sm'" ariaLabel="Deactivate tenant" (pressed)="confirmChange('deactivate')"></app-button>
+        <app-button *ngIf="tenantDetail?.status !== 'banned'" size="sm" type="danger" label="Ban"
+          [customClass]="'px-3 py-1 text-sm'" ariaLabel="Ban tenant" (pressed)="confirmChange('ban')"></app-button>
+      </ng-container>
+      <div>
+        <app-button size="sm" type="secondary" label="Close" [customClass]="'px-3 py-1 text-sm'" ariaLabel="Close drawer"
+          (pressed)="onCloseDrawer()"></app-button>
+      </div>
+    </div>
+  </div>
+</app-side-drawer>
+
+<app-modal [show]="showConfirmModal" title="Confirm action" (close)="onConfirmModalClose()">
+  <p>Are you sure you want to {{ confirmLabel }} this tenant?</p>
+  <div modal-actions class="flex items-center gap-2">
+    <app-button size="sm" type="secondary" label="Cancel" (pressed)="onConfirmModalClose()"></app-button>
+    <app-button size="sm" [type]="confirmButtonType" label="{{ confirmLabel }}" (pressed)="handleConfirm()"></app-button>
+  </div>
+</app-modal>

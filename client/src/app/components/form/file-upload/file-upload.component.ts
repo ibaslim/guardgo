@@ -16,6 +16,7 @@ import { NG_VALUE_ACCESSOR, ControlValueAccessor } from '@angular/forms';
   ]
 })
 export class FileUploadComponent implements ControlValueAccessor {
+  @Input() viewOnly: boolean = false; // when true, show existing file view without upload/remove controls
   @Input() label: string = '';
   @Input() required: boolean = false;
   @Input() disabled: boolean = false;
