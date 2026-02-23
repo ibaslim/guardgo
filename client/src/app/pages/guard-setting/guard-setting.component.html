@@ -404,7 +404,7 @@
                         <div class="flex flex-col" *ngIf="record.issuingAuthorityType === 'other'">
                             <app-base-input label="Issuing Authority (Specify)"
                                 [name]="'policeClearanceAuthorityOther_' + i" [(ngModel)]="record.issuingAuthorityOther"
-                                [required]="i === 0"></app-base-input>
+                                [required]="i === 0" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['police_clearance_' + record.id + '_issuingAuthorityOther'] || null"></app-error-message>
                         </div>
@@ -420,19 +420,19 @@
 
                         <div class="flex flex-col">
                             <app-base-input label="Issuing City (Optional)" [name]="'policeClearanceCity_' + i"
-                                [(ngModel)]="record.issuingCity"></app-base-input>
+                                [(ngModel)]="record.issuingCity" [disabled]="readonly"></app-base-input>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Issue Date" [name]="'policeClearanceIssueDate_' + i" type="date"
-                                [(ngModel)]="record.issueDate" [required]="i === 0"></app-base-input>
+                                [(ngModel)]="record.issueDate" [required]="i === 0" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['police_clearance_' + record.id + '_issueDate'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Reference Number (Optional)" [name]="'policeClearanceReference_' + i"
-                                [(ngModel)]="record.referenceNumber"></app-base-input>
+                                [(ngModel)]="record.referenceNumber" [disabled]="readonly"></app-base-input>
                         </div>
 
                         <div class="flex flex-col md:col-span-2">
@@ -511,21 +511,21 @@
                         <div class="flex flex-col" *ngIf="cert.issuingOrganizationType === 'other'">
                             <app-base-input label="Issuing Organization (Specify)"
                                 [name]="'trainingCertificateOrgOther_' + i"
-                                [(ngModel)]="cert.issuingOrganizationOther"></app-base-input>
+                                [(ngModel)]="cert.issuingOrganizationOther" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['training_certificate_' + cert.id + '_issuingOrganizationOther'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Issue Date" [name]="'trainingCertificateIssueDate_' + i" type="date"
-                                [(ngModel)]="cert.issueDate"></app-base-input>
+                                [(ngModel)]="cert.issueDate" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['training_certificate_' + cert.id + '_issueDate'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Expiry Date (Optional)" [name]="'trainingCertificateExpiryDate_' + i"
-                                type="date" [(ngModel)]="cert.expiryDate"></app-base-input>
+                                type="date" [(ngModel)]="cert.expiryDate" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['training_certificate_' + cert.id + '_expiryDate'] || null"></app-error-message>
                         </div>

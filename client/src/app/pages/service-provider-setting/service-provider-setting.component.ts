@@ -373,13 +373,22 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   }
 
   hasProviderData(data: ServiceProvider): boolean {
+    const safe = (v: any) => (v === null || v === undefined) ? '' : String(v);
+
+    const legalName = safe((data as any).legalCompanyName || (data as any).legal_company_name || (data as any).full_name || '');
+    const companyReg = safe((data as any).companyRegistrationNumber || (data as any).company_registration_number || '');
+    const street = safe((data as any).headOfficeAddress?.street || (data as any).head_office_address?.street || '');
+    const primaryName = safe((data as any).primaryRepresentative?.name || (data as any).primary_representative?.name || '');
+    const primaryMobile = (data as any).primaryRepresentative?.mobilePhone?.e164 || (data as any).primaryRepresentative?.phone || (data as any).primary_representative?.phone || '';
+    const primaryLandline = (data as any).primaryRepresentative?.landlinePhone?.e164 || '';
+
     return !!(
-      data.legalCompanyName.trim() ||
-      data.companyRegistrationNumber.trim() ||
-      data.headOfficeAddress.street.trim() ||
-      data.primaryRepresentative.name.trim() ||
-      data.primaryRepresentative.mobilePhone?.e164 ||
-      data.primaryRepresentative.landlinePhone?.e164
+      legalName.trim() ||
+      companyReg.trim() ||
+      street.trim() ||
+      primaryName.trim() ||
+      primaryMobile ||
+      primaryLandline
     );
   }
 

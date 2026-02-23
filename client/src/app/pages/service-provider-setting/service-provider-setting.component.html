@@ -153,14 +153,14 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col md:col-span-1">
                     <app-base-input label="Contact Name" name="secondaryContactName"
-                        [(ngModel)]="providerFormModel.secondaryContact.name">
+                        [(ngModel)]="providerFormModel.secondaryContact.name" [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="providerErrors.secondaryContactName || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col md:col-span-1">
                     <app-base-input label="Contact Email" name="secondaryContactEmail" type="email"
-                        [(ngModel)]="providerFormModel.secondaryContact.email">
+                        [(ngModel)]="providerFormModel.secondaryContact.email" [disabled]="readonly">
                     </app-base-input>
                     <app-error-message
                         [errorMessage]="providerErrors.secondaryContactEmail || null"></app-error-message>
@@ -169,7 +169,7 @@
                 <div class="flex flex-col md:col-span-1">
                     <app-mobile-phone-input label="Mobile Phone" name="secondaryContactMobile"
                         [(ngModel)]="providerFormModel.secondaryContact.mobilePhone" [defaultCountry]="'CA'"
-                        [disableCountrySelector]="true" helperText="Enter mobile number">
+                        [disableCountrySelector]="true" helperText="Enter mobile number" [disabled]="readonly">
                     </app-mobile-phone-input>
                     <app-error-message
                         [errorMessage]="providerErrors.secondaryContactMobilePhone || null"></app-error-message>
@@ -178,7 +178,7 @@
                 <div class="flex flex-col md:col-span-1">
                     <app-landline-phone-input label="Landline Phone (Optional)" name="secondaryContactLandline"
                         [(ngModel)]="providerFormModel.secondaryContact.landlinePhone" [defaultCountry]="'CA'"
-                        [disableCountrySelector]="true" helperText="Enter landline number">
+                        [disableCountrySelector]="true" helperText="Enter landline number" [disabled]="readonly">
                     </app-landline-phone-input>
                     <app-error-message
                         [errorMessage]="providerErrors.secondaryContactLandlinePhone || null"></app-error-message>
@@ -268,14 +268,14 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col">
                     <app-base-input label="Policy Number" name="policyNumber"
-                        [(ngModel)]="providerFormModel.insuranceDetails.policyNumber">
+                        [(ngModel)]="providerFormModel.insuranceDetails.policyNumber" [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="providerErrors.policyNumber || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
                     <app-base-input label="Coverage Amount" name="coverageAmount" type="number"
-                        [(ngModel)]="providerFormModel.insuranceDetails.coverageAmount">
+                        [(ngModel)]="providerFormModel.insuranceDetails.coverageAmount" [disabled]="readonly">
                     </app-base-input>
                 </div>
 
@@ -288,14 +288,14 @@
 
                 <div class="flex flex-col">
                     <app-base-input label="Policy Expiry Date" name="policyExpiryDate" type="date"
-                        [(ngModel)]="providerFormModel.insuranceDetails.expiryDate">
+                        [(ngModel)]="providerFormModel.insuranceDetails.expiryDate" [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="providerErrors.policyExpiryDate || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col md:col-span-2">
                     <app-base-input label="Coverage Details (Optional)" name="coverageDetails"
-                        [(ngModel)]="providerFormModel.insuranceDetails.coverageDetails">
+                        [(ngModel)]="providerFormModel.insuranceDetails.coverageDetails" [disabled]="readonly">
                     </app-base-input>
                 </div>
             </div>
@@ -324,7 +324,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="flex flex-col">
                             <app-base-input label="City" [name]="'regionCity' + i"
-                                [(ngModel)]="providerFormModel.operatingRegions[i].city" [required]="i === 0">
+                                [(ngModel)]="providerFormModel.operatingRegions[i].city" [required]="i === 0" [disabled]="readonly">
                             </app-base-input>
                             <app-error-message
                                 [errorMessage]="providerErrors['region_' + i + '_city'] || null"></app-error-message>
@@ -343,14 +343,14 @@
                             <app-select-input label="Province" [name]="'regionProvince' + i"
                                 [(ngModel)]="providerFormModel.operatingRegions[i].province" [options]="provinceOptions"
                                 placeholder="-- Select Province --" [required]="i === 0"
-                                [searchable]="true"></app-select-input>
+                                [searchable]="true" [disabled]="readonly"></app-select-input>
                             <app-error-message
                                 [errorMessage]="providerErrors['region_' + i + '_province'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Coverage Radius (km)" [name]="'regionRadius' + i" type="number"
-                                [(ngModel)]="providerFormModel.operatingRegions[i].coverageRadiusKm" [min]="1">
+                                [(ngModel)]="providerFormModel.operatingRegions[i].coverageRadiusKm" [min]="1" [disabled]="readonly">
                             </app-base-input>
                             <app-error-message
                                 [errorMessage]="providerErrors['region_' + i + '_radius'] || null"></app-error-message>
