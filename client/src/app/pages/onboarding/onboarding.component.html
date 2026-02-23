@@ -1,5 +1,7 @@
-<div class="w-full px-4 py-8">
-  <app-guard-setting *ngIf="userType === 'guard'"></app-guard-setting>
-  <app-client-setting *ngIf="userType === 'client'"></app-client-setting>
-  <app-service-provider-setting *ngIf="userType === 'service_provider'"></app-service-provider-setting>
+<div class="">
+  <app-tenant-settings
+    [tenantDataInput]="{ tenant_type: userType, profile: {} }"
+    [readonly]="false"
+    [showPageWrapper]="true">
+  </app-tenant-settings>
 </div>

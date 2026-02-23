@@ -118,7 +118,9 @@ interface ServiceProvider {
 export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
 
   @Input() showPageWrapper: boolean = true;
+  @Input() readonly: boolean = false;
   @Input() providerData?: ServiceProvider;
+  @Input() profileTenantId?: string;
 
   providerFormModel: ServiceProvider = {
     legalCompanyName: '',
@@ -206,6 +208,13 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
         this.providerFormModel.headOfficeAddress.country = 'CA';
       }
     });
+  }
+
+  getProfileImageUrl(): string | null {
+    if (this.profileTenantId) {
+      return `/api/s/static/tenant/${this.profileTenantId}?t=${new Date().getTime()}`;
+    }
+    return null;
   }
 
   ngOnDestroy(): void {
@@ -364,13 +373,22 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   }
 
   hasProviderData(data: ServiceProvider): boolean {
+    const safe = (v: any) => (v === null || v === undefined) ? '' : String(v);
+
+    const legalName = safe((data as any).legalCompanyName || (data as any).legal_company_name || (data as any).full_name || '');
+    const companyReg = safe((data as any).companyRegistrationNumber || (data as any).company_registration_number || '');
+    const street = safe((data as any).headOfficeAddress?.street || (data as any).head_office_address?.street || '');
+    const primaryName = safe((data as any).primaryRepresentative?.name || (data as any).primary_representative?.name || '');
+    const primaryMobile = (data as any).primaryRepresentative?.mobilePhone?.e164 || (data as any).primaryRepresentative?.phone || (data as any).primary_representative?.phone || '';
+    const primaryLandline = (data as any).primaryRepresentative?.landlinePhone?.e164 || '';
+
     return !!(
-      data.legalCompanyName.trim() ||
-      data.companyRegistrationNumber.trim() ||
-      data.headOfficeAddress.street.trim() ||
-      data.primaryRepresentative.name.trim() ||
-      data.primaryRepresentative.mobilePhone?.e164 ||
-      data.primaryRepresentative.landlinePhone?.e164
+      legalName.trim() ||
+      companyReg.trim() ||
+      street.trim() ||
+      primaryName.trim() ||
+      primaryMobile ||
+      primaryLandline
     );
   }
 
@@ -700,6 +718,10 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   }
 
   submitProviderForm() {
+    if (this.readonly) {
+      return;
+    }
+
     if (!this.validateProviderForm()) {
       return;
     }
@@ -794,10 +816,14 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       status: 'active'
     };
 
+    const isOnboarding = this.appService.userSessionData().tenant.has_onboarding;
+    tenantUpdatePayload.status = isOnboarding ? 'pending_verification' : 'active';
+
     this.apiService.put('tenant', tenantUpdatePayload).subscribe({
       next: (response) => {
         console.log('Service provider profile submitted successfully', response);
-        this.appService.setTenantStatus('active', false);
+        const newStatus = isOnboarding ? 'pending_verification' : 'active';
+        this.appService.setTenantStatus(newStatus, false);
         this.router.navigate(['/dashboard']);
       },
       error: (err) => {

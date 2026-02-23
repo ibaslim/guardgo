@@ -1,8 +1,9 @@
 <span [ngClass]="{
-  'bg-blue-500 text-white dark:bg-blue-700': color === 'primary',
-  'bg-gray-400 text-white dark:bg-gray-600': color === 'secondary',
-  'bg-green-500 text-white dark:bg-green-700': color === 'success',
-  'bg-red-500 text-white dark:bg-red-700': color === 'danger'
+  'bg-blue-500 text-white dark:bg-blue-700': resolvedColor === 'primary',
+  'bg-gray-400 text-white dark:bg-gray-600': resolvedColor === 'secondary',
+  'bg-green-500 text-white dark:bg-green-700': resolvedColor === 'success',
+  'bg-red-500 text-white dark:bg-red-700': resolvedColor === 'danger',
+  'bg-yellow-500 text-black dark:bg-yellow-600': resolvedColor === 'warning'
 }" class="px-2 py-1 rounded text-xs font-semibold">
-  {{ label }}
+  {{ readableTitle(label) }}
 </span>

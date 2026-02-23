@@ -12,23 +12,33 @@
     <form (ngSubmit)="submitGuardForm()" class="space-y-8">
         <!-- Profile Picture Section -->
         <app-section title="Profile Picture" subtitle="Your photo helps clients recognize you.">
-            <app-profile-picture-upload [maxSizeKb]="500" [title]="'Profile Picture'"
-                [subtitle]="'Your photo helps clients recognize you.'">
-            </app-profile-picture-upload>
-        </app-section>
+                <ng-container *ngIf="!readonly">
+                    <app-profile-picture-upload [maxSizeKb]="500" [title]="'Profile Picture'"
+                        [subtitle]="'Your photo helps clients recognize you.'">
+                    </app-profile-picture-upload>
+                </ng-container>
+                <ng-container *ngIf="readonly">
+                    <div *ngIf="getProfileImageUrl(); else noProfilePic">
+                        <img [src]="getProfileImageUrl()" alt="Profile picture" class="w-32 h-32 rounded-full object-cover">
+                    </div>
+                    <ng-template #noProfilePic>
+                        <p class="text-sm text-gray-600">No profile picture available.</p>
+                    </ng-template>
+                </ng-container>
+            </app-section>
 
         <app-section title="Basic Info" subtitle="Who you are and how we reach you.">
             <div class="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 <div class="flex flex-col">
                     <app-base-input label="Full Name" name="name" [(ngModel)]="guardFormModel.name"
-                        (ngModelChange)="onGuardNameChanged($event)" [required]="true"></app-base-input>
+                        (ngModelChange)="onGuardNameChanged($event)" [required]="true" [disabled]="readonly"></app-base-input>
                     <app-error-message [errorMessage]="guardErrors.name || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
                     <app-mobile-phone-input label="Mobile Phone" name="mobilePhone"
                         [(ngModel)]="guardFormModel.mobilePhone" [defaultCountry]="'CA'" [disableCountrySelector]="true"
-                        helperText="Enter your mobile number">
+                        helperText="Enter your mobile number" [disabled]="readonly">
                     </app-mobile-phone-input>
                     <app-error-message [errorMessage]="guardErrors.mobilePhone || null"></app-error-message>
                 </div>
@@ -36,14 +46,14 @@
                 <div class="flex flex-col">
                     <app-landline-phone-input label="Landline Phone (Optional)" name="landlinePhone"
                         [(ngModel)]="guardFormModel.landlinePhone" [defaultCountry]="'CA'"
-                        [disableCountrySelector]="true" helperText="Enter your landline number">
+                        [disableCountrySelector]="true" helperText="Enter your landline number" [disabled]="readonly">
                     </app-landline-phone-input>
                     <app-error-message [errorMessage]="guardErrors.landlinePhone || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
                     <app-base-input label="Date of Birth" name="dateOfBirth" type="date"
-                        [(ngModel)]="guardFormModel.dob" [required]="true"></app-base-input>
+                        [(ngModel)]="guardFormModel.dob" [required]="true" [disabled]="readonly"></app-base-input>
                     <app-error-message [errorMessage]="guardErrors.dob || null"></app-error-message>
                 </div>
 
@@ -54,7 +64,7 @@
 
                 <div class="flex flex-col">
                     <app-base-input label="Operational Radius (miles)" name="operationalRadius" type="number"
-                        [(ngModel)]="guardFormModel.operationalRadius" [min]="0"></app-base-input>
+                        [(ngModel)]="guardFormModel.operationalRadius" [min]="0" [disabled]="readonly"></app-base-input>
                     <p class="text-xs sm:text-xs text-gray-500 mt-2">Leave blank if you are location-flexible.</p>
                     <app-error-message [errorMessage]="guardErrors.operationalRadius || null"></app-error-message>
                 </div>
@@ -74,25 +84,25 @@
                 <div class="flex flex-col">
                     <app-select-input label="Province/State" [name]="'addressProvince'"
                         [(ngModel)]="guardFormModel.address.province" [options]="provinceOptions"
-                        placeholder="-- Select Province --" [required]="true" [searchable]="true"></app-select-input>
+                        placeholder="-- Select Province --" [required]="true" [searchable]="true" [disabled]="readonly"></app-select-input>
                     <app-error-message [errorMessage]="guardErrors.addressProvince || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
                     <app-base-input label="City" name="addressCity" [(ngModel)]="guardFormModel.address.city"
-                        [required]="true"></app-base-input>
+                        [required]="true" [disabled]="readonly"></app-base-input>
                     <app-error-message [errorMessage]="guardErrors.addressCity || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
                     <app-base-input label="Postal Code" name="addressPostalCode"
-                        [(ngModel)]="guardFormModel.address.postalCode" [required]="true"></app-base-input>
+                        [(ngModel)]="guardFormModel.address.postalCode" [required]="true" [disabled]="readonly"></app-base-input>
                     <app-error-message [errorMessage]="guardErrors.addressPostalCode || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
                     <app-base-input label="Street Address" name="addressStreet"
-                        [(ngModel)]="guardFormModel.address.street" [required]="true"></app-base-input>
+                        [(ngModel)]="guardFormModel.address.street" [required]="true" [disabled]="readonly"></app-base-input>
                     <app-error-message [errorMessage]="guardErrors.addressStreet || null"></app-error-message>
                 </div>
             </div>
@@ -103,14 +113,14 @@
                 <div class="flex flex-col md:col-span-1">
                     <app-base-input label="Contact Name" name="secondaryContactName"
                         [(ngModel)]="guardFormModel.secondaryContact.name" pattern="[a-zA-Z\s]*"
-                        helperText="Letters and spaces only">
+                        helperText="Letters and spaces only" [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="guardErrors.secondaryContactName || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col md:col-span-1">
                     <app-base-input label="Contact Email" name="secondaryContactEmail" type="email"
-                        [(ngModel)]="guardFormModel.secondaryContact.email">
+                        [(ngModel)]="guardFormModel.secondaryContact.email" [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="guardErrors.secondaryContactEmail || null"></app-error-message>
                 </div>
@@ -118,14 +128,14 @@
                 <div class="flex flex-col md:col-span-1">
                     <app-mobile-phone-input label="Mobile Phone" name="secondaryContactMobile"
                         [(ngModel)]="guardFormModel.secondaryContact.mobilePhone" [defaultCountry]="'CA'"
-                        [disableCountrySelector]="true" helperText="Enter mobile number">
+                        [disableCountrySelector]="true" helperText="Enter mobile number" [disabled]="readonly">
                     </app-mobile-phone-input>
                 </div>
 
                 <div class="flex flex-col md:col-span-1">
                     <app-landline-phone-input label="Landline Phone (Optional)" name="secondaryContactLandline"
                         [(ngModel)]="guardFormModel.secondaryContact.landlinePhone" [defaultCountry]="'CA'"
-                        [disableCountrySelector]="true" helperText="Enter landline number">
+                        [disableCountrySelector]="true" helperText="Enter landline number" [disabled]="readonly">
                     </app-landline-phone-input>
                 </div>
 
@@ -140,7 +150,7 @@
             <div class="grid grid-cols-1 gap-6">
                 <app-guard-types-multiselect label="Guard Types" placeholder="-- Select Types --"
                     [(ngModel)]="guardFormModel.preferredGuardTypes" [options]="guardTypeOptions" [required]="true"
-                    name="preferredGuardTypes">
+                    name="preferredGuardTypes" [disabled]="readonly">
                 </app-guard-types-multiselect>
                 <app-error-message [errorMessage]="guardErrors.preferredGuardTypes || null"></app-error-message>
             </div>
@@ -163,7 +173,7 @@
                                 (Optional)</span>
                         </h3>
                     </div>
-                    <div card-actions>
+                    <div card-actions *ngIf="!readonly">
                         <app-button *ngIf="guardFormModel.identification.documents.length > 1" label="Remove"
                             type="danger" htmlType="button" size="sm" (click)="removeIdentificationDocument(i)">
                         </app-button>
@@ -175,7 +185,7 @@
                             <app-select-input label="Document Type" [name]="'docType_' + i"
                                 [(ngModel)]="doc.documentType" [options]="documentTypeOptions"
                                 placeholder="-- Select Document Type --" [required]="i === 0"
-                                [searchable]="true"></app-select-input>
+                                [searchable]="true" [disabled]="readonly"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['identification_' + doc.id + '_type'] || null"></app-error-message>
                         </div>
@@ -183,7 +193,7 @@
                         <!-- Document Number -->
                         <div class="flex flex-col">
                             <app-base-input [label]="'Document Number'" [name]="'docNumber_' + i"
-                                [(ngModel)]="doc.number" [required]="i === 0"></app-base-input>
+                                [(ngModel)]="doc.number" [required]="i === 0" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['identification_' + doc.id + '_number'] || null"></app-error-message>
                         </div>
@@ -193,7 +203,7 @@
                             <app-select-input label="Province" [name]="'province_' + i" [(ngModel)]="doc.province"
                                 [options]="provinceOptions" placeholder="-- Select Province --"
                                 [required]="i === 0 && requiresProvince(doc.documentType)"
-                                [searchable]="true"></app-select-input>
+                                [searchable]="true" [disabled]="readonly"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['identification_' + doc.id + '_province'] || null"></app-error-message>
                         </div>
@@ -202,30 +212,37 @@
                         <div *ngIf="requiresExpiry(doc.documentType)" class="flex flex-col">
                             <app-base-input [label]="'Expiry Date'" [name]="'docExpiry_' + i" type="date"
                                 [(ngModel)]="doc.expiryDate"
-                                [required]="i === 0 && requiresExpiry(doc.documentType)"></app-base-input>
+                                [required]="i === 0 && requiresExpiry(doc.documentType)" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['identification_' + doc.id + '_expiry'] || null"></app-error-message>
                         </div>
 
                         <!-- File Upload -->
                         <div class="flex flex-col md:col-span-2">
-                            <app-file-upload [label]="'Upload Document'" [name]="'docFile_' + i" [(ngModel)]="doc.file"
-                                (fileChange)="onIdentityFileSelected(doc, $event)"
-                                [existingFileUrl]="doc.existingFileUrl" [existingFileName]="doc.existingFileName"
-                                helperText="PNG, JPG, PDF up to 10MB" [required]="false"
-                                [disabled]="identityUploadInProgress[doc.id || '']"></app-file-upload>
-                            <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, but speeds verification.</p>
-                            <p *ngIf="identityUploadInProgress[doc.id || '']" class="text-xs text-primary-600 mt-2">
-                                Uploading document...</p>
-                            <app-error-message
-                                [errorMessage]="identityUploadErrors[doc.id || ''] || null"></app-error-message>
+                            <ng-container *ngIf="!readonly">
+                                <app-file-upload [label]="'Upload Document'" [name]="'docFile_' + i" [(ngModel)]="doc.file"
+                                    (fileChange)="onIdentityFileSelected(doc, $event)"
+                                    [existingFileUrl]="doc.existingFileUrl" [existingFileName]="doc.existingFileName"
+                                    helperText="PNG, JPG, PDF up to 10MB" [required]="false"
+                                    [disabled]="identityUploadInProgress[doc.id || '']"></app-file-upload>
+                                <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, but speeds verification.</p>
+                                <p *ngIf="identityUploadInProgress[doc.id || '']" class="text-xs text-primary-600 mt-2">
+                                    Uploading document...</p>
+                                <app-error-message
+                                    [errorMessage]="identityUploadErrors[doc.id || ''] || null"></app-error-message>
+                            </ng-container>
+                            <ng-container *ngIf="readonly">
+                                <app-file-upload *ngIf="doc.existingFileUrl" [existingFileUrl]="doc.existingFileUrl"
+                                    [existingFileName]="doc.existingFileName" [viewOnly]="true">
+                                </app-file-upload>
+                            </ng-container>
                         </div>
                     </div>
                 </app-card>
             </div>
 
             <!-- Add Document Button -->
-            <div class="flex justify-center pt-4">
+            <div class="flex justify-center pt-4" *ngIf="!readonly">
                 <app-button
                     [label]="'+ ' + (guardFormModel.identification.documents && guardFormModel.identification.documents.length > 0 ? 'Add Another Document' : 'Add Document')"
                     type="secondary" [htmlType]="'button'" [customClass]="'rounded-lg'"
@@ -252,7 +269,7 @@
 
                         </h3>
                     </div>
-                    <div card-actions>
+                    <div card-actions *ngIf="!readonly">
                         <app-button *ngIf="guardFormModel.securityLicenses.length > 1" label="Remove" type="danger"
                             htmlType="button" size="sm" (click)="removeSecurityLicense(i)">
                         </app-button>
@@ -261,14 +278,14 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="flex flex-col">
                             <app-base-input label="Guard’s Full Legal Name" [name]="'securityLicenseFullName_' + i"
-                                [(ngModel)]="license.fullLegalName" [required]="i === 0"></app-base-input>
+                                [(ngModel)]="license.fullLegalName" [required]="i === 0" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['security_license_' + license.id + '_fullLegalName'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="License Number" [name]="'securityLicenseNumber_' + i"
-                                [(ngModel)]="license.licenseNumber" [required]="i === 0"></app-base-input>
+                                [(ngModel)]="license.licenseNumber" [required]="i === 0" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['security_license_' + license.id + '_licenseNumber'] || null"></app-error-message>
                         </div>
@@ -277,7 +294,7 @@
                             <app-select-input label="License Type" [name]="'securityLicenseType_' + i"
                                 [(ngModel)]="license.licenseType" [options]="securityLicenseTypeOptions"
                                 placeholder="-- Select License Type --" [required]="i === 0"
-                                [searchable]="false"></app-select-input>
+                                [searchable]="false" [disabled]="readonly"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['security_license_' + license.id + '_licenseType'] || null"></app-error-message>
                         </div>
@@ -287,7 +304,7 @@
                                 [(ngModel)]="license.issuingProvince"
                                 (ngModelChange)="onSecurityLicenseProvinceChange(license, $event)"
                                 [options]="provinceOptions" placeholder="-- Select Province --" [required]="i === 0"
-                                [searchable]="true"></app-select-input>
+                                [searchable]="true" [disabled]="readonly"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['security_license_' + license.id + '_issuingProvince'] || null"></app-error-message>
                         </div>
@@ -296,7 +313,7 @@
                             <app-base-input label="Issuing Authority" [name]="'securityLicenseAuthority_' + i"
                                 [(ngModel)]="license.issuingAuthority" [required]="i === 0"
                                 [placeholder]="getSuggestedIssuingAuthority(license.issuingProvince) || 'e.g., Ministry of the Solicitor General'"
-                                helperText="Will auto-populate based on selected province">
+                                helperText="Will auto-populate based on selected province" [disabled]="readonly">
                             </app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['security_license_' + license.id + '_issuingAuthority'] || null"></app-error-message>
@@ -304,37 +321,44 @@
 
                         <div class="flex flex-col">
                             <app-base-input label="Issue Date" [name]="'securityLicenseIssueDate_' + i" type="date"
-                                [(ngModel)]="license.issueDate" [required]="i === 0"></app-base-input>
+                                [(ngModel)]="license.issueDate" [required]="i === 0" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['security_license_' + license.id + '_issueDate'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Expiry Date" [name]="'securityLicenseExpiryDate_' + i" type="date"
-                                [(ngModel)]="license.expiryDate" [required]="i === 0"></app-base-input>
+                                [(ngModel)]="license.expiryDate" [required]="i === 0" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['security_license_' + license.id + '_expiryDate'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col md:col-span-2">
-                            <app-file-upload label="License Document" [name]="'securityLicenseDocument_' + i"
-                                [(ngModel)]="license.file" (fileChange)="onSecurityLicenseFileSelected(license, $event)"
-                                [existingFileUrl]="license.existingFileUrl"
-                                [existingFileName]="license.existingFileName" helperText="PNG, JPG, PDF up to 10MB"
-                                [required]="false"
-                                [disabled]="securityLicenseUploadInProgress[license.id || '']"></app-file-upload>
-                            <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.
-                            </p>
-                            <p *ngIf="securityLicenseUploadInProgress[license.id || '']"
-                                class="text-xs text-primary-600 mt-2">Uploading document...</p>
-                            <app-error-message
-                                [errorMessage]="securityLicenseUploadErrors[license.id || ''] || null"></app-error-message>
+                            <ng-container *ngIf="!readonly">
+                                <app-file-upload label="License Document" [name]="'securityLicenseDocument_' + i"
+                                    [(ngModel)]="license.file" (fileChange)="onSecurityLicenseFileSelected(license, $event)"
+                                    [existingFileUrl]="license.existingFileUrl"
+                                    [existingFileName]="license.existingFileName" helperText="PNG, JPG, PDF up to 10MB"
+                                    [required]="false"
+                                    [disabled]="securityLicenseUploadInProgress[license.id || '']"></app-file-upload>
+                                <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.
+                                </p>
+                                <p *ngIf="securityLicenseUploadInProgress[license.id || '']"
+                                    class="text-xs text-primary-600 mt-2">Uploading document...</p>
+                                <app-error-message
+                                    [errorMessage]="securityLicenseUploadErrors[license.id || ''] || null"></app-error-message>
+                            </ng-container>
+                            <ng-container *ngIf="readonly">
+                                <app-file-upload *ngIf="license.existingFileUrl" [existingFileUrl]="license.existingFileUrl"
+                                    [existingFileName]="license.existingFileName" [viewOnly]="true">
+                                </app-file-upload>
+                            </ng-container>
                         </div>
                     </div>
                 </app-card>
             </div>
 
-            <div class="flex justify-center pt-4">
+            <div class="flex justify-center pt-4" *ngIf="!readonly">
                 <app-button label="+ Add Security License" type="secondary" [htmlType]="'button'"
                     [customClass]="'rounded-lg'" (click)="addSecurityLicense()">
                 </app-button>
@@ -361,7 +385,7 @@
 
                         </h3>
                     </div>
-                    <div card-actions>
+                    <div card-actions *ngIf="!readonly">
                         <app-button *ngIf="guardFormModel.policeClearances.length > 1" label="Remove" type="danger"
                             htmlType="button" size="sm" (click)="removePoliceClearance(i)">
                         </app-button>
@@ -372,7 +396,7 @@
                             <app-select-input label="Issuing Authority Type" [name]="'policeClearanceAuthority_' + i"
                                 [(ngModel)]="record.issuingAuthorityType" [options]="policeClearanceAuthorityOptions"
                                 placeholder="-- Select Authority Type --" [required]="i === 0"
-                                [searchable]="true"></app-select-input>
+                                [searchable]="true" [disabled]="readonly"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['police_clearance_' + record.id + '_issuingAuthorityType'] || null"></app-error-message>
                         </div>
@@ -380,7 +404,7 @@
                         <div class="flex flex-col" *ngIf="record.issuingAuthorityType === 'other'">
                             <app-base-input label="Issuing Authority (Specify)"
                                 [name]="'policeClearanceAuthorityOther_' + i" [(ngModel)]="record.issuingAuthorityOther"
-                                [required]="i === 0"></app-base-input>
+                                [required]="i === 0" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['police_clearance_' + record.id + '_issuingAuthorityOther'] || null"></app-error-message>
                         </div>
@@ -389,46 +413,53 @@
                             <app-select-input label="Issuing Province" [name]="'policeClearanceProvince_' + i"
                                 [(ngModel)]="record.issuingProvince" [options]="provinceOptions"
                                 placeholder="-- Select Province --" [required]="i === 0"
-                                [searchable]="true"></app-select-input>
+                                [searchable]="true" [disabled]="readonly"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['police_clearance_' + record.id + '_issuingProvince'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Issuing City (Optional)" [name]="'policeClearanceCity_' + i"
-                                [(ngModel)]="record.issuingCity"></app-base-input>
+                                [(ngModel)]="record.issuingCity" [disabled]="readonly"></app-base-input>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Issue Date" [name]="'policeClearanceIssueDate_' + i" type="date"
-                                [(ngModel)]="record.issueDate" [required]="i === 0"></app-base-input>
+                                [(ngModel)]="record.issueDate" [required]="i === 0" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['police_clearance_' + record.id + '_issueDate'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Reference Number (Optional)" [name]="'policeClearanceReference_' + i"
-                                [(ngModel)]="record.referenceNumber"></app-base-input>
+                                [(ngModel)]="record.referenceNumber" [disabled]="readonly"></app-base-input>
                         </div>
 
                         <div class="flex flex-col md:col-span-2">
-                            <app-file-upload label="Clearance Document" [name]="'policeClearanceDocument_' + i"
-                                [(ngModel)]="record.file" (fileChange)="onPoliceClearanceFileSelected(record, $event)"
-                                [existingFileUrl]="record.existingFileUrl" [existingFileName]="record.existingFileName"
-                                helperText="PNG, JPG, PDF up to 10MB" [required]="i === 0"
-                                [disabled]="policeClearanceUploadInProgress[record.id || '']"></app-file-upload>
-                            <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.
-                            </p>
-                            <p *ngIf="policeClearanceUploadInProgress[record.id || '']"
-                                class="text-xs text-primary-600 mt-2">Uploading document...</p>
-                            <app-error-message
-                                [errorMessage]="policeClearanceUploadErrors[record.id || ''] || null"></app-error-message>
+                            <ng-container *ngIf="!readonly">
+                                <app-file-upload label="Clearance Document" [name]="'policeClearanceDocument_' + i"
+                                    [(ngModel)]="record.file" (fileChange)="onPoliceClearanceFileSelected(record, $event)"
+                                    [existingFileUrl]="record.existingFileUrl" [existingFileName]="record.existingFileName"
+                                    helperText="PNG, JPG, PDF up to 10MB" [required]="i === 0"
+                                    [disabled]="policeClearanceUploadInProgress[record.id || '']"></app-file-upload>
+                                <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.
+                                </p>
+                                <p *ngIf="policeClearanceUploadInProgress[record.id || '']"
+                                    class="text-xs text-primary-600 mt-2">Uploading document...</p>
+                                <app-error-message
+                                    [errorMessage]="policeClearanceUploadErrors[record.id || ''] || null"></app-error-message>
+                            </ng-container>
+                            <ng-container *ngIf="readonly">
+                                <app-file-upload *ngIf="record.existingFileUrl" [existingFileUrl]="record.existingFileUrl"
+                                    [existingFileName]="record.existingFileName" [viewOnly]="true">
+                                </app-file-upload>
+                            </ng-container>
                         </div>
                     </div>
                 </app-card>
             </div>
 
-            <div class="flex justify-center pt-4">
+            <div class="flex justify-center pt-4" *ngIf="!readonly">
                 <app-button label="+ Add Police Clearance" type="secondary" [htmlType]="'button'"
                     [customClass]="'rounded-lg'" (click)="addPoliceClearance()">
                 </app-button>
@@ -451,7 +482,7 @@
                             <span class="text-sm font-normal text-gray-500 dark:text-gray-400"> (Optional)</span>
                         </h3>
                     </div>
-                    <div card-actions>
+                    <div card-actions *ngIf="!readonly">
                         <app-button *ngIf="guardFormModel.trainingCertificates.length > 1" label="Remove" type="danger"
                             htmlType="button" size="sm" (click)="removeTrainingCertificate(i)">
                         </app-button>
@@ -463,7 +494,7 @@
                                 [(ngModel)]="cert.certificateName"
                                 (ngModelChange)="onTrainingCertificateTypeChange(cert)"
                                 [options]="trainingCertificateOptions" placeholder="-- Select Certificate --"
-                                [searchable]="true"></app-select-input>
+                                [searchable]="true" [disabled]="readonly"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['training_certificate_' + cert.id + '_certificateName'] || null"></app-error-message>
                         </div>
@@ -472,7 +503,7 @@
                             <app-select-input label="Issuing Organization" [name]="'trainingCertificateOrg_' + i"
                                 [(ngModel)]="cert.issuingOrganizationType"
                                 [options]="getTrainingIssuerOptions(cert.certificateName)"
-                                placeholder="-- Select Issuer --" [searchable]="true"></app-select-input>
+                                placeholder="-- Select Issuer --" [searchable]="true" [disabled]="readonly"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['training_certificate_' + cert.id + '_issuingOrganizationType'] || null"></app-error-message>
                         </div>
@@ -480,43 +511,50 @@
                         <div class="flex flex-col" *ngIf="cert.issuingOrganizationType === 'other'">
                             <app-base-input label="Issuing Organization (Specify)"
                                 [name]="'trainingCertificateOrgOther_' + i"
-                                [(ngModel)]="cert.issuingOrganizationOther"></app-base-input>
+                                [(ngModel)]="cert.issuingOrganizationOther" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['training_certificate_' + cert.id + '_issuingOrganizationOther'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Issue Date" [name]="'trainingCertificateIssueDate_' + i" type="date"
-                                [(ngModel)]="cert.issueDate"></app-base-input>
+                                [(ngModel)]="cert.issueDate" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['training_certificate_' + cert.id + '_issueDate'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Expiry Date (Optional)" [name]="'trainingCertificateExpiryDate_' + i"
-                                type="date" [(ngModel)]="cert.expiryDate"></app-base-input>
+                                type="date" [(ngModel)]="cert.expiryDate" [disabled]="readonly"></app-base-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['training_certificate_' + cert.id + '_expiryDate'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col md:col-span-2">
-                            <app-file-upload label="Certificate Document" [name]="'trainingCertificateDocument_' + i"
-                                [(ngModel)]="cert.file" (fileChange)="onTrainingCertificateFileSelected(cert, $event)"
-                                [existingFileUrl]="cert.existingFileUrl" [existingFileName]="cert.existingFileName"
-                                helperText="PNG, JPG, PDF up to 10MB" [required]="false"
-                                [disabled]="trainingCertificateUploadInProgress[cert.id || '']"></app-file-upload>
-                            <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.
-                            </p>
-                            <p *ngIf="trainingCertificateUploadInProgress[cert.id || '']"
-                                class="text-xs text-primary-600 mt-2">Uploading document...</p>
-                            <app-error-message
-                                [errorMessage]="trainingCertificateUploadErrors[cert.id || ''] || null"></app-error-message>
+                            <ng-container *ngIf="!readonly">
+                                <app-file-upload label="Certificate Document" [name]="'trainingCertificateDocument_' + i"
+                                    [(ngModel)]="cert.file" (fileChange)="onTrainingCertificateFileSelected(cert, $event)"
+                                    [existingFileUrl]="cert.existingFileUrl" [existingFileName]="cert.existingFileName"
+                                    helperText="PNG, JPG, PDF up to 10MB" [required]="false"
+                                    [disabled]="trainingCertificateUploadInProgress[cert.id || '']"></app-file-upload>
+                                <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, upload now to avoid later holds.
+                                </p>
+                                <p *ngIf="trainingCertificateUploadInProgress[cert.id || '']"
+                                    class="text-xs text-primary-600 mt-2">Uploading document...</p>
+                                <app-error-message
+                                    [errorMessage]="trainingCertificateUploadErrors[cert.id || ''] || null"></app-error-message>
+                            </ng-container>
+                            <ng-container *ngIf="readonly">
+                                <app-file-upload *ngIf="cert.existingFileUrl" [existingFileUrl]="cert.existingFileUrl"
+                                    [existingFileName]="cert.existingFileName" [viewOnly]="true">
+                                </app-file-upload>
+                            </ng-container>
                         </div>
                     </div>
                 </app-card>
             </div>
 
-            <div class="flex justify-center pt-4">
+            <div class="flex justify-center pt-4" *ngIf="!readonly">
                 <app-button label="+ Add Training Certificate" type="secondary" [htmlType]="'button'"
                     [customClass]="'rounded-lg'" (click)="addTrainingCertificate()">
                 </app-button>
@@ -527,7 +565,7 @@
             containerClass="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-4 sm:p-6 space-y-4 sm:space-y-6">
 
             <app-weekly-availability label="Weekly Availability" name="availability"
-                [(ngModel)]="guardFormModel.weeklyAvailability">
+                [(ngModel)]="guardFormModel.weeklyAvailability" [disabled]="readonly">
             </app-weekly-availability>
 
             <!-- Add error message if validation fails -->
@@ -539,7 +577,7 @@
             <app-error-message [errorMessage]="guardErrors.submit"></app-error-message>
         </div>
 
-        <app-sticky-action-bar [message]="'Save to continue onboarding.'">
+        <app-sticky-action-bar *ngIf="!readonly" [message]="'Save to continue onboarding.'">
             <app-button *ngIf="!isEditMode" [label]="isSubmitting ? 'Submitting...' : 'Submit'" type="primary"
                 [htmlType]="'submit'" [disabled]="isSubmitting" [fullWidth]="true" size="lg"
                 [customClass]="'w-full md:w-auto rounded-lg'">

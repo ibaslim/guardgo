@@ -11,6 +11,9 @@ export class MessageNotificationService {
   type = computed(() => this.typeSignal());
 
   show(message: string, type: MessageType = 'fail', duration: number = 3000) {
+    try {
+      console.debug(`[MessageNotificationService] show(): message='${message}', type='${type}', duration=${duration}`);
+    } catch (e) {}
     this.messageSignal.set(message);
     this.typeSignal.set(type);
     setTimeout(() => this.messageSignal.set(null), duration);

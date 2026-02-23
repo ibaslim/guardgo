@@ -58,3 +58,31 @@ export function formatDate(date: Date | string, locale: string = 'en-CA'): strin
   const dateObj = typeof date === 'string' ? new Date(date) : date;
   return dateObj.toLocaleDateString(locale);
 }
+
+/**
+ * Produce a readable title from arbitrary strings containing special characters
+ * Examples:
+ *  - "service_provider" -> "Service Provider"
+ *  - "client-type#1" -> "Client Type 1"
+ *  - "firstName" -> "First Name"
+ */
+export function readableTitle(value: string): string {
+  if (!value) return '';
+
+  // Normalize common separators to spaces
+  let s = value.replace(/[_-]+/g, ' ');
+
+  // Remove any characters that are not letters, numbers or whitespace
+  s = s.replace(/[^A-Za-z0-9\s]+/g, ' ');
+
+  // Collapse multiple spaces and trim
+  s = s.replace(/\s+/g, ' ').trim();
+
+  // If the string is camelCase, convert to words first
+  if (/[a-z][A-Z]/.test(value)) {
+    s = camelToTitleCase(s);
+  }
+
+  // Finally apply title-casing for readability
+  return toTitleCase(s);
+}

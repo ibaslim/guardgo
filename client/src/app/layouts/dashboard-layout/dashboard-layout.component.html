@@ -35,17 +35,20 @@
       </div>
 
       <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        <a routerLink="/dashboard/overview"
-          routerLinkActive="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20"
-          class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-          </svg>
-          @if (!sidebarCollapsed) {
-          <span class="ml-3">Dashboard</span>
-          }
-        </a>
+        <ng-container *ngFor="let link of links">
+          <ng-container *ngIf="canShow(link)">
+            <a [routerLink]="link.route"
+              routerLinkActive="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20"
+              [attr.title]="sidebarCollapsed ? link.label : null"
+              [attr.aria-label]="link.label"
+              class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <app-icon [name]="link.icon" [size]="20"></app-icon>
+              @if (!sidebarCollapsed) {
+              <span class="ml-3">{{ link.label }}</span>
+              }
+            </a>
+          </ng-container>
+        </ng-container>
       </nav>
 
       <div class="border-t border-gray-200 dark:border-gray-700 p-4 space-y-2">
