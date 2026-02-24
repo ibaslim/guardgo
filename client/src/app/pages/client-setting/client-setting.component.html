@@ -182,8 +182,7 @@
                 <div class="flex flex-col" *ngIf="clientFormModel.billingAddress.country === 'CA'">
                     <app-select-input label="Province" name="billingProvince"
                         [(ngModel)]="clientFormModel.billingAddress.province" [options]="provinceOptions"
-                        placeholder="-- Select Province --" [required]="true" [searchable]="true"
-                        [disabled]="readonly"></app-select-input>
+                        placeholder="-- Select Province --" [required]="true" [searchable]="true" [disabled]="readonly"></app-select-input>
                     <app-error-message [errorMessage]="clientErrors.billingProvince"></app-error-message>
                 </div>
 
@@ -202,8 +201,7 @@
             <app-error-message [errorMessage]="clientErrors.submit"></app-error-message>
         </div>
 
-        <app-sticky-action-bar *ngIf="!readonly" [message]="'Save to activate your client profile.'"
-            [containerClass]="'px-0'">
+        <app-sticky-action-bar *ngIf="!readonly" [message]="'Save to activate your client profile.'" [containerClass]="'px-0'">
             <app-button *ngIf="!isEditMode" [label]="'Submit'" type="primary" [htmlType]="'submit'" [fullWidth]="true"
                 size="lg" [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>
