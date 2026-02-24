@@ -428,62 +428,55 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Secondary Contact (optional)
+    // Secondary Contact (required)
     const secondary = this.clientFormModel.secondaryContact;
-    const secondaryHasAny =
-      secondary.name.trim() ||
-      secondary.email.trim() ||
-      secondary.mobilePhone?.e164 ||
-      secondary.landlinePhone?.e164;
-    if (secondaryHasAny) {
-      if (!secondary.name.trim()) {
-        this.clientErrors.secondaryContactName = 'Secondary contact name is required.';
-      } else if (!/^[a-zA-Z\s]+$/.test(secondary.name)) {
-        this.clientErrors.secondaryContactName = 'Contact name can only contain letters and spaces.';
+
+    if (!secondary.name.trim()) {
+      this.clientErrors.secondaryContactName = 'Secondary contact name is required.';
+    } else if (!/^[a-zA-Z\s]+$/.test(secondary.name)) {
+      this.clientErrors.secondaryContactName = 'Contact name can only contain letters and spaces.';
+    }
+
+    if (!secondary.email.trim()) {
+      this.clientErrors.secondaryContactEmail = 'Secondary contact email is required.';
+    } else if (!/^[\w.-]+@[\w.-]+\.\w+$/.test(secondary.email)) {
+      this.clientErrors.secondaryContactEmail = 'Invalid email format.';
+    }
+
+    const secondaryHasMobile = secondary.mobilePhone?.e164;
+    const secondaryHasLandline = secondary.landlinePhone?.e164;
+
+    if (secondaryHasMobile) {
+      const secondaryMobileE164 = secondary.mobilePhone!.e164;
+      const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+      if (!canadianPhonePattern.test(secondaryMobileE164)) {
+        this.clientErrors.secondaryContactMobilePhone = 'Invalid Canadian mobile phone number format.';
+      } else if (secondary.mobilePhone!.country !== 'CA') {
+        this.clientErrors.secondaryContactMobilePhone = 'Only Canadian phone numbers are accepted.';
       }
-      if (!secondary.email.trim()) {
-        this.clientErrors.secondaryContactEmail = 'Secondary contact email is required.';
-      } else if (!/^[\w.-]+@[\w.-]+\.\w+$/.test(secondary.email)) {
-        this.clientErrors.secondaryContactEmail = 'Invalid email format.';
+    }
+
+    if (secondaryHasLandline) {
+      const secondaryLandlineE164 = secondary.landlinePhone!.e164;
+      const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+      if (!canadianPhonePattern.test(secondaryLandlineE164)) {
+        this.clientErrors.secondaryContactLandlinePhone = 'Invalid Canadian landline phone number format.';
+      } else if (secondary.landlinePhone!.country !== 'CA') {
+        this.clientErrors.secondaryContactLandlinePhone = 'Only Canadian phone numbers are accepted.';
       }
+    }
 
-      const secondaryHasMobile = secondary.mobilePhone?.e164;
-      const secondaryHasLandline = secondary.landlinePhone?.e164;
+    // At least one phone number is required
+    if (!secondaryHasMobile && !secondaryHasLandline) {
+      this.clientErrors.secondaryContactPhoneNumbers = 'At least one phone number (mobile or landline) is required.';
+    }
 
-      // Validate secondary mobile phone format if provided (Canadian: +1 followed by 10 digits)
-      if (secondaryHasMobile) {
-        const secondaryMobileE164 = secondary.mobilePhone!.e164;
-        const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
-
-        if (!canadianPhonePattern.test(secondaryMobileE164)) {
-          this.clientErrors.secondaryContactMobilePhone = 'Invalid Canadian mobile phone number format.';
-        } else if (secondary.mobilePhone!.country !== 'CA') {
-          this.clientErrors.secondaryContactMobilePhone = 'Only Canadian phone numbers are accepted.';
-        }
-      }
-
-      // Validate secondary landline phone format if provided (Canadian: +1 followed by 10 digits)
-      if (secondaryHasLandline) {
-        const secondaryLandlineE164 = secondary.landlinePhone!.e164;
-        const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
-
-        if (!canadianPhonePattern.test(secondaryLandlineE164)) {
-          this.clientErrors.secondaryContactLandlinePhone = 'Invalid Canadian landline phone number format.';
-        } else if (secondary.landlinePhone!.country !== 'CA') {
-          this.clientErrors.secondaryContactLandlinePhone = 'Only Canadian phone numbers are accepted.';
-        }
-      }
-
-      // At least one phone number is required
-      if (!secondaryHasMobile && !secondaryHasLandline) {
-        this.clientErrors.secondaryContactPhoneNumbers = 'At least one phone number (mobile or landline) is required.';
-      }
-
-      // If both phone numbers are provided, they must be from the same country
-      if (secondaryHasMobile && secondaryHasLandline) {
-        if (secondary.mobilePhone?.country !== secondary.landlinePhone?.country) {
-          this.clientErrors.secondaryContactPhoneNumbers = 'Mobile and landline phone numbers must be from the same country.';
-        }
+    // If both provided, must be same country
+    if (secondaryHasMobile && secondaryHasLandline) {
+      if (secondary.mobilePhone?.country !== secondary.landlinePhone?.country) {
+        this.clientErrors.secondaryContactPhoneNumbers = 'Mobile and landline phone numbers must be from the same country.';
       }
     }
 
@@ -553,18 +546,13 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
             || this.clientFormModel.primaryContact.landlinePhone?.e164
             || ''
         },
-        secondary_contact: this.clientFormModel.secondaryContact.name.trim()
-          || this.clientFormModel.secondaryContact.email.trim()
-          || this.clientFormModel.secondaryContact.mobilePhone?.e164
-          || this.clientFormModel.secondaryContact.landlinePhone?.e164
-          ? {
-            name: this.clientFormModel.secondaryContact.name,
-            email: this.clientFormModel.secondaryContact.email,
-            phone: this.clientFormModel.secondaryContact.mobilePhone?.e164
-              || this.clientFormModel.secondaryContact.landlinePhone?.e164
-              || ''
-          }
-          : undefined,
+        secondary_contact: {
+          name: this.clientFormModel.secondaryContact.name,
+          email: this.clientFormModel.secondaryContact.email,
+          phone: this.clientFormModel.secondaryContact.mobilePhone?.e164
+            || this.clientFormModel.secondaryContact.landlinePhone?.e164
+            || ''
+        },
         billing_address: {
           street: this.clientFormModel.billingAddress.street,
           city: this.clientFormModel.billingAddress.city,

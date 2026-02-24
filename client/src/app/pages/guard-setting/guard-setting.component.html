@@ -108,19 +108,19 @@
             </div>
         </app-section>
 
-        <app-section title="Secondary Contact (Optional)" subtitle="Backup contact for urgent updates.">
+        <app-section title="Secondary Contact" subtitle="Backup contact for urgent updates.">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col md:col-span-1">
                     <app-base-input label="Contact Name" name="secondaryContactName"
-                        [(ngModel)]="guardFormModel.secondaryContact.name" pattern="[a-zA-Z\s]*"
-                        helperText="Letters and spaces only" [disabled]="readonly">
+                        [(ngModel)]="guardFormModel.secondaryContact.name" pattern="[a-zA-Z\s]*" [required]="true"
+                        [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="guardErrors.secondaryContactName || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col md:col-span-1">
                     <app-base-input label="Contact Email" name="secondaryContactEmail" type="email"
-                        [(ngModel)]="guardFormModel.secondaryContact.email" [disabled]="readonly">
+                        [(ngModel)]="guardFormModel.secondaryContact.email" [required]="true" [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="guardErrors.secondaryContactEmail || null"></app-error-message>
                 </div>

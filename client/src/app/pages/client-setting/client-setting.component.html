@@ -117,18 +117,18 @@
             </div>
         </app-section>
 
-        <app-section title="Secondary Contact (Optional)" subtitle="Backup contact for urgent updates.">
+        <app-section title="Secondary Contact" subtitle="Backup contact for urgent updates.">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col md:col-span-1">
                     <app-base-input label="Contact Name" name="secondaryContactName"
-                        [(ngModel)]="clientFormModel.secondaryContact.name" [disabled]="readonly">
+                        [(ngModel)]="clientFormModel.secondaryContact.name" [required]="true" [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="clientErrors.secondaryContactName"></app-error-message>
                 </div>
 
                 <div class="flex flex-col md:col-span-1">
                     <app-base-input label="Contact Email" name="secondaryContactEmail" type="email"
-                        [(ngModel)]="clientFormModel.secondaryContact.email" [disabled]="readonly">
+                        [(ngModel)]="clientFormModel.secondaryContact.email" [required]="true" [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="clientErrors.secondaryContactEmail"></app-error-message>
                 </div>
