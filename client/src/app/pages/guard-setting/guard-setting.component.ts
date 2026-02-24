@@ -262,15 +262,52 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       landlinePhone: null
     },
     identification: {
-      documents: [],
+      documents: [{
+        documentType: '',
+        number: '',
+        province: undefined,
+        expiryDate: undefined,
+        file: null,
+        id: `doc_initial_${Date.now()}`
+      }],
       primaryDocumentId: undefined,
-      idType: 'canadian_passport', // Legacy
+      idType: 'canadian_passport',
       idNumber: '',
       document: null
     },
-    securityLicenses: [],
-    policeClearances: [],
-    trainingCertificates: [],
+
+    securityLicenses: [{
+      fullLegalName: '',
+      licenseNumber: '',
+      licenseType: 'securityGuard',
+      issuingProvince: '',
+      issuingAuthority: '',
+      issueDate: '',
+      expiryDate: '',
+      file: null,
+      id: `sec_initial_${Date.now()}`
+    }],
+
+    policeClearances: [{
+      issuingAuthorityType: '',
+      issuingAuthorityOther: '',
+      issuingProvince: '',
+      issuingCity: '',
+      issueDate: '',
+      referenceNumber: '',
+      file: null,
+      id: `police_initial_${Date.now()}`
+    }],
+
+    trainingCertificates: [{
+      certificateName: '',
+      issuingOrganizationType: '',
+      issuingOrganizationOther: '',
+      issueDate: '',
+      expiryDate: '',
+      file: null,
+      id: `train_initial_${Date.now()}`
+    }],
     preferredGuardTypes: [],
     operationalRadius: null,
     weeklyAvailability: {
@@ -1370,51 +1407,80 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Identification Documents - at least one required
-    if (!this.guardFormModel.identification.documents || this.guardFormModel.identification.documents.length === 0) {
-      this.guardErrors['identification'] = 'At least one identification document is required.';
-    } else {
-      // Validate each document using document ID
+    // Identification Documents - Minimum 2 required
+    if (!this.guardFormModel.identification.documents ||
+      this.guardFormModel.identification.documents.length < 2) {
+
+      this.guardErrors['identification'] =
+        'At least 2 identification documents are required.';
+    }
+    else {
+
       this.guardFormModel.identification.documents.forEach((doc, index) => {
-        // First document is required, validate fully
-        if (index === 0) {
+
+        if (!doc.id) return;
+
+        // First 2 documents are required
+        if (index < 2) {
           const validation = this.validateDocument(doc);
-          if (!validation.valid && doc.id) {
-            // Store errors per field
+
+          if (!validation.valid) {
             if (validation.errors['type']) {
-              this.guardErrors[`identification_${doc.id}_type`] = validation.errors['type'];
+              this.guardErrors[`identification_${doc.id}_type`] =
+                validation.errors['type'];
             }
+
             if (validation.errors['number']) {
-              this.guardErrors[`identification_${doc.id}_number`] = validation.errors['number'];
+              this.guardErrors[`identification_${doc.id}_number`] =
+                validation.errors['number'];
             }
+
             if (validation.errors['province']) {
-              this.guardErrors[`identification_${doc.id}_province`] = validation.errors['province'];
+              this.guardErrors[`identification_${doc.id}_province`] =
+                validation.errors['province'];
             }
+
             if (validation.errors['expiry']) {
-              this.guardErrors[`identification_${doc.id}_expiry`] = validation.errors['expiry'];
+              this.guardErrors[`identification_${doc.id}_expiry`] =
+                validation.errors['expiry'];
             }
           }
-        } else {
-          // Additional documents are optional, but if partially filled, validate
-          const hasAnyData = doc.documentType || doc.number || doc.province || doc.expiryDate;
+        }
+        else {
+          // Documents after first 2 are optional but validate if partially filled
+          const hasAnyData =
+            doc.documentType ||
+            doc.number ||
+            doc.province ||
+            doc.expiryDate;
+
           if (hasAnyData) {
             const validation = this.validateDocument(doc);
-            if (!validation.valid && doc.id) {
+
+            if (!validation.valid) {
               if (validation.errors['type']) {
-                this.guardErrors[`identification_${doc.id}_type`] = validation.errors['type'];
+                this.guardErrors[`identification_${doc.id}_type`] =
+                  validation.errors['type'];
               }
+
               if (validation.errors['number']) {
-                this.guardErrors[`identification_${doc.id}_number`] = validation.errors['number'];
+                this.guardErrors[`identification_${doc.id}_number`] =
+                  validation.errors['number'];
               }
+
               if (validation.errors['province']) {
-                this.guardErrors[`identification_${doc.id}_province`] = validation.errors['province'];
+                this.guardErrors[`identification_${doc.id}_province`] =
+                  validation.errors['province'];
               }
+
               if (validation.errors['expiry']) {
-                this.guardErrors[`identification_${doc.id}_expiry`] = validation.errors['expiry'];
+                this.guardErrors[`identification_${doc.id}_expiry`] =
+                  validation.errors['expiry'];
               }
             }
           }
         }
+
       });
     }
 
