@@ -418,11 +418,14 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       this.providerErrors.legalCompanyName = 'Legal company name is required.';
     }
 
-    if (this.providerFormModel.yearOfEstablishment != null) {
-      const year = Number(this.providerFormModel.yearOfEstablishment);
-      const currentYear = new Date().getFullYear();
-      if (!Number.isFinite(year) || year < 1800 || year > currentYear) {
-        this.providerErrors.yearOfEstablishment = 'Enter a valid year of establishment.';
+    if (this.providerFormModel.yearOfEstablishment) {
+      const estDate = new Date(this.providerFormModel.yearOfEstablishment);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (estDate > today) {
+        this.providerErrors.yearOfEstablishment =
+          'Date of establishment cannot be in the future.';
       }
     }
 

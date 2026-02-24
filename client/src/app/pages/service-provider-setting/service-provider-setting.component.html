@@ -43,14 +43,15 @@
 
                 <div class="flex flex-col">
                     <app-base-input label="Company Registration Number" name="companyRegistrationNumber"
-                        [(ngModel)]="providerFormModel.companyRegistrationNumber" [required]="true" [disabled]="readonly">
+                        [(ngModel)]="providerFormModel.companyRegistrationNumber" [required]="true"
+                        [disabled]="readonly">
                     </app-base-input>
                     <app-error-message
                         [errorMessage]="providerErrors.companyRegistrationNumber || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="Year of Establishment (Optional)" name="yearOfEstablishment" type="number"
+                    <app-base-input label="Date of Establishment (Optional)" name="dateOfEstablishment" type="date"
                         [(ngModel)]="providerFormModel.yearOfEstablishment" [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="providerErrors.yearOfEstablishment || null"></app-error-message>
@@ -75,7 +76,8 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col">
                     <app-base-input label="Street Address" name="officeStreet"
-                        [(ngModel)]="providerFormModel.headOfficeAddress.street" [required]="true" [disabled]="readonly">
+                        [(ngModel)]="providerFormModel.headOfficeAddress.street" [required]="true"
+                        [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="providerErrors.officeStreet || null"></app-error-message>
                 </div>
@@ -98,13 +100,15 @@
                 <div class="flex flex-col" *ngIf="providerFormModel.headOfficeAddress.country === 'CA'">
                     <app-select-input label="Province" name="officeProvince"
                         [(ngModel)]="providerFormModel.headOfficeAddress.province" [options]="provinceOptions"
-                        placeholder="-- Select Province --" [required]="true" [searchable]="true" [disabled]="readonly"></app-select-input>
+                        placeholder="-- Select Province --" [required]="true" [searchable]="true"
+                        [disabled]="readonly"></app-select-input>
                     <app-error-message [errorMessage]="providerErrors.officeProvince || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
                     <app-base-input label="Postal Code" name="officePostalCode"
-                        [(ngModel)]="providerFormModel.headOfficeAddress.postalCode" [required]="true" [disabled]="readonly">
+                        [(ngModel)]="providerFormModel.headOfficeAddress.postalCode" [required]="true"
+                        [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="providerErrors.officePostalCode || null"></app-error-message>
                 </div>
@@ -115,14 +119,16 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col md:col-span-1">
                     <app-base-input label="Representative Name" name="repName"
-                        [(ngModel)]="providerFormModel.primaryRepresentative.name" [required]="true" [disabled]="readonly">
+                        [(ngModel)]="providerFormModel.primaryRepresentative.name" [required]="true"
+                        [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="providerErrors.repName || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col md:col-span-1">
                     <app-base-input label="Representative Email" name="repEmail" type="email"
-                        [(ngModel)]="providerFormModel.primaryRepresentative.email" [required]="true" [disabled]="readonly">
+                        [(ngModel)]="providerFormModel.primaryRepresentative.email" [required]="true"
+                        [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="providerErrors.repEmail || null"></app-error-message>
                 </div>
@@ -195,7 +201,8 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col">
                     <app-base-input label="License Number" name="licenseNumber"
-                        [(ngModel)]="providerFormModel.securityLicense.licenseNumber" [required]="true" [disabled]="readonly">
+                        [(ngModel)]="providerFormModel.securityLicense.licenseNumber" [required]="true"
+                        [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="providerErrors.licenseNumber || null"></app-error-message>
                 </div>
@@ -234,7 +241,8 @@
 
                 <div class="flex flex-col">
                     <app-base-input label="Expiry Date" name="expiryDate" type="date"
-                        [(ngModel)]="providerFormModel.securityLicense.expiryDate" [required]="true" [disabled]="readonly">
+                        [(ngModel)]="providerFormModel.securityLicense.expiryDate" [required]="true"
+                        [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="providerErrors.expiryDate || null"></app-error-message>
                 </div>
@@ -256,8 +264,7 @@
                     <ng-container *ngIf="readonly">
                         <app-file-upload *ngIf="providerFormModel.securityLicense.existingFileUrl"
                             [existingFileUrl]="providerFormModel.securityLicense.existingFileUrl"
-                            [existingFileName]="providerFormModel.securityLicense.existingFileName"
-                            [viewOnly]="true">
+                            [existingFileName]="providerFormModel.securityLicense.existingFileName" [viewOnly]="true">
                         </app-file-upload>
                     </ng-container>
                 </div>
@@ -280,8 +287,7 @@
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="Currency" name="coverageCurrency"
-                        [disabled]="true"
+                    <app-base-input label="Currency" name="coverageCurrency" [disabled]="true"
                         [(ngModel)]="providerFormModel.insuranceDetails.currency">
                     </app-base-input>
                 </div>
@@ -324,7 +330,8 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="flex flex-col">
                             <app-base-input label="City" [name]="'regionCity' + i"
-                                [(ngModel)]="providerFormModel.operatingRegions[i].city" [required]="i === 0" [disabled]="readonly">
+                                [(ngModel)]="providerFormModel.operatingRegions[i].city" [required]="i === 0"
+                                [disabled]="readonly">
                             </app-base-input>
                             <app-error-message
                                 [errorMessage]="providerErrors['region_' + i + '_city'] || null"></app-error-message>
@@ -342,15 +349,16 @@
                         <div class="flex flex-col" *ngIf="providerFormModel.operatingRegions[i].country === 'CA'">
                             <app-select-input label="Province" [name]="'regionProvince' + i"
                                 [(ngModel)]="providerFormModel.operatingRegions[i].province" [options]="provinceOptions"
-                                placeholder="-- Select Province --" [required]="i === 0"
-                                [searchable]="true" [disabled]="readonly"></app-select-input>
+                                placeholder="-- Select Province --" [required]="i === 0" [searchable]="true"
+                                [disabled]="readonly"></app-select-input>
                             <app-error-message
                                 [errorMessage]="providerErrors['region_' + i + '_province'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
                             <app-base-input label="Coverage Radius (km)" [name]="'regionRadius' + i" type="number"
-                                [(ngModel)]="providerFormModel.operatingRegions[i].coverageRadiusKm" [min]="1" [disabled]="readonly">
+                                [(ngModel)]="providerFormModel.operatingRegions[i].coverageRadiusKm" [min]="1"
+                                [disabled]="readonly">
                             </app-base-input>
                             <app-error-message
                                 [errorMessage]="providerErrors['region_' + i + '_radius'] || null"></app-error-message>
@@ -383,7 +391,8 @@
             <app-error-message [errorMessage]="providerErrors.submit"></app-error-message>
         </div>
 
-        <app-sticky-action-bar *ngIf="!readonly" [message]="'Save to activate your provider profile.'" [containerClass]="'px-0'">
+        <app-sticky-action-bar *ngIf="!readonly" [message]="'Save to activate your provider profile.'"
+            [containerClass]="'px-0'">
             <app-button *ngIf="!isEditMode" [label]="'Submit'" type="primary" [htmlType]="'submit'" [fullWidth]="true"
                 size="lg" [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>
