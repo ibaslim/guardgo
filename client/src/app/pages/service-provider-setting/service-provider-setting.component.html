@@ -42,11 +42,11 @@
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="Company Registration Number" name="companyRegistrationNumber"
-                        [(ngModel)]="providerFormModel.companyRegistrationNumber" [required]="true" [disabled]="readonly">
+                    <app-base-input label="Corporation Number" name="corporationNumber"
+                        [(ngModel)]="providerFormModel.corporationNumber" [required]="true" [disabled]="readonly">
                     </app-base-input>
                     <app-error-message
-                        [errorMessage]="providerErrors.companyRegistrationNumber || null"></app-error-message>
+                        [errorMessage]="providerErrors.corporationNumber || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
