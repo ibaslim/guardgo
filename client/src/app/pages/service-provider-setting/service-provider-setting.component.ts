@@ -79,7 +79,7 @@ interface InsurancePolicy {
 interface ServiceProvider {
   legalCompanyName: string;
   tradingName: string;
-  companyRegistrationNumber: string;
+  corporationNumber: string;
   yearOfEstablishment: number | null;
   companyWebsite: string;
   taxRegistrationNumber: string;
@@ -125,7 +125,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   providerFormModel: ServiceProvider = {
     legalCompanyName: '',
     tradingName: '',
-    companyRegistrationNumber: '',
+    corporationNumber: '',
     yearOfEstablishment: null,
     companyWebsite: '',
     taxRegistrationNumber: '',
@@ -318,7 +318,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     return {
       legalCompanyName: profile.legal_company_name || profile.legalCompanyName || '',
       tradingName: profile.trading_name || profile.tradingName || '',
-      companyRegistrationNumber: profile.company_registration_number || profile.companyRegistrationNumber || '',
+      corporationNumber: profile.corporation_number || profile.corporationNumber || '',
       yearOfEstablishment: profile.year_of_establishment ?? profile.yearOfEstablishment ?? null,
       companyWebsite: profile.company_website || profile.companyWebsite || '',
       taxRegistrationNumber: profile.tax_registration_number || profile.taxRegistrationNumber || '',
@@ -376,7 +376,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     const safe = (v: any) => (v === null || v === undefined) ? '' : String(v);
 
     const legalName = safe((data as any).legalCompanyName || (data as any).legal_company_name || (data as any).full_name || '');
-    const companyReg = safe((data as any).companyRegistrationNumber || (data as any).company_registration_number || '');
+    const companyReg = safe((data as any).corporationNumber || (data as any).corporation_number || '');
     const street = safe((data as any).headOfficeAddress?.street || (data as any).head_office_address?.street || '');
     const primaryName = safe((data as any).primaryRepresentative?.name || (data as any).primary_representative?.name || '');
     const primaryMobile = (data as any).primaryRepresentative?.mobilePhone?.e164 || (data as any).primaryRepresentative?.phone || (data as any).primary_representative?.phone || '';
@@ -434,8 +434,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     }
 
     // Company Registration Number
-    if (!this.providerFormModel.companyRegistrationNumber.trim()) {
-      this.providerErrors.companyRegistrationNumber = 'Company registration number is required.';
+    if (!this.providerFormModel.corporationNumber.trim()) {
+      this.providerErrors.corporationNumber = 'Corporation number is required.';
     }
 
     // Head Office Address
@@ -746,7 +746,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       profile: {
         legal_company_name: this.providerFormModel.legalCompanyName,
         trading_name: this.providerFormModel.tradingName || undefined,
-        company_registration_number: this.providerFormModel.companyRegistrationNumber,
+        company_registration_number: this.providerFormModel.corporationNumber,
         year_of_establishment: this.providerFormModel.yearOfEstablishment || undefined,
         company_website: this.providerFormModel.companyWebsite || undefined,
         tax_registration_number: this.providerFormModel.taxRegistrationNumber || undefined,
