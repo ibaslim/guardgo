@@ -158,97 +158,135 @@
 
         <app-section title="Identification Documents" subtitle="We verify identity before approving shifts.">
 
-            <!-- Error message for identification documents -->
             <app-error-message [errorMessage]="guardErrors.identification || null"></app-error-message>
 
-            <!-- List of added documents -->
-            <div *ngIf="guardFormModel.identification.documents && guardFormModel.identification.documents.length > 0"
-                class="space-y-4">
+            <div *ngIf="guardFormModel.identification.documents &&
+                guardFormModel.identification.documents.length > 0" class="space-y-4">
+
                 <app-card *ngFor="let doc of guardFormModel.identification.documents; let i = index" class="block"
                     [bodyClass]="'mt-4'">
+
+                    <!-- Header -->
                     <div card-header>
                         <h3 class="font-semibold text-gray-800 dark:text-gray-200">
                             {{ doc.documentType ? toTitleCase(doc.documentType) : ('Document ' + (i + 1)) }}
-                            <span *ngIf="i > 0" class="text-sm font-normal text-gray-500 dark:text-gray-400">
-                                (Optional)</span>
+
+                            <span *ngIf="i >= 2" class="text-sm font-normal text-gray-500 dark:text-gray-400">
+                                (Optional)
+                            </span>
                         </h3>
                     </div>
+
+                    <!-- Remove Button -->
                     <div card-actions *ngIf="!readonly">
                         <app-button *ngIf="guardFormModel.identification.documents.length > 1" label="Remove"
-                            type="danger" htmlType="button" size="sm" (click)="removeIdentificationDocument(i)">
+                            type="danger" size="sm" htmlType="button" (click)="removeIdentificationDocument(i)">
                         </app-button>
                     </div>
 
+                    <!-- Fields -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- Document Type Dropdown -->
+
+                        <!-- Document Type -->
                         <div class="flex flex-col">
-                            <app-select-input label="Document Type" [name]="'docType_' + i"
+                            <app-select-input [label]="'Document Type'" [name]="'docType_' + i"
                                 [(ngModel)]="doc.documentType" [options]="documentTypeOptions"
-                                placeholder="-- Select Document Type --" [required]="i === 0"
-                                [searchable]="true" [disabled]="readonly"></app-select-input>
+                                placeholder="-- Select Document Type --" [required]="i < 2" [searchable]="true"
+                                [disabled]="readonly">
+                            </app-select-input>
+
                             <app-error-message
-                                [errorMessage]="guardErrors['identification_' + doc.id + '_type'] || null"></app-error-message>
+                                [errorMessage]="guardErrors['identification_' + doc.id + '_type'] || null">
+                            </app-error-message>
                         </div>
 
                         <!-- Document Number -->
                         <div class="flex flex-col">
                             <app-base-input [label]="'Document Number'" [name]="'docNumber_' + i"
-                                [(ngModel)]="doc.number" [required]="i === 0" [disabled]="readonly"></app-base-input>
+                                [(ngModel)]="doc.number" [required]="i < 2" [disabled]="readonly">
+                            </app-base-input>
+
                             <app-error-message
-                                [errorMessage]="guardErrors['identification_' + doc.id + '_number'] || null"></app-error-message>
+                                [errorMessage]="guardErrors['identification_' + doc.id + '_number'] || null">
+                            </app-error-message>
                         </div>
 
-                        <!-- Province (conditional) -->
+                        <!-- Province -->
                         <div *ngIf="requiresProvince(doc.documentType)" class="flex flex-col">
-                            <app-select-input label="Province" [name]="'province_' + i" [(ngModel)]="doc.province"
+                            <app-select-input [label]="'Province'" [name]="'province_' + i" [(ngModel)]="doc.province"
                                 [options]="provinceOptions" placeholder="-- Select Province --"
-                                [required]="i === 0 && requiresProvince(doc.documentType)"
-                                [searchable]="true" [disabled]="readonly"></app-select-input>
+                                [required]="i < 2 && requiresProvince(doc.documentType)" [searchable]="true"
+                                [disabled]="readonly">
+                            </app-select-input>
+
                             <app-error-message
-                                [errorMessage]="guardErrors['identification_' + doc.id + '_province'] || null"></app-error-message>
+                                [errorMessage]="guardErrors['identification_' + doc.id + '_province'] || null">
+                            </app-error-message>
                         </div>
 
-                        <!-- Expiry Date (conditional) -->
+                        <!-- Expiry Date -->
                         <div *ngIf="requiresExpiry(doc.documentType)" class="flex flex-col">
                             <app-base-input [label]="'Expiry Date'" [name]="'docExpiry_' + i" type="date"
-                                [(ngModel)]="doc.expiryDate"
-                                [required]="i === 0 && requiresExpiry(doc.documentType)" [disabled]="readonly"></app-base-input>
+                                [(ngModel)]="doc.expiryDate" [required]="i < 2 && requiresExpiry(doc.documentType)"
+                                [disabled]="readonly">
+                            </app-base-input>
+
                             <app-error-message
-                                [errorMessage]="guardErrors['identification_' + doc.id + '_expiry'] || null"></app-error-message>
+                                [errorMessage]="guardErrors['identification_' + doc.id + '_expiry'] || null">
+                            </app-error-message>
                         </div>
 
                         <!-- File Upload -->
-                        <div class="flex flex-col md:col-span-2">
+                        <div class="md:col-span-2 flex flex-col">
+
                             <ng-container *ngIf="!readonly">
-                                <app-file-upload [label]="'Upload Document'" [name]="'docFile_' + i" [(ngModel)]="doc.file"
+
+                                <app-file-upload label="Upload Document" [name]="'docFile_' + i" [(ngModel)]="doc.file"
                                     (fileChange)="onIdentityFileSelected(doc, $event)"
                                     [existingFileUrl]="doc.existingFileUrl" [existingFileName]="doc.existingFileName"
-                                    helperText="PNG, JPG, PDF up to 10MB" [required]="false"
-                                    [disabled]="identityUploadInProgress[doc.id || '']"></app-file-upload>
-                                <p class="text-xs sm:text-xs text-gray-500 mt-2">Optional, but speeds verification.</p>
+                                    helperText="PNG, JPG, PDF up to 10MB"
+                                    [disabled]="identityUploadInProgress[doc.id || '']">
+                                </app-file-upload>
+
+                                <p class="text-xs text-gray-500 mt-2">
+                                    Optional, but speeds verification.
+                                </p>
+
                                 <p *ngIf="identityUploadInProgress[doc.id || '']" class="text-xs text-primary-600 mt-2">
-                                    Uploading document...</p>
-                                <app-error-message
-                                    [errorMessage]="identityUploadErrors[doc.id || ''] || null"></app-error-message>
+                                    Uploading document...
+                                </p>
+
+                                <app-error-message [errorMessage]="identityUploadErrors[doc.id || ''] || null">
+                                </app-error-message>
+
                             </ng-container>
+
                             <ng-container *ngIf="readonly">
                                 <app-file-upload *ngIf="doc.existingFileUrl" [existingFileUrl]="doc.existingFileUrl"
                                     [existingFileName]="doc.existingFileName" [viewOnly]="true">
                                 </app-file-upload>
                             </ng-container>
+
                         </div>
+
                     </div>
+
                 </app-card>
             </div>
 
             <!-- Add Document Button -->
             <div class="flex justify-center pt-4" *ngIf="!readonly">
-                <app-button
-                    [label]="'+ ' + (guardFormModel.identification.documents && guardFormModel.identification.documents.length > 0 ? 'Add Another Document' : 'Add Document')"
-                    type="secondary" [htmlType]="'button'" [customClass]="'rounded-lg'"
+
+                <app-button [label]="' + ' +
+            (guardFormModel.identification.documents &&
+             guardFormModel.identification.documents.length > 0
+             ? 'Add Another Document'
+             : 'Add Document')" type="secondary" htmlType="button" customClass="rounded-lg"
                     (click)="addIdentificationDocument()">
                 </app-button>
+
             </div>
+
         </app-section>
 
         <app-section title="Security Licenses" subtitle="Required for active duty in Canada."
