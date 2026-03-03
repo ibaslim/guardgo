@@ -50,7 +50,7 @@
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="Year of Establishment (Optional)" name="yearOfEstablishment" type="number"
+                    <app-base-input label="Date of Establishment (Optional)" name="dateOfEstablishment" type="date"
                         [(ngModel)]="providerFormModel.yearOfEstablishment" [disabled]="readonly">
                     </app-base-input>
                     <app-error-message [errorMessage]="providerErrors.yearOfEstablishment || null"></app-error-message>
