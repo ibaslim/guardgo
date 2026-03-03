@@ -1642,68 +1642,62 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Secondary Contact Validation (optional, but if any field is filled, name and email are required)
+    // Secondary Contact Validation (required)
     const secondaryContact = this.guardFormModel.secondaryContact;
-    const hasSecondaryContactData = secondaryContact && (
-      secondaryContact.name?.trim() ||
-      secondaryContact.email?.trim() ||
-      (secondaryContact.mobilePhone?.e164) ||
-      (secondaryContact.landlinePhone?.e164)
-    );
 
-    if (hasSecondaryContactData) {
-      // If any field is provided, name and email are required
-      if (!secondaryContact.name?.trim()) {
-        this.guardErrors['secondaryContactName'] = 'Contact name is required if secondary contact is provided.';
-      } else if (!/^[a-zA-Z\s]+$/.test(secondaryContact.name)) {
-        this.guardErrors['secondaryContactName'] = 'Contact name can only contain letters and spaces.';
+    // Name (required)
+    if (!secondaryContact?.name?.trim()) {
+      this.guardErrors['secondaryContactName'] = 'Secondary contact name is required.';
+    } else if (!/^[a-zA-Z\s]+$/.test(secondaryContact.name)) {
+      this.guardErrors['secondaryContactName'] = 'Contact name can only contain letters and spaces.';
+    }
+
+    // Email (required)
+    if (!secondaryContact?.email?.trim()) {
+      this.guardErrors['secondaryContactEmail'] = 'Secondary contact email is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(secondaryContact.email)) {
+      this.guardErrors['secondaryContactEmail'] = 'Please enter a valid email address.';
+    }
+
+    // Phones: at least one required
+    const hasSecondaryMobile = secondaryContact?.mobilePhone?.e164;
+    const hasSecondaryLandline = secondaryContact?.landlinePhone?.e164;
+
+    // Validate mobile if provided
+    if (hasSecondaryMobile) {
+      const secondaryMobileE164 = secondaryContact!.mobilePhone!.e164;
+      const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+      if (!canadianPhonePattern.test(secondaryMobileE164)) {
+        this.guardErrors['secondaryContactMobilePhone'] = 'Invalid Canadian mobile phone number format.';
+      } else if (secondaryContact!.mobilePhone!.country !== 'CA') {
+        this.guardErrors['secondaryContactMobilePhone'] = 'Only Canadian phone numbers are accepted.';
       }
-      if (!secondaryContact.email?.trim()) {
-        this.guardErrors['secondaryContactEmail'] = 'Contact email is required if secondary contact is provided.';
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(secondaryContact.email)) {
-        this.guardErrors['secondaryContactEmail'] = 'Please enter a valid email address.';
+    }
+
+    // Validate landline if provided
+    if (hasSecondaryLandline) {
+      const secondaryLandlineE164 = secondaryContact!.landlinePhone!.e164;
+      const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+      if (!canadianPhonePattern.test(secondaryLandlineE164)) {
+        this.guardErrors['secondaryContactLandlinePhone'] = 'Invalid Canadian landline phone number format.';
+      } else if (secondaryContact!.landlinePhone!.country !== 'CA') {
+        this.guardErrors['secondaryContactLandlinePhone'] = 'Only Canadian phone numbers are accepted.';
       }
+    }
 
-      // At least one phone required if any field is filled
-      const hasSecondaryMobile = secondaryContact.mobilePhone && secondaryContact.mobilePhone.e164;
-      const hasSecondaryLandline = secondaryContact.landlinePhone && secondaryContact.landlinePhone.e164;
+    // At least one phone is required
+    if (!hasSecondaryMobile && !hasSecondaryLandline) {
+      this.guardErrors['secondaryContactPhoneNumbers'] =
+        'At least one phone number (mobile or landline) is required.';
+    }
 
-      // Validate secondary mobile phone format if provided (Canadian: +1 followed by 10 digits)
-      if (hasSecondaryMobile) {
-        const secondaryMobileE164 = secondaryContact.mobilePhone!.e164;
-        const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
-
-        if (!canadianPhonePattern.test(secondaryMobileE164)) {
-          this.guardErrors['secondaryContactMobilePhone'] = 'Invalid Canadian mobile phone number format.';
-        } else if (secondaryContact.mobilePhone!.country !== 'CA') {
-          // Ensure country is Canada
-          this.guardErrors['secondaryContactMobilePhone'] = 'Only Canadian phone numbers are accepted.';
-        }
-      }
-
-      // Validate secondary landline phone format if provided (Canadian: +1 followed by 10 digits)
-      if (hasSecondaryLandline) {
-        const secondaryLandlineE164 = secondaryContact.landlinePhone!.e164;
-        const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
-
-        if (!canadianPhonePattern.test(secondaryLandlineE164)) {
-          this.guardErrors['secondaryContactLandlinePhone'] = 'Invalid Canadian landline phone number format.';
-        } else if (secondaryContact.landlinePhone!.country !== 'CA') {
-          // Ensure country is Canada
-          this.guardErrors['secondaryContactLandlinePhone'] = 'Only Canadian phone numbers are accepted.';
-        }
-      }
-
-      // At least one phone number is required
-      if (!hasSecondaryMobile && !hasSecondaryLandline) {
-        this.guardErrors['secondaryContactPhoneNumbers'] = 'At least one phone number (mobile or landline) is required.';
-      }
-
-      // If both phone numbers are provided, they must be from the same country
-      if (hasSecondaryMobile && hasSecondaryLandline) {
-        if (secondaryContact.mobilePhone?.country !== secondaryContact.landlinePhone?.country) {
-          this.guardErrors['secondaryContactPhoneNumbers'] = 'Mobile and landline phone numbers must be from the same country.';
-        }
+    // If both provided, must be same country
+    if (hasSecondaryMobile && hasSecondaryLandline) {
+      if (secondaryContact!.mobilePhone?.country !== secondaryContact!.landlinePhone?.country) {
+        this.guardErrors['secondaryContactPhoneNumbers'] =
+          'Mobile and landline phone numbers must be from the same country.';
       }
     }
 
@@ -1869,23 +1863,17 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       payload.profile.landline_phone_country = this.guardFormModel.landlinePhone.country;
     }
 
-    // Add secondary contact if any data is present
+    // Secondary contact is required -> always send it
     const secondaryContact = this.guardFormModel.secondaryContact;
-    if (secondaryContact && (
-      secondaryContact.name?.trim() ||
-      secondaryContact.email?.trim() ||
-      secondaryContact.mobilePhone?.e164 ||
-      secondaryContact.landlinePhone?.e164
-    )) {
-      const secondaryPhone = secondaryContact.mobilePhone?.e164
-        || secondaryContact.landlinePhone?.e164
-        || '';
-      payload.profile.secondary_contact = {
-        name: secondaryContact.name || '',
-        email: secondaryContact.email || '',
-        phone: secondaryPhone
-      };
-    }
+    const secondaryPhone = secondaryContact.mobilePhone?.e164
+      || secondaryContact.landlinePhone?.e164
+      || '';
+
+    payload.profile.secondary_contact = {
+      name: secondaryContact.name || '',
+      email: secondaryContact.email || '',
+      phone: secondaryPhone
+    };
 
     // Legacy contact field
     const legacyContact = this.guardFormModel.mobilePhone?.national ||
