@@ -387,6 +387,30 @@ async def delete_tenant_training_certificate(file_id: str, current_user=Depends(
     return await ResourceManager.get_instance().delete_tenant_training_certificate(file_id, current_user)
 
 
+@tenant_routes.post(
+    "/api/tenant/files/insurance",
+    summary="Upload tenant insurance document",
+    description="Upload insurance documents for the current tenant profile.",
+    tags=["Tenant"],
+    operation_id="uploadTenantInsuranceDocument",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.SP_ADMIN]))], )
+async def upload_tenant_insurance_document(file: UploadFile, current_user=Depends(get_current_user)):
+    return await ResourceManager.get_instance().upload_tenant_insurance_document(file, current_user)
+
+
+@tenant_routes.delete(
+    "/api/tenant/files/insurance/{file_id}",
+    summary="Delete tenant insurance document",
+    description="Delete an insurance document for the current tenant.",
+    tags=["Tenant"],
+    operation_id="deleteTenantInsuranceDocument",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.SP_ADMIN]))], )
+async def delete_tenant_insurance_document(file_id: str, current_user=Depends(get_current_user)):
+    return await ResourceManager.get_instance().delete_tenant_insurance_document(file_id, current_user)
+
+
 @tenant_routes.put(
     "/api/me/image",
     summary="Upload user profile image",

@@ -75,6 +75,12 @@ interface InsurancePolicy {
   currency: string;
   expiryDate: string;
   coverageDetails: string;
+  file?: File | null;
+  existingFileUrl?: string;
+  existingFileName?: string;
+  existingFileId?: string;
+  existingFileMimeType?: string;
+  existingFileSize?: number;
 }
 
 interface ServiceProvider {
@@ -166,7 +172,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       coverageAmount: null,
       currency: 'CAD',
       expiryDate: '',
-      coverageDetails: ''
+      coverageDetails: '',
+      file: null
     },
     operatingRegions: [
       {
@@ -190,6 +197,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
 
   securityLicenseUploadInProgress: Record<string, boolean> = {};
   securityLicenseUploadErrors: Record<string, string> = {};
+  insuranceUploadInProgress: boolean = false;
+  insuranceUploadError: string = '';
 
   private destroy$ = new Subject<void>();
 
@@ -364,7 +373,13 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
         coverageAmount: insurance.coverage_amount ?? insurance.coverageAmount ?? null,
         currency: insurance.currency || 'USD',
         expiryDate: insurance.expiry_date || insurance.expiryDate || '',
-        coverageDetails: insurance.coverage_details || insurance.coverageDetails || ''
+        coverageDetails: insurance.coverage_details || insurance.coverageDetails || '',
+        file: null,
+        existingFileUrl: insurance.document_file_url || insurance.document_url || undefined,
+        existingFileName: insurance.document_file_name || undefined,
+        existingFileId: insurance.document_file_id || undefined,
+        existingFileMimeType: insurance.document_file_mime_type || undefined,
+        existingFileSize: insurance.document_file_size || undefined
       },
       operatingRegions: mappedRegions.length
         ? mappedRegions
@@ -797,6 +812,70 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       });
   }
 
+  onInsuranceFileSelected(file: File | null): void {
+    this.insuranceUploadError = '';
+
+    if (!file) {
+      if (this.providerFormModel.insuranceDetails.existingFileId) {
+        this.deleteInsuranceFile();
+      }
+      this.providerFormModel.insuranceDetails.file = null;
+      this.providerFormModel.insuranceDetails.existingFileUrl = undefined;
+      this.providerFormModel.insuranceDetails.existingFileName = undefined;
+      this.providerFormModel.insuranceDetails.existingFileId = undefined;
+      this.providerFormModel.insuranceDetails.existingFileMimeType = undefined;
+      this.providerFormModel.insuranceDetails.existingFileSize = undefined;
+      return;
+    }
+
+    this.insuranceUploadInProgress = true;
+    const formData = new FormData();
+    formData.append('file', file);
+
+    this.apiService.post('tenant/files/insurance', formData)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response: any) => {
+          this.insuranceUploadInProgress = false;
+          this.providerFormModel.insuranceDetails.file = null;
+          this.providerFormModel.insuranceDetails.existingFileId = response?.file_id;
+          this.providerFormModel.insuranceDetails.existingFileUrl = response?.file_url;
+          this.providerFormModel.insuranceDetails.existingFileName = response?.file_name;
+          this.providerFormModel.insuranceDetails.existingFileMimeType = response?.mime_type;
+          this.providerFormModel.insuranceDetails.existingFileSize = response?.size;
+        },
+        error: (err) => {
+          this.insuranceUploadInProgress = false;
+          this.insuranceUploadError = err?.error?.detail || 'Failed to upload document.';
+        }
+      });
+  }
+
+  deleteInsuranceFile(): void {
+    const fileId = this.providerFormModel.insuranceDetails.existingFileId;
+    if (!fileId) {
+      return;
+    }
+
+    this.insuranceUploadInProgress = true;
+    this.apiService.delete(`tenant/files/insurance/${fileId}`)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.insuranceUploadInProgress = false;
+          this.providerFormModel.insuranceDetails.existingFileUrl = undefined;
+          this.providerFormModel.insuranceDetails.existingFileName = undefined;
+          this.providerFormModel.insuranceDetails.existingFileId = undefined;
+          this.providerFormModel.insuranceDetails.existingFileMimeType = undefined;
+          this.providerFormModel.insuranceDetails.existingFileSize = undefined;
+        },
+        error: (err) => {
+          this.insuranceUploadInProgress = false;
+          this.insuranceUploadError = err?.error?.detail || 'Failed to delete document.';
+        }
+      });
+  }
+
   submitProviderForm() {
     if (this.readonly) {
       return;
@@ -891,7 +970,12 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
           coverage_amount: this.providerFormModel.insuranceDetails.coverageAmount ?? undefined,
           currency: this.providerFormModel.insuranceDetails.currency || 'USD',
           expiry_date: this.providerFormModel.insuranceDetails.expiryDate || undefined,
-          coverage_details: this.providerFormModel.insuranceDetails.coverageDetails || undefined
+          coverage_details: this.providerFormModel.insuranceDetails.coverageDetails || undefined,
+          ...(this.providerFormModel.insuranceDetails.existingFileId && { document_file_id: this.providerFormModel.insuranceDetails.existingFileId }),
+          ...(this.providerFormModel.insuranceDetails.existingFileUrl && { document_file_url: this.providerFormModel.insuranceDetails.existingFileUrl }),
+          ...(this.providerFormModel.insuranceDetails.existingFileName && { document_file_name: this.providerFormModel.insuranceDetails.existingFileName }),
+          ...(this.providerFormModel.insuranceDetails.existingFileMimeType && { document_file_mime_type: this.providerFormModel.insuranceDetails.existingFileMimeType }),
+          ...(this.providerFormModel.insuranceDetails.existingFileSize != null && { document_file_size: this.providerFormModel.insuranceDetails.existingFileSize })
         },
         operating_regions: validRegions.map(region => ({
           city: region.city,

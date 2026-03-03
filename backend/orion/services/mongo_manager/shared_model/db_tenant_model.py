@@ -262,6 +262,11 @@ class InsurancePolicy(EmbeddedModel):
     currency: str = "USD"
     expiry_date: Optional[datetime] = None
     document_url: Optional[str] = None
+    document_file_id: Optional[str] = None
+    document_file_url: Optional[str] = None
+    document_file_name: Optional[str] = None
+    document_file_mime_type: Optional[str] = None
+    document_file_size: Optional[int] = None
     coverage_details: Optional[str] = None
 
 

@@ -116,6 +116,13 @@ async def get_tenant_training_certificate(file_id: str, request: Request):
     current_user = await get_current_user_from_cookie(request)
     return await ResourceManager.get_instance().get_tenant_training_certificate(file_id, current_user)
 
+
+@public_routes.get("/api/tenant/files/insurance/{file_id}", include_in_schema=False, dependencies=[Depends(cookie_required)])
+async def get_tenant_insurance_document(file_id: str, request: Request):
+    from configs.token_auth_provider import get_current_user_from_cookie
+    current_user = await get_current_user_from_cookie(request)
+    return await ResourceManager.get_instance().get_tenant_insurance_document(file_id, current_user)
+
 @public_routes.get("/robots.txt", include_in_schema=False)
 async def robots_txt():
     return await ResourceManager.get_instance().get_robots_txt()
