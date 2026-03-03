@@ -54,6 +54,7 @@ interface SecurityLicense {
   issueDate: string;
   expiryDate: string;
   file?: File | null;
+  id?: string;
   existingFileUrl?: string;
   existingFileName?: string;
   existingFileId?: string;
@@ -86,7 +87,7 @@ interface ServiceProvider {
   headOfficeAddress: Address;
   primaryRepresentative: ContactPerson;
   secondaryContact: ContactPerson;
-  securityLicense: SecurityLicense;
+  securityLicenses: SecurityLicense[];
   insuranceDetails: InsurancePolicy;
   operatingRegions: OperatingRegion[];
   guardCategoriesOffered: string[];
@@ -148,15 +149,18 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       mobilePhone: null,
       landlinePhone: null
     },
-    securityLicense: {
-      licenseNumber: '',
-      licenseType: '',
-      issuingProvince: '',
-      issuingAuthority: '',
-      issueDate: '',
-      expiryDate: '',
-      file: null
-    },
+    securityLicenses: [
+      {
+        licenseNumber: '',
+        licenseType: '',
+        issuingProvince: '',
+        issuingAuthority: '',
+        issueDate: '',
+        expiryDate: '',
+        file: null,
+        id: `sec_license_initial_${Date.now()}`
+      }
+    ],
     insuranceDetails: {
       policyNumber: '',
       coverageAmount: null,
@@ -184,8 +188,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   securityLicenseTypeOptions: { value: string; label: string }[] = [];
   guardTypeOptions: { value: string; label: string }[] = [];
 
-  securityLicenseUploadInProgress = false;
-  securityLicenseUploadError = '';
+  securityLicenseUploadInProgress: Record<string, boolean> = {};
+  securityLicenseUploadErrors: Record<string, string> = {};
 
   private destroy$ = new Subject<void>();
 
@@ -288,12 +292,12 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
  * Handle changes to the issuing province field
  * Auto-populates the issuing authority based on the selected province
  */
-  onIssuingProvinceChange(): void {
-    const province = this.providerFormModel.securityLicense.issuingProvince;
+  onIssuingProvinceChange(license: SecurityLicense): void {
+    const province = license.issuingProvince;
     if (province) {
       const authority = this.getSuggestedIssuingAuthority(province);
       if (authority) {
-        this.providerFormModel.securityLicense.issuingAuthority = authority;
+        license.issuingAuthority = authority;
       }
     }
   }
@@ -303,7 +307,12 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     const headOfficeAddress = this.mapAddressFromBackend(profile.head_office_address || profile.headOfficeAddress || {});
     const primaryRep = profile.primary_representative || profile.primaryRepresentative || {};
     const secondaryContact = profile.emergency_contact || profile.secondaryContact || {};
-    const securityLicense = profile.security_license || profile.securityLicense || {};
+    const securityLicensesRaw =
+      (Array.isArray(profile.security_licenses) ? profile.security_licenses : null)
+      || (Array.isArray(profile.securityLicenses) ? profile.securityLicenses : null)
+      || ((profile.security_license || profile.securityLicense)
+        ? [profile.security_license || profile.securityLicense]
+        : []);
     const insurance = profile.insurance_details || profile.insuranceDetails || {};
 
     const mappedRegions = Array.isArray(profile.operating_regions)
@@ -335,20 +344,21 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
         mobilePhone: secondaryContact.phone ? this.mapPhoneFromBackend(secondaryContact.phone, 'mobile') : null,
         landlinePhone: null
       },
-      securityLicense: {
-        licenseNumber: securityLicense.license_number || securityLicense.licenseNumber || '',
-        licenseType: securityLicense.license_type || securityLicense.licenseType || '',
-        issuingProvince: securityLicense.issuing_province || securityLicense.issuingProvince || '',
-        issuingAuthority: securityLicense.issuing_authority || securityLicense.issuingAuthority || '',
-        issueDate: securityLicense.issue_date || securityLicense.issueDate || '',
-        expiryDate: securityLicense.expiry_date || securityLicense.expiryDate || '',
+      securityLicenses: (securityLicensesRaw.length ? securityLicensesRaw : [{}]).map((license: any, index: number) => ({
+        licenseNumber: license.license_number || license.licenseNumber || '',
+        licenseType: license.license_type || license.licenseType || '',
+        issuingProvince: license.issuing_province || license.issuingProvince || '',
+        issuingAuthority: license.issuing_authority || license.issuingAuthority || '',
+        issueDate: license.issue_date || license.issueDate || '',
+        expiryDate: license.expiry_date || license.expiryDate || '',
         file: null,
-        existingFileUrl: securityLicense.document_file_url || securityLicense.document_url || undefined,
-        existingFileName: securityLicense.document_file_name || undefined,
-        existingFileId: securityLicense.document_file_id || undefined,
-        existingFileMimeType: securityLicense.document_file_mime_type || undefined,
-        existingFileSize: securityLicense.document_file_size || undefined
-      },
+        id: license.id || `sec_license_${index}_${Date.now()}`,
+        existingFileUrl: license.document_file_url || license.document_url || undefined,
+        existingFileName: license.document_file_name || undefined,
+        existingFileId: license.document_file_id || undefined,
+        existingFileMimeType: license.document_file_mime_type || undefined,
+        existingFileSize: license.document_file_size || undefined
+      })),
       insuranceDetails: {
         policyNumber: insurance.policy_number || insurance.policyNumber || '',
         coverageAmount: insurance.coverage_amount ?? insurance.coverageAmount ?? null,
@@ -407,6 +417,47 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
 
   trackByIndex(index: number, item: any): any {
     return index;
+  }
+
+  addSecurityLicense(): void {
+    this.providerFormModel.securityLicenses.push({
+      licenseNumber: '',
+      licenseType: '',
+      issuingProvince: '',
+      issuingAuthority: '',
+      issueDate: '',
+      expiryDate: '',
+      file: null,
+      id: `sec_license_new_${this.providerFormModel.securityLicenses.length}_${Date.now()}`
+    });
+  }
+
+  removeSecurityLicense(index: number): void {
+    const license = this.providerFormModel.securityLicenses[index];
+    if (!license) {
+      return;
+    }
+
+    if (license.id) {
+      delete this.providerErrors[`security_license_${license.id}_licenseNumber`];
+      delete this.providerErrors[`security_license_${license.id}_licenseType`];
+      delete this.providerErrors[`security_license_${license.id}_issuingProvince`];
+      delete this.providerErrors[`security_license_${license.id}_issuingAuthority`];
+      delete this.providerErrors[`security_license_${license.id}_issueDate`];
+      delete this.providerErrors[`security_license_${license.id}_expiryDate`];
+      delete this.securityLicenseUploadErrors[license.id];
+      delete this.securityLicenseUploadInProgress[license.id];
+    }
+
+    if (license.existingFileId) {
+      this.deleteSecurityLicenseFile(license);
+    }
+
+    this.providerFormModel.securityLicenses.splice(index, 1);
+
+    if (this.providerFormModel.securityLicenses.length === 0) {
+      this.addSecurityLicense();
+    }
   }
 
 
@@ -576,40 +627,59 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Security License
-    if (!this.providerFormModel.securityLicense.licenseNumber.trim()) {
-      this.providerErrors.licenseNumber = 'Security license number is required.';
-    }
-    if (!this.providerFormModel.securityLicense.licenseType.trim()) {
-      this.providerErrors.licenseType = 'License type is required.';
-    }
-    if (!this.providerFormModel.securityLicense.issuingProvince.trim()) {
-      this.providerErrors.issuingProvince = 'Issuing province is required.';
-    }
-    if (!this.providerFormModel.securityLicense.issuingAuthority.trim()) {
-      this.providerErrors.issuingAuthority = 'Issuing authority is required.';
-    }
+    // Security Licenses
+    if (!this.providerFormModel.securityLicenses || this.providerFormModel.securityLicenses.length === 0) {
+      this.providerErrors.securityLicenses = 'At least one security license is required.';
+    } else {
+      this.providerFormModel.securityLicenses.forEach((license, index) => {
+        const id = license.id || `idx_${index}`;
+        const hasAnyData =
+          license.licenseNumber.trim() ||
+          license.licenseType.trim() ||
+          license.issuingProvince.trim() ||
+          license.issuingAuthority.trim() ||
+          license.issueDate ||
+          license.expiryDate;
 
-    // Validate issue date (cannot be in the future)
-    if (this.providerFormModel.securityLicense.issueDate) {
-      const issueDate = new Date(this.providerFormModel.securityLicense.issueDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      issueDate.setHours(0, 0, 0, 0);
+        const isRequired = index === 0;
+        if (!isRequired && !hasAnyData) {
+          return;
+        }
 
-      if (issueDate > today) {
-        this.providerErrors.issueDate = 'Issue date cannot be in the future.';
-      }
-    }
+        if (!license.licenseNumber.trim()) {
+          this.providerErrors[`security_license_${id}_licenseNumber`] = 'Security license number is required.';
+        }
+        if (!license.licenseType.trim()) {
+          this.providerErrors[`security_license_${id}_licenseType`] = 'License type is required.';
+        }
+        if (!license.issuingProvince.trim()) {
+          this.providerErrors[`security_license_${id}_issuingProvince`] = 'Issuing province is required.';
+        }
+        if (!license.issuingAuthority.trim()) {
+          this.providerErrors[`security_license_${id}_issuingAuthority`] = 'Issuing authority is required.';
+        }
 
-    if (!this.providerFormModel.securityLicense.expiryDate) {
-      this.providerErrors.expiryDate = 'Expiry date is required.';
-    } else if (this.providerFormModel.securityLicense.issueDate) {
-      const issueDate = new Date(this.providerFormModel.securityLicense.issueDate);
-      const expiryDate = new Date(this.providerFormModel.securityLicense.expiryDate);
-      if (expiryDate < issueDate) {
-        this.providerErrors.expiryDate = 'Expiry date cannot be before issue date.';
-      }
+        if (license.issueDate) {
+          const issueDate = new Date(license.issueDate);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          issueDate.setHours(0, 0, 0, 0);
+
+          if (issueDate > today) {
+            this.providerErrors[`security_license_${id}_issueDate`] = 'Issue date cannot be in the future.';
+          }
+        }
+
+        if (!license.expiryDate) {
+          this.providerErrors[`security_license_${id}_expiryDate`] = 'Expiry date is required.';
+        } else if (license.issueDate) {
+          const issueDate = new Date(license.issueDate);
+          const expiryDate = new Date(license.expiryDate);
+          if (expiryDate < issueDate) {
+            this.providerErrors[`security_license_${id}_expiryDate`] = 'Expiry date cannot be before issue date.';
+          }
+        }
+      });
     }
 
     // Operating Regions (at least one required)
@@ -659,23 +729,27 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     return Object.keys(this.providerErrors).length === 0;
   }
 
-  onSecurityLicenseFileSelected(file: File | null): void {
-    this.securityLicenseUploadError = '';
+  onSecurityLicenseFileSelected(license: SecurityLicense, file: File | null): void {
+    if (!license.id) {
+      license.id = `sec_license_${Date.now()}`;
+    }
+    const key = license.id;
+    this.securityLicenseUploadErrors[key] = '';
 
     if (!file) {
-      if (this.providerFormModel.securityLicense.existingFileId) {
-        this.deleteSecurityLicenseFile();
+      if (license.existingFileId) {
+        this.deleteSecurityLicenseFile(license);
       }
-      this.providerFormModel.securityLicense.file = null;
-      this.providerFormModel.securityLicense.existingFileUrl = undefined;
-      this.providerFormModel.securityLicense.existingFileName = undefined;
-      this.providerFormModel.securityLicense.existingFileId = undefined;
-      this.providerFormModel.securityLicense.existingFileMimeType = undefined;
-      this.providerFormModel.securityLicense.existingFileSize = undefined;
+      license.file = null;
+      license.existingFileUrl = undefined;
+      license.existingFileName = undefined;
+      license.existingFileId = undefined;
+      license.existingFileMimeType = undefined;
+      license.existingFileSize = undefined;
       return;
     }
 
-    this.securityLicenseUploadInProgress = true;
+    this.securityLicenseUploadInProgress[key] = true;
     const formData = new FormData();
     formData.append('file', file);
 
@@ -683,42 +757,42 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response: any) => {
-          this.securityLicenseUploadInProgress = false;
-          this.providerFormModel.securityLicense.file = null;
-          this.providerFormModel.securityLicense.existingFileId = response?.file_id;
-          this.providerFormModel.securityLicense.existingFileUrl = response?.file_url;
-          this.providerFormModel.securityLicense.existingFileName = response?.file_name;
-          this.providerFormModel.securityLicense.existingFileMimeType = response?.mime_type;
-          this.providerFormModel.securityLicense.existingFileSize = response?.size;
+          this.securityLicenseUploadInProgress[key] = false;
+          license.file = null;
+          license.existingFileId = response?.file_id;
+          license.existingFileUrl = response?.file_url;
+          license.existingFileName = response?.file_name;
+          license.existingFileMimeType = response?.mime_type;
+          license.existingFileSize = response?.size;
         },
         error: (err) => {
-          this.securityLicenseUploadInProgress = false;
-          this.securityLicenseUploadError = err?.error?.detail || 'Failed to upload document.';
+          this.securityLicenseUploadInProgress[key] = false;
+          this.securityLicenseUploadErrors[key] = err?.error?.detail || 'Failed to upload document.';
         }
       });
   }
 
-  deleteSecurityLicenseFile(): void {
-    const existingFileId = this.providerFormModel.securityLicense.existingFileId;
-    if (!existingFileId) {
+  deleteSecurityLicenseFile(license: SecurityLicense): void {
+    if (!license.id || !license.existingFileId) {
       return;
     }
 
-    this.securityLicenseUploadInProgress = true;
-    this.apiService.delete(`tenant/files/security-license/${existingFileId}`)
+    const key = license.id;
+    this.securityLicenseUploadInProgress[key] = true;
+    this.apiService.delete(`tenant/files/security-license/${license.existingFileId}`)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
-          this.securityLicenseUploadInProgress = false;
-          this.providerFormModel.securityLicense.existingFileUrl = undefined;
-          this.providerFormModel.securityLicense.existingFileName = undefined;
-          this.providerFormModel.securityLicense.existingFileId = undefined;
-          this.providerFormModel.securityLicense.existingFileMimeType = undefined;
-          this.providerFormModel.securityLicense.existingFileSize = undefined;
+          this.securityLicenseUploadInProgress[key] = false;
+          license.existingFileUrl = undefined;
+          license.existingFileName = undefined;
+          license.existingFileId = undefined;
+          license.existingFileMimeType = undefined;
+          license.existingFileSize = undefined;
         },
         error: (err) => {
-          this.securityLicenseUploadInProgress = false;
-          this.securityLicenseUploadError = err?.error?.detail || 'Failed to delete document.';
+          this.securityLicenseUploadInProgress[key] = false;
+          this.securityLicenseUploadErrors[key] = err?.error?.detail || 'Failed to delete document.';
         }
       });
   }
@@ -746,6 +820,37 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       secondaryContact.email.trim() ||
       secondaryContact.mobilePhone?.e164 ||
       secondaryContact.landlinePhone?.e164;
+
+    const validSecurityLicenses = (this.providerFormModel.securityLicenses || []).filter((license, index) => {
+      if (index === 0) {
+        return true;
+      }
+      return !!(
+        license.licenseNumber.trim() ||
+        license.licenseType.trim() ||
+        license.issuingProvince.trim() ||
+        license.issuingAuthority.trim() ||
+        license.issueDate ||
+        license.expiryDate ||
+        license.existingFileId
+      );
+    });
+
+    const mappedSecurityLicenses = validSecurityLicenses.map((license) => ({
+      license_number: license.licenseNumber,
+      license_type: license.licenseType,
+      issuing_province: license.issuingProvince,
+      issuing_authority: license.issuingAuthority,
+      ...(license.issueDate && { issue_date: license.issueDate }),
+      expiry_date: license.expiryDate,
+      ...(license.existingFileId && { document_file_id: license.existingFileId }),
+      ...(license.existingFileUrl && { document_file_url: license.existingFileUrl }),
+      ...(license.existingFileName && { document_file_name: license.existingFileName }),
+      ...(license.existingFileMimeType && { document_file_mime_type: license.existingFileMimeType }),
+      ...(license.existingFileSize != null && { document_file_size: license.existingFileSize })
+    }));
+
+    const primarySecurityLicense = mappedSecurityLicenses[0];
 
     const tenantUpdatePayload = {
       tenant_type: TENANT_TYPES.SERVICE_PROVIDER,
@@ -779,31 +884,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
               || ''
           }
           : undefined,
-        security_license: {
-          license_number: this.providerFormModel.securityLicense.licenseNumber,
-          license_type: this.providerFormModel.securityLicense.licenseType,
-          issuing_province: this.providerFormModel.securityLicense.issuingProvince,
-          issuing_authority: this.providerFormModel.securityLicense.issuingAuthority,
-          ...(this.providerFormModel.securityLicense.issueDate && {
-            issue_date: this.providerFormModel.securityLicense.issueDate
-          }),
-          expiry_date: this.providerFormModel.securityLicense.expiryDate,
-          ...(this.providerFormModel.securityLicense.existingFileId && {
-            document_file_id: this.providerFormModel.securityLicense.existingFileId
-          }),
-          ...(this.providerFormModel.securityLicense.existingFileUrl && {
-            document_file_url: this.providerFormModel.securityLicense.existingFileUrl
-          }),
-          ...(this.providerFormModel.securityLicense.existingFileName && {
-            document_file_name: this.providerFormModel.securityLicense.existingFileName
-          }),
-          ...(this.providerFormModel.securityLicense.existingFileMimeType && {
-            document_file_mime_type: this.providerFormModel.securityLicense.existingFileMimeType
-          }),
-          ...(this.providerFormModel.securityLicense.existingFileSize != null && {
-            document_file_size: this.providerFormModel.securityLicense.existingFileSize
-          })
-        },
+        ...(primarySecurityLicense && { security_license: primarySecurityLicense }),
+        security_licenses: mappedSecurityLicenses,
         insurance_details: {
           policy_number: this.providerFormModel.insuranceDetails.policyNumber || undefined,
           coverage_amount: this.providerFormModel.insuranceDetails.coverageAmount ?? undefined,

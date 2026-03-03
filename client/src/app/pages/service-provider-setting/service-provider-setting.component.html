@@ -191,76 +191,111 @@
             </div>
         </app-section>
 
-        <app-section title="Security License" subtitle="Must be active to deploy guards.">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="flex flex-col">
-                    <app-base-input label="License Number" name="licenseNumber"
-                        [(ngModel)]="providerFormModel.securityLicense.licenseNumber" [required]="true" [disabled]="readonly">
-                    </app-base-input>
-                    <app-error-message [errorMessage]="providerErrors.licenseNumber || null"></app-error-message>
-                </div>
+        <app-section title="Security Licenses" subtitle="Must be active to deploy guards.">
+            <app-error-message [errorMessage]="providerErrors.securityLicenses || null"></app-error-message>
 
-                <div class="flex flex-col">
-                    <app-select-input label="License Type" name="licenseType"
-                        [(ngModel)]="providerFormModel.securityLicense.licenseType"
-                        [options]="securityLicenseTypeOptions" placeholder="-- Select License Type --" [required]="true"
-                        [searchable]="false" [disabled]="readonly"></app-select-input>
-                    <app-error-message [errorMessage]="providerErrors.licenseType || null"></app-error-message>
-                </div>
+            <div *ngIf="providerFormModel.securityLicenses && providerFormModel.securityLicenses.length > 0"
+                class="space-y-4">
+                <app-card *ngFor="let license of providerFormModel.securityLicenses; let i = index" class="block"
+                    [bodyClass]="'mt-4'">
+                    <div card-header>
+                        <h3 class="font-semibold text-gray-800 dark:text-gray-200">
+                            {{ license.licenseNumber ? ('License ' + license.licenseNumber) : ('Security License ' + (i + 1)) }}
+                            <span *ngIf="i > 0" class="text-sm font-normal text-gray-500 dark:text-gray-400">(Optional)</span>
+                        </h3>
+                    </div>
 
-                <div class="flex flex-col">
-                    <app-select-input label="Issuing Province" name="issuingProvince"
-                        [(ngModel)]="providerFormModel.securityLicense.issuingProvince" [options]="provinceOptions"
-                        placeholder="-- Select Province --" [required]="true" [searchable]="true"
-                        (ngModelChange)="onIssuingProvinceChange()" [disabled]="readonly"></app-select-input>
-                    <app-error-message [errorMessage]="providerErrors.issuingProvince || null"></app-error-message>
-                </div>
+                    <div card-actions *ngIf="!readonly">
+                        <app-button *ngIf="providerFormModel.securityLicenses.length > 1" label="Remove" type="danger"
+                            htmlType="button" size="sm" (click)="removeSecurityLicense(i)">
+                        </app-button>
+                    </div>
 
-                <div class="flex flex-col">
-                    <app-base-input label="Issuing Authority" name="issuingAuthority"
-                        [(ngModel)]="providerFormModel.securityLicense.issuingAuthority" [required]="true"
-                        [placeholder]="getSuggestedIssuingAuthority(providerFormModel.securityLicense.issuingProvince) || 'e.g., Ministry of the Solicitor General'"
-                        helperText="Will auto-populate based on selected province" [disabled]="readonly">
-                    </app-base-input>
-                    <app-error-message [errorMessage]="providerErrors.issuingAuthority || null"></app-error-message>
-                </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="flex flex-col">
+                            <app-base-input label="License Number" [name]="'licenseNumber_' + i"
+                                [(ngModel)]="license.licenseNumber" [required]="i === 0" [disabled]="readonly">
+                            </app-base-input>
+                            <app-error-message
+                                [errorMessage]="providerErrors['security_license_' + license.id + '_licenseNumber'] || null"></app-error-message>
+                        </div>
 
-                <div class="flex flex-col">
-                    <app-base-input label="Issue Date (Optional)" name="issueDate" type="date"
-                        [(ngModel)]="providerFormModel.securityLicense.issueDate" [disabled]="readonly">
-                    </app-base-input>
-                    <app-error-message [errorMessage]="providerErrors.issueDate || null"></app-error-message>
-                </div>
+                        <div class="flex flex-col">
+                            <app-select-input label="License Type" [name]="'licenseType_' + i"
+                                [(ngModel)]="license.licenseType" [options]="securityLicenseTypeOptions"
+                                placeholder="-- Select License Type --" [required]="i === 0" [searchable]="false"
+                                [disabled]="readonly"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="providerErrors['security_license_' + license.id + '_licenseType'] || null"></app-error-message>
+                        </div>
 
-                <div class="flex flex-col">
-                    <app-base-input label="Expiry Date" name="expiryDate" type="date"
-                        [(ngModel)]="providerFormModel.securityLicense.expiryDate" [required]="true" [disabled]="readonly">
-                    </app-base-input>
-                    <app-error-message [errorMessage]="providerErrors.expiryDate || null"></app-error-message>
-                </div>
+                        <div class="flex flex-col">
+                            <app-select-input label="Issuing Province" [name]="'issuingProvince_' + i"
+                                [(ngModel)]="license.issuingProvince" [options]="provinceOptions"
+                                placeholder="-- Select Province --" [required]="i === 0" [searchable]="true"
+                                (ngModelChange)="onIssuingProvinceChange(license)" [disabled]="readonly"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="providerErrors['security_license_' + license.id + '_issuingProvince'] || null"></app-error-message>
+                        </div>
 
-                <div class="flex flex-col md:col-span-2">
-                    <ng-container *ngIf="!readonly">
-                        <app-file-upload label="License Document" name="licenseDocument"
-                            [(ngModel)]="providerFormModel.securityLicense.file"
-                            (fileChange)="onSecurityLicenseFileSelected($event)"
-                            [existingFileUrl]="providerFormModel.securityLicense.existingFileUrl"
-                            [existingFileName]="providerFormModel.securityLicense.existingFileName"
-                            helperText="PNG, JPG, PDF up to 10MB" [required]="false"
-                            [disabled]="securityLicenseUploadInProgress"></app-file-upload>
-                        <p class="text-xs text-gray-500 mt-2">Optional upload now avoids later holds.</p>
-                        <p *ngIf="securityLicenseUploadInProgress" class="text-xs text-primary-600 mt-2">Uploading
-                            document...</p>
-                        <app-error-message [errorMessage]="securityLicenseUploadError || null"></app-error-message>
-                    </ng-container>
-                    <ng-container *ngIf="readonly">
-                        <app-file-upload *ngIf="providerFormModel.securityLicense.existingFileUrl"
-                            [existingFileUrl]="providerFormModel.securityLicense.existingFileUrl"
-                            [existingFileName]="providerFormModel.securityLicense.existingFileName"
-                            [viewOnly]="true">
-                        </app-file-upload>
-                    </ng-container>
-                </div>
+                        <div class="flex flex-col">
+                            <app-base-input label="Issuing Authority" [name]="'issuingAuthority_' + i"
+                                [(ngModel)]="license.issuingAuthority" [required]="i === 0"
+                                [placeholder]="getSuggestedIssuingAuthority(license.issuingProvince) || 'e.g., Ministry of the Solicitor General'"
+                                helperText="Will auto-populate based on selected province" [disabled]="readonly">
+                            </app-base-input>
+                            <app-error-message
+                                [errorMessage]="providerErrors['security_license_' + license.id + '_issuingAuthority'] || null"></app-error-message>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <app-base-input label="Issue Date (Optional)" [name]="'issueDate_' + i" type="date"
+                                [(ngModel)]="license.issueDate" [disabled]="readonly">
+                            </app-base-input>
+                            <app-error-message
+                                [errorMessage]="providerErrors['security_license_' + license.id + '_issueDate'] || null"></app-error-message>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <app-base-input label="Expiry Date" [name]="'expiryDate_' + i" type="date"
+                                [(ngModel)]="license.expiryDate" [required]="i === 0" [disabled]="readonly">
+                            </app-base-input>
+                            <app-error-message
+                                [errorMessage]="providerErrors['security_license_' + license.id + '_expiryDate'] || null"></app-error-message>
+                        </div>
+
+                        <div class="flex flex-col md:col-span-2">
+                            <ng-container *ngIf="!readonly">
+                                <app-file-upload label="License Document" [name]="'licenseDocument_' + i"
+                                    [(ngModel)]="license.file"
+                                    (fileChange)="onSecurityLicenseFileSelected(license, $event)"
+                                    [existingFileUrl]="license.existingFileUrl"
+                                    [existingFileName]="license.existingFileName"
+                                    helperText="PNG, JPG, PDF up to 10MB" [required]="false"
+                                    [disabled]="securityLicenseUploadInProgress[license.id || '']">
+                                </app-file-upload>
+                                <p class="text-xs text-gray-500 mt-2">Optional upload now avoids later holds.</p>
+                                <p *ngIf="securityLicenseUploadInProgress[license.id || '']"
+                                    class="text-xs text-primary-600 mt-2">Uploading document...</p>
+                                <app-error-message
+                                    [errorMessage]="securityLicenseUploadErrors[license.id || ''] || null"></app-error-message>
+                            </ng-container>
+                            <ng-container *ngIf="readonly">
+                                <app-file-upload *ngIf="license.existingFileUrl"
+                                    [existingFileUrl]="license.existingFileUrl"
+                                    [existingFileName]="license.existingFileName"
+                                    [viewOnly]="true">
+                                </app-file-upload>
+                            </ng-container>
+                        </div>
+                    </div>
+                </app-card>
+            </div>
+
+            <div class="flex justify-center pt-4" *ngIf="!readonly">
+                <app-button label="+ Add Security License" type="secondary" [htmlType]="'button'"
+                    [customClass]="'rounded-lg'" (click)="addSecurityLicense()">
+                </app-button>
             </div>
         </app-section>
 
