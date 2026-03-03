@@ -147,6 +147,8 @@ TRAINING_ISSUER_OPTIONS_MAP: Dict[str, List[Option]] = {
     ],
     TrainingCertificateType.STANDARD_FIRST_AID_CPR_AED.value: [
         {"value": TrainingIssuerType.ST_JOHN_AMBULANCE.value, "label": "St. John Ambulance"},
+        {"value": TrainingIssuerType.CANADIAN_RED_CROSS.value, "label": "Canadian Red Cross"},
+        {"value": TrainingIssuerType.HEART_AND_STROKE_FOUNDATION.value, "label": "Heart and Stroke Foundation"},
         {"value": TrainingIssuerType.PROVINCIAL_APPROVED_TRAINING_PROVIDER.value,
          "label": "Provincial approved training provider"},
         {"value": TrainingIssuerType.OTHER.value, "label": "Other (Specify)"},

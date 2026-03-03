@@ -60,6 +60,8 @@ class TrainingIssuerType(str, Enum):
     PROVINCIAL_APPROVED_TRAINING_PROVIDER = "provincialApprovedTrainingProvider"
     PRIVATE_SECURITY_ACADEMY_APPROVED = "privateSecurityAcademyApproved"
     ST_JOHN_AMBULANCE = "stJohnAmbulance"
+    CANADIAN_RED_CROSS = "canadianRedCross"
+    HEART_AND_STROKE_FOUNDATION = "heartAndStrokeFoundation"
     TRAINING_PROVIDER_ACCREDITED = "trainingProviderAccredited"
     WORKPLACE_APPROVED_TRAINING_PROVIDER = "workplaceApprovedTrainingProvider"
     OTHER = "other"
