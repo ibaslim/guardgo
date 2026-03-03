@@ -81,8 +81,8 @@ IDENTITY_DOCUMENT_TYPES: List[Dict[str, object]] = [
         "mandatory": False,
     },
     {
-        "value": GuardDocumentType.CANADIAN_PASSPORT.value,
-        "label": "Canadian Passport",
+        "value": GuardDocumentType.PASSPORT.value,
+        "label": "Passport",
         "requiresProvince": False,
         "requiresExpiry": True,
         "mandatory": False,

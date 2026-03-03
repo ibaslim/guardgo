@@ -86,6 +86,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         next: (response) => {
           if (response?.countries?.length) {
             this.countryOptions = response.countries;
+            this.passportCountryOptions = response.countries;
           }
           if (response?.canadianProvinces?.length) {
             this.provinceOptions = response.canadianProvinces;
@@ -232,6 +233,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
 
   countryOptions: { value: string; label: string }[] = [];
 
+  passportCountryOptions: { value: string; label: string }[] = [];
+
   // UI helper methods
   requiresProvince(type: string): boolean {
     return this.identityDocumentTypes.find(doc => doc.value === type)?.requiresProvince ?? false;
@@ -239,6 +242,20 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
 
   requiresExpiry(type: string): boolean {
     return this.identityDocumentTypes.find(doc => doc.value === type)?.requiresExpiry ?? false;
+  }
+
+  isPassportDocument(type: string): boolean {
+    return type === 'passport';
+  }
+
+  onDocumentTypeChange(doc: IdentificationDocument): void {
+    if (!this.requiresProvince(doc.documentType)) {
+      doc.province = undefined;
+    }
+
+    if (!this.isPassportDocument(doc.documentType)) {
+      doc.passportCountry = undefined;
+    }
   }
   toTitleCase = toTitleCase;
 
@@ -266,12 +283,13 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         documentType: '',
         number: '',
         province: undefined,
+          passportCountry: undefined,
         expiryDate: undefined,
         file: null,
         id: `doc_initial_${Date.now()}`
       }],
       primaryDocumentId: undefined,
-      idType: 'canadian_passport',
+      idType: 'passport',
       idNumber: '',
       document: null
     },
@@ -534,10 +552,22 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         const backendId = doc.id || doc.document_id;
         const stableId = backendId || `doc_type_${doc.document_type || 'unknown'}_idx_${index}`;
 
+        const rawDocumentType = doc.document_type || doc.documentType || '';
+        const normalizedDocumentType =
+          rawDocumentType === 'canadian_passport'
+            ? 'passport'
+            : rawDocumentType;
+
+        const passportCountry =
+          doc.passport_country ||
+          doc.passportCountry ||
+          (rawDocumentType === 'canadian_passport' ? 'CA' : undefined);
+
         return {
-          documentType: doc.document_type || doc.documentType || '',
+          documentType: normalizedDocumentType,
           number: doc.document_number || doc.number || '',
           province: doc.province || undefined,
+          passportCountry,
           expiryDate: doc.expiry_date || doc.expiryDate || undefined,
           file: null, // Files not loaded from backend (security)
           existingFileUrl: doc.document_file_url || doc.file_url || undefined,
@@ -549,13 +579,18 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         };
       });
     } else if (formData.identification?.id_type || formData.identification?.id_number) {
-      const legacyIdType = formData.identification.id_type || '';
+      const legacyRawType = formData.identification.id_type || '';
+      const legacyIdType =
+        legacyRawType === 'canadian_passport'
+          ? 'passport'
+          : legacyRawType;
       const legacyIdNumber = formData.identification.id_number || '';
       formData.identification.documents = [
         {
           documentType: legacyIdType,
           number: legacyIdNumber,
           province: undefined,
+          passportCountry: legacyRawType === 'canadian_passport' ? 'CA' : undefined,
           expiryDate: undefined,
           file: null,
           existingFileUrl: formData.identification.document_url || undefined,
@@ -736,6 +771,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       documentType: '',
       number: '',
       province: undefined,
+      passportCountry: undefined,
       expiryDate: undefined,
       file: null,
       // Use stable ID based on index for new documents (will be replaced by backend ID on save)
@@ -758,6 +794,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       delete this.guardErrors[`identification_${doc.id}_type`];
       delete this.guardErrors[`identification_${doc.id}_number`];
       delete this.guardErrors[`identification_${doc.id}_province`];
+      delete this.guardErrors[`identification_${doc.id}_country`];
       delete this.guardErrors[`identification_${doc.id}_expiry`];
     }
 
@@ -1259,7 +1296,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       const pattern = {
         drivers_license: /^[A-Z0-9\-]{4,20}$/i,
         provincial_id: /^[A-Z0-9\-]{4,20}$/i,
-        canadian_passport: /^[A-Z0-9]{6,9}$/i,
+        passport: /^[A-Z0-9\-]{4,20}$/i,
         pr_card: /^[A-Z0-9]{8,12}$/i,
         work_permit: /^[A-Z0-9]{8,20}$/i,
         study_permit: /^[A-Z0-9]{8,20}$/i
@@ -1273,6 +1310,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
 
     if (this.requiresProvince(doc.documentType) && !doc.province) {
       errors['province'] = 'Province is required for this document type.';
+    }
+
+    if (this.isPassportDocument(doc.documentType) && !doc.passportCountry) {
+      errors['country'] = 'Passport country is required for Passport.';
     }
 
     if (this.requiresExpiry(doc.documentType) && !doc.expiryDate) {
@@ -1440,6 +1481,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
                 validation.errors['province'];
             }
 
+            if (validation.errors['country']) {
+              this.guardErrors[`identification_${doc.id}_country`] =
+                validation.errors['country'];
+            }
+
             if (validation.errors['expiry']) {
               this.guardErrors[`identification_${doc.id}_expiry`] =
                 validation.errors['expiry'];
@@ -1452,6 +1498,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
             doc.documentType ||
             doc.number ||
             doc.province ||
+            doc.passportCountry ||
             doc.expiryDate;
 
           if (hasAnyData) {
@@ -1471,6 +1518,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
               if (validation.errors['province']) {
                 this.guardErrors[`identification_${doc.id}_province`] =
                   validation.errors['province'];
+              }
+
+              if (validation.errors['country']) {
+                this.guardErrors[`identification_${doc.id}_country`] =
+                  validation.errors['country'];
               }
 
               if (validation.errors['expiry']) {
@@ -1859,6 +1911,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
             document_type: doc.documentType,
             document_number: doc.number,
             ...(doc.province && { province: doc.province }),
+            ...(doc.passportCountry && { passport_country: doc.passportCountry }),
             ...(doc.expiryDate && { expiry_date: doc.expiryDate }),
             ...(doc.existingFileId && { document_file_id: doc.existingFileId }),
             ...(doc.existingFileUrl && { document_file_url: doc.existingFileUrl }),

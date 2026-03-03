@@ -191,6 +191,7 @@
                         <div class="flex flex-col">
                             <app-select-input [label]="'Document Type'" [name]="'docType_' + i"
                                 [(ngModel)]="doc.documentType" [options]="documentTypeOptions"
+                                (ngModelChange)="onDocumentTypeChange(doc)"
                                 placeholder="-- Select Document Type --" [required]="i < 2" [searchable]="true"
                                 [disabled]="readonly">
                             </app-select-input>
@@ -221,6 +222,20 @@
 
                             <app-error-message
                                 [errorMessage]="guardErrors['identification_' + doc.id + '_province'] || null">
+                            </app-error-message>
+                        </div>
+
+                        <!-- Passport Country (Passport only) -->
+                        <div *ngIf="isPassportDocument(doc.documentType)" class="flex flex-col">
+                            <app-select-input [label]="'Passport Country'" [name]="'passportCountry_' + i"
+                                [(ngModel)]="doc.passportCountry" [options]="passportCountryOptions"
+                                placeholder="-- Select Passport Country --"
+                                [required]="i < 2 && isPassportDocument(doc.documentType)" [searchable]="true"
+                                [disabled]="readonly">
+                            </app-select-input>
+
+                            <app-error-message
+                                [errorMessage]="guardErrors['identification_' + doc.id + '_country'] || null">
                             </app-error-message>
                         </div>
 
