@@ -14,6 +14,7 @@ from configs.metadata_constants import (
     CLIENT_GUARD_TYPE_OPTIONS,
     CLIENT_TYPE_OPTIONS,
 )
+from orion.services.mongo_manager.shared_model.db_auth_models import PLATFORM_ADMIN_ROLES, TENANT_ADMIN_ROLES, user_role
 
 public_routes = APIRouter(tags=["Public"])
 
@@ -71,6 +72,24 @@ async def get_client_metadata():
         "siteTypeOptions": CLIENT_SITE_TYPE_OPTIONS,
         "guardTypeOptions": CLIENT_GUARD_TYPE_OPTIONS,
         "clientTypeOptions": CLIENT_TYPE_OPTIONS,
+    }
+
+
+@public_routes.get(
+    "/api/public/role-metadata",
+    dependencies=[],
+    summary="Get role metadata options",
+    description="Get role groups used by frontend access-control and settings navigation.",
+    tags=["Public", "Config"],
+    operation_id="getRoleMetadata",
+    response_description="Platform and tenant role groups for UI guards.")
+async def get_role_metadata():
+    management_roles = sorted([user_role.ADMIN.value, user_role.SUPER_ADMIN.value])
+    return {
+        "platformRoles": sorted(list(PLATFORM_ADMIN_ROLES)),
+        "tenantSettingsRoles": sorted(list(TENANT_ADMIN_ROLES)),
+        "tenantManagementRoles": management_roles,
+        "platformUserManagementRoles": management_roles,
     }
 
 

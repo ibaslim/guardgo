@@ -2,7 +2,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from orion.helper_manager.env_handler import env_handler
-from orion.services.mongo_manager.shared_model.db_auth_models import user_role, UserStatus
+from orion.services.mongo_manager.shared_model.db_auth_models import user_role, UserStatus, normalize_role_value
 from orion.services.session_manager.session_manager import session_manager
 from orion.constants import constant
 
@@ -27,8 +27,20 @@ async def get_current_status(token: str = Depends(oauth2_scheme)):
 
 
 def role_required(required_roles: list[user_role]):
+    def _matches(required: user_role, actual_role_value: str) -> bool:
+        required_value = normalize_role_value(required)
+
+        if required_value == user_role.ADMIN.value:
+            return actual_role_value in [user_role.ADMIN.value, user_role.SUPER_ADMIN.value]
+
+        if required_value == user_role.SUPER_ADMIN.value:
+            return actual_role_value in [user_role.SUPER_ADMIN.value, user_role.ADMIN.value]
+
+        return actual_role_value == required_value
+
     async def verify_role(role: user_role = Depends(get_current_role)):
-        if role not in required_roles:
+        actual_role_value = normalize_role_value(role)
+        if not any(_matches(required_role, actual_role_value) for required_role in required_roles):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access forbidden")
         return role
 

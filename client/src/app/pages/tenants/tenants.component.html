@@ -1,5 +1,4 @@
-<div class="p-4">
-  <h2 class="text-lg font-semibold mb-4">Tenants</h2>
+<app-page title="Tenants" subtitle="Manage tenant organizations, statuses, and profile access." [contentClass]="'space-y-4'">
 
   <ng-template #tenantHeader let-setSort="setSort" let-sortColumn="sortColumn" let-sortDirection="sortDirection">
     <tr>
@@ -16,9 +15,13 @@
   <div class="mb-4 flex flex-col md:flex-row md:items-start md:gap-4">
     <div class="mt-3 md:mt-0 flex-1 min-w-0 max-w-xs">
       <div class="mt-1">
-        <input type="text" [(ngModel)]="keyword" (keydown.enter)="onSearch(keyword)" placeholder="Search tenants..."
-          aria-label="Search tenants"
-          class="block w-full rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none" />
+        <app-base-input
+          [(ngModel)]="keyword"
+          (ngModelChange)="onSearch($event)"
+          placeholder="Search tenants..."
+          name="tenantSearch"
+          autocomplete="off"
+        ></app-base-input>
       </div>
     </div>
     <div class="mt-3 md:mt-0 md:ml-2" style="min-width:200px;">
@@ -113,7 +116,7 @@
       </app-button>
     </td>
   </ng-template>
-</div>
+</app-page>
 
 <app-side-drawer [show]="showDrawer" size="lg" (close)="onCloseDrawer()">
   <div drawer-header class="flex items-start justify-between">
@@ -140,7 +143,7 @@
 
   <div drawer-footer>
     <div class="flex justify-end items-center gap-2">
-      <ng-container *ngIf="appService.userSessionData().user.role === 'admin'">
+      <ng-container *ngIf="isAdmin()">
         <app-button *ngIf="tenantDetail?.status !== 'active'" size="sm" type="primary" [label]="(tenantDetail?.status === 'inactive' || tenantDetail?.status === 'banned') ? 'Re-activate' : 'Verify'"
           [customClass]="'px-3 py-1 text-sm'" ariaLabel="Verify tenant" (pressed)="confirmChange('verify')"></app-button>
         <app-button *ngIf="tenantDetail?.status === 'active'" size="sm" type="warning" label="Deactivate"

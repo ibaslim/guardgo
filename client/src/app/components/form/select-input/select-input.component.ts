@@ -1,5 +1,5 @@
 // ...existing code...
-import { Component, Input, forwardRef } from '@angular/core';
+import { Component, Input, forwardRef, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/forms';
 
@@ -17,28 +17,35 @@ import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/f
   ]
 })
 export class SelectInputComponent implements ControlValueAccessor {
-    constructor() {
+    constructor(private elementRef: ElementRef<HTMLElement>) {
       if (typeof window !== 'undefined') {
-        window.addEventListener('mousedown', this.handleClickOutside);
+        window.addEventListener('mousedown', this.handleClickOutside, true);
+        window.addEventListener('pointerdown', this.handleClickOutside, true);
+        window.addEventListener('touchstart', this.handleClickOutside, true);
       }
     }
 
     ngOnDestroy() {
       if (typeof window !== 'undefined') {
-        window.removeEventListener('mousedown', this.handleClickOutside);
+        window.removeEventListener('mousedown', this.handleClickOutside, true);
+        window.removeEventListener('pointerdown', this.handleClickOutside, true);
+        window.removeEventListener('touchstart', this.handleClickOutside, true);
       }
     }
 
-    handleClickOutside = (event: MouseEvent) => {
-      const dropdowns = document.getElementsByClassName('select-dropdown');
-      let clickedInside = false;
-      for (let i = 0; i < dropdowns.length; i++) {
-        if (dropdowns[i].contains(event.target as Node)) {
-          clickedInside = true;
-          break;
-        }
+    handleClickOutside = (event: Event) => {
+      if (!this.dropdownOpen) {
+        return;
       }
-      if (!clickedInside && this.dropdownOpen) {
+
+      const host = this.elementRef?.nativeElement;
+      if (!host) {
+        this.dropdownOpen = false;
+        return;
+      }
+
+      const clickedInsideCurrentSelect = host.contains(event.target as Node);
+      if (!clickedInsideCurrentSelect) {
         this.dropdownOpen = false;
       }
     }

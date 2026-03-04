@@ -1,15 +1,17 @@
 import { Component } from '@angular/core';
 import { Router } from '@angular/router';
+import { CardComponent } from '../../../components/card/card.component';
 
 @Component({
   selector: 'app-notification',
   standalone: true,
-  imports: [],
+  imports: [CardComponent],
   templateUrl: './notification.component.html'
 })
 export class NotificationComponent {
   title: string = 'Your Trial Has Ended';
   description: string = 'Your trial period has ended. To continue enjoying full access, please upgrade your subscription.';
+  actionLabel: string = 'Back to Home';
 
   constructor(private router: Router) {
     const nav = this.router.getCurrentNavigation();
@@ -18,8 +20,7 @@ export class NotificationComponent {
     if (state) {
       this.title = state['title'] || this.title;
       this.description = state['description'] || this.description;
-    } else {
-      this.router.navigate(['/']).then();
+      this.actionLabel = state['actionLabel'] || this.actionLabel;
     }
   }
 

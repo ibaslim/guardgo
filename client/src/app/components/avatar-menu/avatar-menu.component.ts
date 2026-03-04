@@ -14,6 +14,12 @@ import { AuthService } from '../../services/authetication/auth.service';
 export class AvatarMenuComponent {
   showUserMenu = false;
 
+  private normalizeRole(role: string | undefined | null): string {
+    const raw = String(role || '').trim().toLowerCase();
+    if (!raw) return '';
+    return raw.includes('.') ? (raw.split('.').pop() || '') : raw;
+  }
+
   constructor(
     private appService: AppService,
     private authService: AuthService,
@@ -30,6 +36,11 @@ export class AvatarMenuComponent {
 
   get avatar(): string | null {
     return (this.appService.userSessionData() as any)?.user?.image || this.appService.userImageUrl();
+  }
+
+  get canSeeSettings(): boolean {
+    const role = this.appService.userSessionData()?.user?.role || '';
+    return !!role;
   }
 
   toggleMenu(event: MouseEvent): void {
@@ -55,12 +66,11 @@ export class AvatarMenuComponent {
   }
 
   async goSettings(): Promise<void> {
-    await this.router.navigate(['/dashboard/settings']);
-    this.closeMenu();
-  }
-
-  async goDashboard(): Promise<void> {
-    await this.router.navigate(['/dashboard/overview']);
+    await this.appService.loadRoleMetadata();
+    await this.appService.loadSession(true);
+    const role = this.normalizeRole(this.appService.userSessionData()?.user?.role);
+    const isPlatform = this.appService.roleMetadata().platformRoles.includes(role);
+    await this.router.navigate([isPlatform ? '/dashboard/platform-settings' : '/dashboard/settings']);
     this.closeMenu();
   }
 

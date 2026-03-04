@@ -11,6 +11,8 @@ import { ModalComponent } from '../../components/modal/modal.component';
 import { TableThComponent } from '../../components/table/table-th.component';
 import { TableTdComponent } from '../../components/table/table-td.component';
 import { SelectInputComponent } from '../../components/form/select-input/select-input.component';
+import { BaseInputComponent } from '../../components/form/base-input/base-input.component';
+import { PageComponent } from '../../components/page/page.component';
 import { TenantSettingsComponent } from '../tenant-settings/tenant-settings.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
@@ -22,7 +24,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 @Component({
   selector: 'app-tenants',
   standalone: true,
-  imports: [CommonModule, FormsModule, TableComponent, BadgeComponent, SideDrawerComponent, IconComponent, TableThComponent, TableTdComponent, ButtonComponent, ModalComponent, SelectInputComponent, TenantSettingsComponent],
+  imports: [CommonModule, FormsModule, TableComponent, BadgeComponent, SideDrawerComponent, IconComponent, TableThComponent, TableTdComponent, ButtonComponent, ModalComponent, SelectInputComponent, BaseInputComponent, PageComponent, TenantSettingsComponent],
   templateUrl: './tenants.component.html',
 })
 export class TenantsComponent implements OnInit {
@@ -71,6 +73,7 @@ export class TenantsComponent implements OnInit {
   readableTitle = readableTitle;
 
   ngOnInit(): void {
+    this.appService.loadRoleMetadata();
     this.loadPage(1);
     this.route.paramMap.subscribe(params => {
       const id = params.get('id');
@@ -182,8 +185,10 @@ export class TenantsComponent implements OnInit {
   }
 
   isAdmin(): boolean {
-    const session = this.appService.userSessionData();
-    return !!(session && session.user && session.user.role === 'admin');
+    const rawRole = String(this.appService.userSessionData()?.user?.role || '').trim().toLowerCase();
+    const role = rawRole.includes('.') ? (rawRole.split('.').pop() || '') : rawRole;
+    const allowedRoles = this.appService.roleMetadata().tenantManagementRoles || [];
+    return !!role && allowedRoles.includes(role);
   }
 
   confirmChange(action: 'verify' | 'deactivate' | 'ban') {

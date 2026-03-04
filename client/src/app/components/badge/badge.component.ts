@@ -26,6 +26,8 @@ export class BadgeComponent {
       // danger-like
       banned: 'danger',
       suspended: 'danger',
+      blocked: 'danger',
+      deleted: 'danger',
       error: 'danger',
       failed: 'danger',
       rejected: 'danger',

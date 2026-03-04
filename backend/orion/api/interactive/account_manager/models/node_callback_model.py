@@ -10,6 +10,7 @@ class UserDataModel(BaseModel):
     email: str
     twofa_enabled: bool
     username: str
+    full_name: Optional[str] = None
     role: user_role
     status: UserStatus
     subscription: bool

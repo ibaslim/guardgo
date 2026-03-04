@@ -14,7 +14,7 @@ from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_keys import db_keys
 from orion.services.mongo_manager.shared_model.db_tenant_model import IocCategory, db_tenant_model, TenantRequest, TenantStatus, TenantType, TenantPayload
 from orion.api.interactive.tenant_manager.models.tenant_profile_update import TenantProfileUpdate
-from orion.services.mongo_manager.shared_model.db_auth_models import UserStatus, db_user_account, user_role
+from orion.services.mongo_manager.shared_model.db_auth_models import UserStatus, db_user_account, user_role, is_super_admin_role
 from orion.services.encryption_manager.key_manager import KeyManager
 from orion.constants.constant import CONSTANTS
 from orion.constants import constant
@@ -101,7 +101,7 @@ class TenantManager:
 
     async def update_tenant(self, data: TenantRequest, current_user):
 
-        if current_user.role in ["admin"]:
+        if is_super_admin_role(current_user.role):
             tenant_id = data.id
         elif current_user.licenses == ["maintainer"] and current_user.tenant_uuid == data.id:
             tenant_id = data.id
@@ -161,10 +161,10 @@ class TenantManager:
                 pass
 
         allowed_licenses = set(data.licenses or [])
-        if "maintainer" in allowed_licenses and current_user.role not in ["admin"]:
+        if "maintainer" in allowed_licenses and not is_super_admin_role(current_user.role):
             raise HTTPException(status_code=401, detail="Only admin can assign maintainer license")
 
-        if current_user.role in ["admin"]:
+        if is_super_admin_role(current_user.role):
             users = await self._engine.find(db_user_account, db_user_account.tenant_uuid == tenant_id)
             for u in users:
                 if "maintainer" in (u.licenses or []):
@@ -695,7 +695,7 @@ class TenantManager:
             if tenant.is_default == False and tenant.user_quota is not None and (users_count + 1) > tenant.user_quota:
                 raise HTTPException(status_code=400, detail="User allocated quota exceeded")
 
-            if data.role in ["demo"] and current_user.role not in ["admin"]:
+            if data.role in ["demo"] and not is_super_admin_role(current_user.role):
 
                 raise HTTPException(status_code=401, detail="You are not allowed to manage this user")
 
@@ -706,7 +706,7 @@ class TenantManager:
 
             requested = set(data.licenses or [])
 
-            if requested and not requested.issubset(tenant_allowed) and not current_user.role in ["admin"]:
+            if requested and not requested.issubset(tenant_allowed) and not is_super_admin_role(current_user.role):
                 raise HTTPException(status_code=400, detail="User assigned license not allowed for this tenant")
 
             users_count = await engine.count(db_user_account, db_user_account.tenant_uuid == tenant_uuid)

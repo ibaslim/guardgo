@@ -47,11 +47,16 @@ class mongo_controller:
 
         await user_collection.create_index([("username", 1)], unique=True)
 
+        try:
+            await user_collection.drop_index("unique_admin_role")
+        except Exception:
+            pass
+
         await user_collection.create_index(
             [("role", 1)],
             unique=True,
-            partialFilterExpression={"role": user_role.ADMIN.value},
-            name="unique_admin_role", )
+            partialFilterExpression={"role": user_role.SUPER_ADMIN.value},
+            name="unique_super_admin_role", )
 
         await user_collection.create_index(
             [("tenant_uuid", 1)],
@@ -61,11 +66,28 @@ class mongo_controller:
 
         await self.__engine.get_collection(db_system_model).create_index("key", unique=True)
 
+    async def migrate_legacy_admin_role(self):
+        user_collection = self.__engine.get_collection(db_user_account)
+
+        existing_super = await user_collection.find_one({"role": user_role.SUPER_ADMIN.value})
+        if existing_super:
+            return
+
+        legacy_admin = await user_collection.find_one({"role": user_role.ADMIN.value})
+        if not legacy_admin:
+            return
+
+        await user_collection.update_one(
+            {"_id": legacy_admin["_id"]},
+            {"$set": {"role": user_role.SUPER_ADMIN.value}}
+        )
+
     def get_engine(self) -> AIOEngine:
         return self.__engine
 
     async def initialize(self):
         await self.ensure_indexes()
+        await self.migrate_legacy_admin_role()
 
         default_tenant = await self.__engine.find_one(db_tenant_model, db_tenant_model.is_default == True)
         if not default_tenant:

@@ -359,7 +359,7 @@
         </app-section>
 
         <app-section title="Operating Regions" subtitle="Where you can deploy guards.">
-            <ng-container section-actions>
+            <ng-container *ngIf="!readonly" section-actions>
                 <app-button [label]="'Add region'" type="outline" [htmlType]="'button'"
                     [customClass]="'hidden md:inline-flex rounded-lg'" (click)="addRegion()">
                 </app-button>

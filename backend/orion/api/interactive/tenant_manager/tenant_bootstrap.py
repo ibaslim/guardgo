@@ -36,7 +36,10 @@ async def create_default_tenant(engine):
 
 
 async def create_default_users(engine, tenant_id):
-    existing_admin = await engine.find_one(db_user_account, db_user_account.role == user_role.ADMIN)
+    existing_admin = await engine.find_one(
+        db_user_account,
+        (db_user_account.role == user_role.ADMIN) | (db_user_account.role == user_role.SUPER_ADMIN),
+    )
     if existing_admin:
         return
 
@@ -44,7 +47,7 @@ async def create_default_users(engine, tenant_id):
         admin_user = db_user_account(
             username=admin_mock["username"],
             password=admin_mock["password"],
-            role=user_role.ADMIN,
+            role=user_role.SUPER_ADMIN,
             status=UserStatus.ACTIVE,
             licenses=[LicenseName.ENTERPRISE, LicenseName.MAINTAINER],
             tenant_uuid=str(tenant_id), )

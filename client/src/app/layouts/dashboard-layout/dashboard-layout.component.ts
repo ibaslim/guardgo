@@ -22,6 +22,10 @@ export class DashboardLayoutComponent implements OnInit {
   user = { name: '', avatar: '' };
   sidebarCollapsed = false;
   isMobileView = false;
+  private platformRoles: string[] = [];
+  private tenantSettingsRoles: string[] = [];
+  private tenantManagementRoles: string[] = [];
+  private platformUserManagementRoles: string[] = [];
   // Navigation links centralized for easier management and role visibility
   links: { label: string; route: string; icon: IconName; roles?: string[]; hidden?: boolean }[] = [
     {
@@ -33,18 +37,32 @@ export class DashboardLayoutComponent implements OnInit {
       label: 'Tenants',
       route: '/dashboard/tenants',
       icon: 'users',
-      roles: ['admin']
+      roles: this.tenantManagementRoles
+    },
+    {
+      label: 'Admin Users',
+      route: '/dashboard/admin-users',
+      icon: 'users',
+      roles: this.platformUserManagementRoles
     },
     {
       label: 'Settings',
       route: '/dashboard/settings',
-      icon: 'settings'
+      icon: 'settings',
+      roles: this.tenantSettingsRoles
+    },
+    {
+      label: 'Settings',
+      route: '/dashboard/platform-settings',
+      icon: 'settings',
+      roles: this.platformRoles
     }
   ];
 
   get isAdmin(): boolean {
-    const session = this.appService.userSessionData();
-    return !!(session && session.user && session.user.role === 'admin');
+    const rawRole = String(this.appService.userSessionData()?.user?.role || '').trim().toLowerCase();
+    const role = rawRole.includes('.') ? (rawRole.split('.').pop() || '') : rawRole;
+    return !!role && this.tenantManagementRoles.includes(role);
   }
 
   constructor(
@@ -59,7 +77,49 @@ export class DashboardLayoutComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.initializeRoleMetadata();
     this.checkScreenWidth();
+  }
+
+  private async initializeRoleMetadata(): Promise<void> {
+    await this.appService.loadRoleMetadata();
+    const metadata = this.appService.roleMetadata();
+    this.platformRoles = metadata.platformRoles || [];
+    this.tenantSettingsRoles = metadata.tenantSettingsRoles || [];
+    this.tenantManagementRoles = metadata.tenantManagementRoles || [];
+    this.platformUserManagementRoles = metadata.platformUserManagementRoles || [];
+
+    this.links = [
+      {
+        label: 'Dashboard',
+        route: '/dashboard/overview',
+        icon: 'home'
+      },
+      {
+        label: 'Tenants',
+        route: '/dashboard/tenants',
+        icon: 'users',
+        roles: this.tenantManagementRoles
+      },
+      {
+        label: 'Admin Users',
+        route: '/dashboard/admin-users',
+        icon: 'users',
+        roles: this.platformUserManagementRoles
+      },
+      {
+        label: 'Settings',
+        route: '/dashboard/settings',
+        icon: 'settings',
+        roles: this.tenantSettingsRoles
+      },
+      {
+        label: 'Settings',
+        route: '/dashboard/platform-settings',
+        icon: 'settings',
+        roles: this.platformRoles
+      }
+    ];
   }
 
   @HostListener('window:resize', ['$event'])
@@ -87,7 +147,8 @@ export class DashboardLayoutComponent implements OnInit {
     if (link.hidden) return false;
     const session = this.appService.userSessionData();
     if (!link.roles || link.roles.length === 0) return true;
-    const role = session?.user?.role || '';
+    const rawRole = String(session?.user?.role || '').trim().toLowerCase();
+    const role = rawRole.includes('.') ? (rawRole.split('.').pop() || '') : rawRole;
     return !!role && link.roles.includes(role);
   }
 }
