@@ -1,30 +1,116 @@
-.notification-wrapper {
-    position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 9999;
-    display: flex;
-    justify-content: center;
-    width: auto;
-    pointer-events: none;
+.toast-wrapper {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(92vw, 420px);
+  pointer-events: none;
 }
 
-.notification-card {
-    background: #b71c1c;
-    padding: 12px 24px;
-    color: #fff;
-    border-radius: 8px;
-    border: 1px solid #fcc5;
-    font-weight: 500;
-    opacity: 1;
-    transform: none;
-    transition: opacity 0.2s ease, transform 0.2s ease;
-    box-shadow: 0 4px 12px rgb(183 28 28 / 40%);
-    pointer-events: auto;
+.toast-card {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 10px;
+  padding: 12px 12px;
+  border: 1px solid;
+  box-shadow: 0 10px 24px rgb(15 23 42 / 18%);
+  background: #ffffff;
+  color: #111827;
 }
-.notification-card.success {
-  background: #1b5e20;
-  border: 1px solid #cfc5;
-  box-shadow: 0 4px 12px rgb(27 94 32 / 40%);
+
+.toast-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.toast-icon {
+  margin-top: 1px;
+}
+
+.toast-message {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.toast-close {
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.85;
+  color: currentColor;
+}
+
+.toast-close:hover {
+  opacity: 1;
+}
+
+.toast-card.success {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.toast-card.fail {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.toast-card.warning {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.toast-card.info {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+@media (prefers-color-scheme: dark) {
+  .toast-card {
+    background: #111827;
+    color: #e5e7eb;
+    border-color: #374151;
+    box-shadow: 0 10px 24px rgb(0 0 0 / 45%);
+  }
+
+  .toast-card.success {
+    background: #052e16;
+    color: #bbf7d0;
+    border-color: #166534;
+  }
+
+  .toast-card.fail {
+    background: #450a0a;
+    color: #fecaca;
+    border-color: #7f1d1d;
+  }
+
+  .toast-card.warning {
+    background: #451a03;
+    color: #fde68a;
+    border-color: #78350f;
+  }
+
+  .toast-card.info {
+    background: #172554;
+    color: #bfdbfe;
+    border-color: #1d4ed8;
+  }
 }
