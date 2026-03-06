@@ -16,7 +16,7 @@ import { OnboardingComponent } from './pages/onboarding/onboarding.component';
 import { TenantSettingsComponent } from './pages/tenant-settings/tenant-settings.component';
 import { PendingVerificationComponent } from './pages/pending-verification/pending-verification.component';
 import { pendingVerificationGuard } from './shared/guards/pending-verification.guard';
-import { platformSettingsGuard, tenantSettingsGuard } from './shared/guards/settings.guard';
+import { platformSettingsGuard, platformUserManagementGuard, tenantSettingsGuard } from './shared/guards/settings.guard';
 
 export const routes: Routes = [
 
@@ -96,7 +96,7 @@ export const routes: Routes = [
       {
         path: 'admin-users',
         loadComponent: () => import('./pages/admin-users/admin-users.component').then(m => m.AdminUsersComponent),
-        canActivate: [onboardingGuard, pendingVerificationGuard]
+        canActivate: [onboardingGuard, pendingVerificationGuard, platformUserManagementGuard]
       },
       {
         path: 'analytics',

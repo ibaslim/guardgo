@@ -4,10 +4,11 @@ export interface IocCategory {
   values: string[];
 }
 
-export type TenantStatus = 'onboarding' | 'active' | 'disable';
+export type TenantStatus = 'onboarding' | 'pending_activation' | 'active' | 'disable';
 
 export const TenantStatusValues = {
   ONBOARDING: 'onboarding' as TenantStatus,
+  PENDING_ACTIVATION: 'pending_activation' as TenantStatus,
   ACTIVE: 'active' as TenantStatus,
   DISABLE: 'disable' as TenantStatus,
 };

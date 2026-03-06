@@ -23,7 +23,7 @@ import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { getIssuingAuthorityForProvince } from '../../shared/constants/provincial-authorities.constants';
 import { Guard, GuardErrors, IdentificationDocument, SecurityLicenseDocument, PoliceClearanceRecord, TrainingCertificate, WeeklyAvailability } from '../../shared/model/guard';
-import { toTitleCase } from '../../shared/helpers/format.helper';
+import { readableTitle } from '../../shared/helpers/format.helper';
 
 @Component({
   selector: 'app-guard-setting',
@@ -257,7 +257,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       doc.passportCountry = undefined;
     }
   }
-  toTitleCase = toTitleCase;
+  readableTitle = readableTitle;
 
   guardFormModel: Guard = {
     name: '',
@@ -2004,16 +2004,16 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       payload.profile.max_travel_radius_km = Math.round(this.guardFormModel.operationalRadius * 1.60934);
     }
 
-    // Determine desired post-submit tenant status. If user is completing onboarding, move to pending_verification.
+    // Determine desired post-submit tenant status. If user is completing onboarding, move to pending_activation.
     const isOnboarding = this.appService.userSessionData().tenant.has_onboarding;
-    payload.status = isOnboarding ? 'pending_verification' : 'active';
+    payload.status = isOnboarding ? 'pending_activation' : 'active';
 
     this.apiService.put('tenant', payload)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
           this.isSubmitting = false;
-          const newStatus = isOnboarding ? 'pending_verification' : 'active';
+          const newStatus = isOnboarding ? 'pending_activation' : 'active';
           this.appService.setTenantStatus(newStatus, false);
           this.router.navigate(['/dashboard']);
         },

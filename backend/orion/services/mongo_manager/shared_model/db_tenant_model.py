@@ -18,6 +18,7 @@ class IocCategory(EmbeddedModel):
 
 class TenantStatus(str, Enum):
     ONBOARDING = "onboarding"
+    PENDING_ACTIVATION = "pending_activation"
     PENDING_VERIFICATION = "pending_verification"
     ACTIVE = "active"
     INACTIVE = "inactive"
@@ -301,6 +302,8 @@ class db_tenant_model(Model):
     verified: bool = False
     user_quota: int = 0
     status: TenantStatus = TenantStatus.INACTIVE
+    approvals_required: int = 2
+    approval_actors: List[str] = []
     licenses: List[str] = []
     iocs: List[IocCategory] = []
 
@@ -355,6 +358,8 @@ class TenantPayload(BaseModel):
     verified: bool = False
     user_quota: int = 0
     status: TenantStatus = TenantStatus.INACTIVE
+    approvals_required: int = 2
+    approval_actors: List[str] = []
     licenses: List[str] = []
     iocs: List[IocCategory] = []
     created_at: Optional[datetime] = None

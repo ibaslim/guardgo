@@ -11,6 +11,7 @@ from orion.services.mongo_manager.shared_model.db_auth_models import user_role, 
 from orion.services.mongo_manager.shared_model.db_tenant_model import TenantRequest, db_tenant_model, TenantPayload, TenantStatus
 from orion.api.interactive.tenant_manager.tenant_manager import TenantManager
 from orion.api.interactive.account_manager.models.user_model import user_model
+from orion.api.interactive.activity_manager.activity_manager import ActivityManager
 from bson import ObjectId
 
 tenant_routes = APIRouter(
@@ -29,7 +30,7 @@ tenant_routes = APIRouter(
     operation_id="getTenant",
     response_description="Complete tenant data.",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN, user_role.GUARD_ADMIN, user_role.CLIENT_ADMIN, user_role.SP_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.COMPLIANCE_ADMIN, user_role.GUARD_ADMIN, user_role.CLIENT_ADMIN, user_role.SP_ADMIN]))], )
 async def get_tenant(current_user=Depends(get_current_user)):
     manager = TenantManager.get_instance()
     tenant = await manager._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(current_user.tenant_uuid))
@@ -42,7 +43,10 @@ async def get_tenant(current_user=Depends(get_current_user)):
         "subscription": tenant.subscription,
         "verified": tenant.verified,
         "user_quota": tenant.user_quota,
-        "status": tenant.status,
+        "status": TenantManager.get_instance()._normalized_status_value(tenant.status),
+        "approvals_required": int(getattr(tenant, "approvals_required", 2) or 2),
+        "approvals_done": len(list(dict.fromkeys(getattr(tenant, "approval_actors", []) or []))),
+        "approvals_remaining": max(int(getattr(tenant, "approvals_required", 2) or 2) - len(list(dict.fromkeys(getattr(tenant, "approval_actors", []) or []))), 0),
         "licenses": tenant.licenses,
         "iocs": tenant.iocs,
         "created_at": tenant.created_at,
@@ -98,7 +102,7 @@ async def get_all_tenants():
     operation_id="getTenantsDatatable",
     response_description="Paginated tenant rows.",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.COMPLIANCE_ADMIN]))], )
 async def get_tenants_datatable(
         page: int = 1,
         rows: int = 10,
@@ -126,7 +130,7 @@ async def get_tenants_datatable(
     operation_id="getTenantById",
     response_description="Complete tenant data.",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.COMPLIANCE_ADMIN]))], )
 async def get_tenant_by_id(
     tenant_id: str = Path(..., description="Tenant ObjectId as string")
 ):
@@ -134,16 +138,29 @@ async def get_tenant_by_id(
 
 
 @tenant_routes.patch(
+    "/api/tenants/{tenant_id}/approve",
+    summary="Approve tenant activation",
+    description="Record an approval. Tenant activates only after required approvals are reached.",
+    tags=["Tenant"],
+    operation_id="approveTenant",
+    response_description="Updated tenant status.",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.COMPLIANCE_ADMIN]))], )
+async def approve_tenant(tenant_id: str, current_user=Depends(get_current_user)):
+    return await TenantManager.get_instance().approve_tenant_activation(tenant_id, current_user=current_user)
+
+
+@tenant_routes.patch(
     "/api/tenants/{tenant_id}/verify",
-    summary="Verify tenant",
-    description="Mark tenant as verified and set status to active.",
+    summary="Verify tenant (legacy alias)",
+    description="Legacy alias for approve tenant activation.",
     tags=["Tenant"],
     operation_id="verifyTenant",
     response_description="Updated tenant status.",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.COMPLIANCE_ADMIN]))], )
 async def verify_tenant(tenant_id: str, current_user=Depends(get_current_user)):
-    return await TenantManager.get_instance().set_tenant_status(tenant_id, TenantStatus.ACTIVE, current_user=current_user)
+    return await TenantManager.get_instance().approve_tenant_activation(tenant_id, current_user=current_user)
 
 
 @tenant_routes.patch(
@@ -154,7 +171,7 @@ async def verify_tenant(tenant_id: str, current_user=Depends(get_current_user)):
     operation_id="deactivateTenant",
     response_description="Updated tenant status.",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.COMPLIANCE_ADMIN]))], )
 async def deactivate_tenant(tenant_id: str, current_user=Depends(get_current_user)):
     return await TenantManager.get_instance().set_tenant_status(tenant_id, TenantStatus.INACTIVE, current_user=current_user)
 
@@ -167,9 +184,38 @@ async def deactivate_tenant(tenant_id: str, current_user=Depends(get_current_use
     operation_id="banTenant",
     response_description="Updated tenant status.",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.COMPLIANCE_ADMIN]))], )
 async def ban_tenant(tenant_id: str, current_user=Depends(get_current_user)):
     return await TenantManager.get_instance().set_tenant_status(tenant_id, TenantStatus.BANNED, current_user=current_user)
+
+
+@tenant_routes.get(
+    "/api/activity",
+    summary="Get activity logs",
+    description="Retrieve activity logs with module/entity filters.",
+    tags=["Activity"],
+    operation_id="getActivityLogs",
+    response_description="Paginated activity logs.",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN, user_role.COMPLIANCE_ADMIN]))], )
+async def get_activity_logs(
+    module: str | None = None,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    action: str | None = None,
+    actor_username: str | None = None,
+    page: int = 1,
+    rows: int = 20,
+):
+    return await ActivityManager.get_instance().list_events(
+        module=module,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        action=action,
+        actor_username=actor_username,
+        page=page,
+        rows=rows,
+    )
 
 
 # ============================================================================

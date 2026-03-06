@@ -39,6 +39,7 @@ export class BadgeComponent {
       attention: 'warning',
       caution: 'warning',
       onboarding: 'warning',
+      pending_activation: 'warning',
       pending_verification: 'warning',
     };
   }

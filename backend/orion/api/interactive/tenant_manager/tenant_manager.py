@@ -20,6 +20,7 @@ from orion.constants.constant import CONSTANTS
 from orion.constants import constant
 from orion.services.mail_manager.mail_manager import mail_manager
 from orion.services.mongo_manager.shared_model.db_tenant_model import TenantStatusAudit
+from orion.api.interactive.activity_manager.activity_manager import ActivityManager
 
 
 class TenantManager:
@@ -42,6 +43,26 @@ class TenantManager:
         if TenantManager.__instance is not None:
             raise Exception("This class is a singleton!")
         TenantManager.__instance = self
+
+    @staticmethod
+    def _normalized_status_value(status_value: Any) -> str:
+        value = str(getattr(status_value, "value", status_value) or "").strip().lower()
+        if value == TenantStatus.PENDING_VERIFICATION.value:
+            return TenantStatus.PENDING_ACTIVATION.value
+        return value
+
+    @staticmethod
+    def _approvals_summary(tenant: db_tenant_model) -> Dict[str, Any]:
+        required = int(getattr(tenant, "approvals_required", 2) or 2)
+        actors = list(dict.fromkeys(getattr(tenant, "approval_actors", []) or []))
+        done = len(actors)
+        remaining = max(required - done, 0)
+        return {
+            "approvals_done": done,
+            "approvals_required": required,
+            "approvals_remaining": remaining,
+            "approval_actors": actors,
+        }
 
     @staticmethod
     def _deep_merge(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
@@ -148,12 +169,14 @@ class TenantManager:
                 values=[enc.encrypt(v.encode()).decode() for v in (ioc.values or [])]) for ioc in (data.iocs or [])]
 
         if previous_status == TenantStatus.ONBOARDING:
-            tenant.status = TenantStatus.PENDING_VERIFICATION
+            tenant.status = TenantStatus.PENDING_ACTIVATION
+            tenant.approval_actors = []
+            tenant.approvals_required = max(int(getattr(tenant, "approvals_required", 2) or 2), 2)
 
         await self._engine.save(tenant)
 
-        # If status changed from onboarding -> pending_verification, record audit and notify
-        if previous_status == TenantStatus.ONBOARDING and tenant.status == TenantStatus.PENDING_VERIFICATION:
+        # If status changed from onboarding -> pending_activation, record audit and notify
+        if previous_status == TenantStatus.ONBOARDING and tenant.status == TenantStatus.PENDING_ACTIVATION:
             try:
                 await self._post_status_change(tenant, previous_status, actor=getattr(current_user, "username", None), actor_role=getattr(current_user, "role", None))
             except Exception:
@@ -315,7 +338,9 @@ class TenantManager:
             tenant.profile = merged
 
         if is_update and previous_status == TenantStatus.ONBOARDING:
-            tenant.status = TenantStatus.PENDING_VERIFICATION
+            tenant.status = TenantStatus.PENDING_ACTIVATION
+            tenant.approval_actors = []
+            tenant.approvals_required = max(int(getattr(tenant, "approvals_required", 2) or 2), 2)
 
         tenant.updated_at = datetime.utcnow()
         if data.verified and not tenant.verified_date:
@@ -323,8 +348,8 @@ class TenantManager:
 
         await self._engine.save(tenant)
 
-        # If this was an update that moved onboarding -> pending_verification, run post-change actions
-        if is_update and previous_status == TenantStatus.ONBOARDING and tenant.status == TenantStatus.PENDING_VERIFICATION:
+        # If this was an update that moved onboarding -> pending_activation, run post-change actions
+        if is_update and previous_status == TenantStatus.ONBOARDING and tenant.status == TenantStatus.PENDING_ACTIVATION:
             try:
                 await self._post_status_change(tenant, previous_status, actor=getattr(current_user, "username", None), actor_role=getattr(current_user, "role", None))
             except Exception:
@@ -334,8 +359,76 @@ class TenantManager:
             "message": "Tenant updated" if is_update else "Tenant created",
             "id": str(tenant.id),
             "tenant_type": tenant.tenant_type,
-            "status": tenant.status,
+            "status": self._normalized_status_value(tenant.status),
+            **self._approvals_summary(tenant),
             "profile": tenant.profile or {},
+        }
+
+    async def approve_tenant_activation(self, tenant_id: str, current_user=None):
+        tenant = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(tenant_id))
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        previous_status = tenant.status
+        current_status = self._normalized_status_value(tenant.status)
+        actor_username = getattr(current_user, "username", None)
+        actor_role = getattr(current_user, "role", None)
+
+        if current_status in [TenantStatus.INACTIVE.value, TenantStatus.BANNED.value]:
+            return await self.set_tenant_status(tenant_id, TenantStatus.ACTIVE, current_user=current_user)
+
+        if current_status not in [TenantStatus.PENDING_ACTIVATION.value, TenantStatus.PENDING_VERIFICATION.value]:
+            raise HTTPException(status_code=400, detail="Tenant is not pending activation")
+
+        tenant.status = TenantStatus.PENDING_ACTIVATION
+        tenant.approvals_required = max(int(getattr(tenant, "approvals_required", 2) or 2), 2)
+        existing_actors = list(dict.fromkeys(getattr(tenant, "approval_actors", []) or []))
+
+        if actor_username in existing_actors:
+            summary = self._approvals_summary(tenant)
+            return {
+                "message": "Approval already recorded for this user",
+                "id": str(tenant.id),
+                "status": tenant.status,
+                **summary,
+            }
+
+        existing_actors.append(actor_username)
+        tenant.approval_actors = existing_actors
+        summary = self._approvals_summary(tenant)
+
+        if summary["approvals_done"] >= summary["approvals_required"]:
+            tenant.status = TenantStatus.ACTIVE
+            tenant.verified = True
+            tenant.verified_date = datetime.utcnow()
+
+        tenant.updated_at = datetime.utcnow()
+        await self._engine.save(tenant)
+
+        try:
+            await self._post_status_change(
+                tenant,
+                previous_status,
+                actor=actor_username,
+                actor_role=actor_role,
+                reason="approval",
+                metadata={
+                    "approvals_done": summary["approvals_done"],
+                    "approvals_required": summary["approvals_required"],
+                    "approvals_remaining": summary["approvals_remaining"],
+                    "approval_actors": summary["approval_actors"],
+                },
+            )
+        except Exception:
+            pass
+
+        return {
+            "message": "Tenant approved" if tenant.status != TenantStatus.ACTIVE else "Tenant activated",
+            "id": str(tenant.id),
+            "status": tenant.status,
+            "verified": tenant.verified,
+            "verified_date": tenant.verified_date,
+            **summary,
         }
 
     async def set_tenant_status(self, tenant_id: str, target_status: TenantStatus, current_user=None):
@@ -344,20 +437,30 @@ class TenantManager:
             raise HTTPException(status_code=404, detail="Tenant not found")
         previous_status = tenant.status
 
+        current_status = self._normalized_status_value(previous_status)
+        target_status_value = self._normalized_status_value(target_status)
+        if target_status_value == TenantStatus.PENDING_VERIFICATION.value:
+            target_status_value = TenantStatus.PENDING_ACTIVATION.value
+        target_status_enum = TenantStatus(target_status_value)
+
         # Idempotent: if no change, do nothing
-        if previous_status == target_status:
+        if current_status == target_status_value:
             return {
                 "message": "No change - tenant already in target status",
                 "id": str(tenant.id),
                 "status": tenant.status,
             }
 
-        tenant.status = target_status
+        tenant.status = target_status_enum
         tenant.updated_at = datetime.utcnow()
 
-        if target_status == TenantStatus.ACTIVE:
+        if target_status_enum == TenantStatus.ACTIVE:
             tenant.verified = True
             tenant.verified_date = datetime.utcnow()
+
+        if target_status_enum == TenantStatus.PENDING_ACTIVATION:
+            tenant.approvals_required = max(int(getattr(tenant, "approvals_required", 2) or 2), 2)
+            tenant.approval_actors = []
 
         await self._engine.save(tenant)
 
@@ -371,17 +474,21 @@ class TenantManager:
         return {
             "message": "Tenant status updated",
             "id": str(tenant.id),
-            "status": tenant.status,
+            "status": self._normalized_status_value(tenant.status),
             "verified": tenant.verified,
             "verified_date": tenant.verified_date,
+            **self._approvals_summary(tenant),
         }
 
-    async def _post_status_change(self, tenant: db_tenant_model, previous_status: TenantStatus, actor: Optional[str] = None, actor_role: Optional[str] = None, reason: Optional[str] = None):
+    async def _post_status_change(self, tenant: db_tenant_model, previous_status: TenantStatus, actor: Optional[str] = None, actor_role: Optional[str] = None, reason: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None):
+        normalized_previous = self._normalized_status_value(previous_status)
+        normalized_current = self._normalized_status_value(tenant.status)
+
         # Persist audit record
         audit = TenantStatusAudit(
             tenant_id=str(tenant.id),
-            previous_status=previous_status,
-            new_status=tenant.status,
+            previous_status=TenantStatus(normalized_previous),
+            new_status=TenantStatus(normalized_current),
             actor=actor,
             actor_role=str(actor_role) if actor_role is not None else None,
             reason=reason,
@@ -389,6 +496,25 @@ class TenantManager:
         )
         try:
             await self._engine.save(audit)
+        except Exception:
+            pass
+
+        # Persist reusable/generic activity log
+        try:
+            await ActivityManager.get_instance().log_event(
+                module="tenant",
+                entity_type="tenant",
+                entity_id=str(tenant.id),
+                action="status_changed",
+                actor_id=str(getattr(actor, "id", "") or "") if hasattr(actor, "id") else None,
+                actor_username=actor,
+                actor_role=str(actor_role) if actor_role is not None else None,
+                previous_status=normalized_previous,
+                new_status=normalized_current,
+                reason=reason,
+                metadata=metadata or self._approvals_summary(tenant),
+                severity="info",
+            )
         except Exception:
             pass
 
@@ -400,36 +526,36 @@ class TenantManager:
                 return
 
             # Choose subject + body based on new status
-            if tenant.status == TenantStatus.PENDING_VERIFICATION:
-                subject = "Your account is awaiting verification"
+            if normalized_current == TenantStatus.PENDING_ACTIVATION.value:
+                subject = "Your account is pending activation"
                 lurlHeading = ""
                 url = ""
-                header_text = "Account Pending Verification"
-                body_text = "Your account is awaiting verification. We will review your details and notify you when verification is complete."
-            elif tenant.status == TenantStatus.ACTIVE:
+                header_text = "Account Pending Activation"
+                body_text = "Your account is pending activation. Two platform approvals are required before activation."
+            elif normalized_current == TenantStatus.ACTIVE.value:
                 subject = "Your account has been verified"
                 lurlHeading = ""
                 url = ""
                 header_text = "Account Verified"
                 body_text = "Your account has been verified and is now active. You can sign in and access services as normal."
-            elif tenant.status == TenantStatus.INACTIVE:
+            elif normalized_current == TenantStatus.INACTIVE.value:
                 subject = "Your account has been deactivated"
                 lurlHeading = ""
                 url = ""
                 header_text = "Account Deactivated"
                 body_text = "Your account has been deactivated by an administrator. If you believe this is in error, please contact support."
-            elif tenant.status == TenantStatus.BANNED:
+            elif normalized_current == TenantStatus.BANNED.value:
                 subject = "Your account has been banned"
                 lurlHeading = ""
                 url = ""
                 header_text = "Account Banned"
                 body_text = "Your account has been banned due to a policy violation. Contact support if you need more information."
             else:
-                subject = f"Tenant status changed to {tenant.status}"
+                subject = f"Tenant status changed to {normalized_current}"
                 lurlHeading = ""
                 url = ""
-                header_text = f"Tenant Status: {tenant.status}"
-                body_text = f"Your tenant status has been updated to {tenant.status}."
+                header_text = f"Tenant Status: {normalized_current}"
+                body_text = f"Your tenant status has been updated to {normalized_current}."
 
             html_content = constant.mail_template.render(
                 username=actor or "",
@@ -489,7 +615,7 @@ class TenantManager:
         filtered_docs: List[Dict[str, Any]] = []
         for doc in docs:
             current_type = str(doc.get("tenant_type") or "").strip().lower()
-            current_status = str(doc.get("status") or "").strip().lower()
+            current_status = self._normalized_status_value(doc.get("status"))
             profile = doc.get("profile") or {}
             display_name = self._extract_tenant_name(profile)
 
@@ -540,14 +666,21 @@ class TenantManager:
         data = []
         for doc in page_docs:
             profile = doc.get("profile") or {}
+            approval_actors = list(dict.fromkeys(doc.get("approval_actors") or []))
+            approvals_required = int(doc.get("approvals_required") or 2)
+            approvals_done = len(approval_actors)
+            approvals_remaining = max(approvals_required - approvals_done, 0)
             data.append({
                 "id": str(doc.get("_id")),
                 "name": self._extract_tenant_name(profile),
                 "tenant_type": doc.get("tenant_type"),
-                "status": doc.get("status"),
+                "status": self._normalized_status_value(doc.get("status")),
                 "verified": bool(doc.get("verified", False)),
                 "subscription": bool(doc.get("subscription", False)),
                 "user_quota": int(doc.get("user_quota", 0) or 0),
+                "approvals_required": approvals_required,
+                "approvals_done": approvals_done,
+                "approvals_remaining": approvals_remaining,
                 "created_at": doc.get("created_at"),
                 "updated_at": doc.get("updated_at"),
                 "verified_date": doc.get("verified_date"),
@@ -621,7 +754,11 @@ class TenantManager:
             "subscription": tenant.subscription,
             "verified": tenant.verified,
             "user_quota": tenant.user_quota,
-            "status": tenant.status,
+            "status": self._normalized_status_value(tenant.status),
+            "approvals_required": self._approvals_summary(tenant)["approvals_required"],
+            "approvals_done": self._approvals_summary(tenant)["approvals_done"],
+            "approvals_remaining": self._approvals_summary(tenant)["approvals_remaining"],
+            "approval_actors": self._approvals_summary(tenant)["approval_actors"],
             "licenses": licenses,
             "iocs": iocs,
             "created_at": tenant.created_at,

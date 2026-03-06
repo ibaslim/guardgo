@@ -71,7 +71,7 @@
     </tbody>
   </table>
 </div>
-  <div class="flex items-center justify-between mt-6">
+  <div *ngIf="showPagination" class="flex items-center justify-between mt-6">
   <div class="text-sm text-gray-500 dark:text-gray-400">
     Page {{ page }} of {{ totalPages }}
   </div>

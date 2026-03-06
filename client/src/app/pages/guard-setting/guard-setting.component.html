@@ -169,7 +169,7 @@
                     <!-- Header -->
                     <div card-header>
                         <h3 class="font-semibold text-gray-800 dark:text-gray-200">
-                            {{ doc.documentType ? toTitleCase(doc.documentType) : ('Document ' + (i + 1)) }}
+                            {{ doc.documentType ? readableTitle(doc.documentType) : ('Document ' + (i + 1)) }}
 
                             <span *ngIf="i >= 2" class="text-sm font-normal text-gray-500 dark:text-gray-400">
                                 (Optional)

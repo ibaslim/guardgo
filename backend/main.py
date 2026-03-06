@@ -36,6 +36,12 @@ async def lifespan(p_app: FastAPI):
         await migrate_tenants()
     except Exception as e:
         print(f"Warning: Tenant migration failed: {e}")
+
+    try:
+        from migrations.scripts.migrate_tenant_pending_activation import migrate_tenant_pending_activation
+        await migrate_tenant_pending_activation()
+    except Exception as e:
+        print(f"Warning: Tenant pending activation migration failed: {e}")
     
     setup_admin(mongo_controller.get_instance().get_engine()).mount_to(p_app)
     app.include_router(interface)
