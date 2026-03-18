@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import FileResponse
-from orion.services.mongo_manager.shared_model.db_auth_models import is_super_admin_role
+from orion.services.mongo_manager.shared_model.db_auth_models import normalize_role_value, user_role
 
 
 
@@ -73,7 +73,7 @@ class ResourceManager:
 
     async def update_system_image(self, file: UploadFile, current_user):
         contents = await file.read()
-        if not is_super_admin_role(current_user.role):
+        if normalize_role_value(current_user.role) != user_role.ADMIN.value:
             return
 
         if len(contents) > 500 * 1024:
@@ -483,7 +483,7 @@ class ResourceManager:
 
     async def delete_system_image(self, current_user):
         image_path = self.SYSTEM_DIR / f"logo.png"
-        if not is_super_admin_role(current_user.role):
+        if normalize_role_value(current_user.role) != user_role.ADMIN.value:
             return {"system_image deletion": "failed"}
 
         if image_path.is_file():

@@ -53,7 +53,7 @@ async def upload_system_image(file: UploadFile, current_user=Depends(get_current
 @admin_routes.get(
     "/api/admin/platform-roles",
     summary="Get platform admin role options",
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
 async def get_platform_roles(_current_user=Depends(get_current_user)):
     labels = {
         user_role.OPS_ADMIN.value: "Ops Admin",
@@ -70,7 +70,7 @@ async def get_platform_roles(_current_user=Depends(get_current_user)):
 @admin_routes.get(
     "/api/admin/platform-users",
     summary="List platform admin users",
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
 async def list_platform_users(current_user=Depends(get_current_user)):
     return await AccountManager.get_instance().list_platform_admin_users(current_user)
 
@@ -78,7 +78,7 @@ async def list_platform_users(current_user=Depends(get_current_user)):
 @admin_routes.post(
     "/api/admin/platform-users",
     summary="Create platform admin user",
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
 async def create_platform_user(data: PlatformAdminCreateRequest, current_user=Depends(get_current_user)):
     return await AccountManager.get_instance().create_platform_admin_user(data, current_user)
 
@@ -86,7 +86,7 @@ async def create_platform_user(data: PlatformAdminCreateRequest, current_user=De
 @admin_routes.put(
     "/api/admin/platform-users/{user_id}",
     summary="Update platform admin user",
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
 async def update_platform_user(user_id: str, data: PlatformAdminUpdateRequest, current_user=Depends(get_current_user)):
     return await AccountManager.get_instance().update_platform_admin_user(user_id, data, current_user)
 
@@ -94,7 +94,7 @@ async def update_platform_user(user_id: str, data: PlatformAdminUpdateRequest, c
 @admin_routes.post(
     "/api/admin/platform-users/{user_id}/resend-invite",
     summary="Resend platform admin invite",
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
 async def resend_platform_user_invite(user_id: str, current_user=Depends(get_current_user)):
     return await AccountManager.get_instance().resend_platform_admin_invite(user_id, current_user)
 
@@ -102,7 +102,7 @@ async def resend_platform_user_invite(user_id: str, current_user=Depends(get_cur
 @admin_routes.post(
     "/api/admin/platform-users/{user_id}/delete",
     summary="Soft delete platform admin user",
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
 async def soft_delete_platform_user(
     user_id: str,
     data: PlatformAdminStatusReasonRequest,
@@ -114,7 +114,7 @@ async def soft_delete_platform_user(
 @admin_routes.post(
     "/api/admin/platform-users/{user_id}/restore",
     summary="Restore soft-deleted platform admin user",
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
 async def restore_platform_user(user_id: str, current_user=Depends(get_current_user)):
     return await AccountManager.get_instance().restore_platform_admin_user(user_id, current_user)
 
@@ -122,6 +122,6 @@ async def restore_platform_user(user_id: str, current_user=Depends(get_current_u
 @admin_routes.delete(
     "/api/admin/platform-users/{user_id}/permanent",
     summary="Permanently delete soft-deleted platform admin user",
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))], )
+    dependencies=[Depends(role_required([user_role.ADMIN]))], )
 async def permanently_delete_platform_user(user_id: str, current_user=Depends(get_current_user)):
     return await AccountManager.get_instance().permanently_delete_platform_admin_user(user_id, current_user)

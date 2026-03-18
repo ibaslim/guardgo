@@ -204,7 +204,7 @@ export class TenantsComponent implements OnInit {
   isSuperAdmin(): boolean {
     const rawRole = String(this.appService.userSessionData()?.user?.role || '').trim().toLowerCase();
     const role = rawRole.includes('.') ? (rawRole.split('.').pop() || '') : rawRole;
-    return role === 'super_admin';
+    return role === 'admin';
   }
 
   confirmChange(action: 'verify' | 'deactivate' | 'ban') {

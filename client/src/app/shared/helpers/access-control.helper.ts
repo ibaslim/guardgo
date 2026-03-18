@@ -9,7 +9,8 @@ export type AccessPolicy =
   | 'platform'
   | 'tenantSettings'
   | 'tenantManagement'
-  | 'platformUserManagement';
+  | 'platformUserManagement'
+  | 'billingConfigurations';
 
 type AccessPolicyRule = {
   metadataKey?: keyof RoleMetadataModel;
@@ -20,11 +21,13 @@ const policyRules: Record<AccessPolicy, AccessPolicyRule> = {
   platform: { metadataKey: 'platformRoles' },
   tenantSettings: { metadataKey: 'tenantSettingsRoles' },
   tenantManagement: { metadataKey: 'tenantManagementRoles' },
-  platformUserManagement: { allowedRoles: ['super_admin'] }
+  platformUserManagement: { allowedRoles: ['admin'] },
+  billingConfigurations: { allowedRoles: ['admin'] }
 };
 
 const routePolicyMap: Record<string, AccessPolicy> = {
-  '/dashboard/admin-users': 'platformUserManagement'
+  '/dashboard/admin-users': 'platformUserManagement',
+  '/dashboard/billing-configurations': 'billingConfigurations'
 };
 
 export const normalizeRole = (role: string | undefined | null): string => {

@@ -84,8 +84,8 @@ async def get_client_metadata():
     operation_id="getRoleMetadata",
     response_description="Platform and tenant role groups for UI guards.")
 async def get_role_metadata():
-    management_roles = sorted([user_role.ADMIN.value, user_role.SUPER_ADMIN.value, user_role.COMPLIANCE_ADMIN.value])
-    platform_user_management_roles = [user_role.SUPER_ADMIN.value]
+    management_roles = sorted([user_role.ADMIN.value, user_role.COMPLIANCE_ADMIN.value])
+    platform_user_management_roles = [user_role.ADMIN.value]
     return {
         "platformRoles": sorted(list(PLATFORM_ADMIN_ROLES)),
         "tenantSettingsRoles": sorted(list(TENANT_ADMIN_ROLES)),

@@ -55,8 +55,8 @@ class mongo_controller:
         await user_collection.create_index(
             [("role", 1)],
             unique=True,
-            partialFilterExpression={"role": user_role.SUPER_ADMIN.value},
-            name="unique_super_admin_role", )
+            partialFilterExpression={"role": user_role.ADMIN.value},
+            name="unique_admin_role", )
 
         await user_collection.create_index(
             [("tenant_uuid", 1)],
@@ -69,17 +69,9 @@ class mongo_controller:
     async def migrate_legacy_admin_role(self):
         user_collection = self.__engine.get_collection(db_user_account)
 
-        existing_super = await user_collection.find_one({"role": user_role.SUPER_ADMIN.value})
-        if existing_super:
-            return
-
-        legacy_admin = await user_collection.find_one({"role": user_role.ADMIN.value})
-        if not legacy_admin:
-            return
-
-        await user_collection.update_one(
-            {"_id": legacy_admin["_id"]},
-            {"$set": {"role": user_role.SUPER_ADMIN.value}}
+        await user_collection.update_many(
+            {"role": "super_admin"},
+            {"$set": {"role": user_role.ADMIN.value}}
         )
 
     def get_engine(self) -> AIOEngine:
