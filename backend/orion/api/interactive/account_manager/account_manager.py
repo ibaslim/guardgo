@@ -72,7 +72,7 @@ class AccountManager:
             engine = mongo_controller.get_instance().get_engine()
 
             # Only admins of the same tenant can create users
-            allowed_roles = [user_role.ADMIN, user_role.SUPER_ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]
+            allowed_roles = [user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]
             if current_user.role not in allowed_roles:
                 raise HTTPException(status_code=403, detail="Not allowed")
 

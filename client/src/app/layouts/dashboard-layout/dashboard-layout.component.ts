@@ -33,13 +33,13 @@ export class DashboardLayoutComponent implements OnInit {
       label: 'Tenants',
       route: '/dashboard/tenants',
       icon: 'users',
-      roles: ['admin', 'super_admin']
+      roles: ['admin']
     },
     {
       label: 'Billing Configurations',
       route: '/dashboard/billing-configurations',
       icon: 'settings',
-      roles: ['super_admin']
+      roles: ['admin']
     },
     {
       label: 'Settings',
@@ -50,7 +50,7 @@ export class DashboardLayoutComponent implements OnInit {
 
   get isAdmin(): boolean {
     const session = this.appService.userSessionData();
-    return !!(session && session.user && ['admin', 'super_admin'].includes(session.user.role));
+    return !!(session && session.user && session.user.role === 'admin');
   }
 
   constructor(

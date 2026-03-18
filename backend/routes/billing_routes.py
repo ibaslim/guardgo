@@ -15,9 +15,9 @@ billing_routes = APIRouter(
 @billing_routes.get(
     "/api/billing/guards",
     summary="Get guard default pay rates",
-    description="Returns default pay rates by province for guards (super-admin only).",
+    description="Returns default pay rates by province for guards (admin only).",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))],
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
 async def get_guard_rates():
     return await BillingManager.get_instance().get_guard_rates()
@@ -26,9 +26,9 @@ async def get_guard_rates():
 @billing_routes.put(
     "/api/billing/guards",
     summary="Save guard default pay rates",
-    description="Upsert default pay rates by province for guards (super-admin only).",
+    description="Upsert default pay rates by province for guards (admin only).",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))],
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
 async def save_guard_rates(
     payload: List[Dict[str, Any]],
@@ -40,9 +40,9 @@ async def save_guard_rates(
 @billing_routes.get(
     "/api/billing/providers/list",
     summary="List active service providers",
-    description="Returns name + id for each active service provider (super-admin only).",
+    description="Returns name + id for each active service provider (admin only).",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))],
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
 async def list_active_providers():
     return await BillingManager.get_instance().list_active_providers()
@@ -51,9 +51,9 @@ async def list_active_providers():
 @billing_routes.get(
     "/api/billing/providers/{provider_id}",
     summary="Get provider pay rates",
-    description="Returns pay rates by province for a specific service provider (super-admin only).",
+    description="Returns pay rates by province for a specific service provider (admin only).",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))],
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
 async def get_provider_rates(
     provider_id: str = Path(..., description="Service provider tenant ObjectId"),
@@ -64,9 +64,9 @@ async def get_provider_rates(
 @billing_routes.put(
     "/api/billing/providers/{provider_id}",
     summary="Save provider pay rates",
-    description="Upsert pay rates by province for a specific service provider (super-admin only).",
+    description="Upsert pay rates by province for a specific service provider (admin only).",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.SUPER_ADMIN]))],
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
 async def save_provider_rates(
     payload: List[Dict[str, Any]],

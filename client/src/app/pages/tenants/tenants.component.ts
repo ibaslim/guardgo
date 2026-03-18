@@ -183,7 +183,7 @@ export class TenantsComponent implements OnInit {
 
   isAdmin(): boolean {
     const session = this.appService.userSessionData();
-    return !!(session && session.user && ['admin', 'super_admin'].includes(session.user.role));
+    return !!(session && session.user && session.user.role === 'admin');
   }
 
   confirmChange(action: 'verify' | 'deactivate' | 'ban') {

@@ -15,13 +15,12 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class user_role(str, Enum):
     ADMIN = "admin"
-    SUPER_ADMIN = "super_admin"
     GUARD_ADMIN = "guard_admin"
     CLIENT_ADMIN = "client_admin"
     SP_ADMIN = "sp_admin"
 
 
-PLATFORM_ADMIN_ROLES = (user_role.ADMIN, user_role.SUPER_ADMIN)
+PLATFORM_ADMIN_ROLES = (user_role.ADMIN,)
 PLATFORM_ADMIN_ROLE_VALUES = tuple(role.value for role in PLATFORM_ADMIN_ROLES)
 
 
@@ -74,6 +73,19 @@ class db_user_account(Model):
     @staticmethod
     def hash_password(password: str) -> str:
         return pwd_context.hash(str(password))
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_role(cls, value):
+        if isinstance(value, user_role):
+            return value
+        if isinstance(value, str):
+            try:
+                return user_role(value)
+            except ValueError:
+                # Legacy/unknown role values are treated as platform admin.
+                return user_role.ADMIN
+        return value
 
     @field_validator("username")
     @classmethod

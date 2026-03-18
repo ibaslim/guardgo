@@ -7,7 +7,7 @@ export const billingConfigurationsGuard: CanActivateFn = (_route, _state) => {
   const router = inject(Router);
 
   const role = appService.userSessionData()?.user?.role ?? '';
-  if (role === 'super_admin') {
+  if (role === 'admin') {
     return true;
   }
   return router.createUrlTree(['/dashboard']);
