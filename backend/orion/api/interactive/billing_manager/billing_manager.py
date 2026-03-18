@@ -4,14 +4,12 @@ from typing import List, Dict, Any
 
 from bson import ObjectId
 from fastapi import HTTPException
-from starlette import status
 
+from orion.api.interactive.activity_manager.activity_manager import ActivityManager
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_billing_model import (
     BillingRate,
-    BillingRateAudit,
 )
-from orion.services.mongo_manager.shared_model.db_auth_models import user_role
 from orion.services.mongo_manager.shared_model.db_tenant_model import (
     db_tenant_model,
     TenantStatus,
@@ -51,6 +49,28 @@ class BillingManager:
                 return value.strip()
         return ""
 
+    @staticmethod
+    def _region_label(region_code: str) -> str:
+        for region in CANADIAN_PROVINCES:
+            if region["value"] == region_code:
+                return region["label"]
+        return region_code
+
+    @staticmethod
+    def _has_rate_change(
+        prev_std: float,
+        prev_wkd: float,
+        prev_hol: float,
+        new_std: float,
+        new_wkd: float,
+        new_hol: float,
+    ) -> bool:
+        return (
+            prev_std != new_std
+            or prev_wkd != new_wkd
+            or prev_hol != new_hol
+        )
+
     # ------------------------------------------------------------------
     # Guard rates – scope="guard"
     # ------------------------------------------------------------------
@@ -82,8 +102,10 @@ class BillingManager:
         """Upsert guard-scope rates for all provinces in the payload."""
         valid_codes = {p["value"] for p in CANADIAN_PROVINCES}
         now = datetime.utcnow()
+        actor_id = str(getattr(current_user, "id", "") or "") or None
         actor = getattr(current_user, "username", None)
         actor_role = str(getattr(current_user, "role", None))
+        updated_count = 0
 
         for row in payload:
             code = row.get("region_code", "")
@@ -99,19 +121,12 @@ class BillingManager:
                 (BillingRate.scope == "guard") & (BillingRate.region_code == code),
             )
 
-            # Write audit record
-            await self._write_audit(
-                scope="guard",
-                region_code=code,
-                prev_std=existing.standard_rate if existing else 0.0,
-                prev_wkd=existing.weekend_rate if existing else 0.0,
-                prev_hol=existing.holiday_rate if existing else 0.0,
-                new_std=std,
-                new_wkd=wkd,
-                new_hol=hol,
-                actor=actor,
-                actor_role=actor_role,
-            )
+            prev_std = existing.standard_rate if existing else 0.0
+            prev_wkd = existing.weekend_rate if existing else 0.0
+            prev_hol = existing.holiday_rate if existing else 0.0
+
+            if not self._has_rate_change(prev_std, prev_wkd, prev_hol, std, wkd, hol):
+                continue
 
             if existing:
                 existing.standard_rate = std
@@ -132,7 +147,28 @@ class BillingManager:
                     updated_by=actor,
                 ))
 
-        return {"message": "Guard rates saved", "count": len(payload)}
+            await self._write_activity_log(
+                entity_id="guard-default-rates",
+                entity_name="Guard Default Rates",
+                scope="guard",
+                region_code=code,
+                prev_std=prev_std,
+                prev_wkd=prev_wkd,
+                prev_hol=prev_hol,
+                new_std=std,
+                new_wkd=wkd,
+                new_hol=hol,
+                actor_id=actor_id,
+                actor=actor,
+                actor_role=actor_role,
+            )
+            updated_count += 1
+
+        return {
+            "message": "Guard rates saved",
+            "count": len(payload),
+            "updated_count": updated_count,
+        }
 
     # ------------------------------------------------------------------
     # Provider list
@@ -204,8 +240,11 @@ class BillingManager:
 
         valid_codes = {p["value"] for p in CANADIAN_PROVINCES}
         now = datetime.utcnow()
+        actor_id = str(getattr(current_user, "id", "") or "") or None
         actor = getattr(current_user, "username", None)
         actor_role = str(getattr(current_user, "role", None))
+        provider_name = self._extract_tenant_name(getattr(tenant, "profile", None) or {}) or provider_id
+        updated_count = 0
 
         for row in payload:
             code = row.get("region_code", "")
@@ -221,18 +260,12 @@ class BillingManager:
                 (BillingRate.scope == provider_id) & (BillingRate.region_code == code),
             )
 
-            await self._write_audit(
-                scope=provider_id,
-                region_code=code,
-                prev_std=existing.standard_rate if existing else 0.0,
-                prev_wkd=existing.weekend_rate if existing else 0.0,
-                prev_hol=existing.holiday_rate if existing else 0.0,
-                new_std=std,
-                new_wkd=wkd,
-                new_hol=hol,
-                actor=actor,
-                actor_role=actor_role,
-            )
+            prev_std = existing.standard_rate if existing else 0.0
+            prev_wkd = existing.weekend_rate if existing else 0.0
+            prev_hol = existing.holiday_rate if existing else 0.0
+
+            if not self._has_rate_change(prev_std, prev_wkd, prev_hol, std, wkd, hol):
+                continue
 
             if existing:
                 existing.standard_rate = std
@@ -253,14 +286,37 @@ class BillingManager:
                     updated_by=actor,
                 ))
 
-        return {"message": "Provider rates saved", "count": len(payload)}
+            await self._write_activity_log(
+                entity_id=provider_id,
+                entity_name=provider_name,
+                scope=provider_id,
+                region_code=code,
+                prev_std=prev_std,
+                prev_wkd=prev_wkd,
+                prev_hol=prev_hol,
+                new_std=std,
+                new_wkd=wkd,
+                new_hol=hol,
+                actor_id=actor_id,
+                actor=actor,
+                actor_role=actor_role,
+            )
+            updated_count += 1
+
+        return {
+            "message": "Provider rates saved",
+            "count": len(payload),
+            "updated_count": updated_count,
+        }
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _write_audit(
+    async def _write_activity_log(
         self,
+        entity_id: str,
+        entity_name: str,
         scope: str,
         region_code: str,
         prev_std: float,
@@ -269,23 +325,37 @@ class BillingManager:
         new_std: float,
         new_wkd: float,
         new_hol: float,
+        actor_id: str | None,
         actor: str | None,
         actor_role: str | None,
     ):
         try:
-            audit = BillingRateAudit(
-                scope=scope,
-                region_code=region_code,
-                previous_standard_rate=prev_std,
-                previous_weekend_rate=prev_wkd,
-                previous_holiday_rate=prev_hol,
-                new_standard_rate=new_std,
-                new_weekend_rate=new_wkd,
-                new_holiday_rate=new_hol,
-                actor=actor,
+            await ActivityManager.get_instance().log_event(
+                module="billing",
+                entity_type="billing_rate",
+                entity_id=entity_id,
+                action="rate_changed",
+                actor_id=actor_id,
+                actor_username=actor,
                 actor_role=actor_role,
-                created_at=datetime.utcnow(),
+                metadata={
+                    "entity_name": entity_name,
+                    "scope": scope,
+                    "region_code": region_code,
+                    "region_label": self._region_label(region_code),
+                    "currency": "CAD",
+                    "previous_rates": {
+                        "standard_rate": prev_std,
+                        "weekend_rate": prev_wkd,
+                        "holiday_rate": prev_hol,
+                    },
+                    "new_rates": {
+                        "standard_rate": new_std,
+                        "weekend_rate": new_wkd,
+                        "holiday_rate": new_hol,
+                    },
+                },
+                severity="info",
             )
-            await self._engine.save(audit)
         except Exception:
             pass

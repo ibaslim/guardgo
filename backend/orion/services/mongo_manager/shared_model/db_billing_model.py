@@ -1,7 +1,7 @@
 from typing import Optional
 from datetime import datetime
 
-from odmantic import Model, Field
+from odmantic import Model
 
 
 class BillingRate(Model):
@@ -18,18 +18,3 @@ class BillingRate(Model):
     currency: str = "CAD"
     updated_at: Optional[datetime] = None
     updated_by: Optional[str] = None
-
-
-class BillingRateAudit(Model):
-    """Immutable audit record written every time billing rates are saved."""
-    scope: str = ""
-    region_code: str = ""
-    previous_standard_rate: float = 0.0
-    previous_weekend_rate: float = 0.0
-    previous_holiday_rate: float = 0.0
-    new_standard_rate: float = 0.0
-    new_weekend_rate: float = 0.0
-    new_holiday_rate: float = 0.0
-    actor: Optional[str] = None
-    actor_role: Optional[str] = None
-    created_at: Optional[datetime] = Field(default=None)
