@@ -13,7 +13,7 @@ from orion.api.interactive.account_manager.models.user_param_model import user_p
 from orion.api.interactive.account_manager.models.user_model import user_model
 from orion.api.interactive.tenant_manager.models.tenant_param_model import tenant_param_model
 from orion.services.mongo_manager.mongo_controller import mongo_controller
-from orion.services.mongo_manager.shared_model.db_auth_models import db_user_account, UserStatus, LicenseName, user_role
+from orion.services.mongo_manager.shared_model.db_auth_models import db_user_account, UserStatus, LicenseName, user_role, is_platform_admin_role
 from orion.services.encryption_manager.key_manager import KeyManager
 from orion.constants.constant import CONSTANTS
 from orion.services.mongo_manager.shared_model.db_keys import db_keys
@@ -43,7 +43,7 @@ class AccountManager:
         return AccountManager.__instance
 
     async def get_all_users(self, current_user) -> List[user_param_model]:
-        if current_user.role == "admin" or LicenseName.MAINTAINER in (current_user.licenses or []):
+        if is_platform_admin_role(current_user.role) or LicenseName.MAINTAINER in (current_user.licenses or []):
             tenant_uuid = current_user.tenant_uuid
             # Use raw collection to avoid odmantic parse errors on legacy records
             collection = self._engine.get_collection(db_user_account)
@@ -72,7 +72,7 @@ class AccountManager:
             engine = mongo_controller.get_instance().get_engine()
 
             # Only admins of the same tenant can create users
-            allowed_roles = [user_role.ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]
+            allowed_roles = [user_role.ADMIN, user_role.SUPER_ADMIN, user_role.CLIENT_ADMIN, user_role.GUARD_ADMIN, user_role.SP_ADMIN]
             if current_user.role not in allowed_roles:
                 raise HTTPException(status_code=403, detail="Not allowed")
 
@@ -123,7 +123,7 @@ class AccountManager:
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
 
-        if user.role in ["admin"]:
+        if is_platform_admin_role(user.role):
             raise HTTPException(status_code=401, detail="This user type cannot be deleted")
 
         if current_user.licenses.__contains__(LicenseName.MAINTAINER):
@@ -154,7 +154,7 @@ class AccountManager:
         else:
             raise HTTPException(status_code=401, detail="You are not allowed to update this user")
 
-        if user.role in [user_role.ADMIN]:
+        if is_platform_admin_role(user.role):
             raise HTTPException(status_code=401, detail="This user type cannot be updated")
 
         if request.status == UserStatus.DISABLE:

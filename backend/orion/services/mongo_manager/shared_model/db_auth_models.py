@@ -15,9 +15,22 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class user_role(str, Enum):
     ADMIN = "admin"
+    SUPER_ADMIN = "super_admin"
     GUARD_ADMIN = "guard_admin"
     CLIENT_ADMIN = "client_admin"
     SP_ADMIN = "sp_admin"
+
+
+PLATFORM_ADMIN_ROLES = (user_role.ADMIN, user_role.SUPER_ADMIN)
+PLATFORM_ADMIN_ROLE_VALUES = tuple(role.value for role in PLATFORM_ADMIN_ROLES)
+
+
+def is_platform_admin_role(role: Any) -> bool:
+    if role is None:
+        return False
+    if isinstance(role, user_role):
+        return role in PLATFORM_ADMIN_ROLES
+    return str(role) in PLATFORM_ADMIN_ROLE_VALUES
 
 
 class UserStatus(str, Enum):
@@ -69,9 +82,9 @@ class db_user_account(Model):
         role = info.data.get("role")
         username_pattern = r"^[A-Za-z][A-Za-z0-9_-]{7,19}$"
         # Allow legacy short admin usernames like "admin" to keep existing accounts working
-        if value == "admin" or role == user_role.ADMIN:
+        if value == "admin" or is_platform_admin_role(role):
             return value
-        if role != user_role.ADMIN:
+        if not is_platform_admin_role(role):
             if not re.match(username_pattern, value):
                 raise ValueError("Username must be 8-20 characters, start with letter")
             if any(op in value for op in ["$", "{", "}"]):
@@ -130,7 +143,7 @@ class db_user_account(Model):
         return pwd_context.verify(plain_password, hashed_password)
 
     def is_admin(self) -> bool:
-        return self.role == user_role.ADMIN
+        return is_platform_admin_role(self.role)
 
     def is_tenant_admin(self) -> bool:
         return self.role in [user_role.GUARD_ADMIN, user_role.CLIENT_ADMIN, user_role.SP_ADMIN]

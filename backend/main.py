@@ -16,6 +16,7 @@ from orion.services.mongo_manager.mongo_controller import mongo_controller
 from routes.admin_routes import admin_routes
 from routes.api_routes import api_routes
 from routes.auth_routes import auth_router
+from routes.billing_routes import billing_routes
 from routes.public_api_routes import public_routes
 from routes.tenant_routes import tenant_routes
 
@@ -62,6 +63,7 @@ def custom_swagger_ui():
 configure_swagger(app)
 app.include_router(auth_router, include_in_schema=True)
 app.include_router(admin_routes, include_in_schema=True)
+app.include_router(billing_routes, include_in_schema=True)
 app.include_router(public_routes, include_in_schema=True)
 app.include_router(tenant_routes, include_in_schema=True)
 app.include_router(api_routes, include_in_schema=True)

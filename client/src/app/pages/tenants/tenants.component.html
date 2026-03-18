@@ -140,7 +140,7 @@
 
   <div drawer-footer>
     <div class="flex justify-end items-center gap-2">
-      <ng-container *ngIf="appService.userSessionData().user.role === 'admin'">
+      <ng-container *ngIf="['admin', 'super_admin'].includes(appService.userSessionData().user.role)">
         <app-button *ngIf="tenantDetail?.status !== 'active'" size="sm" type="primary" [label]="(tenantDetail?.status === 'inactive' || tenantDetail?.status === 'banned') ? 'Re-activate' : 'Verify'"
           [customClass]="'px-3 py-1 text-sm'" ariaLabel="Verify tenant" (pressed)="confirmChange('verify')"></app-button>
         <app-button *ngIf="tenantDetail?.status === 'active'" size="sm" type="warning" label="Deactivate"
