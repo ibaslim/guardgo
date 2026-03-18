@@ -14,7 +14,7 @@ from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_keys import db_keys
 from orion.services.mongo_manager.shared_model.db_tenant_model import IocCategory, db_tenant_model, TenantRequest, TenantStatus, TenantType, TenantPayload
 from orion.api.interactive.tenant_manager.models.tenant_profile_update import TenantProfileUpdate
-from orion.services.mongo_manager.shared_model.db_auth_models import UserStatus, db_user_account, user_role, is_super_admin_role
+from orion.services.mongo_manager.shared_model.db_auth_models import UserStatus, db_user_account, user_role, is_platform_admin_role, normalize_role_value
 from orion.services.encryption_manager.key_manager import KeyManager
 from orion.constants.constant import CONSTANTS
 from orion.constants import constant
@@ -122,7 +122,7 @@ class TenantManager:
 
     async def update_tenant(self, data: TenantRequest, current_user):
 
-        if is_super_admin_role(current_user.role):
+        if normalize_role_value(current_user.role) == user_role.ADMIN.value:
             tenant_id = data.id
         elif current_user.licenses == ["maintainer"] and current_user.tenant_uuid == data.id:
             tenant_id = data.id
@@ -184,10 +184,10 @@ class TenantManager:
                 pass
 
         allowed_licenses = set(data.licenses or [])
-        if "maintainer" in allowed_licenses and not is_super_admin_role(current_user.role):
+        if "maintainer" in allowed_licenses and normalize_role_value(current_user.role) != user_role.ADMIN.value:
             raise HTTPException(status_code=401, detail="Only admin can assign maintainer license")
 
-        if is_super_admin_role(current_user.role):
+        if normalize_role_value(current_user.role) == user_role.ADMIN.value:
             users = await self._engine.find(db_user_account, db_user_account.tenant_uuid == tenant_id)
             for u in users:
                 if "maintainer" in (u.licenses or []):
@@ -251,7 +251,7 @@ class TenantManager:
         # Role guard: Admin can update any; domain admins can update their domain type only
         role = getattr(current_user, "role", None)
         allowed = False
-        if role == user_role.ADMIN:
+        if is_platform_admin_role(role):
             allowed = True
         else:
             if tenant.tenant_type == TenantType.GUARD and role == user_role.GUARD_ADMIN:
@@ -297,7 +297,7 @@ class TenantManager:
 
             # Role guard: only ADMIN or matching domain admin
             role = getattr(current_user, "role", None)
-            allowed = role == user_role.ADMIN or (
+            allowed = is_platform_admin_role(role) or (
                 tenant.tenant_type == TenantType.GUARD and role == user_role.GUARD_ADMIN or
                 tenant.tenant_type == TenantType.CLIENT and role == user_role.CLIENT_ADMIN or
                 tenant.tenant_type == TenantType.SERVICE_PROVIDER and role == user_role.SP_ADMIN
@@ -832,7 +832,7 @@ class TenantManager:
             if tenant.is_default == False and tenant.user_quota is not None and (users_count + 1) > tenant.user_quota:
                 raise HTTPException(status_code=400, detail="User allocated quota exceeded")
 
-            if data.role in ["demo"] and not is_super_admin_role(current_user.role):
+            if data.role in ["demo"] and normalize_role_value(current_user.role) != user_role.ADMIN.value:
 
                 raise HTTPException(status_code=401, detail="You are not allowed to manage this user")
 
@@ -843,7 +843,7 @@ class TenantManager:
 
             requested = set(data.licenses or [])
 
-            if requested and not requested.issubset(tenant_allowed) and not is_super_admin_role(current_user.role):
+            if requested and not requested.issubset(tenant_allowed) and normalize_role_value(current_user.role) != user_role.ADMIN.value:
                 raise HTTPException(status_code=400, detail="User assigned license not allowed for this tenant")
 
             users_count = await engine.count(db_user_account, db_user_account.tenant_uuid == tenant_uuid)

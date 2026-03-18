@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { AuthGuard } from './shared/guards/auth-guard.guard';
 import { onboardingGuard } from './shared/guards/onboarding.guard';
+import { billingConfigurationsGuard } from './shared/guards/billing-configurations.guard';
 import { LoginComponent } from './pages/login/login.component';
 import { DashboardComponent } from './pages/dashboard/dashboard.component';
 import { DashboardLayoutComponent } from './layouts/dashboard-layout/dashboard-layout.component';
@@ -130,6 +131,11 @@ export const routes: Routes = [
         path: 'tenants',
         loadComponent: () => import('./pages/tenants').then(m => m.TenantsComponent),
         canActivate: [onboardingGuard]
+      },
+      {
+        path: 'billing-configurations',
+        loadComponent: () => import('./pages/billing-configurations').then(m => m.BillingConfigurationsComponent),
+        canActivate: [billingConfigurationsGuard]
       },
       {
         path: 'onboarding',

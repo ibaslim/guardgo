@@ -15,7 +15,6 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class user_role(str, Enum):
     ADMIN = "admin"
-    SUPER_ADMIN = "super_admin"
     OPS_ADMIN = "ops_admin"
     SUPPORT_ADMIN = "support_admin"
     COMPLIANCE_ADMIN = "compliance_admin"
@@ -27,7 +26,6 @@ class user_role(str, Enum):
 
 PLATFORM_ADMIN_ROLES: Set[str] = {
     user_role.ADMIN.value,
-    user_role.SUPER_ADMIN.value,
     user_role.OPS_ADMIN.value,
     user_role.SUPPORT_ADMIN.value,
     user_role.COMPLIANCE_ADMIN.value,
@@ -52,7 +50,6 @@ TENANT_ADMIN_ROLES: Set[str] = {
 
 ROLE_PERMISSIONS: Dict[str, Set[str]] = {
     user_role.ADMIN.value: {"*"},
-    user_role.SUPER_ADMIN.value: {"*"},
     user_role.OPS_ADMIN.value: {
         "tenant:read", "tenant:write", "tenant:status", "platform_admin:read"
     },
@@ -76,11 +73,10 @@ def normalize_role_value(role: str | user_role | None) -> str:
         return ""
     if isinstance(role, user_role):
         return role.value
-    return str(role)
-
-
-def is_super_admin_role(role: str | user_role | None) -> bool:
-    return normalize_role_value(role) in {user_role.SUPER_ADMIN.value, user_role.ADMIN.value}
+    value = str(role)
+    if value == "super_admin":
+        return user_role.ADMIN.value
+    return value
 
 
 def is_platform_admin_role(role: str | user_role | None) -> bool:
@@ -143,6 +139,19 @@ class db_user_account(Model):
     def hash_password(password: str) -> str:
         return pwd_context.hash(str(password))
 
+    @field_validator("role", mode="before")
+    @classmethod
+    def normalize_role(cls, value):
+        if isinstance(value, user_role):
+            return value
+        if isinstance(value, str):
+            try:
+                return user_role(value)
+            except ValueError:
+                # Legacy/unknown role values are treated as platform admin.
+                return user_role.ADMIN
+        return value
+
     @field_validator("username")
     @classmethod
     def validate_username(cls, value: str, info: FieldValidationInfo) -> str:
@@ -150,9 +159,9 @@ class db_user_account(Model):
         role = info.data.get("role")
         username_pattern = r"^[A-Za-z][A-Za-z0-9_-]{7,19}$"
         # Allow legacy short admin usernames like "admin" to keep existing accounts working
-        if value == "admin" or role in [user_role.ADMIN, user_role.SUPER_ADMIN]:
+        if value == "admin" or is_platform_admin_role(role):
             return value
-        if role not in [user_role.ADMIN, user_role.SUPER_ADMIN]:
+        if not is_platform_admin_role(role):
             if not re.match(username_pattern, value):
                 raise ValueError("Username must be 8-20 characters, start with letter")
             if any(op in value for op in ["$", "{", "}"]):

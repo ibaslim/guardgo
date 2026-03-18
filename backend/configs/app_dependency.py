@@ -29,13 +29,6 @@ async def get_current_status(token: str = Depends(oauth2_scheme)):
 def role_required(required_roles: list[user_role]):
     def _matches(required: user_role, actual_role_value: str) -> bool:
         required_value = normalize_role_value(required)
-
-        if required_value == user_role.ADMIN.value:
-            return actual_role_value in [user_role.ADMIN.value, user_role.SUPER_ADMIN.value]
-
-        if required_value == user_role.SUPER_ADMIN.value:
-            return actual_role_value in [user_role.SUPER_ADMIN.value, user_role.ADMIN.value]
-
         return actual_role_value == required_value
 
     async def verify_role(role: user_role = Depends(get_current_role)):

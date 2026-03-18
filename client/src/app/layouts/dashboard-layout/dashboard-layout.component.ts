@@ -51,6 +51,12 @@ export class DashboardLayoutComponent implements OnInit {
       policy: 'platformUserManagement'
     },
     {
+      label: 'Billing Configurations',
+      route: '/dashboard/billing-configurations',
+      icon: 'settings',
+      roles: ['admin']
+    },
+    {
       label: 'Settings',
       route: '/dashboard/settings',
       icon: 'settings',

@@ -26,8 +26,8 @@ from orion.services.mongo_manager.shared_model.db_auth_models import (
     UserStatus,
     LicenseName,
     user_role,
-    is_super_admin_role,
     is_platform_admin_role,
+    normalize_role_value,
 )
 from orion.services.encryption_manager.key_manager import KeyManager
 from orion.services.mail_manager.mail_manager import mail_manager
@@ -143,7 +143,7 @@ class AccountManager:
             user.deleted_by = None
 
     async def get_all_users(self, current_user) -> List[user_param_model]:
-        if is_super_admin_role(current_user.role) or LicenseName.MAINTAINER in (current_user.licenses or []):
+        if normalize_role_value(current_user.role) == user_role.ADMIN.value or LicenseName.MAINTAINER in (current_user.licenses or []):
             tenant_uuid = current_user.tenant_uuid
             # Use raw collection to avoid odmantic parse errors on legacy records
             collection = self._engine.get_collection(db_user_account)
@@ -219,14 +219,13 @@ class AccountManager:
             raise HTTPException(status_code=400, detail=str(e) or "Error creating user")
 
     async def list_platform_admin_users(self, current_user):
-        if not is_super_admin_role(current_user.role):
+        if normalize_role_value(current_user.role) != user_role.ADMIN.value:
             raise HTTPException(status_code=403, detail="Not allowed")
 
         collection = self._engine.get_collection(db_user_account)
         docs = await collection.find({
             "role": {"$in": [
                 user_role.ADMIN.value,
-                user_role.SUPER_ADMIN.value,
                 user_role.OPS_ADMIN.value,
                 user_role.SUPPORT_ADMIN.value,
                 user_role.COMPLIANCE_ADMIN.value,
@@ -255,7 +254,7 @@ class AccountManager:
         return rows
 
     async def create_platform_admin_user(self, data: PlatformAdminCreateRequest, current_user):
-        if not is_super_admin_role(current_user.role):
+        if normalize_role_value(current_user.role) != user_role.ADMIN.value:
             raise HTTPException(status_code=403, detail="Not allowed")
 
         email = str(data.email).strip().lower()
@@ -309,7 +308,7 @@ class AccountManager:
         }
 
     async def resend_platform_admin_invite(self, user_id: str, current_user):
-        if not is_super_admin_role(current_user.role):
+        if normalize_role_value(current_user.role) != user_role.ADMIN.value:
             raise HTTPException(status_code=403, detail="Not allowed")
 
         user = await self._engine.find_one(db_user_account, db_user_account.id == ObjectId(user_id))
@@ -346,7 +345,7 @@ class AccountManager:
         }
 
     async def update_platform_admin_user(self, user_id: str, data: PlatformAdminUpdateRequest, current_user):
-        if not is_super_admin_role(current_user.role):
+        if normalize_role_value(current_user.role) != user_role.ADMIN.value:
             raise HTTPException(status_code=403, detail="Not allowed")
 
         user = await self._engine.find_one(db_user_account, db_user_account.id == ObjectId(user_id))
@@ -356,8 +355,8 @@ class AccountManager:
         if not is_platform_admin_role(user.role):
             raise HTTPException(status_code=400, detail="Target user is not a platform admin")
 
-        if is_super_admin_role(user.role):
-            raise HTTPException(status_code=400, detail="Super admin role cannot be modified by this endpoint")
+        if normalize_role_value(user.role) == user_role.ADMIN.value:
+            raise HTTPException(status_code=400, detail="Admin role cannot be modified by this endpoint")
 
         if data.role is not None:
             user.role = data.role
@@ -386,7 +385,7 @@ class AccountManager:
         }
 
     async def soft_delete_platform_admin_user(self, user_id: str, data: PlatformAdminStatusReasonRequest, current_user):
-        if not is_super_admin_role(current_user.role):
+        if normalize_role_value(current_user.role) != user_role.ADMIN.value:
             raise HTTPException(status_code=403, detail="Not allowed")
 
         user = await self._engine.find_one(db_user_account, db_user_account.id == ObjectId(user_id))
@@ -396,8 +395,8 @@ class AccountManager:
         if not is_platform_admin_role(user.role):
             raise HTTPException(status_code=400, detail="Target user is not a platform admin")
 
-        if is_super_admin_role(user.role):
-            raise HTTPException(status_code=400, detail="Super admin user cannot be deleted by this endpoint")
+        if normalize_role_value(user.role) == user_role.ADMIN.value:
+            raise HTTPException(status_code=400, detail="Admin user cannot be deleted by this endpoint")
 
         await self._apply_platform_status_change(
             user=user,
@@ -410,7 +409,7 @@ class AccountManager:
         return {"message": "Platform user deleted", "id": str(user.id), "status": UserStatus.DELETED.value}
 
     async def restore_platform_admin_user(self, user_id: str, current_user):
-        if not is_super_admin_role(current_user.role):
+        if normalize_role_value(current_user.role) != user_role.ADMIN.value:
             raise HTTPException(status_code=403, detail="Not allowed")
 
         user = await self._engine.find_one(db_user_account, db_user_account.id == ObjectId(user_id))
@@ -427,7 +426,7 @@ class AccountManager:
             user=user,
             target_status=UserStatus.INACTIVE,
             actor_username=getattr(current_user, "username", "system"),
-            reason="Restored by super admin",
+            reason="Restored by admin",
         )
         await self._engine.save(user)
 
@@ -438,7 +437,7 @@ class AccountManager:
         }
 
     async def permanently_delete_platform_admin_user(self, user_id: str, current_user):
-        if not is_super_admin_role(current_user.role):
+        if normalize_role_value(current_user.role) != user_role.ADMIN.value:
             raise HTTPException(status_code=403, detail="Not allowed")
 
         user = await self._engine.find_one(db_user_account, db_user_account.id == ObjectId(user_id))
@@ -448,8 +447,8 @@ class AccountManager:
         if not is_platform_admin_role(user.role):
             raise HTTPException(status_code=400, detail="Target user is not a platform admin")
 
-        if is_super_admin_role(user.role):
-            raise HTTPException(status_code=400, detail="Super admin user cannot be permanently deleted")
+        if normalize_role_value(user.role) == user_role.ADMIN.value:
+            raise HTTPException(status_code=400, detail="Admin user cannot be permanently deleted")
 
         if self._normalized_platform_status(user.status) != UserStatus.DELETED.value:
             raise HTTPException(status_code=400, detail="Only soft-deleted platform users can be permanently deleted")
@@ -469,7 +468,7 @@ class AccountManager:
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
 
-        if is_super_admin_role(user.role):
+        if is_platform_admin_role(user.role):
             raise HTTPException(status_code=401, detail="This user type cannot be deleted")
 
         if current_user.licenses.__contains__(LicenseName.MAINTAINER):
@@ -500,7 +499,7 @@ class AccountManager:
         else:
             raise HTTPException(status_code=401, detail="You are not allowed to update this user")
 
-        if is_super_admin_role(user.role):
+        if is_platform_admin_role(user.role):
             raise HTTPException(status_code=401, detail="This user type cannot be updated")
 
         if request.status == UserStatus.DISABLE:

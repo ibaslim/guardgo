@@ -1,0 +1,179 @@
+<app-page
+  title="Billing Configurations"
+  subtitle="Manage default pay rates for guards and service providers across Canadian provinces."
+>
+
+  <!-- ================================================================
+       Section 1 – Guard default pay rates
+       ================================================================ -->
+  <app-section
+    title="Guard Default Pay Rates"
+    subtitle="Default rates (CAD) applied to guards unless overridden."
+  >
+
+    <div *ngIf="guardLoading" class="flex justify-center py-8">
+      <app-loader></app-loader>
+    </div>
+
+    <div *ngIf="!guardLoading" class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <thead>
+          <tr class="bg-gray-50 dark:bg-gray-800">
+            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-40">Region</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Standard Rate (CAD/hr)</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Weekend Rate (CAD/hr)</th>
+            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Holiday Rate (CAD/hr)</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-100 dark:divide-gray-800">
+          @for (rate of guardRates; track rate.region_code) {
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+              <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                {{ rate.region_label }}
+              </td>
+              <td class="px-4 py-3">
+                <app-base-input
+                  type="number"
+                  [min]="0"
+                  placeholder="0.00"
+                  [ngModel]="rate.standard_rate"
+                  (ngModelChange)="onRateInput(rate, 'standard_rate', $event)"
+                  name="std_{{ rate.region_code }}"
+                ></app-base-input>
+              </td>
+              <td class="px-4 py-3">
+                <app-base-input
+                  type="number"
+                  [min]="0"
+                  placeholder="0.00"
+                  [ngModel]="rate.weekend_rate"
+                  (ngModelChange)="onRateInput(rate, 'weekend_rate', $event)"
+                  name="wkd_{{ rate.region_code }}"
+                ></app-base-input>
+              </td>
+              <td class="px-4 py-3">
+                <app-base-input
+                  type="number"
+                  [min]="0"
+                  placeholder="0.00"
+                  [ngModel]="rate.holiday_rate"
+                  (ngModelChange)="onRateInput(rate, 'holiday_rate', $event)"
+                  name="hol_{{ rate.region_code }}"
+                ></app-base-input>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div *ngIf="!guardLoading" class="flex justify-end pt-2">
+      <app-button
+        label="Save Guard Rates"
+        type="primary"
+        [loading]="guardSaving"
+        [disabled]="guardSaving"
+        (pressed)="saveGuardRates()"
+      ></app-button>
+    </div>
+
+  </app-section>
+
+  <!-- ================================================================
+       Section 2 – Service provider default pay rates
+       ================================================================ -->
+  <app-section
+    title="Service Provider Pay Rates"
+    subtitle="Per-province pay rates for each active service provider."
+  >
+
+    <div class="flex flex-col sm:flex-row sm:items-end gap-4">
+      <div class="w-full sm:max-w-xs">
+        <app-select-input
+          label="Service Provider"
+          placeholder="Select a service provider"
+          [options]="providers"
+          [ngModel]="selectedProviderId"
+          (ngModelChange)="onProviderChange($event)"
+          name="providerSelect"
+        ></app-select-input>
+      </div>
+    </div>
+
+    <div *ngIf="selectedProviderId">
+
+      <div *ngIf="providerRatesLoading" class="flex justify-center py-8">
+        <app-loader></app-loader>
+      </div>
+
+      <div *ngIf="!providerRatesLoading && providerRates.length > 0" class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead>
+            <tr class="bg-gray-50 dark:bg-gray-800">
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-40">Region</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Standard Rate (CAD/hr)</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Weekend Rate (CAD/hr)</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Holiday Rate (CAD/hr)</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-100 dark:divide-gray-800">
+            @for (rate of providerRates; track rate.region_code) {
+              <tr class="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                  {{ rate.region_label }}
+                </td>
+                <td class="px-4 py-3">
+                  <app-base-input
+                    type="number"
+                    [min]="0"
+                    placeholder="0.00"
+                    [ngModel]="rate.standard_rate"
+                    (ngModelChange)="onRateInput(rate, 'standard_rate', $event)"
+                    name="pstd_{{ rate.region_code }}"
+                  ></app-base-input>
+                </td>
+                <td class="px-4 py-3">
+                  <app-base-input
+                    type="number"
+                    [min]="0"
+                    placeholder="0.00"
+                    [ngModel]="rate.weekend_rate"
+                    (ngModelChange)="onRateInput(rate, 'weekend_rate', $event)"
+                    name="pwkd_{{ rate.region_code }}"
+                  ></app-base-input>
+                </td>
+                <td class="px-4 py-3">
+                  <app-base-input
+                    type="number"
+                    [min]="0"
+                    placeholder="0.00"
+                    [ngModel]="rate.holiday_rate"
+                    (ngModelChange)="onRateInput(rate, 'holiday_rate', $event)"
+                    name="phol_{{ rate.region_code }}"
+                  ></app-base-input>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div *ngIf="!providerRatesLoading && providerRates.length > 0" class="flex justify-end pt-2">
+        <app-button
+          label="Save Provider Rates"
+          type="primary"
+          [loading]="providerSaving"
+          [disabled]="providerSaving"
+          (pressed)="saveProviderRates()"
+        ></app-button>
+      </div>
+
+    </div>
+
+    <div *ngIf="!selectedProviderId" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+      Select a service provider above to view and edit their pay rates.
+    </div>
+
+  </app-section>
+
+</app-page>
