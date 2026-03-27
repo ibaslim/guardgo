@@ -565,12 +565,12 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     };
 
     const isOnboarding = this.appService.userSessionData().tenant.has_onboarding;
-    tenantUpdatePayload.status = isOnboarding ? 'pending_verification' : 'active';
+    tenantUpdatePayload.status = isOnboarding ? 'pending_activation' : 'active';
 
     this.apiService.put('tenant', tenantUpdatePayload).subscribe({
       next: (response) => {
         console.log('Client profile submitted successfully', response);
-        const newStatus = isOnboarding ? 'pending_verification' : 'active';
+        const newStatus = isOnboarding ? 'pending_activation' : 'active';
         this.appService.setTenantStatus(newStatus, false);
         this.router.navigate(['/dashboard']);
       },

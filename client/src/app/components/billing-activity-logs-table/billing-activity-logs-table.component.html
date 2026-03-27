@@ -1,0 +1,66 @@
+<div class="space-y-3">
+  <div *ngIf="loading" class="text-sm text-gray-500">Loading activity logs...</div>
+
+  <div *ngIf="!loading && !logs.length" class="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-6 text-sm text-gray-500 text-center">
+    {{ emptyMessage }}
+  </div>
+
+  <app-table
+    *ngIf="!loading && logs.length"
+    [data]="logs"
+    [loading]="false"
+    [showFilter]="false"
+    [showPagination]="false"
+    [headerTemplate]="activityHeader"
+    [rowTemplate]="activityRow"
+    [columnCount]="6"
+    [pageSize]="logs.length"
+  ></app-table>
+
+  <ng-template #activityHeader>
+    <tr>
+      <th app-table-th>ACTION</th>
+      <th app-table-th>SCOPE</th>
+      <th app-table-th>REGION</th>
+      <th app-table-th>PREVIOUS</th>
+      <th app-table-th>NEW</th>
+      <th app-table-th>ACTOR / TIME</th>
+    </tr>
+  </ng-template>
+
+  <ng-template #activityRow let-log>
+    <td app-table-td>
+      <span class="text-sm font-medium text-gray-800 dark:text-gray-200">{{ readableTitle(log.action || '-') }}</span>
+    </td>
+    <td app-table-td>
+      <div class="text-sm text-gray-700 dark:text-gray-300">{{ getScopeLabel(log) }}</div>
+      <div class="text-xs text-gray-500 dark:text-gray-400">{{ log.metadata?.entity_name || '-' }}</div>
+    </td>
+    <td app-table-td>
+      <span class="text-sm text-gray-700 dark:text-gray-300">{{ getRegionLabel(log) }}</span>
+    </td>
+    <td app-table-td>
+      <span class="text-sm text-gray-700 dark:text-gray-300">{{ getRateSummary(log, 'previous_rates') }}</span>
+    </td>
+    <td app-table-td>
+      <span class="text-sm text-gray-700 dark:text-gray-300">{{ getRateSummary(log, 'new_rates') }}</span>
+    </td>
+    <td app-table-td>
+      <div class="inline-flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300">
+        <app-icon name="user" [size]="14"></app-icon>
+        <span>{{ log.actor_username || '-' }}</span>
+      </div>
+      <div class="text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap mt-1">{{ formatBackendDateTime(log.created_at) }}</div>
+    </td>
+  </ng-template>
+
+  <div class="flex items-center justify-between gap-2 pt-1">
+    <div class="text-xs text-gray-500">
+      {{ totalItems }} log(s) • page {{ page }} / {{ totalPages || 1 }}
+    </div>
+    <div class="flex items-center gap-2">
+      <app-button size="sm" type="secondary" label="Previous" [disabled]="!canPrev" (pressed)="onPrevious()"></app-button>
+      <app-button size="sm" type="secondary" label="Next" [disabled]="!canNext" (pressed)="onNext()"></app-button>
+    </div>
+  </div>
+</div>

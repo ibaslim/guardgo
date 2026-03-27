@@ -16,8 +16,10 @@ from orion.services.mongo_manager.mongo_controller import mongo_controller
 from routes.admin_routes import admin_routes
 from routes.api_routes import api_routes
 from routes.auth_routes import auth_router
+from routes.billing_routes import billing_routes
 from routes.public_api_routes import public_routes
 from routes.tenant_routes import tenant_routes
+from migrations.seeder_manager import seeder_manager
 
 BASE_DIR = Path(__file__).resolve().parent
 ANGULAR_BUILD_DIR = BASE_DIR / "build"
@@ -36,6 +38,18 @@ async def lifespan(p_app: FastAPI):
         await migrate_tenants()
     except Exception as e:
         print(f"Warning: Tenant migration failed: {e}")
+
+    try:
+        from migrations.scripts.migrate_tenant_pending_activation import migrate_tenant_pending_activation
+        await migrate_tenant_pending_activation()
+    except Exception as e:
+        print(f"Warning: Tenant pending activation migration failed: {e}")
+
+    try:
+        seed_results = await seeder_manager.get_instance().run_auto_seeders(force=False)
+        print(f"Auto seeding status: {seed_results}")
+    except Exception as e:
+        print(f"Warning: Auto seeding failed: {e}")
     
     setup_admin(mongo_controller.get_instance().get_engine()).mount_to(p_app)
     app.include_router(interface)
@@ -62,6 +76,7 @@ def custom_swagger_ui():
 configure_swagger(app)
 app.include_router(auth_router, include_in_schema=True)
 app.include_router(admin_routes, include_in_schema=True)
+app.include_router(billing_routes, include_in_schema=True)
 app.include_router(public_routes, include_in_schema=True)
 app.include_router(tenant_routes, include_in_schema=True)
 app.include_router(api_routes, include_in_schema=True)

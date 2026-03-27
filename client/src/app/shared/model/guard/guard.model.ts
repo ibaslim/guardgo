@@ -31,6 +31,7 @@ export interface IdentificationDocument {
   documentType: string;
   number: string;
   province?: string;
+  passportCountry?: string;
   expiryDate?: string;
   file?: File | null;
   id?: string; // unique identifier for UI purposes

@@ -6,7 +6,7 @@
 export enum CanadianDocumentType {
   DRIVERS_LICENSE = 'drivers_license',
   PROVINCIAL_ID = 'provincial_id',
-  CANADIAN_PASSPORT = 'canadian_passport',
+  PASSPORT = 'passport',
   PR_CARD = 'pr_card',
   WORK_PERMIT = 'work_permit',
   STUDY_PERMIT = 'study_permit'
@@ -60,8 +60,8 @@ export const IDENTITY_DOCUMENT_TYPES: { value: string; label: string; requiresPr
     mandatory: false
   },
   {
-    value: CanadianDocumentType.CANADIAN_PASSPORT,
-    label: 'Canadian Passport',
+    value: CanadianDocumentType.PASSPORT,
+    label: 'Passport',
     requiresProvince: false,
     requiresExpiry: true,
     mandatory: false
@@ -96,7 +96,7 @@ export const IDENTITY_DOCUMENT_TYPES: { value: string; label: string; requiresPr
 export const DOCUMENT_NUMBER_PATTERNS: { [key in CanadianDocumentType]: RegExp } = {
   [CanadianDocumentType.DRIVERS_LICENSE]: /^[A-Z0-9\-]{4,20}$/i,
   [CanadianDocumentType.PROVINCIAL_ID]: /^[A-Z0-9\-]{4,20}$/i,
-  [CanadianDocumentType.CANADIAN_PASSPORT]: /^[A-Z0-9]{6,9}$/i,
+  [CanadianDocumentType.PASSPORT]: /^[A-Z0-9\-]{4,20}$/i,
   [CanadianDocumentType.PR_CARD]: /^[A-Z0-9]{8,12}$/i,
   [CanadianDocumentType.WORK_PERMIT]: /^[A-Z0-9]{8,20}$/i,
   [CanadianDocumentType.STUDY_PERMIT]: /^[A-Z0-9]{8,20}$/i

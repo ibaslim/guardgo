@@ -10,7 +10,7 @@ from starlette_admin.contrib.odmantic import Admin, ModelView
 
 from orion.helper_manager.env_handler import env_handler
 from orion.api.interactive.auth_manager.auth_manager import auth_manager
-from orion.services.mongo_manager.shared_model.db_auth_models import db_user_account, user_role
+from orion.services.mongo_manager.shared_model.db_auth_models import db_user_account, user_role, is_platform_admin_role
 from orion.services.mongo_manager.shared_model.db_system_settings import db_system_model
 from orion.services.mongo_manager.shared_model.db_keys import db_keys
 from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model
@@ -32,7 +32,7 @@ class TokenAuthProvider(AuthProvider):
             user = await auth_manager.get_instance().authenticate_user(username, password)
             if not user:
                 raise HTTPException(status_code=401, detail="Invalid username or password")
-            if user.role != user_role.ADMIN:
+            if not is_platform_admin_role(user.role):
                 raise HTTPException(status_code=403, detail="Not authorized")
 
             access_token_expires = timedelta(minutes=30)
@@ -66,7 +66,7 @@ class TokenAuthProvider(AuthProvider):
             if not user:
                 return False
             role = await session_mgr.get_current_role(token)
-            if role != user_role.ADMIN.value:
+            if not is_platform_admin_role(role):
                 return False
             request.state.user = user
             return True

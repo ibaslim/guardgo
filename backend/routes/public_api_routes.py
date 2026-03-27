@@ -14,6 +14,7 @@ from configs.metadata_constants import (
     CLIENT_GUARD_TYPE_OPTIONS,
     CLIENT_TYPE_OPTIONS,
 )
+from orion.services.mongo_manager.shared_model.db_auth_models import PLATFORM_ADMIN_ROLES, TENANT_ADMIN_ROLES, user_role
 
 public_routes = APIRouter(tags=["Public"])
 
@@ -74,6 +75,25 @@ async def get_client_metadata():
     }
 
 
+@public_routes.get(
+    "/api/public/role-metadata",
+    dependencies=[],
+    summary="Get role metadata options",
+    description="Get role groups used by frontend access-control and settings navigation.",
+    tags=["Public", "Config"],
+    operation_id="getRoleMetadata",
+    response_description="Platform and tenant role groups for UI guards.")
+async def get_role_metadata():
+    management_roles = sorted([user_role.ADMIN.value, user_role.COMPLIANCE_ADMIN.value])
+    platform_user_management_roles = [user_role.ADMIN.value]
+    return {
+        "platformRoles": sorted(list(PLATFORM_ADMIN_ROLES)),
+        "tenantSettingsRoles": sorted(list(TENANT_ADMIN_ROLES)),
+        "tenantManagementRoles": management_roles,
+        "platformUserManagementRoles": platform_user_management_roles,
+    }
+
+
 @public_routes.get("/api/s/static/tenant/{id}", include_in_schema=False, dependencies=[Depends(cookie_required)])
 async def get_tenant_resource(id: str):
     return await ResourceManager.get_instance().get_tenant_image(id)
@@ -115,6 +135,13 @@ async def get_tenant_training_certificate(file_id: str, request: Request):
     from configs.token_auth_provider import get_current_user_from_cookie
     current_user = await get_current_user_from_cookie(request)
     return await ResourceManager.get_instance().get_tenant_training_certificate(file_id, current_user)
+
+
+@public_routes.get("/api/tenant/files/insurance/{file_id}", include_in_schema=False, dependencies=[Depends(cookie_required)])
+async def get_tenant_insurance_document(file_id: str, request: Request):
+    from configs.token_auth_provider import get_current_user_from_cookie
+    current_user = await get_current_user_from_cookie(request)
+    return await ResourceManager.get_instance().get_tenant_insurance_document(file_id, current_user)
 
 @public_routes.get("/robots.txt", include_in_schema=False)
 async def robots_txt():

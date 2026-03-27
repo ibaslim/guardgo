@@ -168,8 +168,20 @@ export class AuthService {
     return this.apiService.post('forgot', { email });
   }
 
+  getResetContext(token: string): Observable<any> {
+    return this.apiService.get(`reset/context/${token}`);
+  }
+
+  getInviteContext(token: string): Observable<any> {
+    return this.apiService.get(`invite/context/${token}`);
+  }
+
   updatePassword(token: string, password: string): Observable<any> {
     return this.apiService.post('updatePassword', { token, password });
+  }
+
+  activateInvite(token: string, password: string, username: string, full_name: string): Observable<any> {
+    return this.apiService.post('invite/activate', { token, password, username, full_name });
   }
 
   getIsMobileDemo(): boolean {

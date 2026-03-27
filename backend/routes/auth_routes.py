@@ -7,7 +7,11 @@ from orion.helper_manager.env_handler import env_handler
 from orion.services.session_manager.session_manager import session_manager
 from orion.api.interactive.signup_manager.model.signup_request_model import SignupRequest
 from orion.api.interactive.signup_manager.signup_manager import SignupManager
-from orion.api.interactive.auth_manager.models.forgot_password_request import ForgotPasswordRequest, ResetPassword
+from orion.api.interactive.auth_manager.models.forgot_password_request import (
+    ForgotPasswordRequest,
+    ResetPassword,
+    InviteActivationRequest,
+)
 
 auth_router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -112,3 +116,23 @@ async def forgotPassword(request: ForgotPasswordRequest):
 @auth_router.post("/api/updatePassword")
 async def updatePassword(data: ResetPassword):
     return await auth_manager.update_password(data.token, data.password)
+
+
+@auth_router.get("/api/reset/context/{token}")
+async def resetPasswordContext(token: str):
+    return await auth_manager.get_password_reset_context(token)
+
+
+@auth_router.get("/api/invite/context/{token}")
+async def inviteContext(token: str):
+    return await auth_manager.get_invite_context(token)
+
+
+@auth_router.post("/api/invite/activate")
+async def activateInvite(data: InviteActivationRequest):
+    return await auth_manager.activate_invited_user(
+        token=data.token,
+        password=data.password,
+        username=data.username,
+        full_name=data.full_name,
+    )

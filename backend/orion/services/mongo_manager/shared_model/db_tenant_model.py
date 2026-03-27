@@ -18,6 +18,7 @@ class IocCategory(EmbeddedModel):
 
 class TenantStatus(str, Enum):
     ONBOARDING = "onboarding"
+    PENDING_ACTIVATION = "pending_activation"
     PENDING_VERIFICATION = "pending_verification"
     ACTIVE = "active"
     INACTIVE = "inactive"
@@ -60,6 +61,8 @@ class TrainingIssuerType(str, Enum):
     PROVINCIAL_APPROVED_TRAINING_PROVIDER = "provincialApprovedTrainingProvider"
     PRIVATE_SECURITY_ACADEMY_APPROVED = "privateSecurityAcademyApproved"
     ST_JOHN_AMBULANCE = "stJohnAmbulance"
+    CANADIAN_RED_CROSS = "canadianRedCross"
+    HEART_AND_STROKE_FOUNDATION = "heartAndStrokeFoundation"
     TRAINING_PROVIDER_ACCREDITED = "trainingProviderAccredited"
     WORKPLACE_APPROVED_TRAINING_PROVIDER = "workplaceApprovedTrainingProvider"
     OTHER = "other"
@@ -262,6 +265,11 @@ class InsurancePolicy(EmbeddedModel):
     currency: str = "USD"
     expiry_date: Optional[datetime] = None
     document_url: Optional[str] = None
+    document_file_id: Optional[str] = None
+    document_file_url: Optional[str] = None
+    document_file_name: Optional[str] = None
+    document_file_mime_type: Optional[str] = None
+    document_file_size: Optional[int] = None
     coverage_details: Optional[str] = None
 
 
@@ -294,6 +302,8 @@ class db_tenant_model(Model):
     verified: bool = False
     user_quota: int = 0
     status: TenantStatus = TenantStatus.INACTIVE
+    approvals_required: int = 2
+    approval_actors: List[str] = []
     licenses: List[str] = []
     iocs: List[IocCategory] = []
 
@@ -348,6 +358,8 @@ class TenantPayload(BaseModel):
     verified: bool = False
     user_quota: int = 0
     status: TenantStatus = TenantStatus.INACTIVE
+    approvals_required: int = 2
+    approval_actors: List[str] = []
     licenses: List[str] = []
     iocs: List[IocCategory] = []
     created_at: Optional[datetime] = None

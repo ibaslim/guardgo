@@ -5,10 +5,11 @@ import { AuthService } from '../../../services/authetication/auth.service';
 import { NgForm, FormsModule } from '@angular/forms';
 
 import { BaseInputComponent } from '../../../components/form/base-input/base-input.component';
+import { CardComponent } from '../../../components/card/card.component';
 @Component({
   selector: 'app-forgot-password',
   templateUrl: './reset-password.component.html',
-  imports: [FormsModule, NgIf, CommonModule, BaseInputComponent]
+  imports: [FormsModule, NgIf, CommonModule, BaseInputComponent, CardComponent]
 })
 export class ResetPasswordComponent implements OnInit {
   email = '';
@@ -17,50 +18,21 @@ export class ResetPasswordComponent implements OnInit {
   responseError = false;
   hasToken: boolean = false;
   token: string = '';
-  confirmPassword: string = 'asdsadasd';
+  confirmPassword: string = '';
 
   passwordStrength: 'weak' | 'medium' | 'strong' | null = null;
   showPasswordMeter = false;
-  passwordChecks = {
-    length: false,
-    lowercase: false,
-    uppercase: false,
-    number: false,
-    specialChar: false
-  };
-  currentUnmetCheck: string | null = null;
   constructor(private router: Router, private route: ActivatedRoute, public auth_service: AuthService) {
   }
   onPasswordInput(password: string) {
     this.showPasswordMeter = password.length > 0;
 
-    this.passwordChecks = {
-      length: password.length >= 8,
-      lowercase: /[a-z]/.test(password),
-      uppercase: /[A-Z]/.test(password),
-      number: /[0-9]/.test(password),
-      specialChar: /[^A-Za-z0-9]/.test(password)
-    };
-
-    const checkOrder = [
-      { key: 'length', message: 'At least 8 characters' },
-      { key: 'lowercase', message: 'At least one lowercase letter' },
-      { key: 'uppercase', message: 'At least one uppercase letter' },
-      { key: 'number', message: 'At least one number' },
-      { key: 'specialChar', message: 'At least one special character' }
-    ] as const;
-
-    this.currentUnmetCheck =
-      checkOrder.find(c => !this.passwordChecks[c.key])?.message || null;
-
-    const allRequirementsMet = Object.values(this.passwordChecks).every(v => v);
-
-    if (!allRequirementsMet) {
+    if (password.length < 8) {
       this.passwordStrength = 'weak';
       return;
     }
 
-    if (password.length >= 12 && this.passwordChecks.specialChar && this.passwordChecks.number) {
+    if (password.length >= 12) {
       this.passwordStrength = 'strong';
     } else if (password.length >= 10) {
       this.passwordStrength = 'medium';
@@ -68,8 +40,29 @@ export class ResetPasswordComponent implements OnInit {
       this.passwordStrength = 'weak';
     }
   }
-  get allPasswordRequirementsMet(): boolean {
-    return Object.values(this.passwordChecks).every(v => v);
+  get isPasswordValid(): boolean {
+    return this.password.length >= 8 && this.password === this.confirmPassword;
+  }
+
+  get pageTitle(): string {
+    if (!this.hasToken) {
+      return 'Forgot Password';
+    }
+    return 'Reset Password';
+  }
+
+  get pageSubtitle(): string {
+    if (!this.hasToken) {
+      return 'Enter your registered email to receive a password reset link.';
+    }
+    return 'Enter your new password';
+  }
+
+  get submitLabel(): string {
+    if (!this.hasToken) {
+      return 'Send Reset Link';
+    }
+    return 'Reset Password';
   }
 
   ngOnInit() {
@@ -77,6 +70,14 @@ export class ResetPasswordComponent implements OnInit {
     if (token != null) {
       this.token = token;
       this.hasToken = true;
+
+      this.auth_service.getInviteContext(token).subscribe({
+        next: () => {
+          this.router.navigate(['/invite', token], { replaceUrl: true }).then();
+        },
+        error: () => {
+        }
+      });
     }
   }
   onSubmit(form: NgForm) {
@@ -98,7 +99,7 @@ export class ResetPasswordComponent implements OnInit {
             if (err.status === 404) {
               this.errorMessage = "Invalid link";
             } else if (err.status === 400) {
-              this.errorMessage = "New password must be different from the old one.";
+              this.errorMessage = err?.error?.detail || "New password must be different from the old one.";
             } else {
               this.errorMessage = "Something went wrong. Please try again later.";
             }

@@ -36,7 +36,10 @@ async def create_default_tenant(engine):
 
 
 async def create_default_users(engine, tenant_id):
-    existing_admin = await engine.find_one(db_user_account, db_user_account.role == user_role.ADMIN)
+    existing_admin = await engine.find_one(
+        db_user_account,
+        db_user_account.role == user_role.ADMIN,
+    )
     if existing_admin:
         return
 

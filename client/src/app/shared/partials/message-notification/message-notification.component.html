@@ -1,7 +1,22 @@
-<div class="notification-wrapper" *ngIf="messageValue as message">
+<div class="toast-wrapper" *ngIf="notificationService.toasts().length">
   <div
-    class="notification-card"
-    [class.success]="notificationService.type() === 'success'">
-    {{ message }}
+    *ngFor="let toast of notificationService.toasts(); trackBy: trackByToastId"
+    class="toast-card"
+    [class.success]="toast.type === 'success'"
+    [class.fail]="toast.type === 'fail'"
+    [class.warning]="toast.type === 'warning'"
+    [class.info]="toast.type === 'info'"
+    role="status"
+    aria-live="polite"
+  >
+    <div class="toast-content">
+      <div class="toast-icon">
+        <app-icon [name]="iconByType(toast.type)" [size]="16"></app-icon>
+      </div>
+      <div class="toast-message">{{ toast.message }}</div>
+    </div>
+    <button type="button" class="toast-close" aria-label="Dismiss notification" (click)="dismiss(toast.id)">
+      <app-icon name="x" [size]="14"></app-icon>
+    </button>
   </div>
 </div>
