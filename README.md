@@ -59,6 +59,48 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
+### Seeder Guidelines (Contributors)
+
+GuardGo uses a reusable seeder framework for backend data seeders.
+
+- Seeder files live in `backend/migrations/scripts/`
+- Seeder files should be named `seed_<name>.py`
+- Seeders are discovered and run through `backend/migrations/seeder_manager.py`
+- App startup runs `AUTO_RUN` seeders via `backend/main.py`
+
+For any new seeder, follow this pattern:
+
+```python
+AUTO_RUN = False  # Set True only if safe to run on startup
+
+async def run(force: bool = False):
+	# Implement idempotent seeding logic.
+	# Respect force=True when overwrite/reseed behavior is needed.
+	return {"ok": True}
+```
+
+Use the shared CLI runner:
+
+```bash
+cd backend
+
+# List discovered seeders
+python migrations/run_seeders.py --list
+
+# Run all AUTO_RUN seeders
+python migrations/run_seeders.py --auto
+
+# Run one seeder by module name (without .py)
+python migrations/run_seeders.py --seeder seed_billing_default_payrates
+
+# Force rerun when supported by the seeder
+python migrations/run_seeders.py --seeder seed_billing_default_payrates --force
+```
+
+Current example seeder:
+
+- `backend/migrations/scripts/seed_billing_default_payrates.py`
+
 ### Frontend
 
 ```bash

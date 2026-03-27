@@ -19,6 +19,7 @@ from routes.auth_routes import auth_router
 from routes.billing_routes import billing_routes
 from routes.public_api_routes import public_routes
 from routes.tenant_routes import tenant_routes
+from migrations.seeder_manager import seeder_manager
 
 BASE_DIR = Path(__file__).resolve().parent
 ANGULAR_BUILD_DIR = BASE_DIR / "build"
@@ -43,6 +44,12 @@ async def lifespan(p_app: FastAPI):
         await migrate_tenant_pending_activation()
     except Exception as e:
         print(f"Warning: Tenant pending activation migration failed: {e}")
+
+    try:
+        seed_results = await seeder_manager.get_instance().run_auto_seeders(force=False)
+        print(f"Auto seeding status: {seed_results}")
+    except Exception as e:
+        print(f"Warning: Auto seeding failed: {e}")
     
     setup_admin(mongo_controller.get_instance().get_engine()).mount_to(p_app)
     app.include_router(interface)

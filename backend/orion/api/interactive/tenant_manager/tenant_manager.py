@@ -96,6 +96,13 @@ class TenantManager:
 
             # Save the tenant
             await self._engine.save(data)
+
+            if data.tenant_type in [TenantType.GUARD, TenantType.SERVICE_PROVIDER]:
+                from orion.api.interactive.billing_manager.billing_manager import BillingManager
+                await BillingManager.get_instance().ensure_tenant_rate_snapshot(
+                    str(data.id),
+                    data.tenant_type,
+                )
         except Exception as _:
             # Cleanup related documents (don't delete the tenant itself if it wasn't saved)
             await self._engine.remove(db_user_account, db_user_account.tenant_uuid == str(data.id))
@@ -174,6 +181,13 @@ class TenantManager:
             tenant.approvals_required = max(int(getattr(tenant, "approvals_required", 2) or 2), 2)
 
         await self._engine.save(tenant)
+
+        if not is_update and tenant.tenant_type in [TenantType.GUARD, TenantType.SERVICE_PROVIDER]:
+            from orion.api.interactive.billing_manager.billing_manager import BillingManager
+            await BillingManager.get_instance().ensure_tenant_rate_snapshot(
+                str(tenant.id),
+                tenant.tenant_type,
+            )
 
         # If status changed from onboarding -> pending_activation, record audit and notify
         if previous_status == TenantStatus.ONBOARDING and tenant.status == TenantStatus.PENDING_ACTIVATION:
