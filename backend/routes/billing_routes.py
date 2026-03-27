@@ -38,6 +38,31 @@ async def save_guard_rates(
 
 
 @billing_routes.get(
+    "/api/billing/margins/guards/defaults",
+    summary="Get guard margin defaults",
+    description="Returns default guard margin values by province (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def get_guard_margin_rates():
+    return await BillingManager.get_instance().get_guard_margin_rates()
+
+
+@billing_routes.put(
+    "/api/billing/margins/guards/defaults",
+    summary="Save guard margin defaults",
+    description="Upsert default guard margin values by province (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def save_guard_margin_rates(
+    payload: List[Dict[str, Any]],
+    current_user=Depends(get_current_user),
+):
+    return await BillingManager.get_instance().save_guard_margin_rates(payload, current_user)
+
+
+@billing_routes.get(
     "/api/billing/guards/list",
     summary="List active guards",
     description="Returns name + id for each active guard (admin only).",
@@ -117,6 +142,31 @@ async def save_provider_default_rates(
     current_user=Depends(get_current_user),
 ):
     return await BillingManager.get_instance().save_provider_default_rates(payload, current_user)
+
+
+@billing_routes.get(
+    "/api/billing/commissions/providers/defaults",
+    summary="Get provider commission defaults",
+    description="Returns default provider commission values by province (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def get_provider_commission_rates():
+    return await BillingManager.get_instance().get_provider_commission_rates()
+
+
+@billing_routes.put(
+    "/api/billing/commissions/providers/defaults",
+    summary="Save provider commission defaults",
+    description="Upsert default provider commission values by province (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def save_provider_commission_rates(
+    payload: List[Dict[str, Any]],
+    current_user=Depends(get_current_user),
+):
+    return await BillingManager.get_instance().save_provider_commission_rates(payload, current_user)
 
 
 @billing_routes.get(

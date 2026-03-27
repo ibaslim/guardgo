@@ -47,6 +47,38 @@ DUMMY_PROVIDER_RATES_CAD = {
     "YT": {"standard_rate": 36.0, "weekend_rate": 40.0, "holiday_rate": 44.0},
 }
 
+DUMMY_GUARD_MARGIN_RATES_CAD = {
+    "AB": {"standard_rate": 4.0, "weekend_rate": 4.5, "holiday_rate": 5.0},
+    "BC": {"standard_rate": 4.5, "weekend_rate": 5.0, "holiday_rate": 5.5},
+    "MB": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "NB": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "NL": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "NS": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "NT": {"standard_rate": 5.0, "weekend_rate": 5.5, "holiday_rate": 6.0},
+    "NU": {"standard_rate": 5.5, "weekend_rate": 6.0, "holiday_rate": 6.5},
+    "ON": {"standard_rate": 4.5, "weekend_rate": 5.0, "holiday_rate": 5.5},
+    "PE": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "QC": {"standard_rate": 4.0, "weekend_rate": 4.5, "holiday_rate": 5.0},
+    "SK": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "YT": {"standard_rate": 5.0, "weekend_rate": 5.5, "holiday_rate": 6.0},
+}
+
+DUMMY_PROVIDER_COMMISSION_RATES_CAD = {
+    "AB": {"standard_rate": 3.0, "weekend_rate": 3.5, "holiday_rate": 4.0},
+    "BC": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "MB": {"standard_rate": 2.5, "weekend_rate": 3.0, "holiday_rate": 3.5},
+    "NB": {"standard_rate": 2.5, "weekend_rate": 3.0, "holiday_rate": 3.5},
+    "NL": {"standard_rate": 2.5, "weekend_rate": 3.0, "holiday_rate": 3.5},
+    "NS": {"standard_rate": 2.5, "weekend_rate": 3.0, "holiday_rate": 3.5},
+    "NT": {"standard_rate": 4.0, "weekend_rate": 4.5, "holiday_rate": 5.0},
+    "NU": {"standard_rate": 4.5, "weekend_rate": 5.0, "holiday_rate": 5.5},
+    "ON": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "PE": {"standard_rate": 2.5, "weekend_rate": 3.0, "holiday_rate": 3.5},
+    "QC": {"standard_rate": 3.0, "weekend_rate": 3.5, "holiday_rate": 4.0},
+    "SK": {"standard_rate": 2.5, "weekend_rate": 3.0, "holiday_rate": 3.5},
+    "YT": {"standard_rate": 4.0, "weekend_rate": 4.5, "holiday_rate": 5.0},
+}
+
 
 def _build_payload(rate_map: Dict[str, Dict[str, float]], fallback: Dict[str, float]) -> list[dict[str, Any]]:
     payload = []
@@ -69,13 +101,17 @@ async def seed_billing_default_payrates(force: bool = False) -> Dict[str, Any]:
 
     guard_count = await engine.count(BillingRate, BillingRate.scope == manager.SCOPE_GUARD_DEFAULT)
     provider_count = await engine.count(BillingRate, BillingRate.scope == manager.SCOPE_PROVIDER_DEFAULT)
+    guard_margin_count = await engine.count(BillingRate, BillingRate.scope == manager.SCOPE_GUARD_MARGIN_DEFAULT)
+    provider_commission_count = await engine.count(BillingRate, BillingRate.scope == manager.SCOPE_PROVIDER_COMMISSION_DEFAULT)
 
-    if not force and guard_count > 0 and provider_count > 0:
+    if not force and guard_count > 0 and provider_count > 0 and guard_margin_count > 0 and provider_commission_count > 0:
         return {
             "seeded": False,
             "reason": "already-seeded",
             "guard_default_rows": guard_count,
             "provider_default_rows": provider_count,
+            "guard_margin_default_rows": guard_margin_count,
+            "provider_commission_default_rows": provider_commission_count,
         }
 
     guard_payload = _build_payload(
@@ -86,14 +122,26 @@ async def seed_billing_default_payrates(force: bool = False) -> Dict[str, Any]:
         DUMMY_PROVIDER_RATES_CAD,
         {"standard_rate": 30.0, "weekend_rate": 33.0, "holiday_rate": 36.0},
     )
+    guard_margin_payload = _build_payload(
+        DUMMY_GUARD_MARGIN_RATES_CAD,
+        {"standard_rate": 4.0, "weekend_rate": 4.5, "holiday_rate": 5.0},
+    )
+    provider_commission_payload = _build_payload(
+        DUMMY_PROVIDER_COMMISSION_RATES_CAD,
+        {"standard_rate": 3.0, "weekend_rate": 3.5, "holiday_rate": 4.0},
+    )
 
     guard_result = await manager.save_guard_rates(guard_payload, current_user=None)
     provider_result = await manager.save_provider_default_rates(provider_payload, current_user=None)
+    guard_margin_result = await manager.save_guard_margin_rates(guard_margin_payload, current_user=None)
+    provider_commission_result = await manager.save_provider_commission_rates(provider_commission_payload, current_user=None)
 
     return {
         "seeded": True,
         "guard": guard_result,
         "provider": provider_result,
+        "guard_margin": guard_margin_result,
+        "provider_commission": provider_commission_result,
     }
 
 
@@ -108,7 +156,7 @@ async def _main(force: bool) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Seed billing default payrates for guards and service providers")
+    parser = argparse.ArgumentParser(description="Seed billing default rates for payrates, margins, and commissions")
     parser.add_argument("--force", action="store_true", help="overwrite existing default rates")
     args = parser.parse_args()
 

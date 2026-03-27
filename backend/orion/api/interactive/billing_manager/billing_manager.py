@@ -42,6 +42,8 @@ class BillingManager:
     SCOPE_GUARD_DEFAULT = "guard_default"
     SCOPE_GUARD_DEFAULT_LEGACY = "guard"
     SCOPE_PROVIDER_DEFAULT = "provider_default"
+    SCOPE_GUARD_MARGIN_DEFAULT = "guard_margin_default"
+    SCOPE_PROVIDER_COMMISSION_DEFAULT = "provider_commission_default"
 
     @staticmethod
     def _extract_tenant_name(profile: Any) -> str:
@@ -235,6 +237,30 @@ class BillingManager:
             "updated_count": save_result["updated_count"],
         }
 
+    async def get_guard_margin_rates(self) -> List[Dict[str, Any]]:
+        """Return one record per Canadian province for guard margin defaults."""
+        return await self._compose_rates_by_scope_priority([
+            self.SCOPE_GUARD_MARGIN_DEFAULT,
+        ])
+
+    async def save_guard_margin_rates(
+        self, payload: List[Dict[str, Any]], current_user=None
+    ) -> Dict[str, Any]:
+        """Upsert guard margin defaults by province."""
+        save_result = await self._save_scope_rates(
+            scope=self.SCOPE_GUARD_MARGIN_DEFAULT,
+            payload=payload,
+            current_user=current_user,
+            entity_id="guard-margin-default-rates",
+            entity_name="Guard Margin Default Rates",
+        )
+
+        return {
+            "message": "Guard margin defaults saved",
+            "count": save_result["count"],
+            "updated_count": save_result["updated_count"],
+        }
+
     async def list_active_guards(self) -> List[Dict[str, Any]]:
         """Return id + name for every active guard tenant."""
         guards = await self._engine.find(
@@ -341,6 +367,30 @@ class BillingManager:
 
         return {
             "message": "Provider default rates saved",
+            "count": save_result["count"],
+            "updated_count": save_result["updated_count"],
+        }
+
+    async def get_provider_commission_rates(self) -> List[Dict[str, Any]]:
+        """Return one record per Canadian province for provider commission defaults."""
+        return await self._compose_rates_by_scope_priority([
+            self.SCOPE_PROVIDER_COMMISSION_DEFAULT,
+        ])
+
+    async def save_provider_commission_rates(
+        self, payload: List[Dict[str, Any]], current_user=None
+    ) -> Dict[str, Any]:
+        """Upsert provider commission defaults by province."""
+        save_result = await self._save_scope_rates(
+            scope=self.SCOPE_PROVIDER_COMMISSION_DEFAULT,
+            payload=payload,
+            current_user=current_user,
+            entity_id="provider-commission-default-rates",
+            entity_name="Provider Commission Default Rates",
+        )
+
+        return {
+            "message": "Provider commission defaults saved",
             "count": save_result["count"],
             "updated_count": save_result["updated_count"],
         }

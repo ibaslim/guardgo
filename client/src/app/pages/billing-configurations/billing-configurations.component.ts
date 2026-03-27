@@ -48,7 +48,7 @@ interface BillingActivityContext {
 export class BillingConfigurationsComponent implements OnInit {
   private readonly activityRows = 20;
 
-  activeBillingTab: 'guards' | 'providers' = 'guards';
+  activeBillingTab: 'guards' | 'providers' | 'addons' = 'guards';
 
   // -- Guard rates --
   guardRates: ProvinceRate[] = [];
@@ -59,6 +59,15 @@ export class BillingConfigurationsComponent implements OnInit {
   providerDefaultRates: ProvinceRate[] = [];
   providerDefaultLoading = false;
   providerDefaultSaving = false;
+
+  // -- Margin & Commission defaults --
+  guardMarginRates: ProvinceRate[] = [];
+  guardMarginLoading = false;
+  guardMarginSaving = false;
+
+  providerCommissionRates: ProvinceRate[] = [];
+  providerCommissionLoading = false;
+  providerCommissionSaving = false;
 
   // -- Providers --
   providers: { label: string; value: string }[] = [];
@@ -98,6 +107,8 @@ export class BillingConfigurationsComponent implements OnInit {
   ngOnInit(): void {
     this.loadGuardRates();
     this.loadProviderDefaultRates();
+    this.loadGuardMarginRates();
+    this.loadProviderCommissionRates();
     this.loadProviders();
     this.loadGuards();
   }
@@ -167,6 +178,66 @@ export class BillingConfigurationsComponent implements OnInit {
       error: () => {
         this.notification.show('Failed to save provider default pay rates', 'fail');
         this.providerDefaultSaving = false;
+      },
+    });
+  }
+
+  loadGuardMarginRates(): void {
+    this.guardMarginLoading = true;
+    this.api.get<ProvinceRate[]>('billing/margins/guards/defaults').subscribe({
+      next: (data) => {
+        this.guardMarginRates = data;
+        this.guardMarginLoading = false;
+      },
+      error: () => {
+        this.notification.show('Failed to load guard margin defaults', 'fail');
+        this.guardMarginLoading = false;
+      },
+    });
+  }
+
+  saveGuardMarginRates(): void {
+    this.guardMarginSaving = true;
+    this.api.put<any>('billing/margins/guards/defaults', this.guardMarginRates).subscribe({
+      next: (res) => {
+        const updatedCount = Number(res?.updated_count ?? 0);
+        this.notification.show(updatedCount > 0 ? 'Guard margin defaults saved' : 'No guard margin changes detected', updatedCount > 0 ? 'success' : 'fail');
+        this.guardMarginSaving = false;
+        this.loadGuardMarginRates();
+      },
+      error: () => {
+        this.notification.show('Failed to save guard margin defaults', 'fail');
+        this.guardMarginSaving = false;
+      },
+    });
+  }
+
+  loadProviderCommissionRates(): void {
+    this.providerCommissionLoading = true;
+    this.api.get<ProvinceRate[]>('billing/commissions/providers/defaults').subscribe({
+      next: (data) => {
+        this.providerCommissionRates = data;
+        this.providerCommissionLoading = false;
+      },
+      error: () => {
+        this.notification.show('Failed to load provider commission defaults', 'fail');
+        this.providerCommissionLoading = false;
+      },
+    });
+  }
+
+  saveProviderCommissionRates(): void {
+    this.providerCommissionSaving = true;
+    this.api.put<any>('billing/commissions/providers/defaults', this.providerCommissionRates).subscribe({
+      next: (res) => {
+        const updatedCount = Number(res?.updated_count ?? 0);
+        this.notification.show(updatedCount > 0 ? 'Provider commission defaults saved' : 'No provider commission changes detected', updatedCount > 0 ? 'success' : 'fail');
+        this.providerCommissionSaving = false;
+        this.loadProviderCommissionRates();
+      },
+      error: () => {
+        this.notification.show('Failed to save provider commission defaults', 'fail');
+        this.providerCommissionSaving = false;
       },
     });
   }
@@ -360,6 +431,24 @@ export class BillingConfigurationsComponent implements OnInit {
       subtitle: `Service Provider: ${selectedProvider?.label || this.selectedProviderId}`,
       entityId: this.selectedProviderId,
       emptyMessage: 'No activity logs found for this service provider billing override.',
+    });
+  }
+
+  openGuardMarginDefaultLogs(): void {
+    this.openBillingLogs({
+      title: 'Guard Margin Activity Logs',
+      subtitle: 'Default guard margin changes',
+      entityId: 'guard-margin-default-rates',
+      emptyMessage: 'No activity logs found for guard margin defaults.',
+    });
+  }
+
+  openProviderCommissionDefaultLogs(): void {
+    this.openBillingLogs({
+      title: 'Provider Commission Activity Logs',
+      subtitle: 'Default provider commission changes',
+      entityId: 'provider-commission-default-rates',
+      emptyMessage: 'No activity logs found for provider commission defaults.',
     });
   }
 
