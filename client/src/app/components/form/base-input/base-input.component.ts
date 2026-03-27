@@ -7,6 +7,19 @@ import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/f
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './base-input.component.html',
+  styles: [
+    `
+      input[type='number']::-webkit-outer-spin-button,
+      input[type='number']::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+
+      input[type='number'] {
+        -moz-appearance: textfield;
+      }
+    `,
+  ],
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,
@@ -27,6 +40,7 @@ export class BaseInputComponent implements ControlValueAccessor {
   @Input() errorText: string = '';
   @Input() min?: number;
   @Input() max?: number;
+  @Input() autocomplete: string = 'on';
   value: string | number = '';
   onChange = (value: any) => { };
   onTouched = () => { };

@@ -1,0 +1,45 @@
+<app-page title="Platform Settings" subtitle="Manage your platform account details." [contentClass]="'max-w-2xl mx-auto space-y-8'">
+  <app-card [showHeader]="false" [containerClass]="'mt-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 sm:p-7'" [bodyClass]="'space-y-6'">
+    <div class="grid grid-cols-1 gap-6">
+      <app-base-input
+        label="Full Name"
+        name="platformFullName"
+        [(ngModel)]="model.full_name"
+        [required]="true"
+        [errorText]="fullNameError"
+      ></app-base-input>
+
+      <app-base-input
+        label="Username"
+        name="platformUsername"
+        [(ngModel)]="model.username"
+        [required]="true"
+        [errorText]="usernameError"
+        [helperText]="'8-20 chars, start with a letter, letters/numbers/_/- only.'"
+      ></app-base-input>
+
+      <app-base-input
+        label="Email"
+        name="platformEmail"
+        [(ngModel)]="email"
+        [readonly]="true"
+        [disabled]="true"
+      ></app-base-input>
+    </div>
+
+    <div class="space-y-2 pt-1">
+      <div *ngIf="errorMessage" class="text-sm text-red-600 dark:text-red-400">{{ errorMessage }}</div>
+      <div *ngIf="successMessage" class="text-sm text-green-600 dark:text-green-400">{{ successMessage }}</div>
+    </div>
+
+    <div class="flex justify-end pt-2">
+      <app-button
+        type="primary"
+        label="Save Changes"
+        [loading]="isSaving"
+        [disabled]="!canSubmit"
+        (pressed)="save()"
+      ></app-button>
+    </div>
+  </app-card>
+</app-page>

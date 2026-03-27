@@ -23,7 +23,7 @@ import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { getIssuingAuthorityForProvince } from '../../shared/constants/provincial-authorities.constants';
 import { Guard, GuardErrors, IdentificationDocument, SecurityLicenseDocument, PoliceClearanceRecord, TrainingCertificate, WeeklyAvailability } from '../../shared/model/guard';
-import { toTitleCase } from '../../shared/helpers/format.helper';
+import { readableTitle } from '../../shared/helpers/format.helper';
 
 @Component({
   selector: 'app-guard-setting',
@@ -86,6 +86,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         next: (response) => {
           if (response?.countries?.length) {
             this.countryOptions = response.countries;
+            this.passportCountryOptions = response.countries;
           }
           if (response?.canadianProvinces?.length) {
             this.provinceOptions = response.canadianProvinces;
@@ -232,6 +233,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
 
   countryOptions: { value: string; label: string }[] = [];
 
+  passportCountryOptions: { value: string; label: string }[] = [];
+
   // UI helper methods
   requiresProvince(type: string): boolean {
     return this.identityDocumentTypes.find(doc => doc.value === type)?.requiresProvince ?? false;
@@ -240,7 +243,21 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   requiresExpiry(type: string): boolean {
     return this.identityDocumentTypes.find(doc => doc.value === type)?.requiresExpiry ?? false;
   }
-  toTitleCase = toTitleCase;
+
+  isPassportDocument(type: string): boolean {
+    return type === 'passport';
+  }
+
+  onDocumentTypeChange(doc: IdentificationDocument): void {
+    if (!this.requiresProvince(doc.documentType)) {
+      doc.province = undefined;
+    }
+
+    if (!this.isPassportDocument(doc.documentType)) {
+      doc.passportCountry = undefined;
+    }
+  }
+  readableTitle = readableTitle;
 
   guardFormModel: Guard = {
     name: '',
@@ -262,15 +279,53 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       landlinePhone: null
     },
     identification: {
-      documents: [],
+      documents: [{
+        documentType: '',
+        number: '',
+        province: undefined,
+          passportCountry: undefined,
+        expiryDate: undefined,
+        file: null,
+        id: `doc_initial_${Date.now()}`
+      }],
       primaryDocumentId: undefined,
-      idType: 'canadian_passport', // Legacy
+      idType: 'passport',
       idNumber: '',
       document: null
     },
-    securityLicenses: [],
-    policeClearances: [],
-    trainingCertificates: [],
+
+    securityLicenses: [{
+      fullLegalName: '',
+      licenseNumber: '',
+      licenseType: 'securityGuard',
+      issuingProvince: '',
+      issuingAuthority: '',
+      issueDate: '',
+      expiryDate: '',
+      file: null,
+      id: `sec_initial_${Date.now()}`
+    }],
+
+    policeClearances: [{
+      issuingAuthorityType: '',
+      issuingAuthorityOther: '',
+      issuingProvince: '',
+      issuingCity: '',
+      issueDate: '',
+      referenceNumber: '',
+      file: null,
+      id: `police_initial_${Date.now()}`
+    }],
+
+    trainingCertificates: [{
+      certificateName: '',
+      issuingOrganizationType: '',
+      issuingOrganizationOther: '',
+      issueDate: '',
+      expiryDate: '',
+      file: null,
+      id: `train_initial_${Date.now()}`
+    }],
     preferredGuardTypes: [],
     operationalRadius: null,
     weeklyAvailability: {
@@ -497,10 +552,22 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         const backendId = doc.id || doc.document_id;
         const stableId = backendId || `doc_type_${doc.document_type || 'unknown'}_idx_${index}`;
 
+        const rawDocumentType = doc.document_type || doc.documentType || '';
+        const normalizedDocumentType =
+          rawDocumentType === 'canadian_passport'
+            ? 'passport'
+            : rawDocumentType;
+
+        const passportCountry =
+          doc.passport_country ||
+          doc.passportCountry ||
+          (rawDocumentType === 'canadian_passport' ? 'CA' : undefined);
+
         return {
-          documentType: doc.document_type || doc.documentType || '',
+          documentType: normalizedDocumentType,
           number: doc.document_number || doc.number || '',
           province: doc.province || undefined,
+          passportCountry,
           expiryDate: doc.expiry_date || doc.expiryDate || undefined,
           file: null, // Files not loaded from backend (security)
           existingFileUrl: doc.document_file_url || doc.file_url || undefined,
@@ -512,13 +579,18 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         };
       });
     } else if (formData.identification?.id_type || formData.identification?.id_number) {
-      const legacyIdType = formData.identification.id_type || '';
+      const legacyRawType = formData.identification.id_type || '';
+      const legacyIdType =
+        legacyRawType === 'canadian_passport'
+          ? 'passport'
+          : legacyRawType;
       const legacyIdNumber = formData.identification.id_number || '';
       formData.identification.documents = [
         {
           documentType: legacyIdType,
           number: legacyIdNumber,
           province: undefined,
+          passportCountry: legacyRawType === 'canadian_passport' ? 'CA' : undefined,
           expiryDate: undefined,
           file: null,
           existingFileUrl: formData.identification.document_url || undefined,
@@ -699,6 +771,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       documentType: '',
       number: '',
       province: undefined,
+      passportCountry: undefined,
       expiryDate: undefined,
       file: null,
       // Use stable ID based on index for new documents (will be replaced by backend ID on save)
@@ -721,6 +794,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       delete this.guardErrors[`identification_${doc.id}_type`];
       delete this.guardErrors[`identification_${doc.id}_number`];
       delete this.guardErrors[`identification_${doc.id}_province`];
+      delete this.guardErrors[`identification_${doc.id}_country`];
       delete this.guardErrors[`identification_${doc.id}_expiry`];
     }
 
@@ -1222,7 +1296,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       const pattern = {
         drivers_license: /^[A-Z0-9\-]{4,20}$/i,
         provincial_id: /^[A-Z0-9\-]{4,20}$/i,
-        canadian_passport: /^[A-Z0-9]{6,9}$/i,
+        passport: /^[A-Z0-9\-]{4,20}$/i,
         pr_card: /^[A-Z0-9]{8,12}$/i,
         work_permit: /^[A-Z0-9]{8,20}$/i,
         study_permit: /^[A-Z0-9]{8,20}$/i
@@ -1236,6 +1310,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
 
     if (this.requiresProvince(doc.documentType) && !doc.province) {
       errors['province'] = 'Province is required for this document type.';
+    }
+
+    if (this.isPassportDocument(doc.documentType) && !doc.passportCountry) {
+      errors['country'] = 'Passport country is required for Passport.';
     }
 
     if (this.requiresExpiry(doc.documentType) && !doc.expiryDate) {
@@ -1370,51 +1448,91 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Identification Documents - at least one required
-    if (!this.guardFormModel.identification.documents || this.guardFormModel.identification.documents.length === 0) {
-      this.guardErrors['identification'] = 'At least one identification document is required.';
-    } else {
-      // Validate each document using document ID
+    // Identification Documents - Minimum 2 required
+    if (!this.guardFormModel.identification.documents ||
+      this.guardFormModel.identification.documents.length < 2) {
+
+      this.guardErrors['identification'] =
+        'At least 2 identification documents are required.';
+    }
+    else {
+
       this.guardFormModel.identification.documents.forEach((doc, index) => {
-        // First document is required, validate fully
-        if (index === 0) {
+
+        if (!doc.id) return;
+
+        // First 2 documents are required
+        if (index < 2) {
           const validation = this.validateDocument(doc);
-          if (!validation.valid && doc.id) {
-            // Store errors per field
+
+          if (!validation.valid) {
             if (validation.errors['type']) {
-              this.guardErrors[`identification_${doc.id}_type`] = validation.errors['type'];
+              this.guardErrors[`identification_${doc.id}_type`] =
+                validation.errors['type'];
             }
+
             if (validation.errors['number']) {
-              this.guardErrors[`identification_${doc.id}_number`] = validation.errors['number'];
+              this.guardErrors[`identification_${doc.id}_number`] =
+                validation.errors['number'];
             }
+
             if (validation.errors['province']) {
-              this.guardErrors[`identification_${doc.id}_province`] = validation.errors['province'];
+              this.guardErrors[`identification_${doc.id}_province`] =
+                validation.errors['province'];
             }
+
+            if (validation.errors['country']) {
+              this.guardErrors[`identification_${doc.id}_country`] =
+                validation.errors['country'];
+            }
+
             if (validation.errors['expiry']) {
-              this.guardErrors[`identification_${doc.id}_expiry`] = validation.errors['expiry'];
+              this.guardErrors[`identification_${doc.id}_expiry`] =
+                validation.errors['expiry'];
             }
           }
-        } else {
-          // Additional documents are optional, but if partially filled, validate
-          const hasAnyData = doc.documentType || doc.number || doc.province || doc.expiryDate;
+        }
+        else {
+          // Documents after first 2 are optional but validate if partially filled
+          const hasAnyData =
+            doc.documentType ||
+            doc.number ||
+            doc.province ||
+            doc.passportCountry ||
+            doc.expiryDate;
+
           if (hasAnyData) {
             const validation = this.validateDocument(doc);
-            if (!validation.valid && doc.id) {
+
+            if (!validation.valid) {
               if (validation.errors['type']) {
-                this.guardErrors[`identification_${doc.id}_type`] = validation.errors['type'];
+                this.guardErrors[`identification_${doc.id}_type`] =
+                  validation.errors['type'];
               }
+
               if (validation.errors['number']) {
-                this.guardErrors[`identification_${doc.id}_number`] = validation.errors['number'];
+                this.guardErrors[`identification_${doc.id}_number`] =
+                  validation.errors['number'];
               }
+
               if (validation.errors['province']) {
-                this.guardErrors[`identification_${doc.id}_province`] = validation.errors['province'];
+                this.guardErrors[`identification_${doc.id}_province`] =
+                  validation.errors['province'];
               }
+
+              if (validation.errors['country']) {
+                this.guardErrors[`identification_${doc.id}_country`] =
+                  validation.errors['country'];
+              }
+
               if (validation.errors['expiry']) {
-                this.guardErrors[`identification_${doc.id}_expiry`] = validation.errors['expiry'];
+                this.guardErrors[`identification_${doc.id}_expiry`] =
+                  validation.errors['expiry'];
               }
             }
           }
         }
+
       });
     }
 
@@ -1642,68 +1760,62 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Secondary Contact Validation (optional, but if any field is filled, name and email are required)
+    // Secondary Contact Validation (required)
     const secondaryContact = this.guardFormModel.secondaryContact;
-    const hasSecondaryContactData = secondaryContact && (
-      secondaryContact.name?.trim() ||
-      secondaryContact.email?.trim() ||
-      (secondaryContact.mobilePhone?.e164) ||
-      (secondaryContact.landlinePhone?.e164)
-    );
 
-    if (hasSecondaryContactData) {
-      // If any field is provided, name and email are required
-      if (!secondaryContact.name?.trim()) {
-        this.guardErrors['secondaryContactName'] = 'Contact name is required if secondary contact is provided.';
-      } else if (!/^[a-zA-Z\s]+$/.test(secondaryContact.name)) {
-        this.guardErrors['secondaryContactName'] = 'Contact name can only contain letters and spaces.';
+    // Name (required)
+    if (!secondaryContact?.name?.trim()) {
+      this.guardErrors['secondaryContactName'] = 'Secondary contact name is required.';
+    } else if (!/^[a-zA-Z\s]+$/.test(secondaryContact.name)) {
+      this.guardErrors['secondaryContactName'] = 'Contact name can only contain letters and spaces.';
+    }
+
+    // Email (required)
+    if (!secondaryContact?.email?.trim()) {
+      this.guardErrors['secondaryContactEmail'] = 'Secondary contact email is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(secondaryContact.email)) {
+      this.guardErrors['secondaryContactEmail'] = 'Please enter a valid email address.';
+    }
+
+    // Phones: at least one required
+    const hasSecondaryMobile = secondaryContact?.mobilePhone?.e164;
+    const hasSecondaryLandline = secondaryContact?.landlinePhone?.e164;
+
+    // Validate mobile if provided
+    if (hasSecondaryMobile) {
+      const secondaryMobileE164 = secondaryContact!.mobilePhone!.e164;
+      const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+      if (!canadianPhonePattern.test(secondaryMobileE164)) {
+        this.guardErrors['secondaryContactMobilePhone'] = 'Invalid Canadian mobile phone number format.';
+      } else if (secondaryContact!.mobilePhone!.country !== 'CA') {
+        this.guardErrors['secondaryContactMobilePhone'] = 'Only Canadian phone numbers are accepted.';
       }
-      if (!secondaryContact.email?.trim()) {
-        this.guardErrors['secondaryContactEmail'] = 'Contact email is required if secondary contact is provided.';
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(secondaryContact.email)) {
-        this.guardErrors['secondaryContactEmail'] = 'Please enter a valid email address.';
+    }
+
+    // Validate landline if provided
+    if (hasSecondaryLandline) {
+      const secondaryLandlineE164 = secondaryContact!.landlinePhone!.e164;
+      const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
+
+      if (!canadianPhonePattern.test(secondaryLandlineE164)) {
+        this.guardErrors['secondaryContactLandlinePhone'] = 'Invalid Canadian landline phone number format.';
+      } else if (secondaryContact!.landlinePhone!.country !== 'CA') {
+        this.guardErrors['secondaryContactLandlinePhone'] = 'Only Canadian phone numbers are accepted.';
       }
+    }
 
-      // At least one phone required if any field is filled
-      const hasSecondaryMobile = secondaryContact.mobilePhone && secondaryContact.mobilePhone.e164;
-      const hasSecondaryLandline = secondaryContact.landlinePhone && secondaryContact.landlinePhone.e164;
+    // At least one phone is required
+    if (!hasSecondaryMobile && !hasSecondaryLandline) {
+      this.guardErrors['secondaryContactPhoneNumbers'] =
+        'At least one phone number (mobile or landline) is required.';
+    }
 
-      // Validate secondary mobile phone format if provided (Canadian: +1 followed by 10 digits)
-      if (hasSecondaryMobile) {
-        const secondaryMobileE164 = secondaryContact.mobilePhone!.e164;
-        const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
-
-        if (!canadianPhonePattern.test(secondaryMobileE164)) {
-          this.guardErrors['secondaryContactMobilePhone'] = 'Invalid Canadian mobile phone number format.';
-        } else if (secondaryContact.mobilePhone!.country !== 'CA') {
-          // Ensure country is Canada
-          this.guardErrors['secondaryContactMobilePhone'] = 'Only Canadian phone numbers are accepted.';
-        }
-      }
-
-      // Validate secondary landline phone format if provided (Canadian: +1 followed by 10 digits)
-      if (hasSecondaryLandline) {
-        const secondaryLandlineE164 = secondaryContact.landlinePhone!.e164;
-        const canadianPhonePattern = /^\+1[2-9]\d{9}$/;
-
-        if (!canadianPhonePattern.test(secondaryLandlineE164)) {
-          this.guardErrors['secondaryContactLandlinePhone'] = 'Invalid Canadian landline phone number format.';
-        } else if (secondaryContact.landlinePhone!.country !== 'CA') {
-          // Ensure country is Canada
-          this.guardErrors['secondaryContactLandlinePhone'] = 'Only Canadian phone numbers are accepted.';
-        }
-      }
-
-      // At least one phone number is required
-      if (!hasSecondaryMobile && !hasSecondaryLandline) {
-        this.guardErrors['secondaryContactPhoneNumbers'] = 'At least one phone number (mobile or landline) is required.';
-      }
-
-      // If both phone numbers are provided, they must be from the same country
-      if (hasSecondaryMobile && hasSecondaryLandline) {
-        if (secondaryContact.mobilePhone?.country !== secondaryContact.landlinePhone?.country) {
-          this.guardErrors['secondaryContactPhoneNumbers'] = 'Mobile and landline phone numbers must be from the same country.';
-        }
+    // If both provided, must be same country
+    if (hasSecondaryMobile && hasSecondaryLandline) {
+      if (secondaryContact!.mobilePhone?.country !== secondaryContact!.landlinePhone?.country) {
+        this.guardErrors['secondaryContactPhoneNumbers'] =
+          'Mobile and landline phone numbers must be from the same country.';
       }
     }
 
@@ -1799,6 +1911,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
             document_type: doc.documentType,
             document_number: doc.number,
             ...(doc.province && { province: doc.province }),
+            ...(doc.passportCountry && { passport_country: doc.passportCountry }),
             ...(doc.expiryDate && { expiry_date: doc.expiryDate }),
             ...(doc.existingFileId && { document_file_id: doc.existingFileId }),
             ...(doc.existingFileUrl && { document_file_url: doc.existingFileUrl }),
@@ -1869,23 +1982,17 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       payload.profile.landline_phone_country = this.guardFormModel.landlinePhone.country;
     }
 
-    // Add secondary contact if any data is present
+    // Secondary contact is required -> always send it
     const secondaryContact = this.guardFormModel.secondaryContact;
-    if (secondaryContact && (
-      secondaryContact.name?.trim() ||
-      secondaryContact.email?.trim() ||
-      secondaryContact.mobilePhone?.e164 ||
-      secondaryContact.landlinePhone?.e164
-    )) {
-      const secondaryPhone = secondaryContact.mobilePhone?.e164
-        || secondaryContact.landlinePhone?.e164
-        || '';
-      payload.profile.secondary_contact = {
-        name: secondaryContact.name || '',
-        email: secondaryContact.email || '',
-        phone: secondaryPhone
-      };
-    }
+    const secondaryPhone = secondaryContact.mobilePhone?.e164
+      || secondaryContact.landlinePhone?.e164
+      || '';
+
+    payload.profile.secondary_contact = {
+      name: secondaryContact.name || '',
+      email: secondaryContact.email || '',
+      phone: secondaryPhone
+    };
 
     // Legacy contact field
     const legacyContact = this.guardFormModel.mobilePhone?.national ||
@@ -1897,16 +2004,16 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       payload.profile.max_travel_radius_km = Math.round(this.guardFormModel.operationalRadius * 1.60934);
     }
 
-    // Determine desired post-submit tenant status. If user is completing onboarding, move to pending_verification.
+    // Determine desired post-submit tenant status. If user is completing onboarding, move to pending_activation.
     const isOnboarding = this.appService.userSessionData().tenant.has_onboarding;
-    payload.status = isOnboarding ? 'pending_verification' : 'active';
+    payload.status = isOnboarding ? 'pending_activation' : 'active';
 
     this.apiService.put('tenant', payload)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
           this.isSubmitting = false;
-          const newStatus = isOnboarding ? 'pending_verification' : 'active';
+          const newStatus = isOnboarding ? 'pending_activation' : 'active';
           this.appService.setTenantStatus(newStatus, false);
           this.router.navigate(['/dashboard']);
         },

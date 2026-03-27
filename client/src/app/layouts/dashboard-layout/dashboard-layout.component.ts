@@ -6,6 +6,15 @@ import { Router, RouterModule } from '@angular/router';
 import { AuthService } from "../../services/authetication/auth.service";
 import { AppService } from "../../services/core/app/app.service";
 import { ThemeService } from "../../services/theme/theme.service";
+import { AccessPolicy, canAccessPolicy } from '../../shared/helpers/access-control.helper';
+
+type DashboardLink = {
+  label: string;
+  route: string;
+  icon: IconName;
+  policy?: AccessPolicy;
+  hidden?: boolean;
+};
 
 @Component({
   selector: 'app-dashboard-layout',
@@ -23,7 +32,7 @@ export class DashboardLayoutComponent implements OnInit {
   sidebarCollapsed = false;
   isMobileView = false;
   // Navigation links centralized for easier management and role visibility
-  links: { label: string; route: string; icon: IconName; roles?: string[]; hidden?: boolean }[] = [
+  links: DashboardLink[] = [
     {
       label: 'Dashboard',
       route: '/dashboard/overview',
@@ -33,18 +42,40 @@ export class DashboardLayoutComponent implements OnInit {
       label: 'Tenants',
       route: '/dashboard/tenants',
       icon: 'users',
-      roles: ['admin']
+      policy: 'tenantManagement'
+    },
+    {
+      label: 'Admin Users',
+      route: '/dashboard/admin-users',
+      icon: 'users',
+      policy: 'platformUserManagement'
+    },
+    {
+      label: 'Billing Configurations',
+      route: '/dashboard/billing-configurations',
+      icon: 'settings',
+      policy: 'billingConfigurations'
     },
     {
       label: 'Settings',
       route: '/dashboard/settings',
-      icon: 'settings'
+      icon: 'settings',
+      policy: 'tenantSettings'
+    },
+    {
+      label: 'Settings',
+      route: '/dashboard/platform-settings',
+      icon: 'settings',
+      policy: 'platform'
     }
   ];
 
   get isAdmin(): boolean {
-    const session = this.appService.userSessionData();
-    return !!(session && session.user && session.user.role === 'admin');
+    return canAccessPolicy(
+      'tenantManagement',
+      this.appService.userSessionData()?.user?.role,
+      this.appService.roleMetadata()
+    );
   }
 
   constructor(
@@ -59,7 +90,12 @@ export class DashboardLayoutComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.initializeRoleMetadata();
     this.checkScreenWidth();
+  }
+
+  private async initializeRoleMetadata(): Promise<void> {
+    await this.appService.loadRoleMetadata(true);
   }
 
   @HostListener('window:resize', ['$event'])
@@ -83,11 +119,9 @@ export class DashboardLayoutComponent implements OnInit {
     this.authService.logout();
   }
 
-  canShow(link: { roles?: string[]; hidden?: boolean }): boolean {
+  canShow(link: DashboardLink): boolean {
     if (link.hidden) return false;
-    const session = this.appService.userSessionData();
-    if (!link.roles || link.roles.length === 0) return true;
-    const role = session?.user?.role || '';
-    return !!role && link.roles.includes(role);
+    if (!link.policy) return true;
+    return canAccessPolicy(link.policy, this.appService.userSessionData()?.user?.role, this.appService.roleMetadata());
   }
 }

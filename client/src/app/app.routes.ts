@@ -1,12 +1,14 @@
 import { Routes } from '@angular/router';
 import { AuthGuard } from './shared/guards/auth-guard.guard';
 import { onboardingGuard } from './shared/guards/onboarding.guard';
+import { billingConfigurationsGuard } from './shared/guards/billing-configurations.guard';
 import { LoginComponent } from './pages/login/login.component';
 import { DashboardComponent } from './pages/dashboard/dashboard.component';
 import { DashboardLayoutComponent } from './layouts/dashboard-layout/dashboard-layout.component';
 import { SignupComponent } from './pages/signup/signup.component';
 import { WelcomeComponent } from './pages/welcome/welcome.component';
 import { ResetPasswordComponent } from './shared/partials/forgot-password/reset-password.component';
+import { InviteActivationComponent } from './shared/partials/invite-activation/invite-activation.component';
 import { NotificationComponent } from './shared/partials/notification/notification.component';
 import { ConfigResolver } from './shared/resolvers/config.resolver';
 import { UsersComponent } from './pages/users/users.component';
@@ -15,6 +17,7 @@ import { OnboardingComponent } from './pages/onboarding/onboarding.component';
 import { TenantSettingsComponent } from './pages/tenant-settings/tenant-settings.component';
 import { PendingVerificationComponent } from './pages/pending-verification/pending-verification.component';
 import { pendingVerificationGuard } from './shared/guards/pending-verification.guard';
+import { platformSettingsGuard, platformUserManagementGuard, tenantSettingsGuard } from './shared/guards/settings.guard';
 
 export const routes: Routes = [
 
@@ -63,6 +66,11 @@ export const routes: Routes = [
     data: { animation: 'ForgotPasswordComponent' }
   },
   {
+    path: 'invite/:token',
+    component: InviteActivationComponent,
+    data: { animation: 'ForgotPasswordComponent' }
+  },
+  {
     path: 'dashboard',
     component: DashboardLayoutComponent,
     canActivate: [AuthGuard],
@@ -87,6 +95,11 @@ export const routes: Routes = [
         canActivate: [onboardingGuard, pendingVerificationGuard]
       },
       {
+        path: 'admin-users',
+        loadComponent: () => import('./pages/admin-users/admin-users.component').then(m => m.AdminUsersComponent),
+        canActivate: [onboardingGuard, pendingVerificationGuard, platformUserManagementGuard]
+      },
+      {
         path: 'analytics',
         component: AnalyticsComponent,
         canActivate: [onboardingGuard, pendingVerificationGuard]
@@ -102,6 +115,12 @@ export const routes: Routes = [
       {
         path: 'settings',
         component: TenantSettingsComponent,
+        canActivate: [tenantSettingsGuard]
+      },
+      {
+        path: 'platform-settings',
+        loadComponent: () => import('./pages/platform-settings/platform-settings.component').then(m => m.PlatformSettingsComponent),
+        canActivate: [platformSettingsGuard]
       },
       {
         path: 'tenants/:id',
@@ -112,6 +131,11 @@ export const routes: Routes = [
         path: 'tenants',
         loadComponent: () => import('./pages/tenants').then(m => m.TenantsComponent),
         canActivate: [onboardingGuard]
+      },
+      {
+        path: 'billing-configurations',
+        loadComponent: () => import('./pages/billing-configurations').then(m => m.BillingConfigurationsComponent),
+        canActivate: [billingConfigurationsGuard]
       },
       {
         path: 'onboarding',

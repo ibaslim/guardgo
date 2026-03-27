@@ -11,27 +11,36 @@ import { ModalComponent } from '../../components/modal/modal.component';
 import { TableThComponent } from '../../components/table/table-th.component';
 import { TableTdComponent } from '../../components/table/table-td.component';
 import { SelectInputComponent } from '../../components/form/select-input/select-input.component';
+import { BaseInputComponent } from '../../components/form/base-input/base-input.component';
+import { PageComponent } from '../../components/page/page.component';
 import { TenantSettingsComponent } from '../tenant-settings/tenant-settings.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
 import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
-import { readableTitle } from '../../shared/helpers/format.helper';
+import { formatBackendDateTime, readableTitle } from '../../shared/helpers/format.helper';
 import { HttpParams } from '@angular/common/http';
 import { Router, ActivatedRoute } from '@angular/router';
+import { LogListTableComponent } from '../../components/activity-logs-table/activity-logs-table.component';
 
 @Component({
   selector: 'app-tenants',
   standalone: true,
-  imports: [CommonModule, FormsModule, TableComponent, BadgeComponent, SideDrawerComponent, IconComponent, TableThComponent, TableTdComponent, ButtonComponent, ModalComponent, SelectInputComponent, TenantSettingsComponent],
+  imports: [CommonModule, FormsModule, TableComponent, BadgeComponent, SideDrawerComponent, IconComponent, TableThComponent, TableTdComponent, ButtonComponent, ModalComponent, SelectInputComponent, BaseInputComponent, PageComponent, TenantSettingsComponent, LogListTableComponent],
   templateUrl: './tenants.component.html',
 })
 export class TenantsComponent implements OnInit {
   tenants: any[] = [];
+  activityLogs: any[] = [];
   loading = false;
+  activityLoading = false;
   page = 1;
   rows = 10;
+  activityPage = 1;
+  activityRows = 20;
   totalPages = 1;
   totalItems = 0;
+  activityTotalPages = 1;
+  activityTotalItems = 0;
   keyword = '';
   sort_by = 'created_at';
   sort_order: 'asc' | 'desc' = 'desc';
@@ -46,14 +55,16 @@ export class TenantsComponent implements OnInit {
   tenantStatusOptions = [
     { label: 'All', value: '' },
     { label: 'Onboarding', value: 'onboarding' },
-    { label: 'Pending Verification', value: 'pending_verification' },
+    { label: 'Pending Activation', value: 'pending_activation' },
     { label: 'Active', value: 'active' },
     { label: 'Inactive', value: 'inactive' },
     { label: 'Banned', value: 'banned' }
   ];
 
   showDrawer = false;
+  showActivityDrawer = false;
   tenantDetail: any = null;
+  selectedTenantForLogs: any = null;
   selectedRows: any[] = [];
   // UI state for modal/alerts
   showConfirmModal = false;
@@ -69,8 +80,10 @@ export class TenantsComponent implements OnInit {
 
   // expose helper to template
   readableTitle = readableTitle;
+  formatBackendDateTime = formatBackendDateTime;
 
   ngOnInit(): void {
+    this.appService.loadRoleMetadata();
     this.loadPage(1);
     this.route.paramMap.subscribe(params => {
       const id = params.get('id');
@@ -182,17 +195,25 @@ export class TenantsComponent implements OnInit {
   }
 
   isAdmin(): boolean {
-    const session = this.appService.userSessionData();
-    return !!(session && session.user && session.user.role === 'admin');
+    const rawRole = String(this.appService.userSessionData()?.user?.role || '').trim().toLowerCase();
+    const role = rawRole.includes('.') ? (rawRole.split('.').pop() || '') : rawRole;
+    const allowedRoles = this.appService.roleMetadata().tenantManagementRoles || [];
+    return !!role && allowedRoles.includes(role);
+  }
+
+  isSuperAdmin(): boolean {
+    const rawRole = String(this.appService.userSessionData()?.user?.role || '').trim().toLowerCase();
+    const role = rawRole.includes('.') ? (rawRole.split('.').pop() || '') : rawRole;
+    return role === 'admin';
   }
 
   confirmChange(action: 'verify' | 'deactivate' | 'ban') {
     if (!this.tenantDetail || !this.tenantDetail.id) return;
-    const map: any = { verify: 'Verify', deactivate: 'Deactivate', ban: 'Ban' };
+    const map: any = { verify: 'Approve', deactivate: 'Deactivate', ban: 'Ban' };
     this.pendingAction = action;
     // If verifying a previously inactive or banned tenant, present as "Re-activate"
     if (action === 'verify' && (this.tenantDetail?.status === 'inactive' || this.tenantDetail?.status === 'banned')) {
-      this.confirmLabel = 'Re-activate';
+      this.confirmLabel = 'Approve & Re-activate';
     } else {
       this.confirmLabel = map[action];
     }
@@ -205,7 +226,8 @@ export class TenantsComponent implements OnInit {
   performStatusAction(action: 'verify' | 'deactivate' | 'ban') {
     if (!this.tenantDetail || !this.tenantDetail.id) return;
     const id = this.tenantDetail.id || this.tenantDetail._id;
-    this.api.patch<any>(`tenants/${id}/${action}`).subscribe({
+    const endpointAction = action === 'verify' ? 'approve' : action;
+    this.api.patch<any>(`tenants/${id}/${endpointAction}`).subscribe({
       next: res => {
         this.notification.show(res?.message || 'Tenant status updated', 'success', 4000);
         this.showConfirmModal = false;
@@ -237,5 +259,63 @@ export class TenantsComponent implements OnInit {
     this.showDrawer = false;
     // clear route id
     this.router.navigate(['/dashboard/tenants']);
+  }
+
+  openTenantLogs(row: any) {
+    if (!this.isSuperAdmin()) return;
+    const id = row?.id || row?._id;
+    if (!id) return;
+    this.selectedTenantForLogs = row;
+    this.showActivityDrawer = true;
+    this.loadTenantActivityLogs(id, 1);
+  }
+
+  loadTenantActivityLogs(tenantId: string, page: number = 1) {
+    this.activityLoading = true;
+    const params = new HttpParams()
+      .set('module', 'tenant')
+      .set('entity_type', 'tenant')
+      .set('entity_id', String(tenantId))
+      .set('page', String(page))
+      .set('rows', String(this.activityRows));
+
+    this.api.get<any>('activity', { params }).subscribe({
+      next: res => {
+        this.activityLogs = res?.items || [];
+        this.activityTotalItems = res?.pagination?.total_items || 0;
+        this.activityTotalPages = res?.pagination?.total_pages || 1;
+        this.activityPage = res?.pagination?.page || page;
+        this.activityLoading = false;
+      },
+      error: () => {
+        this.activityLogs = [];
+        this.activityTotalItems = 0;
+        this.activityTotalPages = 1;
+        this.activityLoading = false;
+      }
+    });
+  }
+
+  closeActivityModal() {
+    this.showActivityDrawer = false;
+    this.selectedTenantForLogs = null;
+    this.activityLogs = [];
+    this.activityPage = 1;
+    this.activityTotalPages = 1;
+    this.activityTotalItems = 0;
+  }
+
+  nextActivityPage() {
+    if (!this.selectedTenantForLogs) return;
+    const id = this.selectedTenantForLogs.id || this.selectedTenantForLogs._id;
+    if (!id || this.activityPage >= this.activityTotalPages) return;
+    this.loadTenantActivityLogs(id, this.activityPage + 1);
+  }
+
+  prevActivityPage() {
+    if (!this.selectedTenantForLogs) return;
+    const id = this.selectedTenantForLogs.id || this.selectedTenantForLogs._id;
+    if (!id || this.activityPage <= 1) return;
+    this.loadTenantActivityLogs(id, this.activityPage - 1);
   }
 }

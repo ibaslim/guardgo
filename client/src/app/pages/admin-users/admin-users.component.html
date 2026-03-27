@@ -1,0 +1,207 @@
+<app-page title="Admin Users" subtitle="Manage platform-level admin accounts and their roles." [contentClass]="'space-y-6'">
+  <div page-actions *ngIf="isSuperAdminCompatible()">
+    <app-button label="Add Admin User" type="primary" size="sm" [customClass]="'rounded-lg'"
+      (pressed)="openCreateModal()"></app-button>
+  </div>
+
+  <div *ngIf="!isSuperAdminCompatible()" class="rounded-md border border-yellow-300 bg-yellow-50 text-yellow-800 p-4">
+    You do not have access to manage platform admin users.
+  </div>
+
+  <ng-container *ngIf="isSuperAdminCompatible()">
+    <div class="space-y-4">
+
+      <div class="mb-4 flex flex-col md:flex-row md:items-start md:gap-4">
+        <div class="mt-3 md:mt-0 flex-1 min-w-0 max-w-xs">
+          <div class="mt-1">
+            <app-base-input
+              [(ngModel)]="keyword"
+              (ngModelChange)="onSearch($event)"
+              placeholder="Search admin users..."
+              name="adminUserSearch"
+              autocomplete="off"
+            ></app-base-input>
+          </div>
+        </div>
+
+        <div class="mt-3 md:mt-0 md:ml-2" style="min-width:200px;">
+          <div class="mt-1">
+            <app-select-input [options]="roleFilterOptions" [(ngModel)]="roleFilter"
+              (ngModelChange)="onRoleFilterChange($event)" [searchable]="false" placeholder="Role"
+              aria-label="Role filter"></app-select-input>
+          </div>
+        </div>
+
+        <div class="mt-3 md:mt-0 md:ml-2" style="min-width:200px;">
+          <div class="mt-1">
+            <app-select-input [options]="statusFilterOptions" [(ngModel)]="statusFilter"
+              (ngModelChange)="onStatusFilterChange($event)" [searchable]="false" placeholder="Status"
+              aria-label="Status filter"></app-select-input>
+          </div>
+        </div>
+
+        <div class="mt-3 md:mt-0 md:ml-2" style="min-width:120px;">
+          <div class="mt-1">
+            <app-select-input
+              [options]="[{ label: '10', value: 10 }, { label: '25', value: 25 }, { label: '50', value: 50 }, { label: '100', value: 100 }]"
+              [(ngModel)]="rows" (ngModelChange)="onPageSizeChange($event)" [searchable]="false" placeholder="Rows"
+              aria-label="Rows per page"></app-select-input>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between gap-4 mb-4">
+        <div class="flex items-center flex-wrap gap-2">
+          <ng-container *ngIf="keyword">
+            <div class="inline-flex items-center bg-gray-100 dark:bg-gray-800 text-sm rounded-full px-2 py-0.5">
+              <span class="mr-1 text-sm">Search: "{{ keyword }}"</span>
+              <app-button size="sm" type="outline" [iconOnly]="true"
+                [customClass]="'p-1 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'"
+                ariaLabel="Clear search" (pressed)="removeKeyword()">
+                <app-icon icon name="x" [size]="12"></app-icon>
+              </app-button>
+            </div>
+          </ng-container>
+
+          <ng-container *ngIf="roleFilter">
+            <div class="inline-flex items-center bg-gray-100 dark:bg-gray-800 text-sm rounded-full px-2 py-0.5">
+              <span class="mr-1 text-sm">Role: {{ getRoleLabel(roleFilter) }}</span>
+              <app-button size="sm" type="outline" [iconOnly]="true"
+                [customClass]="'p-1 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'"
+                ariaLabel="Clear role" (pressed)="removeRole()">
+                <app-icon icon name="x" [size]="12"></app-icon>
+              </app-button>
+            </div>
+          </ng-container>
+
+          <ng-container *ngIf="statusFilter">
+            <div class="inline-flex items-center bg-gray-100 dark:bg-gray-800 text-sm rounded-full px-2 py-0.5">
+              <span class="mr-1 text-sm">Status: {{ statusFilter }}</span>
+              <app-button size="sm" type="outline" [iconOnly]="true"
+                [customClass]="'p-1 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100'"
+                ariaLabel="Clear status" (pressed)="removeStatus()">
+                <app-icon icon name="x" [size]="12"></app-icon>
+              </app-button>
+            </div>
+          </ng-container>
+        </div>
+
+        <div>
+          <app-button size="sm" type="secondary" label="Reset filters" [customClass]="'px-3 py-1 text-sm'"
+            ariaLabel="Reset filters" (pressed)="resetFilters()"></app-button>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <ng-template #adminHeader let-setSort="setSort">
+          <tr>
+            <th app-table-th (click)="setSort('username')" class="cursor-pointer">USERNAME</th>
+            <th app-table-th>FULL NAME</th>
+            <th app-table-th (click)="setSort('email')" class="cursor-pointer">EMAIL</th>
+            <th app-table-th (click)="setSort('role')" class="cursor-pointer">ROLE</th>
+            <th app-table-th (click)="setSort('status')" class="cursor-pointer">STATUS</th>
+            <th app-table-th>INVITE</th>
+            <th app-table-th>ACTIONS</th>
+          </tr>
+        </ng-template>
+
+        <app-table
+          [data]="filteredUsers"
+          [loading]="loading"
+          [showFilter]="false"
+          [showPagination]="true"
+          [pageSize]="rows"
+          [headerTemplate]="adminHeader"
+          [rowTemplate]="adminRow"
+          [columnCount]="7">
+        </app-table>
+
+        <ng-template #adminRow let-row>
+          <td app-table-td>{{ row.username }}</td>
+          <td app-table-td>{{ row.full_name || '-' }}</td>
+          <td app-table-td>{{ row.email }}</td>
+          <td app-table-td>{{ getRoleLabel(row.role) }}</td>
+          <td app-table-td><app-badge [label]="row.status"></app-badge></td>
+          <td app-table-td>
+            <div class="flex flex-col gap-1">
+              <app-badge [label]="getInviteBadgeLabel(row)" [color]="getInviteBadgeColor(row)"></app-badge>
+              <span class="text-xs text-gray-500 dark:text-gray-400">{{ getInviteExpiryLabel(row) }}</span>
+            </div>
+          </td>
+          <td app-table-td>
+            <div class="flex items-center gap-2">
+              <app-button *ngIf="row.invite_pending" type="outline" size="sm" [iconOnly]="true" [customClass]="'p-1 rounded'"
+                ariaLabel="Resend invite" title="Resend invite" [loading]="saving" (pressed)="resendInvite(row)">
+                <app-icon icon name="send" [size]="16"></app-icon>
+              </app-button>
+
+              <app-button type="secondary" size="sm" [iconOnly]="true" [customClass]="'p-1 rounded'"
+                ariaLabel="Edit user" title="Edit user" (pressed)="openEditModal(row)">
+                <app-icon icon name="edit" [size]="16"></app-icon>
+              </app-button>
+
+              <app-button *ngIf="row.status !== 'deleted'" type="danger" size="sm" [iconOnly]="true" [customClass]="'p-1 rounded'"
+                ariaLabel="Delete user" title="Delete user" [loading]="saving" (pressed)="softDelete(row)">
+                <app-icon icon name="trash" [size]="16"></app-icon>
+              </app-button>
+
+              <app-button *ngIf="row.status === 'deleted'" type="outline" size="sm" [iconOnly]="true" [customClass]="'p-1 rounded'"
+                ariaLabel="Restore user" title="Restore user" [loading]="saving" (pressed)="restoreUser(row)">
+                <app-icon icon name="check-circle" [size]="16"></app-icon>
+              </app-button>
+
+              <app-button *ngIf="row.status === 'deleted'" type="danger" size="sm" [iconOnly]="true" [customClass]="'p-1 rounded'"
+                ariaLabel="Permanently delete user" title="Permanently delete user" [loading]="saving" (pressed)="permanentlyDeleteUser(row)">
+                <app-icon icon name="trash-2" [size]="16"></app-icon>
+              </app-button>
+            </div>
+          </td>
+        </ng-template>
+      </div>
+    </div>
+  </ng-container>
+</app-page>
+
+<app-modal [show]="showCreateModal" title="Invite Admin User" size="lg" (close)="closeCreateModal()">
+  <p class="text-sm text-gray-600 dark:text-gray-300 mb-4">
+    Enter email and role. We’ll send an invite link so the user can set their own password.
+  </p>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+    <app-base-input label="Email" type="email" name="platformAdminEmail" [(ngModel)]="createForm.email"
+      autocomplete="off" [required]="true" [errorText]="createFormErrors['email'] || ''">
+    </app-base-input>
+
+    <app-select-input label="Role" name="platformAdminRole" [options]="roleOptions" [(ngModel)]="createForm.role"
+      [required]="true" [searchable]="false" [errorText]="createFormErrors['role'] || ''">
+    </app-select-input>
+  </div>
+
+  <div *ngIf="createFormErrors['form']" class="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+    {{ createFormErrors['form'] }}
+  </div>
+
+  <div modal-actions class="flex items-center justify-end gap-2 mt-6">
+    <app-button type="secondary" size="sm" label="Cancel" (pressed)="closeCreateModal()"></app-button>
+    <app-button type="primary" size="sm" label="Send Invite" [loading]="saving" (pressed)="createUser()"></app-button>
+  </div>
+</app-modal>
+
+<app-modal [show]="showEditModal" title="Edit Admin User" size="lg" (close)="closeEditModal()">
+  <div class="grid grid-cols-1 gap-4 sm:gap-5">
+    <app-select-input label="Role" name="editPlatformAdminRole" [options]="roleOptions" [(ngModel)]="editForm.role"
+      [required]="true" [searchable]="false" [errorText]="editFormErrors['role'] || ''">
+    </app-select-input>
+    <app-select-input label="Status" name="editPlatformAdminStatus" [options]="statusOptions" [(ngModel)]="editForm.status"
+      [required]="true" [searchable]="false" [errorText]="editFormErrors['status'] || ''">
+    </app-select-input>
+    <app-base-input *ngIf="editForm.status === 'blocked' || editForm.status === 'deleted'"
+      label="Reason" name="editPlatformAdminStatusReason" [(ngModel)]="editForm.status_reason"
+      [required]="true" [errorText]="editFormErrors['status_reason'] || ''">
+    </app-base-input>
+  </div>
+
+  <div modal-actions class="flex items-center justify-end gap-2 mt-6">
+    <app-button type="secondary" size="sm" label="Cancel" (pressed)="closeEditModal()"></app-button>
+    <app-button type="primary" size="sm" label="Save" [loading]="saving" (pressed)="saveEdit()"></app-button>
+  </div>
+</app-modal>

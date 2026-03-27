@@ -1,4 +1,5 @@
 import threading
+import re
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, Depends, Request
@@ -10,7 +11,12 @@ from orion.constants import constant
 from orion.services.mail_manager.mail_enums import MailSubject, MailUrlHeading
 from orion.constants.constant import CONSTANTS
 from orion.services.mongo_manager.mongo_controller import mongo_controller
-from orion.services.mongo_manager.shared_model.db_auth_models import db_user_account, user_role, UserStatus
+from orion.services.mongo_manager.shared_model.db_auth_models import (
+    db_user_account,
+    user_role,
+    UserStatus,
+    is_platform_admin_role,
+)
 from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus
 from orion.services.session_manager.session_manager import session_manager
 from orion.services.mail_manager.mail_manager import mail_manager
@@ -66,13 +72,18 @@ class auth_manager:
         if isinstance(acct_at, datetime):
             acct_at = acct_at if acct_at.tzinfo else acct_at.replace(tzinfo=timezone.utc)
 
-        if not getattr(user, "tenant_uuid", None):
+        tenant_uuid = getattr(user, "tenant_uuid", None)
+        is_platform_user = is_platform_admin_role(user.role)
+
+        if not tenant_uuid and not is_platform_user:
             raise HTTPException(status_code=401, detail="account not found")
-        engine = mongo_controller.get_instance().get_engine()
-        tenant = await engine.find_one(
-            db_tenant_model, db_tenant_model.id == ObjectId(user.tenant_uuid))
-        if tenant and tenant.status == TenantStatus.BANNED:
-            raise HTTPException(status_code=401, detail="account blocked")
+
+        if tenant_uuid:
+            engine = mongo_controller.get_instance().get_engine()
+            tenant = await engine.find_one(
+                db_tenant_model, db_tenant_model.id == ObjectId(tenant_uuid))
+            if tenant and tenant.status == TenantStatus.BANNED:
+                raise HTTPException(status_code=401, detail="account blocked")
 
         if (role_name == "member" and not bool(getattr(user, "subscription", False)) and acct_at is not None and (
                 datetime.now(timezone.utc) - acct_at).days >= 30):
@@ -81,8 +92,11 @@ class auth_manager:
         if role_name == "member" and user.status != UserStatus.ACTIVE:
             raise HTTPException(status_code=401, detail="user currently disabled")
 
-        if user.status == UserStatus.DISABLE:
+        if user.status in [UserStatus.DISABLE, UserStatus.BLOCKED]:
             raise HTTPException(status_code=401, detail="Account Blocked")
+
+        if user.status in [UserStatus.INACTIVE, UserStatus.DELETED]:
+            raise HTTPException(status_code=401, detail="Account is inactive")
 
         # All users get standard token expiry
         access_token_expires = timedelta(minutes=30)
@@ -91,7 +105,9 @@ class auth_manager:
             data={"sub": user.username}, expires_delta=access_token_expires, free=free)
 
 
-        onboarding_exists = await session_manager.get_instance().has_onboarding(str(user.tenant_uuid))
+        onboarding_exists = False
+        if tenant_uuid:
+            onboarding_exists = await session_manager.get_instance().has_onboarding(str(tenant_uuid))
 
         session_data = {"role": role, "username": user.username, "status": user.status, "hasOnboarding": onboarding_exists, "subscription": user.subscription, "verificationDate": user.account_verify_at, "licenses": [
             license.value for license in user.licenses], }
@@ -120,20 +136,104 @@ class auth_manager:
         return {"message": "Email verified successfully. You may continue onboarding."}
 
     @staticmethod
+    async def get_password_reset_context(token: str):
+        engine = mongo_controller.get_instance().get_engine()
+        user = await engine.find_one(db_user_account, db_user_account.verification_token == token)
+        if not user:
+            raise HTTPException(status_code=404, detail="Invalid Link")
+
+        expiry = user.verification_expiry
+        if expiry is not None:
+            expiry_utc = expiry if expiry.tzinfo else expiry.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) > expiry_utc:
+                raise HTTPException(status_code=400, detail="Verification link expired")
+
+        return {
+            "invite_pending": bool(getattr(user, "invite_pending", False)),
+            "email": user.email,
+            "username": user.username,
+            "full_name": getattr(user, "full_name", "") or "",
+        }
+
+    @staticmethod
+    async def get_invite_context(token: str):
+        ctx = await auth_manager.get_password_reset_context(token)
+        if not ctx.get("invite_pending"):
+            raise HTTPException(status_code=400, detail="Invalid invite link")
+        return ctx
+
+    @staticmethod
     async def update_password(token: str, password: str):
         engine = mongo_controller.get_instance().get_engine()
         user = await engine.find_one(db_user_account, db_user_account.verification_token == token)
         if not user:
             raise HTTPException(status_code=404, detail="Invalid Link")
+
+        expiry = user.verification_expiry
+        if expiry is not None:
+            expiry_utc = expiry if expiry.tzinfo else expiry.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) > expiry_utc:
+                raise HTTPException(status_code=400, detail="Verification link expired")
+
+        if bool(getattr(user, "invite_pending", False)):
+            raise HTTPException(status_code=400, detail="Invite activation must use invite endpoint")
+
         if CONSTANTS.S_AUTH_PWD_CONTEXT.verify(password, user.password):
             raise HTTPException(status_code=400, detail="New password must be different from the old one.")
 
         user.password = CONSTANTS.S_AUTH_PWD_CONTEXT.hash(password)
         user.verification_token = None
+        user.verification_expiry = None
+
         await engine.save(user)
 
 
         return {"message": "Password reset successfully."}
+
+    @staticmethod
+    async def activate_invited_user(token: str, password: str, username: str, full_name: str):
+        engine = mongo_controller.get_instance().get_engine()
+        user = await engine.find_one(db_user_account, db_user_account.verification_token == token)
+        if not user:
+            raise HTTPException(status_code=404, detail="Invalid Link")
+
+        if not bool(getattr(user, "invite_pending", False)):
+            raise HTTPException(status_code=400, detail="Invalid invite link")
+
+        expiry = user.verification_expiry
+        if expiry is not None:
+            expiry_utc = expiry if expiry.tzinfo else expiry.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) > expiry_utc:
+                raise HTTPException(status_code=400, detail="Verification link expired")
+
+        normalized_username = (username or "").strip()
+        normalized_full_name = (full_name or "").strip()
+
+        if not normalized_username:
+            raise HTTPException(status_code=400, detail="Username is required for invite activation")
+        if not normalized_full_name:
+            raise HTTPException(status_code=400, detail="Full name is required for invite activation")
+
+        username_pattern = r"^[A-Za-z][A-Za-z0-9_-]{7,19}$"
+        if not normalized_username[0].isalpha() or not re.match(username_pattern, normalized_username):
+            raise HTTPException(status_code=400, detail="Username must be 8-20 characters, start with letter")
+
+        existing = await engine.find_one(db_user_account, db_user_account.username == normalized_username)
+        if existing and str(existing.id) != str(user.id):
+            raise HTTPException(status_code=400, detail="Username already exists")
+
+        user.password = CONSTANTS.S_AUTH_PWD_CONTEXT.hash(password)
+        user.username = normalized_username
+        user.full_name = normalized_full_name
+        user.invite_pending = False
+        user.status = UserStatus.ACTIVE
+        user.status_reason = None
+        user.account_verify_at = datetime.now(timezone.utc)
+        user.verification_token = None
+        user.verification_expiry = None
+
+        await engine.save(user)
+        return {"message": "Account activated successfully."}
 
     @staticmethod
     async def forgot_password(mail: str):

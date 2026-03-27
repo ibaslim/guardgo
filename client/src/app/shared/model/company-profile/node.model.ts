@@ -8,6 +8,7 @@ export interface UserDataModel {
     email: string;
     twofa_enabled: boolean;
     username: string;
+    full_name?: string;
     role: string;
     status: string;
     subscription: boolean;

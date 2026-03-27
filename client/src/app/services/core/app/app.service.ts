@@ -26,6 +26,7 @@ export class AppService {
       email: '',
       twofa_enabled: false,
       username: '',
+      full_name: '',
       role: '',
       status: '',
       subscription: false,
@@ -55,6 +56,17 @@ export class AppService {
     iocs: []
   });
   public userImageUrl = signal<string | null>(null);
+  public roleMetadata = signal<{
+    platformRoles: string[];
+    tenantSettingsRoles: string[];
+    tenantManagementRoles: string[];
+    platformUserManagementRoles: string[];
+  }>({
+    platformRoles: [],
+    tenantSettingsRoles: [],
+    tenantManagementRoles: [],
+    platformUserManagementRoles: []
+  });
 
   constructor(private title: Title, private apiService: ApiService, private activatedRoute: ActivatedRoute, private router: Router, private appStorageService: AppStorageService, private http: HttpClient) {
     this.loadEntities()
@@ -80,6 +92,7 @@ export class AppService {
             email: '',
             twofa_enabled: false,
             username: '',
+            full_name: '',
             role: '',
             status: '',
             subscription: false,
@@ -115,6 +128,35 @@ export class AppService {
         this.configData.set(new ConfigSettings(response.settings, current.localSettings));
       }
     });
+  }
+
+  async loadRoleMetadata(force = false): Promise<void> {
+    const current = this.roleMetadata();
+    if (
+      !force &&
+      current.platformRoles.length > 0 &&
+      current.tenantSettingsRoles.length > 0 &&
+      current.tenantManagementRoles.length > 0 &&
+      current.platformUserManagementRoles.length > 0
+    ) {
+      return;
+    }
+
+    try {
+      const data = await firstValueFrom(this.apiService.get<any>('public/role-metadata'));
+      const platformRoles = Array.isArray(data?.platformRoles) ? data.platformRoles : [];
+      const tenantSettingsRoles = Array.isArray(data?.tenantSettingsRoles) ? data.tenantSettingsRoles : [];
+      const tenantManagementRoles = Array.isArray(data?.tenantManagementRoles) ? data.tenantManagementRoles : [];
+      const platformUserManagementRoles = Array.isArray(data?.platformUserManagementRoles) ? data.platformUserManagementRoles : [];
+      this.roleMetadata.set({ platformRoles, tenantSettingsRoles, tenantManagementRoles, platformUserManagementRoles });
+    } catch {
+      this.roleMetadata.set({
+        platformRoles: [],
+        tenantSettingsRoles: [],
+        tenantManagementRoles: [],
+        platformUserManagementRoles: []
+      });
+    }
   }
 
   loadStaticConfig(): void {
@@ -173,6 +215,7 @@ export class AppService {
         email: '',
         twofa_enabled: false,
         username: '',
+        full_name: '',
         role: '',
         status: '',
         subscription: false,

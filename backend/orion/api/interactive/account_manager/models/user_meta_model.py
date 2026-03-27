@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 class user_meta_model(BaseModel):
     username: str
+    full_name: Optional[str] = None
     email: Optional[str] = None
     password: Optional[str] = None
     preferences: Optional[Dict[str, Any]] = None
