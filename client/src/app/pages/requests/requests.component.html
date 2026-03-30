@@ -1,0 +1,395 @@
+<app-page
+  title="Requests"
+  subtitle="Role-aware request visibility, assignment flow, and ongoing job management."
+  [containerClass]="'w-full px-4 py-8 sm:px-6 lg:px-8'"
+  [contentClass]="'max-w-6xl mx-auto space-y-8'"
+>
+  <div page-actions *ngIf="isClientAdmin">
+    <app-button label="Add Request" type="primary" (pressed)="openCreateRequestDrawer()"></app-button>
+  </div>
+
+  <app-card
+    [showHeader]="false"
+    [containerClass]="'rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
+    [bodyClass]="'p-4 sm:p-5'"
+  >
+    <div class="flex flex-nowrap items-center gap-3 overflow-x-auto">
+      <app-button
+        label="Requests"
+        [type]="activeTab === 'requests' ? 'primary' : 'secondary'"
+        (pressed)="activeTab = 'requests'"
+      ></app-button>
+      <app-button
+        label="Jobs"
+        [type]="activeTab === 'jobs' ? 'primary' : 'secondary'"
+        (pressed)="activeTab = 'jobs'"
+      ></app-button>
+    </div>
+  </app-card>
+
+  <app-card
+    *ngIf="activeTab === 'requests'"
+    [showHeader]="false"
+    [containerClass]="'mt-3 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
+    [bodyClass]="'p-0'"
+  >
+    <div class="border-b border-gray-100 px-6 py-6 dark:border-gray-800">
+      <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Request Pipeline</h2>
+          <p class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ totalItems }} request{{ totalItems === 1 ? '' : 's' }} in your role scope.</p>
+        </div>
+        <div class="grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-end dark:bg-gray-800/50">
+          <app-base-input label="Search" name="keyword" [(ngModel)]="keyword" placeholder="Title or site"></app-base-input>
+          <app-select-input label="Status" [name]="'requestStatusFilter'" [(ngModel)]="requestStatusFilter" [options]="requestStatusOptions"></app-select-input>
+          <app-select-input label="Target" [name]="'targetTypeFilter'" [(ngModel)]="targetTypeFilter" [options]="targetTypeFilterOptions"></app-select-input>
+          <div class="flex flex-wrap gap-2 pb-0.5 sm:justify-end">
+            <app-button label="Apply" type="primary" (pressed)="applyFilters()"></app-button>
+            <app-button label="Clear" type="secondary" (pressed)="clearFilters()"></app-button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="loading" class="space-y-4 p-6">
+      <div *ngFor="let _ of [1,2,3]" class="animate-pulse rounded-lg border border-gray-100 p-5 dark:border-gray-800">
+        <div class="mb-3 h-4 w-40 rounded bg-gray-200 dark:bg-gray-700"></div>
+        <div class="mb-3 h-3 w-3/4 rounded bg-gray-100 dark:bg-gray-800"></div>
+        <div class="h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800"></div>
+      </div>
+    </div>
+
+    <div *ngIf="!loading && !items.length" class="px-6 py-16 text-center">
+      <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+        <app-icon name="file-text" [size]="22"></app-icon>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">No requests in scope</h3>
+      <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Adjust filters or create a new request to continue.</p>
+    </div>
+
+    <div *ngIf="!loading && items.length" class="divide-y divide-gray-100 dark:divide-gray-800">
+      <div *ngFor="let item of items; trackBy: trackByRequestId" class="px-6 py-6">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div class="min-w-0 flex-1">
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+              <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(item.request_status)">
+                {{ item.request_status }}
+              </span>
+              <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                {{ getTargetTypeLabel(item.target_type) }}
+              </span>
+              <span class="text-xs text-gray-400 dark:text-gray-500">Created {{ formatBackendDateTime(item.created_at) }}</span>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ item.title }}</h3>
+            <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
+              <span>{{ item.site_snapshot.site_name || 'Unnamed site' }}</span>
+              <span>•</span>
+              <span>{{ item.guards_required }} guard{{ item.guards_required === 1 ? '' : 's' }}</span>
+              <span *ngIf="item.requested_guard_type">•</span>
+              <span *ngIf="item.requested_guard_type">{{ item.requested_guard_type }}</span>
+            </div>
+            <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+              <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+                <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Eligible Matches</div>
+                <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getMatchCount(item, 'eligible_count') }}</div>
+              </div>
+              <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+                <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Missing Geo</div>
+                <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getMatchCount(item, 'missing_geo_count') }}</div>
+              </div>
+              <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+                <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Outside Radius</div>
+                <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getMatchCount(item, 'outside_radius_count') }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="flex shrink-0 flex-wrap gap-2 pt-1 xl:pl-6">
+            <app-button label="Details" type="secondary" (pressed)="openRequestDetails(item)"></app-button>
+            <app-button *ngIf="canEditRequest(item)" label="Edit" type="secondary" (pressed)="openEditRequestDrawer(item)"></app-button>
+            <app-button *ngIf="canCommitRequest(item)" label="Commit" type="primary" (pressed)="commitDraft(item)"></app-button>
+            <app-button *ngIf="canShowRequestStatusActions(item)" label="Cancel" type="danger" (pressed)="updateStatus(item, 'cancelled')"></app-button>
+            <app-button *ngIf="canShowRequestStatusActions(item)" label="Close" type="secondary" (pressed)="updateStatus(item, 'closed')"></app-button>
+          </div>
+        </div>
+
+        <div *ngIf="canShowAssignmentActions(item)" class="mt-5 grid grid-cols-1 gap-3 rounded-md border border-blue-100 bg-blue-50/60 p-5 md:grid-cols-[1fr_auto] dark:border-blue-900/40 dark:bg-blue-950/20">
+          <app-select-input
+            label="Assign Eligible Candidate"
+            [name]="'candidate-' + item.id"
+            [(ngModel)]="selectedCandidateByRequestId[item.id]"
+            [options]="getEligibleCandidateOptions(item)"
+            placeholder="Select candidate"
+          ></app-select-input>
+          <div class="flex items-end md:justify-end">
+            <app-button
+              label="Assign"
+              type="primary"
+              [loading]="assigningRequestId === item.id"
+              [disabled]="assigningRequestId === item.id"
+              (pressed)="assignSelectedCandidate(item)"
+            ></app-button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="!loading && totalPages > 1" class="flex flex-col gap-3 border-t border-gray-100 px-6 py-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+      <p class="text-sm text-gray-500 dark:text-gray-400">Page {{ page }} of {{ totalPages }}</p>
+      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+        <app-button label="Previous" type="secondary" [disabled]="page <= 1" (pressed)="loadRequests(page - 1)"></app-button>
+        <app-button *ngFor="let pageNumber of paginationPages" [label]="getPageLabel(pageNumber)" [type]="pageNumber === page ? 'primary' : 'secondary'" (pressed)="loadRequests(pageNumber)"></app-button>
+        <app-button label="Next" type="secondary" [disabled]="page >= totalPages" (pressed)="loadRequests(page + 1)"></app-button>
+      </div>
+    </div>
+  </app-card>
+
+  <app-card
+    *ngIf="activeTab === 'jobs'"
+    [showHeader]="false"
+    [containerClass]="'mt-3 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
+    [bodyClass]="'p-0'"
+  >
+    <div class="border-b border-gray-100 px-6 py-6 dark:border-gray-800">
+      <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Accepted & Ongoing Jobs</h2>
+          <p class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ jobTotalItems }} assignment{{ jobTotalItems === 1 ? '' : 's' }} in your role scope.</p>
+        </div>
+        <div class="grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-3 xl:items-end dark:bg-gray-800/50">
+          <app-base-input label="Search" name="jobKeyword" [(ngModel)]="jobKeyword" placeholder="Request or site"></app-base-input>
+          <app-select-input label="Status" [name]="'jobStatusFilter'" [(ngModel)]="jobStatusFilter" [options]="jobStatusOptions"></app-select-input>
+          <div class="flex flex-wrap gap-2 pb-0.5 sm:justify-end">
+            <app-button label="Apply" type="primary" (pressed)="applyJobFilters()"></app-button>
+            <app-button label="Clear" type="secondary" (pressed)="clearJobFilters()"></app-button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="jobsLoading" class="space-y-4 p-6">
+      <div *ngFor="let _ of [1,2,3]" class="animate-pulse rounded-lg border border-gray-100 p-5 dark:border-gray-800">
+        <div class="mb-3 h-4 w-40 rounded bg-gray-200 dark:bg-gray-700"></div>
+        <div class="h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800"></div>
+      </div>
+    </div>
+
+    <div *ngIf="!jobsLoading && !jobs.length" class="px-6 py-16 text-center">
+      <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+        <app-icon name="file-text" [size]="22"></app-icon>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">No jobs found</h3>
+      <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">You will see offered, accepted, and in-progress jobs here.</p>
+    </div>
+
+    <div *ngIf="!jobsLoading && jobs.length" class="divide-y divide-gray-100 dark:divide-gray-800">
+      <div *ngFor="let job of jobs; trackBy: trackByJobId" class="px-6 py-6">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div class="min-w-0 flex-1">
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+              <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(job.assignment_status)">
+                {{ job.assignment_status }}
+              </span>
+              <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                {{ getTargetTypeLabel(job.assignee_tenant_type) }}
+              </span>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ job.request?.title || 'Request' }}</h3>
+            <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
+              <span>{{ job.request?.site_name || 'Unknown site' }}</span>
+              <span>•</span>
+              <span>Candidate: {{ job.candidate_snapshot?.['candidate_name'] || job.candidate_snapshot?.['candidate_id'] || 'Unknown' }}</span>
+            </div>
+            <div *ngIf="job.note" class="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">{{ job.note }}</div>
+          </div>
+          <div class="flex shrink-0 flex-wrap gap-2 pt-1 xl:pl-6" *ngIf="canShowJobActions(job)">
+            <app-button
+              *ngFor="let action of getJobActions(job)"
+              [label]="action.label"
+              [type]="action.type"
+              [loading]="updatingJobId === job.id"
+              [disabled]="updatingJobId === job.id"
+              (pressed)="updateJobStatus(job, action.status)"
+            ></app-button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="!jobsLoading && jobTotalPages > 1" class="flex flex-col gap-3 border-t border-gray-100 px-6 py-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+      <p class="text-sm text-gray-500 dark:text-gray-400">Page {{ jobPage }} of {{ jobTotalPages }}</p>
+      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+        <app-button label="Previous" type="secondary" [disabled]="jobPage <= 1" (pressed)="loadJobs(jobPage - 1)"></app-button>
+        <app-button *ngFor="let pageNumber of jobPaginationPages" [label]="getPageLabel(pageNumber)" [type]="pageNumber === jobPage ? 'primary' : 'secondary'" (pressed)="loadJobs(pageNumber)"></app-button>
+        <app-button label="Next" type="secondary" [disabled]="jobPage >= jobTotalPages" (pressed)="loadJobs(jobPage + 1)"></app-button>
+      </div>
+    </div>
+  </app-card>
+
+  <app-side-drawer [show]="showRequestFormDrawer" size="xl" (close)="closeRequestFormDrawer()">
+    <div drawer-header>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
+        {{ requestFormMode === 'create' ? 'Add Request' : 'Edit Request Draft' }}
+      </h3>
+      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Capture site details, staffing needs, and commit when ready.</p>
+    </div>
+
+    <div drawer-body class="space-y-6">
+      <div class="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+        <app-base-input label="Request Title" name="requestTitleDrawer" [(ngModel)]="requestForm.title" [required]="true"></app-base-input>
+
+        <app-select-input
+          label="Fulfillment Target"
+          [name]="'targetTypeDrawer'"
+          [(ngModel)]="requestForm.targetType"
+          [options]="targetTypeOptions"
+          [required]="true"
+        ></app-select-input>
+
+        <div>
+          <app-base-input label="Site Name" name="siteNameDrawer" [(ngModel)]="requestForm.siteName" [required]="true"></app-base-input>
+          <div *ngIf="requestErrors['siteName']" class="mt-1 text-xs text-red-500">{{ requestErrors['siteName'] }}</div>
+        </div>
+
+        <app-select-input
+          label="Requested Guard Type"
+          [name]="'requestedGuardTypeDrawer'"
+          [(ngModel)]="requestForm.requestedGuardType"
+          [options]="guardTypeOptions"
+          placeholder="Optional"
+        ></app-select-input>
+
+        <div>
+          <app-base-input
+            label="Guards Required"
+            name="guardsRequiredDrawer"
+            type="number"
+            [(ngModel)]="requestForm.guardsRequired"
+            [min]="1"
+            [required]="true"
+          ></app-base-input>
+          <div *ngIf="requestErrors['guardsRequired']" class="mt-1 text-xs text-red-500">{{ requestErrors['guardsRequired'] }}</div>
+        </div>
+
+        <app-base-input label="Site Manager Contact" name="siteManagerContactDrawer" [(ngModel)]="requestForm.siteManagerContact"></app-base-input>
+
+        <div>
+          <app-base-input label="Manager Email" name="managerEmailDrawer" type="email" [(ngModel)]="requestForm.managerEmail"></app-base-input>
+          <div *ngIf="requestErrors['managerEmail']" class="mt-1 text-xs text-red-500">{{ requestErrors['managerEmail'] }}</div>
+        </div>
+
+        <app-base-input label="Requested Start Date" name="requestedStartAtDrawer" type="date" [(ngModel)]="requestForm.requestedStartAt"></app-base-input>
+        <app-base-input label="Requested End Date" name="requestedEndAtDrawer" type="date" [(ngModel)]="requestForm.requestedEndAt"></app-base-input>
+        <div *ngIf="requestErrors['requestedEndAt']" class="md:col-span-2 -mt-2 text-xs text-red-500">{{ requestErrors['requestedEndAt'] }}</div>
+
+        <div class="md:col-span-2 rounded-md border border-gray-200 bg-gray-50/60 p-5 dark:border-gray-800 dark:bg-gray-800/30">
+          <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-1">
+              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Site Location</h3>
+              <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">Paste a Google Maps share link to auto-fill coordinates, or provide latitude and longitude manually.</p>
+            </div>
+
+            <div class="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+              <app-base-input label="Google Maps Link" name="googleMapsUrlDrawer" [(ngModel)]="requestForm.googleMapsUrl" [helperText]="'Optional. Coordinates are extracted when available.'"></app-base-input>
+              <app-base-input label="Street" name="siteStreetDrawer" [(ngModel)]="requestForm.siteStreet"></app-base-input>
+
+              <div>
+                <app-base-input label="City" name="siteCityDrawer" [(ngModel)]="requestForm.siteCity" [required]="true"></app-base-input>
+                <div *ngIf="requestErrors['siteCity']" class="mt-1 text-xs text-red-500">{{ requestErrors['siteCity'] }}</div>
+              </div>
+
+              <div>
+                <app-base-input label="Province / State" name="siteProvinceDrawer" [(ngModel)]="requestForm.siteProvince" [required]="true"></app-base-input>
+                <div *ngIf="requestErrors['siteProvince']" class="mt-1 text-xs text-red-500">{{ requestErrors['siteProvince'] }}</div>
+              </div>
+
+              <app-base-input label="Postal Code" name="sitePostalCodeDrawer" [(ngModel)]="requestForm.sitePostalCode"></app-base-input>
+              <app-base-input label="Country" name="siteCountryDrawer" [(ngModel)]="requestForm.siteCountry"></app-base-input>
+
+              <div>
+                <app-base-input label="Latitude" name="siteLatitudeDrawer" [(ngModel)]="requestForm.latitude" placeholder="43.6532"></app-base-input>
+                <div *ngIf="requestErrors['latitude']" class="mt-1 text-xs text-red-500">{{ requestErrors['latitude'] }}</div>
+              </div>
+
+              <div>
+                <app-base-input label="Longitude" name="siteLongitudeDrawer" [(ngModel)]="requestForm.longitude" placeholder="-79.3832"></app-base-input>
+                <div *ngIf="requestErrors['longitude']" class="mt-1 text-xs text-red-500">{{ requestErrors['longitude'] }}</div>
+              </div>
+            </div>
+
+            <div *ngIf="requestErrors['coordinates']" class="-mt-2 text-xs text-red-500">{{ requestErrors['coordinates'] }}</div>
+          </div>
+        </div>
+
+        <div class="md:col-span-2">
+          <app-textarea
+            label="Special Instructions"
+            name="specialInstructionsDrawer"
+            [(ngModel)]="requestForm.specialInstructions"
+            placeholder="Shift details, site-specific notes, or access requirements"
+          ></app-textarea>
+        </div>
+
+        <div *ngIf="requestErrors['title']" class="md:col-span-2 -mt-2 text-xs text-red-500">{{ requestErrors['title'] }}</div>
+      </div>
+    </div>
+
+    <div drawer-footer class="flex flex-wrap justify-end gap-2">
+      <app-button label="Close" type="secondary" (pressed)="closeRequestFormDrawer()"></app-button>
+      <app-button *ngIf="requestFormMode === 'create'" label="Reset" type="secondary" (pressed)="resetForm()"></app-button>
+      <app-button label="Save Draft" type="secondary" [loading]="saving" [disabled]="saving" (pressed)="submitRequest(false)"></app-button>
+      <app-button label="Commit Request" type="primary" [loading]="saving" [disabled]="saving" (pressed)="submitRequest(true)"></app-button>
+    </div>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showRequestDrawer" size="lg" (close)="closeRequestDrawer()">
+    <div drawer-header>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ selectedRequest?.title || 'Request details' }}</h3>
+      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        {{ selectedRequest?.site_snapshot?.site_name || 'Unnamed site' }}
+      </p>
+    </div>
+
+    <div drawer-body *ngIf="selectedRequest as request" class="space-y-5">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Status</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.request_status }}</div>
+        </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Target</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ getTargetTypeLabel(request.target_type) }}</div>
+        </div>
+      </div>
+
+      <div class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Site Snapshot</h4>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">{{ request.site_snapshot.site_name || 'Unnamed site' }}</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+          {{ getSiteAddressField(request, 'street') }}
+          {{ getSiteAddressField(request, 'city') }}
+          {{ getSiteAddressField(request, 'province') }}
+        </p>
+      </div>
+
+      <div *ngIf="request.special_instructions" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Special Instructions</h4>
+        <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{{ request.special_instructions }}</p>
+      </div>
+
+      <div *ngIf="getTopCandidateNames(request).length" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Top Eligible Candidates</h4>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <span *ngFor="let candidateName of getTopCandidateNames(request)" class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
+            {{ candidateName }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div drawer-footer class="flex flex-wrap justify-end gap-2" *ngIf="selectedRequest as request">
+      <app-button *ngIf="canShowRequestStatusActions(request)" label="Cancel" type="danger" (pressed)="updateStatus(request, 'cancelled')"></app-button>
+      <app-button *ngIf="canShowRequestStatusActions(request)" label="Close" type="secondary" (pressed)="updateStatus(request, 'closed')"></app-button>
+      <app-button label="Done" type="primary" (pressed)="closeRequestDrawer()"></app-button>
+    </div>
+  </app-side-drawer>
+</app-page>

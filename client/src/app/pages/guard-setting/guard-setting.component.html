@@ -63,9 +63,12 @@
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="Operational Radius (miles)" name="operationalRadius" type="number"
-                        [(ngModel)]="guardFormModel.operationalRadius" [min]="0" [disabled]="readonly"></app-base-input>
-                    <p class="text-xs sm:text-xs text-gray-500 mt-2">Leave blank if you are location-flexible.</p>
+                    <app-select-input label="Distance Unit" [name]="'distanceUnit'" [(ngModel)]="selectedDistanceUnit"
+                        [options]="distanceUnitOptions" [disabled]="readonly" (ngModelChange)="onDistanceUnitChange($event)">
+                    </app-select-input>
+                    <app-base-input [label]="operationalRadiusLabel" name="operationalRadius" type="number"
+                        [(ngModel)]="guardFormModel.operationalRadius" [min]="minimumOperationalRadiusDisplay" [disabled]="readonly"></app-base-input>
+                    <p class="text-xs sm:text-xs text-gray-500 mt-2">Leave blank if you are location-flexible. Minimum {{ minimumOperationalRadiusText }}.</p>
                     <app-error-message [errorMessage]="guardErrors.operationalRadius || null"></app-error-message>
                 </div>
             </div>

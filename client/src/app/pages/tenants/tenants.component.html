@@ -144,8 +144,14 @@
 
   <div drawer-body>
     <div *ngIf="tenantDetail; else loadingDetail">
-      <div class="mb-3">
-        <!-- Notifications shown via global MessageNotificationComponent -->
+      <div class="w-full px-4 pt-8 sm:px-6 lg:px-8">
+        <div class="max-w-4xl mx-auto">
+          <app-tenant-admin-user-summary
+            [fullName]="tenantDetail?.tenant_admin_user?.full_name || ''"
+            [email]="tenantDetail?.tenant_admin_user?.email || ''"
+            [username]="tenantDetail?.tenant_admin_user?.username || ''"
+          ></app-tenant-admin-user-summary>
+        </div>
       </div>
       <app-tenant-settings [tenantDataInput]="tenantDetail" [readonly]="true" [showPageWrapper]="false"></app-tenant-settings>
     </div>

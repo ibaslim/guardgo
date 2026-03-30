@@ -17,6 +17,7 @@ import { OnboardingComponent } from './pages/onboarding/onboarding.component';
 import { TenantSettingsComponent } from './pages/tenant-settings/tenant-settings.component';
 import { PendingVerificationComponent } from './pages/pending-verification/pending-verification.component';
 import { pendingVerificationGuard } from './shared/guards/pending-verification.guard';
+import { clientRequestsGuard } from './shared/guards/client-requests.guard';
 import { platformSettingsGuard, platformUserManagementGuard, tenantSettingsGuard } from './shared/guards/settings.guard';
 
 export const routes: Routes = [
@@ -136,6 +137,16 @@ export const routes: Routes = [
         path: 'billing-configurations',
         loadComponent: () => import('./pages/billing-configurations').then(m => m.BillingConfigurationsComponent),
         canActivate: [billingConfigurationsGuard]
+      },
+      {
+        path: 'requests',
+        loadComponent: () => import('./pages/requests/requests.component').then(m => m.RequestsComponent),
+        canActivate: [onboardingGuard, pendingVerificationGuard, clientRequestsGuard]
+      },
+      {
+        path: 'notifications',
+        loadComponent: () => import('./pages/notifications/notifications.component').then(m => m.NotificationsComponent),
+        canActivate: [onboardingGuard, pendingVerificationGuard]
       },
       {
         path: 'onboarding',

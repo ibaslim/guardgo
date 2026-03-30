@@ -21,6 +21,7 @@ import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { getIssuingAuthorityForProvince } from '../../shared/constants/provincial-authorities.constants';
+import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared/helpers/distance.helper';
 
 interface PhoneNumber {
   e164: string;
@@ -194,6 +195,11 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   provinceOptions: { value: string; label: string }[] = [];
   securityLicenseTypeOptions: { value: string; label: string }[] = [];
   guardTypeOptions: { value: string; label: string }[] = [];
+  selectedDistanceUnit: DistanceUnit = 'km';
+  readonly distanceUnitOptions: { value: DistanceUnit; label: string }[] = [
+    { value: 'km', label: 'Kilometers (km)' },
+    { value: 'mi', label: 'Miles (mi)' }
+  ];
 
   securityLicenseUploadInProgress: Record<string, boolean> = {};
   securityLicenseUploadErrors: Record<string, string> = {};
@@ -209,6 +215,9 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit(): void {
+    const preferredUnit = this.appService.getConfig().localSettings.distanceUnit;
+    this.selectedDistanceUnit = preferredUnit === 'mi' ? 'mi' : 'km';
+
     this.loadProviderMetadata(() => {
       if (this.providerData && this.hasProviderData(this.providerData)) {
         this.providerFormModel = this.transformBackendDataToForm(this.providerData as any);
@@ -311,6 +320,72 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     }
   }
 
+  get coverageRadiusLabel(): string {
+    return `Coverage Radius (${this.selectedDistanceUnit})`;
+  }
+
+  get minimumCoverageRadiusDisplay(): number {
+    return this.selectedDistanceUnit === 'mi' ? kmToMiles(1) : 1;
+  }
+
+  get minimumCoverageRadiusText(): string {
+    return formatDistance(this.minimumCoverageRadiusDisplay, this.selectedDistanceUnit);
+  }
+
+  onDistanceUnitChange(nextUnitRaw: string): void {
+    const nextUnit: DistanceUnit = nextUnitRaw === 'mi' ? 'mi' : 'km';
+    if (nextUnit === this.selectedDistanceUnit) {
+      return;
+    }
+
+    this.providerFormModel.operatingRegions = this.providerFormModel.operatingRegions.map((region) => {
+      if (region.coverageRadiusKm == null || !Number.isFinite(region.coverageRadiusKm)) {
+        return region;
+      }
+
+      return {
+        ...region,
+        coverageRadiusKm: this.convertDistanceBetweenUnits(Number(region.coverageRadiusKm), this.selectedDistanceUnit, nextUnit)
+      };
+    });
+
+    this.selectedDistanceUnit = nextUnit;
+    this.appService.set('distanceUnit', nextUnit);
+  }
+
+  private toDisplayDistance(kmValue: number): number {
+    return this.selectedDistanceUnit === 'mi'
+      ? kmToMiles(kmValue)
+      : Number(kmValue.toFixed(1));
+  }
+
+  private toStorageKm(displayValue: number): number {
+    return this.selectedDistanceUnit === 'mi'
+      ? milesToKm(displayValue)
+      : Number(displayValue.toFixed(2));
+  }
+
+  private convertDistanceBetweenUnits(value: number, from: DistanceUnit, to: DistanceUnit): number {
+    if (from === to) {
+      return value;
+    }
+    return from === 'km' ? kmToMiles(value) : milesToKm(value);
+  }
+
+  getCoverageRadiusDualLabel(region: OperatingRegion): string {
+    const displayValue = Number(region?.coverageRadiusKm);
+    if (!Number.isFinite(displayValue) || displayValue <= 0) {
+      return '';
+    }
+
+    const kmValue = this.toStorageKm(displayValue);
+    const miValue = kmToMiles(kmValue);
+    if (this.selectedDistanceUnit === 'mi') {
+      return `${formatDistance(miValue, 'mi')} (${formatDistance(kmValue, 'km')})`;
+    }
+    return `${formatDistance(kmValue, 'km')} (${formatDistance(miValue, 'mi')})`;
+  }
+
   private transformBackendDataToForm(data: any): ServiceProvider {
     const profile = data?.profile || data || {};
     const headOfficeAddress = this.mapAddressFromBackend(profile.head_office_address || profile.headOfficeAddress || {});
@@ -329,7 +404,10 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
         city: region.city || '',
         country: region.country || 'CA',
         province: region.province || '',
-        coverageRadiusKm: region.coverage_radius_km ?? region.coverageRadiusKm ?? null
+        coverageRadiusKm: (() => {
+          const kmValue = Number(region.coverage_radius_km ?? region.coverageRadiusKm);
+          return Number.isFinite(kmValue) ? this.toDisplayDistance(kmValue) : null;
+        })()
       }))
       : [];
 
@@ -714,8 +792,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       if (region.country === 'CA' && !region.province.trim()) {
         this.providerErrors[`region_${index}_province`] = 'Province is required for Canada.';
       }
-      if (region.coverageRadiusKm != null && region.coverageRadiusKm < 1) {
-        this.providerErrors[`region_${index}_radius`] = 'Coverage radius must be at least 1 km.';
+      if (region.coverageRadiusKm != null && region.coverageRadiusKm < this.minimumCoverageRadiusDisplay) {
+        this.providerErrors[`region_${index}_radius`] = `Coverage radius must be at least ${this.minimumCoverageRadiusText}.`;
       }
     });
 
@@ -981,7 +1059,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
           city: region.city,
           country: region.country,
           province: region.province,
-          coverage_radius_km: region.coverageRadiusKm
+          coverage_radius_km: region.coverageRadiusKm == null ? null : this.toStorageKm(region.coverageRadiusKm)
         })),
         guard_categories_offered: validCategories
       },

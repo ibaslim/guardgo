@@ -21,11 +21,12 @@ import { formatBackendDateTime, readableTitle } from '../../shared/helpers/forma
 import { HttpParams } from '@angular/common/http';
 import { Router, ActivatedRoute } from '@angular/router';
 import { LogListTableComponent } from '../../components/activity-logs-table/activity-logs-table.component';
+import { TenantAdminUserSummaryComponent } from '../../components/tenant-admin-user-summary/tenant-admin-user-summary.component';
 
 @Component({
   selector: 'app-tenants',
   standalone: true,
-  imports: [CommonModule, FormsModule, TableComponent, BadgeComponent, SideDrawerComponent, IconComponent, TableThComponent, TableTdComponent, ButtonComponent, ModalComponent, SelectInputComponent, BaseInputComponent, PageComponent, TenantSettingsComponent, LogListTableComponent],
+  imports: [CommonModule, FormsModule, TableComponent, BadgeComponent, SideDrawerComponent, IconComponent, TableThComponent, TableTdComponent, ButtonComponent, ModalComponent, SelectInputComponent, BaseInputComponent, PageComponent, TenantSettingsComponent, LogListTableComponent, TenantAdminUserSummaryComponent],
   templateUrl: './tenants.component.html',
 })
 export class TenantsComponent implements OnInit {

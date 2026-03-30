@@ -24,6 +24,7 @@ import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { getIssuingAuthorityForProvince } from '../../shared/constants/provincial-authorities.constants';
 import { Guard, GuardErrors, IdentificationDocument, SecurityLicenseDocument, PoliceClearanceRecord, TrainingCertificate, WeeklyAvailability } from '../../shared/model/guard';
 import { readableTitle } from '../../shared/helpers/format.helper';
+import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared/helpers/distance.helper';
 
 @Component({
   selector: 'app-guard-setting',
@@ -235,6 +236,12 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
 
   passportCountryOptions: { value: string; label: string }[] = [];
 
+  selectedDistanceUnit: DistanceUnit = 'km';
+  readonly distanceUnitOptions: { value: DistanceUnit; label: string }[] = [
+    { value: 'km', label: 'Kilometers (km)' },
+    { value: 'mi', label: 'Miles (mi)' }
+  ];
+
   // UI helper methods
   requiresProvince(type: string): boolean {
     return this.identityDocumentTypes.find(doc => doc.value === type)?.requiresProvince ?? false;
@@ -370,6 +377,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit(): void {
+    const preferredUnit = this.appService.getConfig().localSettings.distanceUnit;
+    this.selectedDistanceUnit = preferredUnit === 'mi' ? 'mi' : 'km';
+
     this.loadGuardMetadata(() => {
       if (this.guardData && this.hasGuardData(this.guardData)) {
         this.guardFormModel = this.transformBackendDataToForm(this.guardData);
@@ -386,6 +396,55 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       this.ensureCanadaDocumentDefaults();
       this.lastAutoLegalName = this.guardFormModel.name || '';
     });
+  }
+
+  get operationalRadiusLabel(): string {
+    return `Operational Radius (${this.selectedDistanceUnit})`;
+  }
+
+  get minimumOperationalRadiusDisplay(): number {
+    return this.selectedDistanceUnit === 'mi' ? kmToMiles(1) : 1;
+  }
+
+  get minimumOperationalRadiusText(): string {
+    return formatDistance(this.minimumOperationalRadiusDisplay, this.selectedDistanceUnit);
+  }
+
+  onDistanceUnitChange(nextUnitRaw: string): void {
+    const nextUnit: DistanceUnit = nextUnitRaw === 'mi' ? 'mi' : 'km';
+    if (nextUnit === this.selectedDistanceUnit) {
+      return;
+    }
+
+    if (this.guardFormModel.operationalRadius != null && Number.isFinite(this.guardFormModel.operationalRadius)) {
+      this.guardFormModel.operationalRadius = this.convertDistanceBetweenUnits(
+        Number(this.guardFormModel.operationalRadius),
+        this.selectedDistanceUnit,
+        nextUnit
+      );
+    }
+
+    this.selectedDistanceUnit = nextUnit;
+    this.appService.set('distanceUnit', nextUnit);
+  }
+
+  private toDisplayDistance(kmValue: number): number {
+    return this.selectedDistanceUnit === 'mi'
+      ? kmToMiles(kmValue)
+      : Number(kmValue.toFixed(1));
+  }
+
+  private toStorageKm(displayValue: number): number {
+    return this.selectedDistanceUnit === 'mi'
+      ? milesToKm(displayValue)
+      : Number(displayValue.toFixed(2));
+  }
+
+  private convertDistanceBetweenUnits(value: number, from: DistanceUnit, to: DistanceUnit): number {
+    if (from === to) {
+      return value;
+    }
+    return from === 'km' ? kmToMiles(value) : milesToKm(value);
   }
 
   getProfileImageUrl(): string | null {
@@ -465,7 +524,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
 
     if (profile.max_travel_radius_km != null) {
       const km = Number(profile.max_travel_radius_km);
-      formData.operationalRadius = Number.isFinite(km) ? Number((km / 1.60934).toFixed(1)) : null;
+      formData.operationalRadius = Number.isFinite(km) ? this.toDisplayDistance(km) : null;
     }
 
     // Transform phone numbers from backend
@@ -1828,9 +1887,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     if (
       this.guardFormModel.operationalRadius != null &&
       (isNaN(this.guardFormModel.operationalRadius) ||
-        this.guardFormModel.operationalRadius < 1)
+        this.guardFormModel.operationalRadius < this.minimumOperationalRadiusDisplay)
     ) {
-      this.guardErrors['operationalRadius'] = 'Operational radius must be at least 1 mile.';
+      this.guardErrors['operationalRadius'] = `Operational radius must be at least ${this.minimumOperationalRadiusText}.`;
     }
 
     // Weekly Availability validation
@@ -2001,7 +2060,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
 
     // Add operational radius if set
     if (this.guardFormModel.operationalRadius != null) {
-      payload.profile.max_travel_radius_km = Math.round(this.guardFormModel.operationalRadius * 1.60934);
+      payload.profile.max_travel_radius_km = this.toStorageKm(this.guardFormModel.operationalRadius);
     }
 
     // Determine desired post-submit tenant status. If user is completing onboarding, move to pending_activation.

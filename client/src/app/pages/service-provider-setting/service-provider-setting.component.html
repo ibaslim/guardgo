@@ -406,9 +406,17 @@
                         </div>
 
                         <div class="flex flex-col">
-                            <app-base-input label="Coverage Radius (km)" [name]="'regionRadius' + i" type="number"
-                                [(ngModel)]="providerFormModel.operatingRegions[i].coverageRadiusKm" [min]="1" [disabled]="readonly">
+                            <app-select-input *ngIf="i === 0" label="Distance Unit" [name]="'distanceUnit'"
+                                [(ngModel)]="selectedDistanceUnit" [options]="distanceUnitOptions"
+                                [disabled]="readonly" (ngModelChange)="onDistanceUnitChange($event)">
+                            </app-select-input>
+                            <app-base-input [label]="coverageRadiusLabel" [name]="'regionRadius' + i" type="number"
+                                [(ngModel)]="providerFormModel.operatingRegions[i].coverageRadiusKm" [min]="minimumCoverageRadiusDisplay" [disabled]="readonly">
                             </app-base-input>
+                            <div class="text-xs text-gray-500 mt-1">Minimum {{ minimumCoverageRadiusText }}.</div>
+                            <div class="text-xs text-gray-500 mt-1" *ngIf="getCoverageRadiusDualLabel(providerFormModel.operatingRegions[i])">
+                                {{ getCoverageRadiusDualLabel(providerFormModel.operatingRegions[i]) }}
+                            </div>
                             <app-error-message
                                 [errorMessage]="providerErrors['region_' + i + '_radius'] || null"></app-error-message>
                         </div>

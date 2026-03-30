@@ -1,0 +1,125 @@
+<app-page
+  title="Notifications"
+  subtitle="Track important account, billing, and workflow updates in one place."
+  [containerClass]="'w-full px-4 py-6 sm:px-6 lg:px-8'"
+  [contentClass]="'max-w-6xl mx-auto space-y-6'"
+>
+  <div page-actions class="flex flex-wrap items-center gap-3">
+    <div class="flex flex-wrap gap-2" role="tablist" aria-label="Notification Status Tabs">
+      <app-button
+        label="All"
+        [type]="selectedStatus === 'all' ? 'primary' : 'secondary'"
+        (pressed)="setStatusFilter('all')"
+      ></app-button>
+      <app-button
+        label="Unread"
+        [type]="selectedStatus === 'unread' ? 'primary' : 'secondary'"
+        (pressed)="setStatusFilter('unread')"
+      ></app-button>
+      <app-button
+        label="Read"
+        [type]="selectedStatus === 'read' ? 'primary' : 'secondary'"
+        (pressed)="setStatusFilter('read')"
+      ></app-button>
+    </div>
+    <button
+      type="button"
+      (click)="markAllRead()"
+      class="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-blue-200 hover:text-blue-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-blue-500/40 dark:hover:text-blue-300"
+    >
+      <app-icon name="check-circle" [size]="16"></app-icon>
+      <span>Mark all read</span>
+    </button>
+  </div>
+
+  <app-card [showHeader]="false" [containerClass]="'mt-4 rounded-[28px] border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'" [bodyClass]="'p-0'">
+    <div class="border-b border-gray-100 px-6 py-5 dark:border-gray-800">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Inbox</h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ totalItems }} notification{{ totalItems === 1 ? '' : 's' }} available</p>
+        </div>
+        <div class="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+          <span class="inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
+          <span>{{ notificationsService.unreadCount() }} unread</span>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="notificationsService.pageLoading()" class="space-y-4 p-6">
+      <div *ngFor="let _ of [1,2,3,4]" class="animate-pulse rounded-3xl border border-gray-100 p-5 dark:border-gray-800">
+        <div class="mb-3 h-3 w-24 rounded bg-gray-200 dark:bg-gray-700"></div>
+        <div class="mb-3 h-5 w-1/2 rounded bg-gray-200 dark:bg-gray-700"></div>
+        <div class="mb-2 h-3 w-full rounded bg-gray-100 dark:bg-gray-800"></div>
+        <div class="h-3 w-4/5 rounded bg-gray-100 dark:bg-gray-800"></div>
+      </div>
+    </div>
+
+    <div *ngIf="!notificationsService.pageLoading() && !items.length" class="px-6 py-16 text-center">
+      <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-3xl bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+        <app-icon name="bell" [size]="22"></app-icon>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">No notifications to show</h3>
+      <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Try another filter or check back when new account activity arrives.</p>
+    </div>
+
+    <div *ngIf="!notificationsService.pageLoading() && items.length" class="divide-y divide-gray-100 dark:divide-gray-800">
+      <button
+        type="button"
+        *ngFor="let item of items; trackBy: trackById"
+        (click)="openNotification(item)"
+        class="block w-full px-6 py-5 text-left transition hover:bg-gray-50 dark:hover:bg-gray-950/40"
+      >
+        <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div class="min-w-0 flex-1">
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+              <span class="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em]" [class]="getCategoryClasses(item.category)">
+                {{ item.category || 'info' }}
+              </span>
+              <span *ngIf="!item.is_read" class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-600 dark:bg-blue-950/40 dark:text-blue-300">
+                <span class="inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
+                New
+              </span>
+              <span class="text-xs text-gray-400 dark:text-gray-500">{{ formatRelativeDate(item.created_at) }}</span>
+            </div>
+            <div class="text-base font-semibold text-gray-900 dark:text-gray-100">{{ item.title }}</div>
+            <div class="mt-2 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-300">{{ item.message }}</div>
+            <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+              <span>{{ formatDisplayDate(item.created_at) }}</span>
+              <span *ngIf="item.source_module" class="rounded-full bg-gray-100 px-2.5 py-1 font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                {{ item.source_module }}
+              </span>
+              <span *ngIf="item.action_label || item.action_url" class="font-semibold text-blue-600 dark:text-blue-300">
+                {{ item.action_label || 'Open details' }}
+              </span>
+            </div>
+          </div>
+          <div class="flex items-center gap-3 md:pl-6">
+            <span *ngIf="item.is_read" class="inline-flex items-center gap-1 text-xs font-medium text-gray-400 dark:text-gray-500">
+              <app-icon name="check" [size]="14"></app-icon>
+              Read
+            </span>
+            <app-icon name="chevron-right" [size]="18"></app-icon>
+          </div>
+        </div>
+      </button>
+    </div>
+
+    <div *ngIf="!notificationsService.pageLoading() && totalPages > 1" class="flex flex-col gap-3 border-t border-gray-100 px-6 py-5 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+      <p class="text-sm text-gray-500 dark:text-gray-400">Page {{ currentPage }} of {{ totalPages }}</p>
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" (click)="loadNotifications(currentPage - 1)" [disabled]="currentPage <= 1" class="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:border-blue-200 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-200">Previous</button>
+        <button
+          type="button"
+          *ngFor="let page of paginationWindow"
+          (click)="loadNotifications(page)"
+          class="h-10 min-w-10 rounded-xl px-3 text-sm font-semibold transition"
+          [class]="page === currentPage ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'border border-gray-200 text-gray-700 hover:border-blue-200 hover:text-blue-600 dark:border-gray-700 dark:text-gray-200'"
+        >
+          {{ page }}
+        </button>
+        <button type="button" (click)="loadNotifications(currentPage + 1)" [disabled]="currentPage >= totalPages" class="rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:border-blue-200 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-200">Next</button>
+      </div>
+    </div>
+  </app-card>
+</app-page>

@@ -1,5 +1,6 @@
 import motor.motor_asyncio
 from odmantic import AIOEngine
+from typing import Optional
 
 from orion.api.interactive.tenant_manager.tenant_bootstrap import tenant_boostrap
 from orion.services.log_manager.log_controller import log
@@ -14,19 +15,21 @@ from orion.services.mongo_manager.shared_views.user_admin_view import UserAdminV
 
 
 class mongo_controller:
-    __instance = None
+    __instance: Optional["mongo_controller"] = None
     __m_connection = None
 
     @staticmethod
-    def get_instance():
+    def get_instance() -> "mongo_controller":
         if mongo_controller.__instance is None:
             mongo_controller()
+        if mongo_controller.__instance is None:
+            raise RuntimeError("Failed to initialize mongo_controller singleton")
         return mongo_controller.__instance
 
     def __init__(self):
         mongo_controller.__instance = self
         self.__m_connection = None
-        self.__engine = None
+        self.__engine: Optional[AIOEngine] = None
 
     async def link_connection(self):
         try:
@@ -75,6 +78,8 @@ class mongo_controller:
         )
 
     def get_engine(self) -> AIOEngine:
+        if self.__engine is None:
+            raise RuntimeError("Mongo engine is not initialized. Call link_connection() first.")
         return self.__engine
 
     async def initialize(self):

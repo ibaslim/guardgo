@@ -597,6 +597,43 @@ class TenantManager:
             # swallow errors from mail sending
             pass
 
+        try:
+            from orion.api.interactive.notification_manager.notification_manager import NotificationManager
+
+            if normalized_current == TenantStatus.PENDING_ACTIVATION.value:
+                notification_title = "Account pending activation"
+                notification_message = "Your account is pending activation. Two platform approvals are required before full access is enabled."
+            elif normalized_current == TenantStatus.ACTIVE.value:
+                notification_title = "Account activated"
+                notification_message = "Your account is now active and ready to use."
+            elif normalized_current == TenantStatus.INACTIVE.value:
+                notification_title = "Account deactivated"
+                notification_message = "Your account has been deactivated by an administrator. Contact support if this needs review."
+            elif normalized_current == TenantStatus.BANNED.value:
+                notification_title = "Account banned"
+                notification_message = "Your account has been banned due to a policy or compliance issue. Contact support for details."
+            else:
+                notification_title = "Account status updated"
+                notification_message = f"Your account status changed to {normalized_current}."
+
+            await NotificationManager.get_instance().create_for_tenant_users(
+                tenant_id=str(tenant.id),
+                title=notification_title,
+                message=notification_message,
+                category="info",
+                source_module="tenant",
+                action_url="/dashboard/notifications",
+                action_label="Review updates",
+                metadata={
+                    "tenant_id": str(tenant.id),
+                    "previous_status": normalized_previous,
+                    "new_status": normalized_current,
+                    **(metadata or {}),
+                },
+            )
+        except Exception:
+            pass
+
     @staticmethod
     def _extract_tenant_name(profile: Optional[Dict[str, Any]]) -> str:
         if not isinstance(profile, dict):
@@ -761,6 +798,35 @@ class TenantManager:
                 values.append(v)
             iocs.append(IocCategory(ioc_id=ioc_id, name=name, values=values))
 
+        tenant_role_to_admin_role = {
+            TenantType.GUARD: user_role.GUARD_ADMIN,
+            TenantType.CLIENT: user_role.CLIENT_ADMIN,
+            TenantType.SERVICE_PROVIDER: user_role.SP_ADMIN,
+        }
+        expected_admin_role = tenant_role_to_admin_role.get(tenant.tenant_type)
+
+        tenant_admin_user = None
+        if expected_admin_role is not None:
+            candidate_users = await self._engine.find(
+                db_user_account,
+                (db_user_account.tenant_uuid == str(tenant.id)) & (db_user_account.role == expected_admin_role),
+            )
+
+            selected_user = None
+            active_users = [u for u in candidate_users if str(getattr(u, "status", "")) == UserStatus.ACTIVE.value]
+            if active_users:
+                selected_user = active_users[0]
+            elif candidate_users:
+                selected_user = candidate_users[0]
+
+            if selected_user is not None:
+                tenant_admin_user = {
+                    "id": str(selected_user.id),
+                    "username": selected_user.username,
+                    "full_name": (selected_user.full_name or "").strip() or None,
+                    "email": (selected_user.email or "").strip() or None,
+                }
+
         return {
             "id": str(tenant.id),
             "tenant_type": tenant.tenant_type,
@@ -775,6 +841,7 @@ class TenantManager:
             "approval_actors": self._approvals_summary(tenant)["approval_actors"],
             "licenses": licenses,
             "iocs": iocs,
+            "tenant_admin_user": tenant_admin_user,
             "created_at": tenant.created_at,
             "updated_at": tenant.updated_at,
             "verified_date": tenant.verified_date,

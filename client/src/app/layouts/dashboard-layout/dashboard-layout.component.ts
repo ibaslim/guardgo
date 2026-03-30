@@ -2,6 +2,7 @@ import { Component, Host, HostListener, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AvatarMenuComponent } from '../../components/avatar-menu/avatar-menu.component';
 import { IconComponent, IconName } from '../../components/icon/icon.component';
+import { NotificationBellComponent } from '../../components/notification-bell/notification-bell.component';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from "../../services/authetication/auth.service";
 import { AppService } from "../../services/core/app/app.service";
@@ -23,6 +24,7 @@ type DashboardLink = {
     CommonModule,
     RouterModule,
     AvatarMenuComponent,
+    NotificationBellComponent,
     IconComponent
   ],
   templateUrl: './dashboard-layout.component.html',
@@ -55,6 +57,17 @@ export class DashboardLayoutComponent implements OnInit {
       route: '/dashboard/billing-configurations',
       icon: 'settings',
       policy: 'billingConfigurations'
+    },
+    {
+      label: 'Requests',
+      route: '/dashboard/requests',
+      icon: 'file-text',
+      policy: 'clientRequests'
+    },
+    {
+      label: 'Notifications',
+      route: '/dashboard/notifications',
+      icon: 'bell'
     },
     {
       label: 'Settings',
