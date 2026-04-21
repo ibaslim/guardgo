@@ -387,6 +387,124 @@ export class RequestsComponent implements OnInit {
     this.resetForm();
   }
 
+  fillDummyData(): void {
+    const samples = [
+      {
+        title: 'Overnight Warehouse Security – Toronto',
+        siteName: 'Maple Leaf Logistics Centre',
+        siteStreet: '120 Interchange Way',
+        siteCity: 'Toronto',
+        siteProvince: 'Ontario',
+        sitePostalCode: 'M9W 6G9',
+        siteCountry: 'CA',
+        latitude: '43.7315',
+        longitude: '-79.5700',
+        siteManagerContact: '+1 416-555-0192',
+        managerEmail: 'ops@mapleloglistics.ca',
+        requestedGuardType: 'armed',
+        guardsRequired: 3,
+        specialInstructions: 'Guards must be licensed under Ontario Security Guard Act. Night shift from 22:00–06:00. Check-in every 2 hours via radio.',
+      },
+      {
+        title: 'Construction Site Patrol – Calgary',
+        siteName: 'Bow River Towers – Phase 2',
+        siteStreet: '4500 Bow Trail SW',
+        siteCity: 'Calgary',
+        siteProvince: 'Alberta',
+        sitePostalCode: 'T3C 3K3',
+        siteCountry: 'CA',
+        latitude: '51.0423',
+        longitude: '-114.1341',
+        siteManagerContact: '+1 403-555-0147',
+        managerEmail: 'site.manager@bowrivertowers.ca',
+        requestedGuardType: 'unarmed',
+        guardsRequired: 2,
+        specialInstructions: 'Patrol perimeter every 90 minutes. No public access after 20:00. Incident log required.',
+      },
+      {
+        title: 'Retail Event Security – Vancouver',
+        siteName: 'Pacific Centre Mall – West Wing',
+        siteStreet: '701 W Georgia St',
+        siteCity: 'Vancouver',
+        siteProvince: 'British Columbia',
+        sitePostalCode: 'V7Y 1G5',
+        siteCountry: 'CA',
+        latitude: '49.2827',
+        longitude: '-123.1207',
+        siteManagerContact: '+1 604-555-0211',
+        managerEmail: 'events@pacificcentre.ca',
+        requestedGuardType: 'unarmed',
+        guardsRequired: 4,
+        specialInstructions: 'Flash sale event. High foot traffic expected. Guards to manage crowd at entrance and cashier area.',
+      },
+      {
+        title: 'Corporate Campus Patrol – Ottawa',
+        siteName: 'Parliament Hill Campus Annex',
+        siteStreet: '180 Wellington St',
+        siteCity: 'Ottawa',
+        siteProvince: 'Ontario',
+        sitePostalCode: 'K1A 0A9',
+        siteCountry: 'CA',
+        latitude: '45.4253',
+        longitude: '-75.7009',
+        siteManagerContact: '+1 613-555-0099',
+        managerEmail: 'facilities@gov-annex.ca',
+        requestedGuardType: 'tactical',
+        guardsRequired: 5,
+        specialInstructions: 'High-profile government facility. Security clearance preferred. Strict access control at all three entry points.',
+      },
+      {
+        title: 'Hospital Entrance Security – Montreal',
+        siteName: 'Montréal General Hospital',
+        siteStreet: '1650 Cedar Ave',
+        siteCity: 'Montreal',
+        siteProvince: 'Quebec',
+        sitePostalCode: 'H3G 1A4',
+        siteCountry: 'CA',
+        latitude: '45.4974',
+        longitude: '-73.5872',
+        siteManagerContact: '+1 514-555-0312',
+        managerEmail: 'security@mgh-montreal.ca',
+        requestedGuardType: 'unarmed',
+        guardsRequired: 2,
+        specialInstructions: 'De-escalation training required. Bilingual (EN/FR) preferred. Must follow hospital visitor policy.',
+      },
+    ];
+
+    const picked = samples[Math.floor(Math.random() * samples.length)];
+
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() + 7);
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 30);
+
+    const toDateInput = (d: Date) => d.toISOString().slice(0, 10);
+
+    this.requestForm = {
+      ...this.requestForm,
+      title: picked.title,
+      targetType: 'guard',
+      siteName: picked.siteName,
+      siteStreet: picked.siteStreet,
+      siteCity: picked.siteCity,
+      siteProvince: picked.siteProvince,
+      sitePostalCode: picked.sitePostalCode,
+      siteCountry: picked.siteCountry,
+      latitude: picked.latitude,
+      longitude: picked.longitude,
+      googleMapsUrl: '',
+      siteManagerContact: picked.siteManagerContact,
+      managerEmail: picked.managerEmail,
+      requestedGuardType: picked.requestedGuardType,
+      guardsRequired: picked.guardsRequired,
+      requestedStartAt: toDateInput(startDate),
+      requestedEndAt: toDateInput(endDate),
+      specialInstructions: picked.specialInstructions,
+    };
+    this.requestErrors = {};
+  }
+
   populateFormFromRequest(item: ClientRequestItem): void {
     const address = item.site_snapshot?.site_address || {};
     this.requestForm = {
