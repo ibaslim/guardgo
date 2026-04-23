@@ -5,7 +5,7 @@ from pathlib import Path
 # Add backend directory to import path when run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from configs.metadata_constants import CANADIAN_PROVINCE_OPTIONS
+from configs.metadata_constants import BILLING_REGION_CITY_OPTIONS
 from orion.api.interactive.billing_manager.billing_manager import BillingManager
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 
@@ -31,8 +31,9 @@ async def seed_guard_margin_default_rates() -> None:
     await mongo_controller.get_instance().link_connection()
 
     payload = []
-    for region in CANADIAN_PROVINCE_OPTIONS:
-        code = region["value"]
+    for location in BILLING_REGION_CITY_OPTIONS:
+        code = location["region_code"]
+        city_code = location["city_code"]
         rates = DUMMY_GUARD_MARGIN_RATES_CAD.get(code, {
             "standard_rate": 4.0,
             "weekend_rate": 4.5,
@@ -40,6 +41,7 @@ async def seed_guard_margin_default_rates() -> None:
         })
         payload.append({
             "region_code": code,
+            "city_code": city_code,
             "standard_rate": rates["standard_rate"],
             "weekend_rate": rates["weekend_rate"],
             "holiday_rate": rates["holiday_rate"],

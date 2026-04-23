@@ -16,6 +16,7 @@ class BillingRate(Model):
     """
     scope: str = ""
     region_code: str = ""
+    city_code: str = ""
     standard_rate: float = 0.0
     weekend_rate: float = 0.0
     holiday_rate: float = 0.0

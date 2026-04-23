@@ -15,11 +15,16 @@ from orion.services.mongo_manager.shared_model.db_tenant_model import (
     TenantStatus,
     TenantType,
 )
-from configs.metadata_constants import CANADIAN_PROVINCE_OPTIONS
+from configs.metadata_constants import (
+    CANADIAN_PROVINCE_OPTIONS,
+    CANADIAN_CITIES_BY_PROVINCE_OPTIONS,
+    BILLING_REGION_CITY_OPTIONS,
+)
 
 
 # Use all Canadian provinces and territories
 CANADIAN_PROVINCES = CANADIAN_PROVINCE_OPTIONS
+BILLING_LOCATIONS = BILLING_REGION_CITY_OPTIONS
 
 
 class BillingManager:
@@ -63,6 +68,31 @@ class BillingManager:
         return region_code
 
     @staticmethod
+    def _normalize_city_code(city_code: Any) -> str:
+        return str(city_code or "").strip().upper()
+
+    @staticmethod
+    def _rate_key(region_code: str, city_code: str) -> str:
+        return f"{region_code}:{city_code}"
+
+    @staticmethod
+    def _city_label(region_code: str, city_code: str) -> str:
+        normalized = city_code.strip().upper()
+        if not normalized:
+            return ""
+        for city in CANADIAN_CITIES_BY_PROVINCE_OPTIONS.get(region_code, []):
+            if city["value"] == normalized:
+                return city["label"]
+        return normalized
+
+    def _location_label(self, region_code: str, city_code: str) -> str:
+        region_label = self._region_label(region_code)
+        city_label = self._city_label(region_code, city_code)
+        if city_label:
+            return f"{region_label} / {city_label}"
+        return region_label
+
+    @staticmethod
     def _provider_scope(provider_id: str) -> str:
         return f"provider:{provider_id}"
 
@@ -92,20 +122,33 @@ class BillingManager:
         by_scope: Dict[str, Dict[str, BillingRate]] = {}
         for scope in scopes:
             existing = await self._engine.find(BillingRate, BillingRate.scope == scope)
-            by_scope[scope] = {r.region_code: r for r in existing}
+            by_scope[scope] = {
+                self._rate_key(r.region_code, self._normalize_city_code(getattr(r, "city_code", ""))): r
+                for r in existing
+            }
 
         result = []
-        for prov in CANADIAN_PROVINCES:
-            code = prov["value"]
+        for location in BILLING_LOCATIONS:
+            code = location["region_code"]
+            city_code = self._normalize_city_code(location.get("city_code"))
+            province_label = location["region_label"]
+            city_label = location.get("city_label", "")
             rec = None
             for scope in scopes:
-                rec = by_scope.get(scope, {}).get(code)
+                scoped_rates = by_scope.get(scope, {})
+                rec = scoped_rates.get(self._rate_key(code, city_code))
+                if not rec:
+                    # Backward compatibility: province-level defaults without city_code.
+                    rec = scoped_rates.get(self._rate_key(code, ""))
                 if rec:
                     break
 
             result.append({
                 "region_code": code,
-                "region_label": prov["label"],
+                "region_label": province_label,
+                "city_code": city_code,
+                "city_label": city_label,
+                "location_label": self._location_label(code, city_code),
                 "standard_rate": rec.standard_rate if rec else 0.0,
                 "weekend_rate": rec.weekend_rate if rec else 0.0,
                 "holiday_rate": rec.holiday_rate if rec else 0.0,
@@ -123,6 +166,10 @@ class BillingManager:
         write_activity: bool = True,
         force_create_missing: bool = False,
     ) -> Dict[str, Any]:
+        valid_location_keys = {
+            self._rate_key(loc["region_code"], self._normalize_city_code(loc.get("city_code")))
+            for loc in BILLING_LOCATIONS
+        }
         valid_codes = {p["value"] for p in CANADIAN_PROVINCES}
         now = datetime.utcnow()
         actor_id = str(getattr(current_user, "id", "") or "") or None
@@ -131,68 +178,96 @@ class BillingManager:
         updated_count = 0
 
         for row in payload:
-            code = row.get("region_code", "")
+            code = str(row.get("region_code", "")).strip().upper()
             if code not in valid_codes:
                 continue
+
+            input_city_code = self._normalize_city_code(row.get("city_code", ""))
+
+            target_cities: List[str]
+            if input_city_code:
+                if self._rate_key(code, input_city_code) not in valid_location_keys:
+                    continue
+                target_cities = [input_city_code]
+            else:
+                target_cities = [
+                    self._normalize_city_code(loc.get("city_code"))
+                    for loc in BILLING_LOCATIONS
+                    if loc["region_code"] == code
+                ]
+                if not target_cities:
+                    continue
 
             std = round(float(row.get("standard_rate", 0)), 2)
             wkd = round(float(row.get("weekend_rate", 0)), 2)
             hol = round(float(row.get("holiday_rate", 0)), 2)
 
-            existing = await self._engine.find_one(
-                BillingRate,
-                (BillingRate.scope == scope) & (BillingRate.region_code == code),
-            )
-
-            prev_std = existing.standard_rate if existing else 0.0
-            prev_wkd = existing.weekend_rate if existing else 0.0
-            prev_hol = existing.holiday_rate if existing else 0.0
-
-            changed = self._has_rate_change(prev_std, prev_wkd, prev_hol, std, wkd, hol)
-            if not changed and not (force_create_missing and not existing):
-                continue
-
-            if existing:
-                existing.standard_rate = std
-                existing.weekend_rate = wkd
-                existing.holiday_rate = hol
-                existing.updated_at = now
-                existing.updated_by = actor
-                await self._engine.save(existing)
-            else:
-                await self._engine.save(BillingRate(
-                    scope=scope,
-                    region_code=code,
-                    standard_rate=std,
-                    weekend_rate=wkd,
-                    holiday_rate=hol,
-                    currency="CAD",
-                    updated_at=now,
-                    updated_by=actor,
-                ))
-
-            if write_activity and changed:
-                await self._write_activity_log(
-                    entity_id=entity_id,
-                    entity_name=entity_name,
-                    scope=scope,
-                    region_code=code,
-                    prev_std=prev_std,
-                    prev_wkd=prev_wkd,
-                    prev_hol=prev_hol,
-                    new_std=std,
-                    new_wkd=wkd,
-                    new_hol=hol,
-                    actor_id=actor_id,
-                    actor=actor,
-                    actor_role=actor_role,
+            for city_code in target_cities:
+                existing = await self._engine.find_one(
+                    BillingRate,
+                    (BillingRate.scope == scope)
+                    & (BillingRate.region_code == code)
+                    & (BillingRate.city_code == city_code),
                 )
 
-            updated_count += 1
+                prev_std = existing.standard_rate if existing else 0.0
+                prev_wkd = existing.weekend_rate if existing else 0.0
+                prev_hol = existing.holiday_rate if existing else 0.0
+
+                changed = self._has_rate_change(prev_std, prev_wkd, prev_hol, std, wkd, hol)
+                if not changed and not (force_create_missing and not existing):
+                    continue
+
+                if existing:
+                    existing.standard_rate = std
+                    existing.weekend_rate = wkd
+                    existing.holiday_rate = hol
+                    existing.updated_at = now
+                    existing.updated_by = actor
+                    await self._engine.save(existing)
+                else:
+                    await self._engine.save(BillingRate(
+                        scope=scope,
+                        region_code=code,
+                        city_code=city_code,
+                        standard_rate=std,
+                        weekend_rate=wkd,
+                        holiday_rate=hol,
+                        currency="CAD",
+                        updated_at=now,
+                        updated_by=actor,
+                    ))
+
+                if write_activity and changed:
+                    await self._write_activity_log(
+                        entity_id=entity_id,
+                        entity_name=entity_name,
+                        scope=scope,
+                        region_code=code,
+                        city_code=city_code,
+                        prev_std=prev_std,
+                        prev_wkd=prev_wkd,
+                        prev_hol=prev_hol,
+                        new_std=std,
+                        new_wkd=wkd,
+                        new_hol=hol,
+                        actor_id=actor_id,
+                        actor=actor,
+                        actor_role=actor_role,
+                    )
+
+                updated_count += 1
 
         return {
             "count": len(payload),
             "updated_count": updated_count,
+        }
+
+    async def get_billing_location_metadata(self) -> Dict[str, Any]:
+        return {
+            "canadianProvinces": CANADIAN_PROVINCES,
+            "canadianCitiesByProvince": CANADIAN_CITIES_BY_PROVINCE_OPTIONS,
+            "billingLocationOptions": BILLING_LOCATIONS,
         }
 
     async def _get_tenant_or_404(self, tenant_id: str, tenant_type: TenantType, detail: str):
@@ -544,6 +619,7 @@ class BillingManager:
         entity_name: str,
         scope: str,
         region_code: str,
+        city_code: str,
         prev_std: float,
         prev_wkd: float,
         prev_hol: float,
@@ -568,6 +644,9 @@ class BillingManager:
                     "scope": scope,
                     "region_code": region_code,
                     "region_label": self._region_label(region_code),
+                    "city_code": city_code,
+                    "city_label": self._city_label(region_code, city_code),
+                    "location_label": self._location_label(region_code, city_code),
                     "currency": "CAD",
                     "previous_rates": {
                         "standard_rate": prev_std,

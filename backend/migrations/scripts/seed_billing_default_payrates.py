@@ -7,7 +7,7 @@ from typing import Any, Dict
 # Add backend directory to import path when run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from configs.metadata_constants import CANADIAN_PROVINCE_OPTIONS
+from configs.metadata_constants import BILLING_REGION_CITY_OPTIONS
 from orion.api.interactive.billing_manager.billing_manager import BillingManager
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_billing_model import BillingRate
@@ -82,11 +82,13 @@ DUMMY_PROVIDER_COMMISSION_RATES_CAD = {
 
 def _build_payload(rate_map: Dict[str, Dict[str, float]], fallback: Dict[str, float]) -> list[dict[str, Any]]:
     payload = []
-    for region in CANADIAN_PROVINCE_OPTIONS:
-        code = region["value"]
+    for location in BILLING_REGION_CITY_OPTIONS:
+        code = location["region_code"]
+        city_code = location["city_code"]
         rates = rate_map.get(code, fallback)
         payload.append({
             "region_code": code,
+            "city_code": city_code,
             "standard_rate": rates["standard_rate"],
             "weekend_rate": rates["weekend_rate"],
             "holiday_rate": rates["holiday_rate"],
@@ -103,8 +105,15 @@ async def seed_billing_default_payrates(force: bool = False) -> Dict[str, Any]:
     provider_count = await engine.count(BillingRate, BillingRate.scope == manager.SCOPE_PROVIDER_DEFAULT)
     guard_margin_count = await engine.count(BillingRate, BillingRate.scope == manager.SCOPE_GUARD_MARGIN_DEFAULT)
     provider_commission_count = await engine.count(BillingRate, BillingRate.scope == manager.SCOPE_PROVIDER_COMMISSION_DEFAULT)
+    expected_locations = len(BILLING_REGION_CITY_OPTIONS)
 
-    if not force and guard_count > 0 and provider_count > 0 and guard_margin_count > 0 and provider_commission_count > 0:
+    if (
+        not force
+        and guard_count >= expected_locations
+        and provider_count >= expected_locations
+        and guard_margin_count >= expected_locations
+        and provider_commission_count >= expected_locations
+    ):
         return {
             "seeded": False,
             "reason": "already-seeded",

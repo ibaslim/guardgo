@@ -16,6 +16,9 @@ import { MessageNotificationService } from '../../services/message_notification/
 interface ProvinceRate {
   region_code: string;
   region_label: string;
+  city_code?: string;
+  city_label?: string;
+  location_label?: string;
   standard_rate: number;
   weekend_rate: number;
   holiday_rate: number;
@@ -26,6 +29,18 @@ interface BillingActivityContext {
   subtitle: string;
   entityId: string;
   emptyMessage: string;
+}
+
+interface ProvinceRateGroup {
+  region_code: string;
+  region_label: string;
+  rates: ProvinceRate[];
+}
+
+interface ProvinceDefaultRate {
+  standard_rate: number;
+  weekend_rate: number;
+  holiday_rate: number;
 }
 
 @Component({
@@ -47,6 +62,8 @@ interface BillingActivityContext {
 })
 export class BillingConfigurationsComponent implements OnInit {
   private readonly activityRows = 20;
+  private readonly collapsedRegionState: Record<string, Record<string, boolean>> = {};
+  private readonly provinceDefaultsBySection: Record<string, Record<string, ProvinceDefaultRate>> = {};
 
   activeBillingTab: 'guards' | 'providers' | 'addons' = 'guards';
 
@@ -122,6 +139,7 @@ export class BillingConfigurationsComponent implements OnInit {
     this.api.get<ProvinceRate[]>('billing/guards').subscribe({
       next: (data) => {
         this.guardRates = data;
+        this.collapseAllRegions('guard-default', this.guardRates);
         this.guardLoading = false;
       },
       error: () => {
@@ -134,6 +152,129 @@ export class BillingConfigurationsComponent implements OnInit {
   onRateInput(rate: ProvinceRate, field: keyof Pick<ProvinceRate, 'standard_rate' | 'weekend_rate' | 'holiday_rate'>, value: any): void {
     const parsed = parseFloat(String(value));
     rate[field] = isNaN(parsed) ? 0 : Math.round(parsed * 100) / 100;
+  }
+
+  getRateRowKey(rate: ProvinceRate): string {
+    const region = String(rate.region_code || '').trim().toUpperCase();
+    const city = String(rate.city_code || '').trim().toUpperCase() || 'ALL';
+    return `${region}_${city}`;
+  }
+
+  getCityLabel(rate: ProvinceRate): string {
+    const cityLabel = String(rate.city_label || '').trim();
+    if (cityLabel) {
+      return cityLabel;
+    }
+    const location = String(rate.location_label || '').trim();
+    const region = String(rate.region_label || '').trim();
+    if (location && region && location.startsWith(`${region} / `)) {
+      return location.slice(region.length + 3);
+    }
+    return location || 'City';
+  }
+
+  getGroupedRates(rates: ProvinceRate[]): ProvinceRateGroup[] {
+    const map = new Map<string, ProvinceRateGroup>();
+
+    for (const rate of rates) {
+      const regionCode = String(rate.region_code || '').trim().toUpperCase();
+      if (!regionCode) {
+        continue;
+      }
+
+      if (!map.has(regionCode)) {
+        map.set(regionCode, {
+          region_code: regionCode,
+          region_label: String(rate.region_label || regionCode),
+          rates: [],
+        });
+      }
+
+      map.get(regionCode)!.rates.push(rate);
+    }
+
+    const groups = Array.from(map.values()).sort((a, b) => a.region_label.localeCompare(b.region_label));
+    for (const group of groups) {
+      group.rates.sort((a, b) => this.getCityLabel(a).localeCompare(this.getCityLabel(b)));
+    }
+    return groups;
+  }
+
+  isRegionCollapsed(sectionKey: string, regionCode: string): boolean {
+    return !!this.collapsedRegionState[sectionKey]?.[regionCode];
+  }
+
+  toggleRegion(sectionKey: string, regionCode: string): void {
+    if (!this.collapsedRegionState[sectionKey]) {
+      this.collapsedRegionState[sectionKey] = {};
+    }
+    this.collapsedRegionState[sectionKey][regionCode] = !this.collapsedRegionState[sectionKey][regionCode];
+  }
+
+  collapseAllRegions(sectionKey: string, rates: ProvinceRate[]): void {
+    const regionCodes = this.getGroupedRates(rates).map((group) => group.region_code);
+    if (!this.collapsedRegionState[sectionKey]) {
+      this.collapsedRegionState[sectionKey] = {};
+    }
+    for (const regionCode of regionCodes) {
+      this.collapsedRegionState[sectionKey][regionCode] = true;
+    }
+  }
+
+  expandAllRegions(sectionKey: string, rates: ProvinceRate[]): void {
+    const regionCodes = this.getGroupedRates(rates).map((group) => group.region_code);
+    if (!this.collapsedRegionState[sectionKey]) {
+      this.collapsedRegionState[sectionKey] = {};
+    }
+    for (const regionCode of regionCodes) {
+      this.collapsedRegionState[sectionKey][regionCode] = false;
+    }
+  }
+
+  private ensureProvinceDefault(sectionKey: string, regionCode: string, rates: ProvinceRate[]): ProvinceDefaultRate {
+    if (!this.provinceDefaultsBySection[sectionKey]) {
+      this.provinceDefaultsBySection[sectionKey] = {};
+    }
+
+    const existing = this.provinceDefaultsBySection[sectionKey][regionCode];
+    if (existing) {
+      return existing;
+    }
+
+    const seed = rates[0];
+    const created: ProvinceDefaultRate = {
+      standard_rate: Number(seed?.standard_rate ?? 0),
+      weekend_rate: Number(seed?.weekend_rate ?? 0),
+      holiday_rate: Number(seed?.holiday_rate ?? 0),
+    };
+
+    this.provinceDefaultsBySection[sectionKey][regionCode] = created;
+    return created;
+  }
+
+  getProvinceDefault(sectionKey: string, regionCode: string, rates: ProvinceRate[]): ProvinceDefaultRate {
+    return this.ensureProvinceDefault(sectionKey, regionCode, rates);
+  }
+
+  onProvinceDefaultInput(
+    sectionKey: string,
+    regionCode: string,
+    field: keyof ProvinceDefaultRate,
+    value: any,
+    rates: ProvinceRate[],
+  ): void {
+    const defaults = this.ensureProvinceDefault(sectionKey, regionCode, rates);
+    const parsed = parseFloat(String(value));
+    defaults[field] = isNaN(parsed) ? 0 : Math.round(parsed * 100) / 100;
+  }
+
+  applyProvinceDefaultToCities(sectionKey: string, group: ProvinceRateGroup): void {
+    const defaults = this.ensureProvinceDefault(sectionKey, group.region_code, group.rates);
+    for (const rate of group.rates) {
+      rate.standard_rate = defaults.standard_rate;
+      rate.weekend_rate = defaults.weekend_rate;
+      rate.holiday_rate = defaults.holiday_rate;
+    }
   }
 
   saveGuardRates(): void {
@@ -159,6 +300,7 @@ export class BillingConfigurationsComponent implements OnInit {
     this.api.get<ProvinceRate[]>('billing/providers/defaults').subscribe({
       next: (data) => {
         this.providerDefaultRates = data;
+        this.collapseAllRegions('provider-default', this.providerDefaultRates);
         this.providerDefaultLoading = false;
       },
       error: () => {
@@ -187,6 +329,7 @@ export class BillingConfigurationsComponent implements OnInit {
     this.api.get<ProvinceRate[]>('billing/margins/guards/defaults').subscribe({
       next: (data) => {
         this.guardMarginRates = data;
+        this.collapseAllRegions('guard-margin', this.guardMarginRates);
         this.guardMarginLoading = false;
       },
       error: () => {
@@ -217,6 +360,7 @@ export class BillingConfigurationsComponent implements OnInit {
     this.api.get<ProvinceRate[]>('billing/commissions/providers/defaults').subscribe({
       next: (data) => {
         this.providerCommissionRates = data;
+        this.collapseAllRegions('provider-commission', this.providerCommissionRates);
         this.providerCommissionLoading = false;
       },
       error: () => {
@@ -301,6 +445,7 @@ export class BillingConfigurationsComponent implements OnInit {
     this.api.get<ProvinceRate[]>(`billing/providers/${providerId}`).subscribe({
       next: (data) => {
         this.providerRates = data;
+        this.collapseAllRegions('provider-override', this.providerRates);
         this.providerRatesLoading = false;
       },
       error: () => {
@@ -352,6 +497,7 @@ export class BillingConfigurationsComponent implements OnInit {
     this.api.get<ProvinceRate[]>(`billing/guards/${guardId}`).subscribe({
       next: (data) => {
         this.guardOverrideRates = data;
+        this.collapseAllRegions('guard-override', this.guardOverrideRates);
         this.guardOverrideLoading = false;
       },
       error: () => {

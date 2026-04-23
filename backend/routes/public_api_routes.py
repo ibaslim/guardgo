@@ -5,6 +5,8 @@ from orion.api.server.config_manager.config_controller import config_controller
 from configs.metadata_constants import (
     COUNTRY_OPTIONS,
     CANADIAN_PROVINCE_OPTIONS,
+    CANADIAN_CITIES_BY_PROVINCE_OPTIONS,
+    BILLING_REGION_CITY_OPTIONS,
     IDENTITY_DOCUMENT_TYPES,
     SECURITY_LICENSE_TYPE_OPTIONS,
     TRAINING_CERTIFICATE_TYPE_OPTIONS,
@@ -69,6 +71,8 @@ async def get_client_metadata():
     return {
         "countries": COUNTRY_OPTIONS,
         "canadianProvinces": CANADIAN_PROVINCE_OPTIONS,
+        "canadianCitiesByProvince": CANADIAN_CITIES_BY_PROVINCE_OPTIONS,
+        "billingLocationOptions": BILLING_REGION_CITY_OPTIONS,
         "siteTypeOptions": CLIENT_SITE_TYPE_OPTIONS,
         "guardTypeOptions": CLIENT_GUARD_TYPE_OPTIONS,
         "clientTypeOptions": CLIENT_TYPE_OPTIONS,
