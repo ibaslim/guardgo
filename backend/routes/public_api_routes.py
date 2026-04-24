@@ -50,6 +50,7 @@ async def get_guard_metadata():
     return {
         "countries": COUNTRY_OPTIONS,
         "canadianProvinces": CANADIAN_PROVINCE_OPTIONS,
+        "canadianCitiesByProvince": CANADIAN_CITIES_BY_PROVINCE_OPTIONS,
         "identityDocumentTypes": IDENTITY_DOCUMENT_TYPES,
         "securityLicenseTypes": SECURITY_LICENSE_TYPE_OPTIONS,
         "trainingCertificateTypes": TRAINING_CERTIFICATE_TYPE_OPTIONS,

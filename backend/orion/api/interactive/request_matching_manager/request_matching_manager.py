@@ -66,6 +66,14 @@ class RequestMatchingManager:
         return str(value or "").strip().upper()
 
     @staticmethod
+    def _first_non_empty_string(values: List[Any]) -> str:
+        for value in values:
+            text = str(value or "").strip()
+            if text:
+                return text
+        return ""
+
+    @staticmethod
     def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         earth_radius_km = 6371.0
         phi1 = math.radians(lat1)
@@ -90,8 +98,11 @@ class RequestMatchingManager:
         request_province = self._normalize_text(request_address.province)
 
         home_address = profile.get("home_address") if isinstance(profile.get("home_address"), dict) else {}
-        province = self._normalize_text(home_address.get("province"))
-        city = str(home_address.get("city") or "").strip()
+        province = self._normalize_text(profile.get("operational_region_code") or home_address.get("province"))
+        city = self._first_non_empty_string([
+            profile.get("operational_city_code"),
+            home_address.get("city"),
+        ])
 
         max_radius_km = self._as_float(profile.get("max_travel_radius_km"))
         lat = self._as_float(home_address.get("latitude"))
@@ -152,11 +163,41 @@ class RequestMatchingManager:
     ) -> RequestMatchCandidate:
         request_address = payload.site_address
         request_province = self._normalize_text(request_address.province)
+        request_city_text = self._normalize_text(request_address.city)
 
-        province = self._normalize_text(region.get("province"))
-        city = str(region.get("city") or "").strip()
+        province = self._normalize_text(region.get("region_code") or region.get("province"))
+
+        city_codes = region.get("city_codes") if isinstance(region.get("city_codes"), list) else []
+        city_labels = region.get("city_labels") if isinstance(region.get("city_labels"), list) else []
+        city = self._first_non_empty_string([
+            city_labels[0] if city_labels else "",
+            city_codes[0] if city_codes else "",
+            region.get("city"),
+        ])
 
         radius_km = self._as_float(region.get("coverage_radius_km"))
+        city_entries = region.get("city_entries") if isinstance(region.get("city_entries"), list) else []
+        if city_entries:
+            matched_entry = None
+            for entry in city_entries:
+                if not isinstance(entry, dict):
+                    continue
+                entry_city_code = self._normalize_text(entry.get("city_code"))
+                entry_city_name = self._normalize_text(entry.get("city"))
+                if request_city_text and (request_city_text == entry_city_code or request_city_text == entry_city_name):
+                    matched_entry = entry
+                    break
+
+            if matched_entry is None:
+                matched_entry = city_entries[0] if isinstance(city_entries[0], dict) else None
+
+            if matched_entry is not None:
+                radius_km = self._as_float(matched_entry.get("coverage_radius_km"))
+                city = self._first_non_empty_string([
+                    matched_entry.get("city"),
+                    matched_entry.get("city_code"),
+                    city,
+                ])
         region_lat = self._as_float(region.get("latitude"))
         region_lon = self._as_float(region.get("longitude"))
 
@@ -235,7 +276,9 @@ class RequestMatchingManager:
             if not operating_regions:
                 empty_region = {
                     "province": self._get_nested(profile, ["head_office_address", "province"], ""),
+                    "region_code": self._get_nested(profile, ["head_office_address", "province"], ""),
                     "city": self._get_nested(profile, ["head_office_address", "city"], ""),
+                    "city_codes": [],
                     "coverage_radius_km": None,
                     "latitude": self._get_nested(profile, ["head_office_address", "latitude"], None),
                     "longitude": self._get_nested(profile, ["head_office_address", "longitude"], None),

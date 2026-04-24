@@ -200,6 +200,8 @@ class GuardProfile(EmbeddedModel):
     training_certificates: List[GuardTrainingCertificate] = []
     background_check: GuardBackgroundCheck = GuardBackgroundCheck()
     max_travel_radius_km: Optional[int] = None
+    operational_region_code: Optional[str] = None
+    operational_city_code: Optional[str] = None
     weekly_availability: GuardAvailability = GuardAvailability()
     preferred_guard_types: List[str] = []
     secondary_contact: Optional[ContactPerson] = None
@@ -241,6 +243,8 @@ class OperatingRegion(EmbeddedModel):
     city: str = ""
     country: str = ""
     province: str = ""
+    region_code: Optional[str] = None
+    city_codes: List[str] = []
     coverage_radius_km: Optional[int] = None
 
 

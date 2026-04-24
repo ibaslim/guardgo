@@ -87,13 +87,15 @@
                 <div class="flex flex-col">
                     <app-select-input label="Province/State" [name]="'addressProvince'"
                         [(ngModel)]="guardFormModel.address.province" [options]="provinceOptions"
-                        placeholder="-- Select Province --" [required]="true" [searchable]="true" [disabled]="readonly"></app-select-input>
+                        placeholder="-- Select Province --" [required]="true" [searchable]="true"
+                        (ngModelChange)="onAddressProvinceChange($event)" [disabled]="readonly"></app-select-input>
                     <app-error-message [errorMessage]="guardErrors.addressProvince || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="City" name="addressCity" [(ngModel)]="guardFormModel.address.city"
-                        [required]="true" [disabled]="readonly"></app-base-input>
+                    <app-select-input label="City" [name]="'addressCity'" [(ngModel)]="guardFormModel.address.city"
+                        [options]="getAddressCityOptions()" placeholder="-- Select City --" [required]="true"
+                        [searchable]="true" [disabled]="readonly || !guardFormModel.address.province"></app-select-input>
                     <app-error-message [errorMessage]="guardErrors.addressCity || null"></app-error-message>
                 </div>
 
@@ -107,6 +109,28 @@
                     <app-base-input label="Street Address" name="addressStreet"
                         [(ngModel)]="guardFormModel.address.street" [required]="true" [disabled]="readonly"></app-base-input>
                     <app-error-message [errorMessage]="guardErrors.addressStreet || null"></app-error-message>
+                </div>
+            </div>
+        </app-section>
+
+        <app-section title="Operational region" subtitle="Where you actively accept and prioritize shifts.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col">
+                    <app-select-input label="Operational Province" [name]="'operationalRegionCode'"
+                        [(ngModel)]="guardFormModel.operationalRegionCode" [options]="provinceOptions"
+                        placeholder="-- Select Province --" [required]="true" [searchable]="true"
+                        (ngModelChange)="onOperationalRegionChange($event)" [disabled]="readonly">
+                    </app-select-input>
+                    <app-error-message [errorMessage]="guardErrors.operationalRegionCode || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-select-input label="Operational City" [name]="'operationalCityCode'"
+                        [(ngModel)]="guardFormModel.operationalCityCode" [options]="getOperationalCityOptions()"
+                        placeholder="-- Select City --" [required]="true" [searchable]="true"
+                        [disabled]="readonly || !guardFormModel.operationalRegionCode">
+                    </app-select-input>
+                    <app-error-message [errorMessage]="guardErrors.operationalCityCode || null"></app-error-message>
                 </div>
             </div>
         </app-section>

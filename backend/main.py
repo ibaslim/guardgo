@@ -49,6 +49,12 @@ async def lifespan(p_app: FastAPI):
         print(f"Warning: Tenant pending activation migration failed: {e}")
 
     try:
+        from migrations.scripts.normalize_phase1_operational_locations import normalize_phase1_operational_locations
+        await normalize_phase1_operational_locations()
+    except Exception as e:
+        print(f"Warning: Phase 1 operational location normalization failed: {e}")
+
+    try:
         seed_results = await seeder_manager.get_instance().run_auto_seeders(force=False)
         print(f"Auto seeding status: {seed_results}")
     except Exception as e:

@@ -81,13 +81,6 @@
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="City" name="officeCity"
-                        [(ngModel)]="providerFormModel.headOfficeAddress.city" [required]="true" [disabled]="readonly">
-                    </app-base-input>
-                    <app-error-message [errorMessage]="providerErrors.officeCity || null"></app-error-message>
-                </div>
-
-                <div class="flex flex-col">
                     <app-select-input label="Country" name="officeCountry"
                         [(ngModel)]="providerFormModel.headOfficeAddress.country" [options]="countryOptions"
                         placeholder="-- Select Country --" [required]="true" [searchable]="true"
@@ -98,8 +91,17 @@
                 <div class="flex flex-col" *ngIf="providerFormModel.headOfficeAddress.country === 'CA'">
                     <app-select-input label="Province" name="officeProvince"
                         [(ngModel)]="providerFormModel.headOfficeAddress.province" [options]="provinceOptions"
-                        placeholder="-- Select Province --" [required]="true" [searchable]="true" [disabled]="readonly"></app-select-input>
+                        placeholder="-- Select Province --" [required]="true" [searchable]="true"
+                        (ngModelChange)="onHeadOfficeProvinceChange($event)" [disabled]="readonly"></app-select-input>
                     <app-error-message [errorMessage]="providerErrors.officeProvince || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-select-input label="City" name="officeCity"
+                        [(ngModel)]="providerFormModel.headOfficeAddress.city" [options]="getHeadOfficeCityOptions()"
+                        placeholder="-- Select City --" [required]="true" [searchable]="true"
+                        [disabled]="readonly || !providerFormModel.headOfficeAddress.province"></app-select-input>
+                    <app-error-message [errorMessage]="providerErrors.officeCity || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
@@ -370,7 +372,10 @@
                     class="block" [bodyClass]="'mt-4'">
                     <div card-header>
                         <h3 class="font-semibold text-gray-800 dark:text-gray-200">
-                            {{ region.city ? region.city : ('Region ' + (i + 1)) }}
+                            Region {{ i + 1 }}
+                            <span *ngIf="region.regionCode" class="text-sm font-normal text-gray-500 dark:text-gray-400">
+                                • {{ getProvinceLabel(region.regionCode) }}
+                            </span>
                         </h3>
                     </div>
                     <div card-actions *ngIf="providerFormModel.operatingRegions.length > 1 && !readonly">
@@ -378,47 +383,88 @@
                         </app-button>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="flex flex-col">
-                            <app-base-input label="City" [name]="'regionCity' + i"
-                                [(ngModel)]="providerFormModel.operatingRegions[i].city" [required]="i === 0" [disabled]="readonly">
-                            </app-base-input>
-                            <app-error-message
-                                [errorMessage]="providerErrors['region_' + i + '_city'] || null"></app-error-message>
-                        </div>
-
-                        <div class="flex flex-col">
-                            <app-select-input label="Country" [name]="'regionCountry' + i"
-                                [(ngModel)]="providerFormModel.operatingRegions[i].country" [options]="countryOptions"
-                                placeholder="-- Select Country --" [required]="i === 0" [searchable]="true"
-                                [disabled]="true"></app-select-input>
-                            <app-error-message
-                                [errorMessage]="providerErrors['region_' + i + '_country'] || null"></app-error-message>
-                        </div>
-
-                        <div class="flex flex-col" *ngIf="providerFormModel.operatingRegions[i].country === 'CA'">
-                            <app-select-input label="Province" [name]="'regionProvince' + i"
-                                [(ngModel)]="providerFormModel.operatingRegions[i].province" [options]="provinceOptions"
-                                placeholder="-- Select Province --" [required]="i === 0"
-                                [searchable]="true" [disabled]="readonly"></app-select-input>
-                            <app-error-message
-                                [errorMessage]="providerErrors['region_' + i + '_province'] || null"></app-error-message>
-                        </div>
-
-                        <div class="flex flex-col">
-                            <app-select-input *ngIf="i === 0" label="Distance Unit" [name]="'distanceUnit'"
-                                [(ngModel)]="selectedDistanceUnit" [options]="distanceUnitOptions"
-                                [disabled]="readonly" (ngModelChange)="onDistanceUnitChange($event)">
-                            </app-select-input>
-                            <app-base-input [label]="coverageRadiusLabel" [name]="'regionRadius' + i" type="number"
-                                [(ngModel)]="providerFormModel.operatingRegions[i].coverageRadiusKm" [min]="minimumCoverageRadiusDisplay" [disabled]="readonly">
-                            </app-base-input>
-                            <div class="text-xs text-gray-500 mt-1">Minimum {{ minimumCoverageRadiusText }}.</div>
-                            <div class="text-xs text-gray-500 mt-1" *ngIf="getCoverageRadiusDualLabel(providerFormModel.operatingRegions[i])">
-                                {{ getCoverageRadiusDualLabel(providerFormModel.operatingRegions[i]) }}
+                    <div class="space-y-5">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="flex flex-col">
+                                <app-select-input label="Country" [name]="'regionCountry' + i"
+                                    [(ngModel)]="providerFormModel.operatingRegions[i].country" [options]="countryOptions"
+                                    placeholder="-- Select Country --" [required]="i === 0" [searchable]="true"
+                                    [disabled]="true"></app-select-input>
+                                <app-error-message
+                                    [errorMessage]="providerErrors['region_' + i + '_country'] || null"></app-error-message>
                             </div>
+
+                            <div class="flex flex-col" *ngIf="providerFormModel.operatingRegions[i].country === 'CA'">
+                                <app-select-input label="Province" [name]="'regionProvince' + i"
+                                    [(ngModel)]="providerFormModel.operatingRegions[i].regionCode" [options]="provinceOptions"
+                                    placeholder="-- Select Province --" [required]="i === 0"
+                                    [searchable]="true" [disabled]="readonly"
+                                    (ngModelChange)="onRegionCodeChange(i, $event)"></app-select-input>
+                                <app-error-message
+                                    [errorMessage]="providerErrors['region_' + i + '_regionCode'] || null"></app-error-message>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+                            <div class="flex flex-col">
+                                <app-select-input label="Distance Unit" [name]="'distanceUnit'"
+                                    [(ngModel)]="selectedDistanceUnit" [options]="distanceUnitOptions"
+                                    [disabled]="readonly" (ngModelChange)="onDistanceUnitChange($event)">
+                                </app-select-input>
+                            </div>
+                            <div class="flex items-end">
+                                <div class="text-xs text-gray-500">Minimum {{ minimumCoverageRadiusText }} per city.</div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-3 border-t border-gray-200 dark:border-gray-700 pt-4">
+                            <div class="flex items-center justify-between">
+                                <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300">Operational Cities</h4>
+                                <app-button *ngIf="!readonly" label="Add City" type="primary" htmlType="button" size="sm"
+                                    [customClass]="'px-3 py-1 rounded-md'"
+                                    (click)="addRegionCity(i)">
+                                </app-button>
+                            </div>
+
+                            <div class="rounded-lg border border-gray-200 dark:border-gray-700 p-4"
+                                *ngFor="let cityEntry of providerFormModel.operatingRegions[i].cityEntries; let cityIndex = index">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div class="flex flex-col">
+                                        <app-select-input label="City" [name]="'regionCity' + i + '_' + cityIndex"
+                                            [(ngModel)]="providerFormModel.operatingRegions[i].cityEntries[cityIndex].cityCode"
+                                            [options]="getCityOptionsForRegion(providerFormModel.operatingRegions[i].regionCode)"
+                                            placeholder="-- Select City --" [required]="cityIndex === 0"
+                                            [searchable]="true"
+                                            [disabled]="readonly || !providerFormModel.operatingRegions[i].regionCode">
+                                        </app-select-input>
+                                    </div>
+
+                                    <div class="flex flex-col">
+                                        <app-base-input [label]="coverageRadiusLabel" [name]="'regionCityRadius' + i + '_' + cityIndex" type="number"
+                                            [(ngModel)]="providerFormModel.operatingRegions[i].cityEntries[cityIndex].coverageRadiusKm"
+                                            [min]="minimumCoverageRadiusDisplay" [disabled]="readonly">
+                                        </app-base-input>
+                                    </div>
+                                </div>
+
+                                <div class="mt-2 flex items-center justify-between gap-3">
+                                    <div class="text-xs text-gray-500" *ngIf="getCoverageRadiusDualLabel(providerFormModel.operatingRegions[i].cityEntries[cityIndex].coverageRadiusKm)">
+                                        {{ getCoverageRadiusDualLabel(providerFormModel.operatingRegions[i].cityEntries[cityIndex].coverageRadiusKm) }}
+                                    </div>
+                                    <div class="ml-auto">
+                                        <app-button *ngIf="!readonly && providerFormModel.operatingRegions[i].cityEntries.length > 1"
+                                            label="Remove" type="danger" htmlType="button" size="sm"
+                                            (click)="removeRegionCity(i, cityIndex)">
+                                        </app-button>
+                                    </div>
+                                </div>
+
+                                <app-error-message
+                                    [errorMessage]="providerErrors['region_' + i + '_city_' + cityIndex + '_radius'] || null"></app-error-message>
+                            </div>
+
                             <app-error-message
-                                [errorMessage]="providerErrors['region_' + i + '_radius'] || null"></app-error-message>
+                                [errorMessage]="providerErrors['region_' + i + '_cityCodes'] || null"></app-error-message>
                         </div>
                     </div>
                 </app-card>

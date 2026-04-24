@@ -21,6 +21,7 @@ from orion.constants import constant
 from orion.services.mail_manager.mail_manager import mail_manager
 from orion.services.mongo_manager.shared_model.db_tenant_model import TenantStatusAudit
 from orion.api.interactive.activity_manager.activity_manager import ActivityManager
+from configs.metadata_constants import CANADIAN_PROVINCE_OPTIONS, CANADIAN_CITIES_BY_PROVINCE_OPTIONS
 
 
 class TenantManager:
@@ -72,6 +73,195 @@ class TenantManager:
             else:
                 base[k] = v
         return base
+
+    @staticmethod
+    def _province_codes() -> set[str]:
+        return {str(item.get("value") or "").strip().upper() for item in CANADIAN_PROVINCE_OPTIONS}
+
+    @staticmethod
+    def _province_label_map() -> Dict[str, str]:
+        return {
+            str(item.get("value") or "").strip().upper(): str(item.get("label") or "").strip()
+            for item in CANADIAN_PROVINCE_OPTIONS
+        }
+
+    @staticmethod
+    def _city_maps_by_province() -> Dict[str, Dict[str, Any]]:
+        maps: Dict[str, Dict[str, Any]] = {}
+        for province_code, cities in CANADIAN_CITIES_BY_PROVINCE_OPTIONS.items():
+            code = str(province_code or "").strip().upper()
+            by_code: Dict[str, str] = {}
+            by_label: Dict[str, str] = {}
+            for city in cities or []:
+                city_code = str(city.get("value") or "").strip().upper()
+                city_label = str(city.get("label") or "").strip()
+                if not city_code or not city_label:
+                    continue
+                by_code[city_code] = city_label
+                by_label[city_label.lower()] = city_code
+            maps[code] = {"by_code": by_code, "by_label": by_label}
+        return maps
+
+    @staticmethod
+    def _normalize_code(value: Any) -> str:
+        return str(value or "").strip().upper()
+
+    @classmethod
+    def _resolve_city_code(cls, region_code: str, value: Any) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        maps = cls._city_maps_by_province().get(region_code, {})
+        by_code = maps.get("by_code", {})
+        by_label = maps.get("by_label", {})
+        code_candidate = raw.upper()
+        if code_candidate in by_code:
+            return code_candidate
+        return str(by_label.get(raw.lower()) or "")
+
+    @classmethod
+    def _validate_and_normalize_guard_operational_city(cls, profile: Dict[str, Any]) -> None:
+        region_code = cls._normalize_code(profile.get("operational_region_code"))
+        city_code = cls._resolve_city_code(region_code, profile.get("operational_city_code")) if region_code else ""
+
+        if not region_code:
+            raise HTTPException(status_code=400, detail="Guard operational province is required")
+        if not city_code:
+            raise HTTPException(status_code=400, detail="Guard operational city is required")
+
+        province_codes = cls._province_codes()
+        if region_code not in province_codes:
+            raise HTTPException(status_code=400, detail=f"Invalid guard operational province: {region_code}")
+
+        city_maps = cls._city_maps_by_province().get(region_code, {})
+        by_code = city_maps.get("by_code", {})
+        if city_code not in by_code:
+            raise HTTPException(status_code=400, detail=f"Invalid guard operational city '{city_code}' for province '{region_code}'")
+
+        profile["operational_region_code"] = region_code
+        profile["operational_city_code"] = city_code
+
+    @classmethod
+    def _validate_and_normalize_provider_operating_regions(cls, profile: Dict[str, Any]) -> None:
+        operating_regions = profile.get("operating_regions")
+        if not isinstance(operating_regions, list) or not operating_regions:
+            raise HTTPException(status_code=400, detail="At least one operating region is required")
+
+        province_codes = cls._province_codes()
+        province_labels = cls._province_label_map()
+        city_maps_by_province = cls._city_maps_by_province()
+        normalized_regions: List[Dict[str, Any]] = []
+
+        for index, region in enumerate(operating_regions):
+            if not isinstance(region, dict):
+                raise HTTPException(status_code=400, detail=f"Operating region at index {index} is invalid")
+
+            region_code = cls._normalize_code(region.get("region_code") or region.get("province"))
+            if not region_code:
+                raise HTTPException(status_code=400, detail=f"Operating region province is required at index {index}")
+            if region_code not in province_codes:
+                raise HTTPException(status_code=400, detail=f"Invalid operating region province '{region_code}' at index {index}")
+
+            city_codes_raw = region.get("city_codes")
+            city_entries_raw = region.get("city_entries")
+            default_region_radius = None
+            try:
+                default_region_radius = float(region.get("coverage_radius_km")) if region.get("coverage_radius_km") is not None else None
+            except Exception:
+                default_region_radius = None
+
+            if not isinstance(city_entries_raw, list):
+                city_entries_raw = []
+
+            if not isinstance(city_codes_raw, list):
+                city_codes_raw = []
+                legacy_city = region.get("city")
+                if legacy_city:
+                    city_codes_raw.append(legacy_city)
+
+            if not city_entries_raw and city_codes_raw:
+                city_entries_raw = [{"city_code": value, "coverage_radius_km": default_region_radius} for value in city_codes_raw]
+
+            resolved_city_codes: List[str] = []
+            normalized_city_entries: List[Dict[str, Any]] = []
+            seen: set[str] = set()
+            city_maps = city_maps_by_province.get(region_code, {})
+            by_code = city_maps.get("by_code", {})
+
+            for entry in city_entries_raw:
+                if isinstance(entry, dict):
+                    raw_city = entry.get("city_code") or entry.get("city")
+                    raw_radius = entry.get("coverage_radius_km")
+                else:
+                    raw_city = entry
+                    raw_radius = default_region_radius
+
+                code = cls._resolve_city_code(region_code, raw_city)
+                if not code or code in seen:
+                    continue
+                if code not in by_code:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid city '{raw_city}' for province '{region_code}' at index {index}"
+                    )
+
+                try:
+                    radius_km = float(raw_radius) if raw_radius is not None else None
+                except Exception:
+                    radius_km = None
+
+                if radius_km is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Coverage radius is required for city '{code}' in province '{region_code}' at index {index}"
+                    )
+
+                if radius_km < 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Coverage radius must be at least 1 km for city '{code}' in province '{region_code}' at index {index}"
+                    )
+
+                seen.add(code)
+                resolved_city_codes.append(code)
+                normalized_city_entries.append({
+                    "city_code": code,
+                    "city": by_code.get(code, code),
+                    "coverage_radius_km": radius_km,
+                })
+
+            if not resolved_city_codes:
+                raise HTTPException(status_code=400, detail=f"At least one valid city is required for province '{region_code}' at index {index}")
+
+            city_labels = [by_code.get(code, code) for code in resolved_city_codes]
+            first_city_code = resolved_city_codes[0]
+
+            normalized_region = dict(region)
+            normalized_region["country"] = "CA"
+            normalized_region["province"] = region_code
+            normalized_region["region_code"] = region_code
+            normalized_region["region_label"] = province_labels.get(region_code, region_code)
+            normalized_region["city_codes"] = resolved_city_codes
+            normalized_region["city_labels"] = city_labels
+            normalized_region["city_entries"] = normalized_city_entries
+            normalized_region["city_code"] = first_city_code
+            normalized_region["city"] = by_code.get(first_city_code, first_city_code)
+            normalized_region["coverage_radius_km"] = normalized_city_entries[0]["coverage_radius_km"] if normalized_city_entries else default_region_radius
+            normalized_regions.append(normalized_region)
+
+        profile["operating_regions"] = normalized_regions
+
+    @classmethod
+    def _validate_and_normalize_profile_for_tenant_type(cls, tenant_type: TenantType, profile: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(profile, dict):
+            return profile
+
+        if tenant_type == TenantType.GUARD:
+            cls._validate_and_normalize_guard_operational_city(profile)
+        elif tenant_type == TenantType.SERVICE_PROVIDER:
+            cls._validate_and_normalize_provider_operating_regions(profile)
+
+        return profile
 
     @staticmethod
     async def _dek(tenant_id: str) -> bytes:
@@ -288,6 +478,7 @@ class TenantManager:
         update_payload = data.dump_selected() or {}
         existing_profile = tenant.profile or {}
         merged = TenantManager._deep_merge(existing_profile, update_payload)
+        merged = TenantManager._validate_and_normalize_profile_for_tenant_type(tenant.tenant_type, merged)
 
         tenant.profile = merged
         tenant.updated_at = tenant.updated_at  # keep field present; odmantic will persist
@@ -349,6 +540,7 @@ class TenantManager:
             # Ensure profile type matches tenant_type
             existing = tenant.profile or {}
             merged = TenantManager._deep_merge(existing, data.profile)
+            merged = TenantManager._validate_and_normalize_profile_for_tenant_type(tenant.tenant_type, merged)
             tenant.profile = merged
 
         if is_update and previous_status == TenantStatus.ONBOARDING:

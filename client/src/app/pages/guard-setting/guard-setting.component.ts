@@ -92,6 +92,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           if (response?.canadianProvinces?.length) {
             this.provinceOptions = response.canadianProvinces;
           }
+          if (response?.canadianCitiesByProvince) {
+            this.canadianCitiesByProvinceOptions = response.canadianCitiesByProvince;
+          }
           if (response?.identityDocumentTypes?.length) {
             this.identityDocumentTypes = response.identityDocumentTypes;
             this.documentTypes = response.identityDocumentTypes;
@@ -231,6 +234,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   provinceOptions: { value: string; label: string }[] = [];
+  canadianCitiesByProvinceOptions: Record<string, { value: string; label: string }[]> = {};
 
   countryOptions: { value: string; label: string }[] = [];
 
@@ -335,6 +339,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     }],
     preferredGuardTypes: [],
     operationalRadius: null,
+    operationalRegionCode: '',
+    operationalCityCode: '',
     weeklyAvailability: {
       Monday: { enabled: false, timeRanges: [] },
       Tuesday: { enabled: false, timeRanges: [] },
@@ -447,6 +453,78 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     return from === 'km' ? kmToMiles(value) : milesToKm(value);
   }
 
+  getOperationalCityOptions(): { value: string; label: string }[] {
+    if (!this.guardFormModel.operationalRegionCode) {
+      return [];
+    }
+    return this.canadianCitiesByProvinceOptions[this.guardFormModel.operationalRegionCode] || [];
+  }
+
+  getAddressCityOptions(): { value: string; label: string }[] {
+    const provinceCode = this.guardFormModel.address.province || '';
+    const canonical: { value: string; label: string }[] = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const current = String(this.guardFormModel.address.city || '').trim();
+    if (!current) {
+      return canonical;
+    }
+
+    const exists = canonical.some((option: { value: string; label: string }) => option.value === current);
+    if (exists) {
+      return canonical;
+    }
+
+    return [...canonical, { value: current, label: current }];
+  }
+
+  onAddressProvinceChange(nextProvinceCode: string): void {
+    this.guardFormModel.address.province = nextProvinceCode;
+    const options = this.getAddressCityOptions();
+    const isCurrentValid = options.some(city => city.value === this.guardFormModel.address.city);
+    if (!isCurrentValid) {
+      this.guardFormModel.address.city = '';
+    }
+  }
+
+  private getCityLabelForProvince(provinceCode: string, cityCode: string): string {
+    const options = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const normalized = String(cityCode || '').trim().toUpperCase();
+    if (!normalized) {
+      return '';
+    }
+    const found = options.find(option => option.value === normalized);
+    return found?.label || String(cityCode || '').trim();
+  }
+
+  onOperationalRegionChange(nextRegionCode: string): void {
+    this.guardFormModel.operationalRegionCode = nextRegionCode;
+    const options = this.getOperationalCityOptions();
+    const isCurrentCityValid = options.some(city => city.value === this.guardFormModel.operationalCityCode);
+    if (!isCurrentCityValid) {
+      this.guardFormModel.operationalCityCode = '';
+    }
+  }
+
+  private resolveCityCodeForProvince(provinceCode: string, valueOrLabel: string): string {
+    const options = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const normalized = String(valueOrLabel || '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const byValue = options.find(option => option.value === normalized.toUpperCase());
+    if (byValue) {
+      return byValue.value;
+    }
+
+    const byLabel = options.find(option => option.label.toLowerCase() === normalized.toLowerCase());
+    return byLabel?.value || '';
+  }
+
+  private getDefaultCityCodeForProvince(provinceCode: string): string {
+    const options = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    return options[0]?.value || '';
+  }
+
   getProfileImageUrl(): string | null {
     // Cache the generated URL to avoid changing it on each change-detection pass
     if (!this.profileTenantId) return null;
@@ -511,13 +589,22 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     formData.dob = profile.date_of_birth || profile.dateOfBirth || formData.dob || '';
 
     const rawAddress = profile.home_address || profile.homeAddress || profile.address || {};
+    const addressProvinceCode = (rawAddress.province || '').toString().trim();
+    const rawAddressCity = (rawAddress.city || '').toString().trim();
+    const resolvedAddressCity = this.resolveCityCodeForProvince(addressProvinceCode, rawAddressCity);
     formData.address = {
       street: rawAddress.street || '',
-      city: rawAddress.city || '',
+      city: resolvedAddressCity || rawAddressCity || this.getDefaultCityCodeForProvince(addressProvinceCode),
       country: rawAddress.country || 'CA',
-      province: rawAddress.province || '',
+      province: addressProvinceCode,
       postalCode: rawAddress.postal_code || rawAddress.postalCode || ''
     };
+
+    const operationalRegionCode = (profile.operational_region_code || profile.operationalRegionCode || formData.address.province || '').toString().trim();
+    const rawOperationalCity = (profile.operational_city_code || profile.operationalCityCode || formData.address.city || '').toString().trim();
+    formData.operationalRegionCode = operationalRegionCode;
+    formData.operationalCityCode = this.resolveCityCodeForProvince(operationalRegionCode, rawOperationalCity)
+      || this.getDefaultCityCodeForProvince(operationalRegionCode);
 
     const rawAvailability = profile.weekly_availability || profile.weeklyAvailability;
     formData.weeklyAvailability = this.mapWeeklyAvailabilityFromBackend(rawAvailability);
@@ -815,6 +902,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       (data.policeClearances && data.policeClearances.length > 0) ||
       (data.trainingCertificates && data.trainingCertificates.length > 0) ||
       data.operationalRadius != null ||
+      data.operationalRegionCode?.trim() ||
+      data.operationalCityCode?.trim() ||
       Object.values(data.weeklyAvailability).some(day => day.enabled && day.timeRanges.length > 0)
     );
   }
@@ -1472,6 +1561,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     }
     if (!this.guardFormModel.address.city.trim()) {
       this.guardErrors['addressCity'] = 'City is required.';
+    } else {
+      const cityOptions = this.getAddressCityOptions();
+      if (cityOptions.length && !cityOptions.some(city => city.value === this.guardFormModel.address.city)) {
+        this.guardErrors['addressCity'] = 'Please select a valid city for the selected province.';
+      }
     }
     if (!this.guardFormModel.address.country.trim()) {
       this.guardErrors['addressCountry'] = 'Country is required.';
@@ -1892,6 +1986,22 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       this.guardErrors['operationalRadius'] = `Operational radius must be at least ${this.minimumOperationalRadiusText}.`;
     }
 
+    if (!this.guardFormModel.operationalRegionCode) {
+      this.guardErrors['operationalRegionCode'] = 'Operational province is required.';
+    } else {
+      const validProvinces = this.provinceOptions.map(p => p.value);
+      if (validProvinces.length && !validProvinces.includes(this.guardFormModel.operationalRegionCode)) {
+        this.guardErrors['operationalRegionCode'] = 'Please select a valid operational province.';
+      }
+    }
+
+    const operationalCityOptions = this.getOperationalCityOptions();
+    if (!this.guardFormModel.operationalCityCode) {
+      this.guardErrors['operationalCityCode'] = 'Operational city is required.';
+    } else if (operationalCityOptions.length && !operationalCityOptions.some(c => c.value === this.guardFormModel.operationalCityCode)) {
+      this.guardErrors['operationalCityCode'] = 'Please select a valid operational city.';
+    }
+
     // Weekly Availability validation
     const hasAtLeastOneDay = Object.keys(this.guardFormModel.weeklyAvailability).some(
       day => this.guardFormModel.weeklyAvailability[day].enabled
@@ -1957,11 +2067,13 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         date_of_birth: this.guardFormModel.dob,
         home_address: {
           street: this.guardFormModel.address.street,
-          city: this.guardFormModel.address.city,
+          city: this.getCityLabelForProvince(this.guardFormModel.address.province || '', this.guardFormModel.address.city),
           country: this.guardFormModel.address.country,
           province: this.guardFormModel.address.province || '',
           postal_code: this.guardFormModel.address.postalCode
         },
+        operational_region_code: this.guardFormModel.operationalRegionCode,
+        operational_city_code: this.guardFormModel.operationalCityCode,
         identification: {
           ...(primaryIdentification?.documentType && { id_type: primaryIdentification.documentType }),
           ...(primaryIdentification?.number && { id_number: primaryIdentification.number }),

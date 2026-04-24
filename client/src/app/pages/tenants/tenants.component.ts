@@ -65,6 +65,7 @@ export class TenantsComponent implements OnInit {
   showDrawer = false;
   showActivityDrawer = false;
   tenantDetail: any = null;
+  tenantDetailLoading = false;
   selectedTenantForLogs: any = null;
   selectedRows: any[] = [];
   // UI state for modal/alerts
@@ -180,17 +181,17 @@ export class TenantsComponent implements OnInit {
   }
 
   loadTenantById(id: string) {
-    this.loading = true;
+    this.tenantDetailLoading = true;
+    this.showDrawer = true;
+    this.tenantDetail = null;
     this.api.get<any>(`tenants/${id}`).subscribe({
       next: res => {
         this.tenantDetail = res;
-        this.showDrawer = true;
-        this.loading = false;
+        this.tenantDetailLoading = false;
       },
       error: () => {
         this.tenantDetail = null;
-        this.showDrawer = false;
-        this.loading = false;
+        this.tenantDetailLoading = false;
       }
     });
   }
@@ -258,6 +259,7 @@ export class TenantsComponent implements OnInit {
 
   onCloseDrawer() {
     this.showDrawer = false;
+    this.tenantDetailLoading = false;
     // clear route id
     this.router.navigate(['/dashboard/tenants']);
   }
