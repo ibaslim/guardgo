@@ -488,6 +488,8 @@ class TenantManager:
 
     async def upsert_tenant(self, data: TenantPayload, current_user, is_update: bool = True):
         """Unified endpoint for GET/POST/PUT complete tenant data (including profile)."""
+        role = getattr(current_user, "role", None)
+        is_platform_admin = is_platform_admin_role(role)
         if is_update:
             # Update existing tenant
             tenant_id = getattr(current_user, "tenant_uuid", None)
@@ -501,8 +503,7 @@ class TenantManager:
             previous_status = tenant.status
 
             # Role guard: only ADMIN or matching domain admin
-            role = getattr(current_user, "role", None)
-            allowed = is_platform_admin_role(role) or (
+            allowed = is_platform_admin or (
                 tenant.tenant_type == TenantType.GUARD and role == user_role.GUARD_ADMIN or
                 tenant.tenant_type == TenantType.CLIENT and role == user_role.CLIENT_ADMIN or
                 tenant.tenant_type == TenantType.SERVICE_PROVIDER and role == user_role.SP_ADMIN
@@ -529,7 +530,8 @@ class TenantManager:
         tenant.verified = data.verified
         tenant.user_quota = data.user_quota
         if data.status is not None:
-            tenant.status = data.status
+            normalized_requested = self._normalized_status_value(data.status)
+            tenant.status = TenantStatus(normalized_requested)
         if data.licenses:
             tenant.licenses = data.licenses
         if data.iocs:
@@ -543,10 +545,20 @@ class TenantManager:
             merged = TenantManager._validate_and_normalize_profile_for_tenant_type(tenant.tenant_type, merged)
             tenant.profile = merged
 
-        if is_update and previous_status == TenantStatus.ONBOARDING:
-            tenant.status = TenantStatus.PENDING_ACTIVATION
-            tenant.approval_actors = []
-            tenant.approvals_required = max(int(getattr(tenant, "approvals_required", 2) or 2), 2)
+        if is_update and not is_platform_admin:
+            # Tenant admins cannot directly mutate lifecycle states from update payloads.
+            tenant.status = previous_status
+            if previous_status == TenantStatus.ONBOARDING:
+                if tenant.tenant_type == TenantType.CLIENT:
+                    tenant.status = TenantStatus.ACTIVE
+                    tenant.verified = True
+                    if not tenant.verified_date:
+                        tenant.verified_date = datetime.utcnow()
+                    tenant.approval_actors = []
+                else:
+                    tenant.status = TenantStatus.PENDING_ACTIVATION
+                    tenant.approval_actors = []
+                    tenant.approvals_required = max(int(getattr(tenant, "approvals_required", 2) or 2), 2)
 
         tenant.updated_at = datetime.utcnow()
         if data.verified and not tenant.verified_date:
@@ -554,8 +566,8 @@ class TenantManager:
 
         await self._engine.save(tenant)
 
-        # If this was an update that moved onboarding -> pending_activation, run post-change actions
-        if is_update and previous_status == TenantStatus.ONBOARDING and tenant.status == TenantStatus.PENDING_ACTIVATION:
+        # Record status-change side effects on update when lifecycle changed.
+        if is_update and self._normalized_status_value(previous_status) != self._normalized_status_value(tenant.status):
             try:
                 await self._post_status_change(tenant, previous_status, actor=getattr(current_user, "username", None), actor_role=getattr(current_user, "role", None))
             except Exception:

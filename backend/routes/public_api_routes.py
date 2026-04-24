@@ -110,7 +110,7 @@ async def get_user_resource(id: str):
 
 
 @public_routes.get("/api/s/static/system/{id}", include_in_schema=False, dependencies=[Depends(cookie_required)])
-async def get_user_resource():
+async def get_user_resource(id: str):
     return await ResourceManager.get_instance().get_system_image(id)
 
 @public_routes.get("/api/tenant/files/identity/{file_id}", include_in_schema=False, dependencies=[Depends(cookie_required)])

@@ -17,7 +17,7 @@ from orion.services.mongo_manager.shared_model.db_auth_models import (
     UserStatus,
     is_platform_admin_role,
 )
-from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus
+from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus, TenantType
 from orion.services.session_manager.session_manager import session_manager
 from orion.services.mail_manager.mail_manager import mail_manager
 from orion.helper_manager.env_handler import env_handler
@@ -132,7 +132,36 @@ class auth_manager:
         user.verification_expiry = None
         await engine.save(user)
 
+        tenant_auto_activated = False
+        tenant_uuid = getattr(user, "tenant_uuid", None)
+        if tenant_uuid:
+            try:
+                tenant = await engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(tenant_uuid))
+            except Exception:
+                tenant = None
+            if tenant and tenant.tenant_type == TenantType.CLIENT and tenant.status != TenantStatus.ACTIVE:
+                previous_status = tenant.status
+                tenant.status = TenantStatus.ACTIVE
+                tenant.verified = True
+                tenant.updated_at = datetime.now(timezone.utc)
+                tenant.verified_date = tenant.verified_date or datetime.now(timezone.utc)
+                tenant.approval_actors = []
+                await engine.save(tenant)
+                tenant_auto_activated = True
+                try:
+                    from orion.api.interactive.tenant_manager.tenant_manager import TenantManager
+                    await TenantManager.get_instance()._post_status_change(
+                        tenant,
+                        previous_status,
+                        actor=getattr(user, "username", None),
+                        actor_role=getattr(user, "role", None),
+                        reason="auto_activation_on_email_verify",
+                    )
+                except Exception:
+                    pass
 
+        if tenant_auto_activated:
+            return {"message": "Email verified successfully. Your account is active."}
         return {"message": "Email verified successfully. You may continue onboarding."}
 
     @staticmethod
