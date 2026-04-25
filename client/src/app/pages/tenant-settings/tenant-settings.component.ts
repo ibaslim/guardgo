@@ -8,8 +8,8 @@ import { ClientSettingComponent } from '../client-setting/client-setting.compone
 import { ServiceProviderSettingComponent } from '../service-provider-setting/service-provider-setting.component';
 import { ApiService } from '../../shared/services/api.service';
 import { readableTitle } from '../../shared/helpers/format.helper';
-import { LoaderComponent } from '../../components/loader/loader.component';
 import { AlertComponent } from '../../components/alert/alert.component';
+import { LoadingShellComponent } from '../../components/loading-shell/loading-shell.component';
 
 @Component({
   selector: 'app-tenant-settings',
@@ -20,12 +20,13 @@ import { AlertComponent } from '../../components/alert/alert.component';
     GuardSettingComponent,
     ClientSettingComponent,
     ServiceProviderSettingComponent,
-    LoaderComponent,
-    AlertComponent
+    AlertComponent,
+    LoadingShellComponent
   ],
   templateUrl: './tenant-settings.component.html'
 })
 export class TenantSettingsComponent implements OnInit, OnDestroy {
+  readonly tenantLoadingScope = 'tenant-settings';
   @Input() showPageWrapper: boolean = true;
   @Input() tenantDataInput: any = null;
   @Input() readonly: boolean = false;
@@ -72,7 +73,7 @@ export class TenantSettingsComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     this.errorMessage = null;
 
-    this.apiService.get<any>('tenant')
+    this.apiService.get<any>('tenant', { loadingScope: this.tenantLoadingScope })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {

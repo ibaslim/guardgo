@@ -1,8 +1,17 @@
 from typing import Optional
 from fastapi import Depends, HTTPException, status
+from bson import ObjectId
 from fastapi.security import OAuth2PasswordBearer
 from orion.helper_manager.env_handler import env_handler
-from orion.services.mongo_manager.shared_model.db_auth_models import user_role, UserStatus, normalize_role_value
+from orion.services.mongo_manager.mongo_controller import mongo_controller
+from orion.services.mongo_manager.shared_model.db_auth_models import (
+    user_role,
+    UserStatus,
+    normalize_role_value,
+    is_platform_admin_role,
+    is_tenant_admin_role,
+)
+from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus
 from orion.services.session_manager.session_manager import session_manager
 from orion.constants import constant
 
@@ -56,6 +65,48 @@ def status_required(status_required: list[UserStatus], bypass_roles: Optional[li
         return user_status
 
     return verify_status
+
+
+def tenant_status_required(allowed_statuses: list[TenantStatus], bypass_roles: Optional[list[user_role]] = None):
+    async def verify_tenant_status(
+        current_user=Depends(get_current_user),
+        role: user_role = Depends(get_current_role),
+    ):
+        if bypass_roles and role in bypass_roles:
+            return True
+
+        if is_platform_admin_role(role):
+            return True
+
+        if not is_tenant_admin_role(role):
+            return True
+
+        tenant_uuid = str(getattr(current_user, "tenant_uuid", "") or "").strip()
+        if not tenant_uuid:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid tenant association")
+
+        try:
+            tenant = await mongo_controller.get_instance().get_engine().find_one(
+                db_tenant_model,
+                db_tenant_model.id == ObjectId(tenant_uuid),
+            )
+        except Exception:
+            tenant = None
+
+        if not tenant:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant not found")
+
+        allowed_values = {str(getattr(s, "value", s)).strip().lower() for s in (allowed_statuses or [])}
+        tenant_value = str(getattr(tenant.status, "value", tenant.status)).strip().lower()
+        if tenant_value == TenantStatus.PENDING_VERIFICATION.value:
+            tenant_value = TenantStatus.PENDING_ACTIVATION.value
+
+        if tenant_value not in allowed_values:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant is not active for this action")
+
+        return True
+
+    return verify_tenant_status
 
 
 def license_required(feature: str, bypass_roles: Optional[list[user_role]] = None):

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { ButtonComponent } from '../../components/button/button.component';
@@ -23,6 +23,7 @@ import {
 import { formatBackendDateTime } from '../../shared/helpers/format.helper';
 import { AppService } from '../../services/core/app/app.service';
 import { normalizeRole } from '../../shared/helpers/access-control.helper';
+import { LoadingFeedbackService } from '../../shared/services/loading-feedback.service';
 
 @Component({
   selector: 'app-requests',
@@ -42,9 +43,14 @@ import { normalizeRole } from '../../shared/helpers/access-control.helper';
   templateUrl: './requests.component.html',
 })
 export class RequestsComponent implements OnInit {
+  readonly requestListScope = 'requests:list';
+  readonly jobListScope = 'requests:jobs';
+  readonly metadataScope = 'requests:metadata';
+  readonly saveRequestScope = 'requests:save';
   loading = false;
   saving = false;
   jobsLoading = false;
+  private readonly loadingFeedback = inject(LoadingFeedbackService);
 
   role = '';
   tenantType = '';
@@ -145,6 +151,22 @@ export class RequestsComponent implements OnInit {
 
   formatBackendDateTime = formatBackendDateTime;
 
+  isScopeLoading(scope: string): boolean {
+    return this.loadingFeedback.isScopeLoading(scope);
+  }
+
+  getRequestStatusScope(requestId: string): string {
+    return `requests:status:${requestId}`;
+  }
+
+  getAssignScope(requestId: string): string {
+    return `requests:assign:${requestId}`;
+  }
+
+  getJobUpdateScope(jobId: string): string {
+    return `requests:job:${jobId}`;
+  }
+
   get isPlatformAdmin(): boolean {
     return ['admin', 'ops_admin', 'support_admin', 'compliance_admin'].includes(this.role);
   }
@@ -175,7 +197,7 @@ export class RequestsComponent implements OnInit {
   }
 
   loadMetadata(): void {
-    this.api.get<any>('public/client-metadata').subscribe({
+    this.api.get<any>('public/client-metadata', { loadingScope: this.metadataScope }).subscribe({
       next: (response) => {
         this.guardTypeOptions = Array.isArray(response?.guardTypeOptions) ? response.guardTypeOptions : [];
       }
@@ -184,7 +206,7 @@ export class RequestsComponent implements OnInit {
 
   loadRequests(page: number): void {
     this.loading = true;
-    this.requestService.listRequests(page, this.rows, this.keyword, this.requestStatusFilter, this.targetTypeFilter).subscribe({
+    this.requestService.listRequests(page, this.rows, this.keyword, this.requestStatusFilter, this.targetTypeFilter, { loadingScope: this.requestListScope }).subscribe({
       next: (response) => {
         this.items = response.items || [];
         this.page = response.pagination?.page || page;
@@ -201,7 +223,7 @@ export class RequestsComponent implements OnInit {
 
   loadJobs(page: number): void {
     this.jobsLoading = true;
-    this.requestService.listJobs(page, this.jobRows, this.jobStatusFilter, this.jobKeyword).subscribe({
+    this.requestService.listJobs(page, this.jobRows, this.jobStatusFilter, this.jobKeyword, { loadingScope: this.jobListScope }).subscribe({
       next: (response) => {
         this.jobs = response.items || [];
         this.jobPage = response.pagination?.page || page;
@@ -285,7 +307,7 @@ export class RequestsComponent implements OnInit {
     const payload = this.buildRequestPayload();
 
     if (this.requestFormMode === 'create') {
-      this.requestService.createRequest({ ...payload, commit }).subscribe({
+      this.requestService.createRequest({ ...payload, commit }, { loadingScope: this.saveRequestScope }).subscribe({
         next: (response) => {
           this.saving = false;
           this.notification.show(response.message || (commit ? 'Request created' : 'Request draft saved'), 'success', 4000);
@@ -306,7 +328,7 @@ export class RequestsComponent implements OnInit {
       return;
     }
 
-    this.requestService.updateRequest(this.editingRequestId, payload).subscribe({
+    this.requestService.updateRequest(this.editingRequestId, payload, { loadingScope: this.saveRequestScope }).subscribe({
       next: () => {
         if (!commit) {
           this.saving = false;
@@ -316,7 +338,7 @@ export class RequestsComponent implements OnInit {
           return;
         }
 
-        this.requestService.updateRequestStatus(this.editingRequestId, 'submitted').subscribe({
+        this.requestService.updateRequestStatus(this.editingRequestId, 'submitted', undefined, { loadingScope: this.saveRequestScope }).subscribe({
           next: (response) => {
             this.saving = false;
             this.notification.show(response.message || 'Request submitted', 'success', 3500);
@@ -566,7 +588,7 @@ export class RequestsComponent implements OnInit {
       return;
     }
 
-    this.requestService.updateRequestStatus(item.id, 'submitted').subscribe({
+    this.requestService.updateRequestStatus(item.id, 'submitted', undefined, { loadingScope: this.getRequestStatusScope(item.id) }).subscribe({
       next: (response) => {
         this.notification.show(response.message || 'Request submitted', 'success', 3500);
         this.loadRequests(this.page);
@@ -618,7 +640,7 @@ export class RequestsComponent implements OnInit {
       return;
     }
 
-    this.requestService.updateRequestStatus(item.id, status, reason).subscribe({
+    this.requestService.updateRequestStatus(item.id, status, reason, { loadingScope: this.getRequestStatusScope(item.id) }).subscribe({
       next: (response) => {
         this.notification.show(response.message || 'Request updated', 'success', 3500);
         this.loadRequests(this.page);
@@ -640,7 +662,7 @@ export class RequestsComponent implements OnInit {
     }
 
     this.assigningRequestId = item.id;
-    this.requestService.assignRequest(item.id, candidateId).subscribe({
+    this.requestService.assignRequest(item.id, candidateId, undefined, { loadingScope: this.getAssignScope(item.id) }).subscribe({
       next: (response) => {
         this.assigningRequestId = '';
         this.notification.show(response.message || 'Request assigned', 'success', 3500);
@@ -662,7 +684,7 @@ export class RequestsComponent implements OnInit {
     }
 
     this.updatingJobId = job.id;
-    this.requestService.updateJobStatus(job.id, status, reason).subscribe({
+    this.requestService.updateJobStatus(job.id, status, reason, { loadingScope: this.getJobUpdateScope(job.id) }).subscribe({
       next: (response) => {
         this.updatingJobId = '';
         this.notification.show(response.message || 'Job updated', 'success', 3500);

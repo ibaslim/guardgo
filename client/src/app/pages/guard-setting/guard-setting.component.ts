@@ -18,6 +18,7 @@ import { ErrorMessageComponent } from "../../components/error-message/error-mess
 import { ProfilePictureUploadComponent } from '../../components/profile-picture-upload/profile-picture-upload.component';
 import { CardComponent } from '../../components/card/card.component';
 import { ClientPreferredGuardTypesComponent } from '../../components/client-preferred-guard-types/client-preferred-guard-types.component';
+import { AlertComponent } from '../../components/alert/alert.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
@@ -25,6 +26,18 @@ import { getIssuingAuthorityForProvince } from '../../shared/constants/provincia
 import { Guard, GuardErrors, IdentificationDocument, SecurityLicenseDocument, PoliceClearanceRecord, TrainingCertificate, WeeklyAvailability } from '../../shared/model/guard';
 import { readableTitle } from '../../shared/helpers/format.helper';
 import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared/helpers/distance.helper';
+import {
+  buildAlphabeticDummyTag,
+  buildCaPhone,
+  buildSeededCaPhone,
+  isLocalhostForDummyData,
+  isoDateYearsAgo,
+  isoDateYearsAhead,
+  nextDummySeed,
+  pickCityValueForProvince,
+  pickFirstOptionValue,
+  pickPreferredOptionValue,
+} from '../../shared/helpers/onboarding-dummy-data.helper';
 
 @Component({
   selector: 'app-guard-setting',
@@ -45,12 +58,15 @@ import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared
     ErrorMessageComponent,
     ProfilePictureUploadComponent,
     CardComponent,
-    ClientPreferredGuardTypesComponent
+    ClientPreferredGuardTypesComponent,
+    AlertComponent
   ],
   templateUrl: './guard-setting.component.html',
   styleUrls: ['./guard-setting.component.css']
 })
 export class GuardSettingComponent implements OnInit, OnDestroy {
+  readonly showDummyDataButton = isLocalhostForDummyData();
+  managedByProviderName = '';
 
   @Input() showPageWrapper: boolean = true;
   @Input() readonly: boolean = false;
@@ -376,6 +392,42 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   trainingCertificateUploadInProgress: Record<string, boolean> = {};
   trainingCertificateUploadErrors: Record<string, string> = {};
 
+  get showServiceProviderInfo(): boolean {
+    return !this.readonly && !!this.serviceProviderDisplayName;
+  }
+
+  get serviceProviderDisplayName(): string {
+    if (this.managedByProviderName) {
+      return this.managedByProviderName;
+    }
+
+    const tenant = this.appService.userSessionData()?.tenant;
+    const provider = tenant?.service_provider;
+    const name = String(provider?.name || '').trim();
+    const id = String(provider?.id || tenant?.service_provider_tenant_id || '').trim();
+    return name || id;
+  }
+
+  private loadServiceProviderInfo(): void {
+    this.apiService.get<any>('tenant', { loadingMode: 'silent' })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          const tenantType = String(response?.tenant_type || '').trim().toLowerCase();
+          const ownershipType = String(response?.ownership_type || '').trim().toLowerCase();
+          const providerName = String(response?.service_provider?.name || '').trim();
+          const providerId = String(response?.service_provider?.id || response?.service_provider_tenant_id || '').trim();
+
+          this.managedByProviderName = tenantType === 'guard' && ownershipType === 'service_provider'
+            ? (providerName || providerId)
+            : '';
+        },
+        error: () => {
+          this.managedByProviderName = '';
+        }
+      });
+  }
+
   constructor(
     private apiService: ApiService,
     private router: Router,
@@ -383,6 +435,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit(): void {
+    this.loadServiceProviderInfo();
+
     const preferredUnit = this.appService.getConfig().localSettings.distanceUnit;
     this.selectedDistanceUnit = preferredUnit === 'mi' ? 'mi' : 'km';
 
@@ -476,6 +530,20 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     return [...canonical, { value: current, label: current }];
   }
 
+  getPoliceClearanceCityOptions(record: PoliceClearanceRecord): { value: string; label: string }[] {
+    const provinceCode = String(record?.issuingProvince || '').trim().toUpperCase();
+    const canonical: { value: string; label: string }[] = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const current = String(record?.issuingCity || '').trim();
+    if (!current) {
+      return canonical;
+    }
+    const exists = canonical.some((option: { value: string; label: string }) => option.value === current);
+    if (exists) {
+      return canonical;
+    }
+    return [...canonical, { value: current, label: current }];
+  }
+
   onAddressProvinceChange(nextProvinceCode: string): void {
     this.guardFormModel.address.province = nextProvinceCode;
     const options = this.getAddressCityOptions();
@@ -501,6 +569,16 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     const isCurrentCityValid = options.some(city => city.value === this.guardFormModel.operationalCityCode);
     if (!isCurrentCityValid) {
       this.guardFormModel.operationalCityCode = '';
+    }
+  }
+
+  onPoliceClearanceProvinceChange(record: PoliceClearanceRecord, nextProvinceCode: string): void {
+    record.issuingProvince = String(nextProvinceCode || '').trim().toUpperCase();
+    const options = this.getPoliceClearanceCityOptions(record);
+    const currentCity = String(record.issuingCity || '').trim();
+    const isCurrentValid = options.some(city => city.value === currentCity);
+    if (!isCurrentValid) {
+      record.issuingCity = '';
     }
   }
 
@@ -809,6 +887,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     const rawPoliceClearances = (formData as any).police_clearances || formData.policeClearances || [];
     if (Array.isArray(rawPoliceClearances) && rawPoliceClearances.length > 0) {
       formData.policeClearances = rawPoliceClearances.map((record: any, index: number) => {
+        const issuingProvince = record.issuing_province || record.issuingProvince || '';
+        const rawIssuingCity = record.issuing_city || record.issuingCity || '';
+        const resolvedIssuingCity = this.resolveCityCodeForProvince(issuingProvince, rawIssuingCity);
         const backendId = record.id || record.clearance_id;
         const stableId = backendId || `police_clearance_${record.reference_number || 'unknown'}_${index}`;
         const incomingAuthority = record.issuing_authority || record.issuingAuthority || '';
@@ -822,8 +903,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
             ? 'other'
             : (isKnownAuthority ? normalizedAuthority : (incomingAuthority ? 'other' : '')),
           issuingAuthorityOther: incomingAuthorityOther || (!isKnownAuthority ? incomingAuthority : ''),
-          issuingProvince: record.issuing_province || record.issuingProvince || '',
-          issuingCity: record.issuing_city || record.issuingCity || '',
+          issuingProvince,
+          issuingCity: resolvedIssuingCity || rawIssuingCity || '',
           issueDate: record.issue_date || record.issueDate || '',
           referenceNumber: record.reference_number || record.referenceNumber || undefined,
           file: null,
@@ -1843,6 +1924,12 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
                 this.guardErrors[`police_clearance_${record.id}_issueDate`] = 'Issue date cannot be in the future.';
               }
             }
+            if (record.issuingCity?.trim()) {
+              const cityOptions = this.getPoliceClearanceCityOptions(record);
+              if (cityOptions.length && !cityOptions.some(city => city.value === record.issuingCity)) {
+                this.guardErrors[`police_clearance_${record.id}_issuingCity`] = 'Please select a valid city for the selected province.';
+              }
+            }
           } else {
             // Additional clearances are optional, but if partially filled, validate
             const hasAnyData = record.issuingAuthorityType.trim() || record.issuingAuthorityOther?.trim() ||
@@ -1865,6 +1952,12 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
               }
               if (!record.issueDate) {
                 this.guardErrors[`police_clearance_${record.id}_issueDate`] = 'Issue date is required.';
+              }
+              if (record.issuingCity?.trim()) {
+                const cityOptions = this.getPoliceClearanceCityOptions(record);
+                if (cityOptions.length && !cityOptions.some(city => city.value === record.issuingCity)) {
+                  this.guardErrors[`police_clearance_${record.id}_issuingCity`] = 'Please select a valid city for the selected province.';
+                }
               }
             }
           }
@@ -2193,5 +2286,129 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           this.guardErrors['submit'] = err?.error?.detail || 'Failed to submit guard profile.';
         }
       });
+  }
+
+  fillDummyData(): void {
+    const seed = nextDummySeed();
+    const nameTag = buildAlphabeticDummyTag(seed.sequence);
+    const province = pickFirstOptionValue(this.provinceOptions, 'ON');
+    const city = pickCityValueForProvince(this.canadianCitiesByProvinceOptions, province, 'TORONTO');
+    const operationalProvince = province;
+    const operationalCity = pickCityValueForProvince(this.canadianCitiesByProvinceOptions, operationalProvince, city);
+
+    const firstDocType = pickPreferredOptionValue(this.documentTypeOptions, ['drivers_license'], 'drivers_license');
+    const secondDocType = pickPreferredOptionValue(
+      this.documentTypeOptions.filter(option => option.value !== firstDocType),
+      ['provincial_id', 'passport'],
+      firstDocType === 'passport' ? 'drivers_license' : 'passport'
+    );
+    const securityLicenseType = pickFirstOptionValue(this.securityLicenseTypeOptions, 'securityGuard');
+    const policeAuthorityType = pickFirstOptionValue(this.policeClearanceAuthorityOptions, 'police');
+    const preferredGuardType = pickFirstOptionValue(this.guardTypeOptions, 'securityGuard');
+    const trainingCertificate = pickFirstOptionValue(this.trainingCertificateOptions, 'basicSecurityTraining');
+    const trainingIssuerOptions = this.getTrainingIssuerOptions(trainingCertificate);
+    const trainingIssuer = pickFirstOptionValue(trainingIssuerOptions, 'other');
+
+    const doc1Id = `doc_local_1_${seed.suffix}`;
+    const doc2Id = `doc_local_2_${seed.suffix}`;
+    const secId = `sec_local_1_${seed.suffix}`;
+    const policeId = `police_local_1_${seed.suffix}`;
+    const trainingId = `training_local_1_${seed.suffix}`;
+    const guardName = `Local Test Guard ${nameTag}`;
+    const guardSecondaryEmail = `local.guard.contact+${seed.suffix}@example.com`;
+    const firstDocNumber = `DL-${seed.suffix}`;
+    const secondDocNumber = secondDocType === 'passport' ? `P-${seed.suffix}` : `PID-${seed.suffix}`;
+
+    this.guardFormModel.name = guardName;
+    this.guardFormModel.dob = isoDateYearsAgo(28);
+    this.guardFormModel.mobilePhone = buildSeededCaPhone(seed.phoneSuffix, 0, 'mobile');
+    this.guardFormModel.landlinePhone = buildSeededCaPhone(seed.phoneSuffix, 6, 'landline');
+    this.guardFormModel.address = {
+      street: `${100 + seed.sequence} Local Street`,
+      city,
+      country: 'CA',
+      province,
+      postalCode: 'M5V 2T6',
+    };
+    this.guardFormModel.secondaryContact = {
+      name: `Local Contact ${nameTag}`,
+      email: guardSecondaryEmail,
+      mobilePhone: buildSeededCaPhone(seed.phoneSuffix, 1, 'mobile'),
+      landlinePhone: buildSeededCaPhone(seed.phoneSuffix, 7, 'landline'),
+    };
+    this.guardFormModel.identification = {
+      ...this.guardFormModel.identification,
+      documents: [
+        {
+          documentType: firstDocType,
+          number: firstDocNumber,
+          province: this.requiresProvince(firstDocType) ? province : undefined,
+          passportCountry: this.isPassportDocument(firstDocType) ? 'CA' : undefined,
+          expiryDate: isoDateYearsAhead(4),
+          file: null,
+          id: doc1Id,
+        },
+        {
+          documentType: secondDocType,
+          number: secondDocNumber,
+          province: this.requiresProvince(secondDocType) ? province : undefined,
+          passportCountry: this.isPassportDocument(secondDocType) ? 'CA' : undefined,
+          expiryDate: isoDateYearsAhead(6),
+          file: null,
+          id: doc2Id,
+        },
+      ],
+      primaryDocumentId: doc1Id,
+    };
+    this.guardFormModel.securityLicenses = [
+      {
+        fullLegalName: guardName,
+        licenseNumber: `SG-${seed.suffix}`,
+        licenseType: securityLicenseType,
+        issuingProvince: province,
+        issuingAuthority: this.getSuggestedIssuingAuthority(province) || 'Provincial Authority',
+        issueDate: isoDateYearsAgo(2),
+        expiryDate: isoDateYearsAhead(2),
+        file: null,
+        id: secId,
+      },
+    ];
+    this.guardFormModel.policeClearances = [
+      {
+        issuingAuthorityType: policeAuthorityType,
+        issuingAuthorityOther: '',
+        issuingProvince: province,
+        issuingCity: city,
+        issueDate: isoDateYearsAgo(1),
+        referenceNumber: `CLR-${seed.suffix}`,
+        file: null,
+        id: policeId,
+      },
+    ];
+    this.guardFormModel.trainingCertificates = [
+      {
+        certificateName: trainingCertificate,
+        issuingOrganizationType: trainingIssuer,
+        issuingOrganizationOther: trainingIssuer === 'other' ? `Local Training Academy ${nameTag}` : '',
+        issueDate: isoDateYearsAgo(1),
+        expiryDate: isoDateYearsAhead(1),
+        file: null,
+        id: trainingId,
+      },
+    ];
+    this.guardFormModel.preferredGuardTypes = [preferredGuardType];
+    this.guardFormModel.operationalRegionCode = operationalProvince;
+    this.guardFormModel.operationalCityCode = operationalCity;
+    this.guardFormModel.operationalRadius = Math.max(this.minimumOperationalRadiusDisplay, 10);
+    this.guardFormModel.weeklyAvailability = {
+      Monday: { enabled: true, timeRanges: [{ start: '09:00', end: '17:00' }] },
+      Tuesday: { enabled: false, timeRanges: [] },
+      Wednesday: { enabled: false, timeRanges: [] },
+      Thursday: { enabled: false, timeRanges: [] },
+      Friday: { enabled: false, timeRanges: [] },
+      Saturday: { enabled: false, timeRanges: [] },
+      Sunday: { enabled: false, timeRanges: [] },
+    };
+    this.guardErrors = {};
   }
 }

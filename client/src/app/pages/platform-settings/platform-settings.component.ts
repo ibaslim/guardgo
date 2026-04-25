@@ -17,6 +17,7 @@ import { AppService } from '../../services/core/app/app.service';
   templateUrl: './platform-settings.component.html'
 })
 export class PlatformSettingsComponent implements OnInit {
+  readonly saveScope = 'platform-settings:save';
   model = {
     full_name: '',
     username: ''
@@ -87,7 +88,7 @@ export class PlatformSettingsComponent implements OnInit {
     };
 
     try {
-      await firstValueFrom(this.apiService.put('me', payload));
+      await firstValueFrom(this.apiService.put('me', payload, { loadingScope: this.saveScope }));
       await this.appService.loadSession(true);
       this.successMessage = 'Settings updated successfully.';
     } catch (error: any) {

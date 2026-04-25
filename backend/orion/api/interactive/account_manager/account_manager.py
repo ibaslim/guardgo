@@ -609,6 +609,9 @@ class AccountManager:
                         "image": "/api/s/static/tenant/default",
                         "tenant_type": None,
                         "status": None,
+                        "ownership_type": None,
+                        "service_provider_tenant_id": None,
+                        "service_provider": None,
                     },
                 }
             )
@@ -629,6 +632,21 @@ class AccountManager:
         tenant_country = profile.get("country", "")
         tenant_city = profile.get("city", "")
         tenant_postal_code = profile.get("postal_code", "")
+        service_provider_summary = None
+        service_provider_tenant_id = str(getattr(tenant, "service_provider_tenant_id", "") or "").strip() or None
+        if service_provider_tenant_id and ObjectId.is_valid(service_provider_tenant_id):
+            provider = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(service_provider_tenant_id))
+            if provider:
+                provider_profile = provider.profile or {}
+                service_provider_summary = {
+                    "id": str(provider.id),
+                    "name": str(provider_profile.get("name") or "").strip() or None,
+                }
+            else:
+                service_provider_summary = {
+                    "id": service_provider_tenant_id,
+                    "name": None,
+                }
 
         node = NodeCallbackModel.model_validate(
             {"user": {"email": user.email, "twofa_enabled": user.twofa_enabled, "username": user.username, "full_name": getattr(user, "full_name", "") or "", "role": user.role, "status": user.status, "subscription": user.subscription, "verificationDate": user.account_verify_at.isoformat() if user.account_verify_at else None, "license": [
@@ -637,6 +655,6 @@ class AccountManager:
                 tenant.id), "is_default": str(tenant.is_default), "name": tenant_name, "phone": tenant_phone, "country": tenant_country, "city": tenant_city, "postal_code": tenant_postal_code, "tax_id": str(tenant.id), "user_id": "", "licenses": [
                 self.safe_decrypt(enc, l) for l in (tenant.licenses or [])], "assigned_quota": str(
                 assigned_quota), "quota_exceeded": bool(
-                not tenant.is_default and tenant.user_quota is not None and assigned_quota < total_user), "image": tenant_image_path, "tenant_type": tenant.tenant_type.value, "status": tenant.status.value, } })
+                not tenant.is_default and tenant.user_quota is not None and assigned_quota < total_user), "image": tenant_image_path, "tenant_type": tenant.tenant_type.value, "status": tenant.status.value, "ownership_type": getattr(tenant, "ownership_type", None), "service_provider_tenant_id": service_provider_tenant_id, "service_provider": service_provider_summary, } })
 
         return node

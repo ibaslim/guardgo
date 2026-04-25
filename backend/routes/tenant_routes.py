@@ -7,6 +7,13 @@ from orion.api.interactive.account_manager.models.user_meta_model import user_me
 from orion.api.interactive.account_manager.models.user_param_model import user_param_model
 from orion.api.interactive.resource_manager.resource_manager import ResourceManager
 from orion.api.interactive.tenant_manager.models.tenant_param_model import tenant_param_model
+from orion.api.interactive.tenant_manager.models.service_provider_guard_models import (
+    ServiceProviderGuardInviteRequest,
+    ServiceProviderGuardStatusRequestPayload,
+    GuardStatusRequestDecisionPayload,
+    GuardServiceProviderLinkPayload,
+    GuardServiceProviderUnlinkPayload,
+)
 from orion.services.mongo_manager.shared_model.db_auth_models import user_role, UserStatus
 from orion.services.mongo_manager.shared_model.db_tenant_model import TenantRequest, db_tenant_model, TenantPayload, TenantStatus
 from orion.api.interactive.tenant_manager.tenant_manager import TenantManager
@@ -36,10 +43,14 @@ async def get_tenant(current_user=Depends(get_current_user)):
     tenant = await manager._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(current_user.tenant_uuid))
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
+    provider_summary = await manager._provider_summary(getattr(tenant, "service_provider_tenant_id", None))
     return {
         "id": str(tenant.id),
         "tenant_type": tenant.tenant_type,
         "profile": tenant.profile or {},
+        "ownership_type": getattr(tenant, "ownership_type", None),
+        "service_provider_tenant_id": getattr(tenant, "service_provider_tenant_id", None),
+        "service_provider": provider_summary,
         "subscription": tenant.subscription,
         "verified": tenant.verified,
         "user_quota": tenant.user_quota,
@@ -503,3 +514,135 @@ async def delete_system_image(current_user=Depends(get_current_user)):
     return await ResourceManager.get_instance().delete_system_image(current_user)
 
 
+@tenant_routes.post(
+    "/api/sp/guards/invite",
+    summary="Invite guard under service provider",
+    status_code=201,
+    dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
+)
+async def invite_guard_for_service_provider(
+    data: ServiceProviderGuardInviteRequest,
+    current_user=Depends(get_current_user),
+):
+    return await TenantManager.get_instance().invite_guard_for_service_provider(data, current_user)
+
+
+@tenant_routes.get(
+    "/api/sp/guards",
+    summary="List guards owned by service provider",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
+)
+async def list_service_provider_guards(
+    page: int = 1,
+    rows: int = 20,
+    current_user=Depends(get_current_user),
+):
+    return await TenantManager.get_instance().list_service_provider_guards(current_user, page=page, rows=rows)
+
+
+@tenant_routes.get(
+    "/api/sp/guards/{guard_tenant_id}",
+    summary="Get service provider guard details",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
+)
+async def get_service_provider_guard_details(
+    guard_tenant_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await TenantManager.get_instance().get_service_provider_guard(guard_tenant_id, current_user)
+
+
+@tenant_routes.delete(
+    "/api/sp/guards/pending/{guard_tenant_id}",
+    summary="Delete expired pending guard invite",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
+)
+async def delete_expired_pending_guard_invite(
+    guard_tenant_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await TenantManager.get_instance().delete_expired_pending_guard_invite(guard_tenant_id, current_user)
+
+
+@tenant_routes.post(
+    "/api/sp/guards/{guard_tenant_id}/status-request",
+    summary="Request guard status change",
+    description="For action='deactivate', request body must include a non-empty reason. For action='activate', reason is optional.",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
+)
+async def request_guard_status_change(
+    guard_tenant_id: str,
+    payload: ServiceProviderGuardStatusRequestPayload,
+    current_user=Depends(get_current_user),
+):
+    return await TenantManager.get_instance().request_guard_status_change(guard_tenant_id, payload, current_user)
+
+
+@tenant_routes.get(
+    "/api/guard-status-requests",
+    summary="List guard status change requests",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def list_guard_status_requests(page: int = 1, rows: int = 20):
+    return await TenantManager.get_instance().list_guard_status_requests(page=page, rows=rows)
+
+
+@tenant_routes.post(
+    "/api/guard-status-requests/{request_id}/approve",
+    summary="Approve guard status change request",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def approve_guard_status_request(
+    request_id: str,
+    payload: GuardStatusRequestDecisionPayload,
+    current_user=Depends(get_current_user),
+):
+    return await TenantManager.get_instance().approve_guard_status_request(request_id, payload, current_user)
+
+
+@tenant_routes.post(
+    "/api/guard-status-requests/{request_id}/reject",
+    summary="Reject guard status change request",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def reject_guard_status_request(
+    request_id: str,
+    payload: GuardStatusRequestDecisionPayload,
+    current_user=Depends(get_current_user),
+):
+    return await TenantManager.get_instance().reject_guard_status_request(request_id, payload, current_user)
+
+
+@tenant_routes.post(
+    "/api/guards/{guard_tenant_id}/link-service-provider",
+    summary="Link guard to service provider",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def link_guard_to_service_provider(
+    guard_tenant_id: str,
+    payload: GuardServiceProviderLinkPayload,
+    current_user=Depends(get_current_user),
+):
+    return await TenantManager.get_instance().link_guard_to_service_provider(guard_tenant_id, payload, current_user)
+
+
+@tenant_routes.post(
+    "/api/guards/{guard_tenant_id}/unlink-service-provider",
+    summary="Unlink guard from service provider",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def unlink_guard_from_service_provider(
+    guard_tenant_id: str,
+    payload: GuardServiceProviderUnlinkPayload,
+    current_user=Depends(get_current_user),
+):
+    return await TenantManager.get_instance().unlink_guard_from_service_provider(guard_tenant_id, payload, current_user)

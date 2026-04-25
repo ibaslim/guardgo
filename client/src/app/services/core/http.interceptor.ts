@@ -1,4 +1,5 @@
 import {
+  HttpContextToken,
   HttpErrorResponse,
   HttpEvent,
   HttpHandlerFn,
@@ -11,12 +12,11 @@ import { Observable, throwError, TimeoutError, Subject } from 'rxjs';
 import { catchError, finalize, timeout, takeUntil } from 'rxjs/operators';
 import { MessageNotificationService } from '../message_notification/message-notification.service';
 import { AuthService } from '../authetication/auth.service';
+import { HTTP_LOADING_MODE, HTTP_LOADING_SCOPE } from '../../shared/http/http-loading.tokens';
+import { LoadingFeedbackService } from '../../shared/services/loading-feedback.service';
 
-let activeRequests = 0;
-let hideTimeout: any = null;
 const inFlightCancels = new Map<string, Subject<void>>();
 const GLOBAL_TIMEOUT = 150000;
-
 const STATUS_MEANINGS: { [key: number]: string } = {
   400: 'Bad Request',
   401: 'Unauthorized',
@@ -39,11 +39,16 @@ export const httpInterceptor: HttpInterceptorFn = (
   const router = inject(Router);
   const msg = inject(MessageNotificationService);
   const injector = inject(Injector);
+  const loading = inject(LoadingFeedbackService);
 
   const token = localStorage.getItem('token');
   const authReq = token
     ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` }, withCredentials: true })
     : req.clone({ withCredentials: true });
+
+  const isAssetRequest = authReq.url.includes('/assets/') || authReq.url.startsWith('assets/');
+  const loadingMode = isAssetRequest ? 'silent' : authReq.context.get(HTTP_LOADING_MODE);
+  const loadingScope = authReq.context.get(HTTP_LOADING_SCOPE);
 
   const key = authReq.url.startsWith('api/') ? authReq.url : null;
   let cancel$: Subject<void> | null = null;
@@ -58,8 +63,7 @@ export const httpInterceptor: HttpInterceptorFn = (
     inFlightCancels.set(key, cancel$);
   }
 
-  activeRequests++;
-  if (hideTimeout) clearTimeout(hideTimeout);
+  loading.begin(loadingMode, loadingScope);
 
   return next(authReq).pipe(
     cancel$ ? takeUntil(cancel$) : (s) => s,
@@ -69,12 +73,7 @@ export const httpInterceptor: HttpInterceptorFn = (
         const current = inFlightCancels.get(key);
         if (current === cancel$) inFlightCancels.delete(key);
       }
-      activeRequests--;
-      if (activeRequests === 0) {
-        hideTimeout = setTimeout(() => {
-          hideTimeout = null;
-        }, 1000);
-      }
+      loading.end(loadingMode, loadingScope);
     }),
     catchError((error: unknown) => {
       const authService = injector.get(AuthService, null);
@@ -99,7 +98,7 @@ export const httpInterceptor: HttpInterceptorFn = (
         ]);
         const isSilentLogout = silentLogoutMessages.has(message);
 
-        if (error instanceof HttpErrorResponse && error.status !== 400) {
+        if (error instanceof HttpErrorResponse && error.status === 401) {
           localStorage.clear();
           sessionStorage.clear();
           router.navigate(['/login']).then();

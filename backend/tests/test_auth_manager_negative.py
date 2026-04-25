@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from orion.api.interactive.auth_manager.auth_manager import auth_manager
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_auth_models import LicenseName, UserStatus, db_user_account, user_role
+from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus, TenantType
 
 
 class FakeEngine:
@@ -16,6 +17,8 @@ class FakeEngine:
     async def find_one(self, model, *_args, **_kwargs):
         if model is db_user_account:
             return self.user
+        if model is db_tenant_model:
+            return db_tenant_model(tenant_type=TenantType.CLIENT, profile={}, status=TenantStatus.ONBOARDING)
         return None
 
     async def save(self, model):
@@ -273,3 +276,57 @@ async def test_activate_invited_user_success_updates_account_fields(monkeypatch)
     assert user.verification_token is None
     assert user.verification_expiry is None
     assert len(engine.saved) == 1
+
+
+@pytest.mark.anyio
+async def test_login_rejects_unverified_email(monkeypatch):
+    user = _build_user(
+        status=UserStatus.ACTIVE,
+        account_verify_at=None,
+        invite_pending=False,
+        verification_token=None,
+    )
+
+    class FakeManager:
+        async def authenticate_user(self, _mail, _password):
+            return user
+
+    class FakeMongo:
+        def get_engine(self):
+            return FakeEngine(user)
+
+    monkeypatch.setattr(auth_manager, "get_instance", staticmethod(lambda: FakeManager()))
+    monkeypatch.setattr(mongo_controller, "get_instance", staticmethod(lambda: FakeMongo()))
+
+    with pytest.raises(HTTPException) as exc:
+        await auth_manager.login("tenant@example.com", "StrongPass1!")
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "Email verification pending"
+
+
+@pytest.mark.anyio
+async def test_login_rejects_pending_invite_activation(monkeypatch):
+    user = _build_user(
+        status=UserStatus.ACTIVE,
+        account_verify_at=None,
+        invite_pending=True,
+        verification_token="invite-token-1",
+    )
+
+    class FakeManager:
+        async def authenticate_user(self, _mail, _password):
+            return user
+
+    class FakeMongo:
+        def get_engine(self):
+            return FakeEngine(user)
+
+    monkeypatch.setattr(auth_manager, "get_instance", staticmethod(lambda: FakeManager()))
+    monkeypatch.setattr(mongo_controller, "get_instance", staticmethod(lambda: FakeMongo()))
+
+    with pytest.raises(HTTPException) as exc:
+        await auth_manager.login("tenant@example.com", "StrongPass1!")
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "Invite activation pending"

@@ -51,7 +51,7 @@
       </div>
     </div>
 
-    <div *ngIf="loading" class="space-y-4 p-6">
+    <div *ngIf="isScopeLoading(requestListScope)" class="space-y-4 p-6">
       <div *ngFor="let _ of [1,2,3]" class="animate-pulse rounded-lg border border-gray-100 p-5 dark:border-gray-800">
         <div class="mb-3 h-4 w-40 rounded bg-gray-200 dark:bg-gray-700"></div>
         <div class="mb-3 h-3 w-3/4 rounded bg-gray-100 dark:bg-gray-800"></div>
@@ -59,7 +59,7 @@
       </div>
     </div>
 
-    <div *ngIf="!loading && !items.length" class="px-6 py-16 text-center">
+    <div *ngIf="!isScopeLoading(requestListScope) && !items.length" class="px-6 py-16 text-center">
       <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
         <app-icon name="file-text" [size]="22"></app-icon>
       </div>
@@ -67,7 +67,7 @@
       <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Adjust filters or create a new request to continue.</p>
     </div>
 
-    <div *ngIf="!loading && items.length" class="divide-y divide-gray-100 dark:divide-gray-800">
+    <div *ngIf="!isScopeLoading(requestListScope) && items.length" class="divide-y divide-gray-100 dark:divide-gray-800">
       <div *ngFor="let item of items; trackBy: trackByRequestId" class="px-6 py-6">
         <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div class="min-w-0 flex-1">
@@ -106,9 +106,9 @@
           <div class="flex shrink-0 flex-wrap gap-2 pt-1 xl:pl-6">
             <app-button label="Details" type="secondary" (pressed)="openRequestDetails(item)"></app-button>
             <app-button *ngIf="canEditRequest(item)" label="Edit" type="secondary" (pressed)="openEditRequestDrawer(item)"></app-button>
-            <app-button *ngIf="canCommitRequest(item)" label="Commit" type="primary" (pressed)="commitDraft(item)"></app-button>
-            <app-button *ngIf="canShowRequestStatusActions(item)" label="Cancel" type="danger" (pressed)="updateStatus(item, 'cancelled')"></app-button>
-            <app-button *ngIf="canShowRequestStatusActions(item)" label="Close" type="secondary" (pressed)="updateStatus(item, 'closed')"></app-button>
+            <app-button *ngIf="canCommitRequest(item)" label="Commit" type="primary" [loadingScope]="getRequestStatusScope(item.id)" (pressed)="commitDraft(item)"></app-button>
+            <app-button *ngIf="canShowRequestStatusActions(item)" label="Cancel" type="danger" [loadingScope]="getRequestStatusScope(item.id)" (pressed)="updateStatus(item, 'cancelled')"></app-button>
+            <app-button *ngIf="canShowRequestStatusActions(item)" label="Close" type="secondary" [loadingScope]="getRequestStatusScope(item.id)" (pressed)="updateStatus(item, 'closed')"></app-button>
           </div>
         </div>
 
@@ -121,19 +121,18 @@
             placeholder="Select candidate"
           ></app-select-input>
           <div class="flex items-end md:justify-end">
-            <app-button
-              label="Assign"
-              type="primary"
-              [loading]="assigningRequestId === item.id"
-              [disabled]="assigningRequestId === item.id"
-              (pressed)="assignSelectedCandidate(item)"
-            ></app-button>
+              <app-button
+                label="Assign"
+                type="primary"
+                [loadingScope]="getAssignScope(item.id)"
+                (pressed)="assignSelectedCandidate(item)"
+              ></app-button>
           </div>
         </div>
       </div>
     </div>
 
-    <div *ngIf="!loading && totalPages > 1" class="flex flex-col gap-3 border-t border-gray-100 px-6 py-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+    <div *ngIf="!isScopeLoading(requestListScope) && totalPages > 1" class="flex flex-col gap-3 border-t border-gray-100 px-6 py-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
       <p class="text-sm text-gray-500 dark:text-gray-400">Page {{ page }} of {{ totalPages }}</p>
       <div class="flex flex-wrap items-center gap-2 sm:justify-end">
         <app-button label="Previous" type="secondary" [disabled]="page <= 1" (pressed)="loadRequests(page - 1)"></app-button>
@@ -166,14 +165,14 @@
       </div>
     </div>
 
-    <div *ngIf="jobsLoading" class="space-y-4 p-6">
+    <div *ngIf="isScopeLoading(jobListScope)" class="space-y-4 p-6">
       <div *ngFor="let _ of [1,2,3]" class="animate-pulse rounded-lg border border-gray-100 p-5 dark:border-gray-800">
         <div class="mb-3 h-4 w-40 rounded bg-gray-200 dark:bg-gray-700"></div>
         <div class="h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800"></div>
       </div>
     </div>
 
-    <div *ngIf="!jobsLoading && !jobs.length" class="px-6 py-16 text-center">
+    <div *ngIf="!isScopeLoading(jobListScope) && !jobs.length" class="px-6 py-16 text-center">
       <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
         <app-icon name="file-text" [size]="22"></app-icon>
       </div>
@@ -181,7 +180,7 @@
       <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">You will see offered, accepted, and in-progress jobs here.</p>
     </div>
 
-    <div *ngIf="!jobsLoading && jobs.length" class="divide-y divide-gray-100 dark:divide-gray-800">
+    <div *ngIf="!isScopeLoading(jobListScope) && jobs.length" class="divide-y divide-gray-100 dark:divide-gray-800">
       <div *ngFor="let job of jobs; trackBy: trackByJobId" class="px-6 py-6">
         <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div class="min-w-0 flex-1">
@@ -206,8 +205,7 @@
               *ngFor="let action of getJobActions(job)"
               [label]="action.label"
               [type]="action.type"
-              [loading]="updatingJobId === job.id"
-              [disabled]="updatingJobId === job.id"
+              [loadingScope]="getJobUpdateScope(job.id)"
               (pressed)="updateJobStatus(job, action.status)"
             ></app-button>
           </div>
@@ -215,7 +213,7 @@
       </div>
     </div>
 
-    <div *ngIf="!jobsLoading && jobTotalPages > 1" class="flex flex-col gap-3 border-t border-gray-100 px-6 py-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+    <div *ngIf="!isScopeLoading(jobListScope) && jobTotalPages > 1" class="flex flex-col gap-3 border-t border-gray-100 px-6 py-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
       <p class="text-sm text-gray-500 dark:text-gray-400">Page {{ jobPage }} of {{ jobTotalPages }}</p>
       <div class="flex flex-wrap items-center gap-2 sm:justify-end">
         <app-button label="Previous" type="secondary" [disabled]="jobPage <= 1" (pressed)="loadJobs(jobPage - 1)"></app-button>
@@ -348,8 +346,8 @@
     <div drawer-footer class="flex flex-wrap justify-end gap-2">
       <app-button label="Close" type="secondary" (pressed)="closeRequestFormDrawer()"></app-button>
       <app-button *ngIf="requestFormMode === 'create'" label="Reset" type="secondary" (pressed)="resetForm()"></app-button>
-      <app-button label="Save Draft" type="secondary" [loading]="saving" [disabled]="saving" (pressed)="submitRequest(false)"></app-button>
-      <app-button label="Commit Request" type="primary" [loading]="saving" [disabled]="saving" (pressed)="submitRequest(true)"></app-button>
+      <app-button label="Save Draft" type="secondary" [loadingScope]="saveRequestScope" (pressed)="submitRequest(false)"></app-button>
+      <app-button label="Commit Request" type="primary" [loadingScope]="saveRequestScope" (pressed)="submitRequest(true)"></app-button>
     </div>
   </app-side-drawer>
 
@@ -399,8 +397,8 @@
     </div>
 
     <div drawer-footer class="flex flex-wrap justify-end gap-2" *ngIf="selectedRequest as request">
-      <app-button *ngIf="canShowRequestStatusActions(request)" label="Cancel" type="danger" (pressed)="updateStatus(request, 'cancelled')"></app-button>
-      <app-button *ngIf="canShowRequestStatusActions(request)" label="Close" type="secondary" (pressed)="updateStatus(request, 'closed')"></app-button>
+      <app-button *ngIf="canShowRequestStatusActions(request)" label="Cancel" type="danger" [loadingScope]="getRequestStatusScope(request.id)" (pressed)="updateStatus(request, 'cancelled')"></app-button>
+      <app-button *ngIf="canShowRequestStatusActions(request)" label="Close" type="secondary" [loadingScope]="getRequestStatusScope(request.id)" (pressed)="updateStatus(request, 'closed')"></app-button>
       <app-button label="Done" type="primary" (pressed)="closeRequestDrawer()"></app-button>
     </div>
   </app-side-drawer>

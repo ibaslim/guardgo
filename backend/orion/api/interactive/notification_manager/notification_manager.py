@@ -7,7 +7,8 @@ from fastapi import HTTPException
 
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_notification_model import NotificationRecord
-from orion.services.mongo_manager.shared_model.db_auth_models import db_user_account
+from orion.services.mongo_manager.shared_model.db_auth_models import db_user_account, normalize_role_value
+from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus
 
 
 class NotificationManager:
@@ -34,6 +35,24 @@ class NotificationManager:
     @staticmethod
     def _tenant_id(current_user) -> str:
         return str(getattr(current_user, "tenant_uuid", "") or "")
+
+    @staticmethod
+    def _is_tenant_admin_role(role_value: str) -> bool:
+        return role_value in {"guard_admin", "client_admin", "sp_admin"}
+
+    async def _ensure_active_tenant_for_current_user(self, current_user) -> None:
+        role_value = normalize_role_value(getattr(current_user, "role", ""))
+        if not self._is_tenant_admin_role(role_value):
+            return
+        tenant_id = self._tenant_id(current_user)
+        if not tenant_id:
+            raise HTTPException(status_code=403, detail="Invalid tenant association")
+        try:
+            tenant = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(tenant_id))
+        except Exception:
+            tenant = None
+        if not tenant or tenant.status != TenantStatus.ACTIVE:
+            raise HTTPException(status_code=403, detail="Tenant is not active for this action")
 
     @staticmethod
     def _serialize(record: NotificationRecord | Dict[str, Any]) -> Dict[str, Any]:
@@ -175,6 +194,7 @@ class NotificationManager:
         )
 
     async def list_latest(self, current_user, limit: int = 5) -> Dict[str, Any]:
+        await self._ensure_active_tenant_for_current_user(current_user)
         await self._ensure_default_notification(current_user)
         safe_limit = max(1, min(int(limit or 5), 20))
         recipient_user_id = self._user_id(current_user)
@@ -185,6 +205,7 @@ class NotificationManager:
         return {"items": items, "unread_count": unread_count}
 
     async def list_notifications(self, current_user, page: int = 1, rows: int = 20, status: str = "all") -> Dict[str, Any]:
+        await self._ensure_active_tenant_for_current_user(current_user)
         await self._ensure_default_notification(current_user)
         recipient_user_id = self._user_id(current_user)
         safe_page = page if page and page > 0 else 1
@@ -221,6 +242,7 @@ class NotificationManager:
         }
 
     async def get_unread_count(self, current_user) -> Dict[str, Any]:
+        await self._ensure_active_tenant_for_current_user(current_user)
         await self._ensure_default_notification(current_user)
         recipient_user_id = self._user_id(current_user)
         collection = self._engine.get_collection(NotificationRecord)
@@ -228,6 +250,7 @@ class NotificationManager:
         return {"unread_count": unread_count}
 
     async def mark_read(self, notification_id: str, current_user) -> Dict[str, Any]:
+        await self._ensure_active_tenant_for_current_user(current_user)
         recipient_user_id = self._user_id(current_user)
         try:
             object_id = ObjectId(notification_id)
@@ -249,6 +272,7 @@ class NotificationManager:
         }
 
     async def mark_all_read(self, current_user) -> Dict[str, Any]:
+        await self._ensure_active_tenant_for_current_user(current_user)
         recipient_user_id = self._user_id(current_user)
         collection = self._engine.get_collection(NotificationRecord)
         await collection.update_many(

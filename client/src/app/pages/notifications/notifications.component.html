@@ -22,14 +22,16 @@
         (pressed)="setStatusFilter('read')"
       ></app-button>
     </div>
-    <button
-      type="button"
-      (click)="markAllRead()"
-      class="inline-flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition hover:border-blue-200 hover:text-blue-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-blue-500/40 dark:hover:text-blue-300"
+    <app-button
+      type="secondary"
+      label="Mark all read"
+      [loadingScope]="notificationsService.markAllScope"
+      [hasIcon]="true"
+      [customClass]="'rounded-2xl px-4 py-2.5'"
+      (pressed)="markAllRead()"
     >
-      <app-icon name="check-circle" [size]="16"></app-icon>
-      <span>Mark all read</span>
-    </button>
+      <app-icon icon name="check-circle" [size]="16"></app-icon>
+    </app-button>
   </div>
 
   <app-card [showHeader]="false" [containerClass]="'mt-4 rounded-[28px] border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'" [bodyClass]="'p-0'">

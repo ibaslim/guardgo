@@ -5,11 +5,13 @@ import { Router, RouterModule } from '@angular/router';
 import { IconComponent } from '../icon/icon.component';
 import { NotificationsService } from '../../services/notifications/notifications.service';
 import { NotificationItem } from '../../shared/model/notification/notification.model';
+import { AppService } from '../../services/core/app/app.service';
+import { ButtonComponent } from '../button/button.component';
 
 @Component({
   selector: 'app-notification-bell',
   standalone: true,
-  imports: [CommonModule, RouterModule, IconComponent],
+  imports: [CommonModule, RouterModule, IconComponent, ButtonComponent],
   templateUrl: './notification-bell.component.html'
 })
 export class NotificationBellComponent implements OnInit {
@@ -17,14 +19,17 @@ export class NotificationBellComponent implements OnInit {
 
   constructor(
     protected notificationsService: NotificationsService,
+    protected appService: AppService,
     private router: Router,
   ) {}
 
   ngOnInit(): void {
+    if (!this.canUseNotifications()) return;
     this.notificationsService.loadLatest(6).subscribe();
   }
 
   toggleMenu(event: MouseEvent): void {
+    if (!this.canUseNotifications()) return;
     event.stopPropagation();
     this.isOpen = !this.isOpen;
     if (this.isOpen) {
@@ -63,7 +68,8 @@ export class NotificationBellComponent implements OnInit {
     navigate();
   }
 
-  markAllRead(event: MouseEvent): void {
+  markAllRead(event: Event): void {
+    if (!this.canUseNotifications()) return;
     event.stopPropagation();
     this.notificationsService.markAllRead().subscribe();
   }
@@ -106,5 +112,14 @@ export class NotificationBellComponent implements OnInit {
       return `${diffDays}d ago`;
     }
     return date.toLocaleDateString();
+  }
+
+  private canUseNotifications(): boolean {
+    const roleRaw = String(this.appService.userSessionData()?.user?.role || '').trim().toLowerCase();
+    const role = roleRaw.includes('.') ? (roleRaw.split('.').pop() || '') : roleRaw;
+    const tenantStatus = String(this.appService.userSessionData()?.tenant?.status || '').trim().toLowerCase();
+    const tenantAdminRoles = new Set(['guard_admin', 'client_admin', 'sp_admin']);
+    if (!tenantAdminRoles.has(role)) return true;
+    return tenantStatus === 'active';
   }
 }

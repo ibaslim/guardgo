@@ -1,4 +1,4 @@
-import { Component, Host, HostListener, OnInit } from '@angular/core';
+import { Component, HostListener, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AvatarMenuComponent } from '../../components/avatar-menu/avatar-menu.component';
 import { IconComponent, IconName } from '../../components/icon/icon.component';
@@ -134,7 +134,44 @@ export class DashboardLayoutComponent implements OnInit {
 
   canShow(link: DashboardLink): boolean {
     if (link.hidden) return false;
+    const rawRole = String(this.appService.userSessionData()?.user?.role || '').trim().toLowerCase();
+    const role = rawRole.includes('.') ? (rawRole.split('.').pop() || '') : rawRole;
+    if (link.route === '/dashboard/tenants' && role === 'sp_admin') {
+      return true;
+    }
     if (!link.policy) return true;
     return canAccessPolicy(link.policy, this.appService.userSessionData()?.user?.role, this.appService.roleMetadata());
+  }
+
+  linkLabel(link: DashboardLink): string {
+    const rawRole = String(this.appService.userSessionData()?.user?.role || '').trim().toLowerCase();
+    const role = rawRole.includes('.') ? (rawRole.split('.').pop() || '') : rawRole;
+    if (link.route === '/dashboard/tenants' && role === 'sp_admin') {
+      return 'My Guards';
+    }
+    return link.label;
+  }
+
+  get showGuardServiceProviderInfo(): boolean {
+    const tenant = this.appService.userSessionData()?.tenant;
+    return String(tenant?.tenant_type || '').trim().toLowerCase() === 'guard'
+      && String(tenant?.ownership_type || '').trim().toLowerCase() === 'service_provider'
+      && !!this.guardServiceProviderLabel;
+  }
+
+  get guardServiceProviderLabel(): string {
+    const provider = this.appService.userSessionData()?.tenant?.service_provider;
+    const name = String(provider?.name || '').trim();
+    const id = String(provider?.id || this.appService.userSessionData()?.tenant?.service_provider_tenant_id || '').trim();
+    return name || id;
+  }
+
+  shouldShowNotificationBell(): boolean {
+    const roleRaw = String(this.appService.userSessionData()?.user?.role || '').trim().toLowerCase();
+    const role = roleRaw.includes('.') ? (roleRaw.split('.').pop() || '') : roleRaw;
+    const tenantStatus = String(this.appService.userSessionData()?.tenant?.status || '').trim().toLowerCase();
+    const tenantAdminRoles = new Set(['guard_admin', 'client_admin', 'sp_admin']);
+    if (!tenantAdminRoles.has(role)) return true;
+    return tenantStatus === 'active';
   }
 }

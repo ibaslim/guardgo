@@ -7,11 +7,12 @@ import { AppService } from '../../services/core/app/app.service';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MessageNotificationComponent } from '../../shared/partials/message-notification/message-notification.component';
 import { ThemeService } from '../../services/theme/theme.service';
+import { GlobalLoadingBarComponent } from '../../components/global-loading-bar/global-loading-bar.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, NgIf, FormsModule, ReactiveFormsModule, MessageNotificationComponent],
+  imports: [RouterOutlet, NgIf, FormsModule, ReactiveFormsModule, MessageNotificationComponent, GlobalLoadingBarComponent],
   templateUrl: './app.component.html',
 })
 export class AppComponent {

@@ -37,6 +37,12 @@ export interface TenantDataModel {
     image?: string;
     tenant_type?: string;
     status?: string;
+    ownership_type?: string | null;
+    service_provider_tenant_id?: string | null;
+    service_provider?: {
+        id?: string | null;
+        name?: string | null;
+    } | null;
 }
 
 export interface AlertAllIoc {

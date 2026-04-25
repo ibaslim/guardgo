@@ -32,6 +32,22 @@ class TenantType(str, Enum):
     GUARD = "guard"
 
 
+class GuardOwnershipType(str, Enum):
+    PLATFORM = "platform"
+    SERVICE_PROVIDER = "service_provider"
+
+
+class GuardStatusAction(str, Enum):
+    ACTIVATE = "activate"
+    DEACTIVATE = "deactivate"
+
+
+class GuardStatusRequestStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class SecurityLicenseType(str, Enum):
     SECURITY_GUARD = "securityGuard"
     PRIVATE_INVESTIGATOR = "privateInvestigator"
@@ -314,6 +330,12 @@ class db_tenant_model(Model):
     # Tenant type and typed profile (contains all domain-specific fields)
     tenant_type: TenantType = Field(default=TenantType.CLIENT)
     profile: Optional[Dict[str, Any]] = Field(default=None)
+    ownership_type: Optional[GuardOwnershipType] = None
+    service_provider_tenant_id: Optional[str] = None
+    linked_at: Optional[datetime] = None
+    linked_by: Optional[str] = None
+    unlinked_at: Optional[datetime] = None
+    unlinked_by: Optional[str] = None
 
     # Auditing/metadata
     created_at: Optional[datetime] = Field(default=None)
@@ -379,3 +401,22 @@ class TenantStatusAudit(Model):
     actor_role: Optional[str] = None
     reason: Optional[str] = None
     created_at: Optional[datetime] = Field(default=None)
+
+
+class GuardStatusChangeRequest(Model):
+    guard_tenant_id: str = Field(index=True)
+    service_provider_tenant_id: str = Field(index=True)
+    requested_action: GuardStatusAction = Field(index=True)
+    reason: Optional[str] = None
+
+    status: GuardStatusRequestStatus = Field(default=GuardStatusRequestStatus.PENDING, index=True)
+    requested_by_user_id: Optional[str] = None
+    requested_by_username: Optional[str] = None
+
+    reviewed_by_user_id: Optional[str] = None
+    reviewed_by_username: Optional[str] = None
+    review_comment: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)

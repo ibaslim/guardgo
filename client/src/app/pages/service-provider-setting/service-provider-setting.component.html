@@ -495,6 +495,9 @@
         </div>
 
         <app-sticky-action-bar *ngIf="!readonly" [message]="'Save to activate your provider profile.'" [containerClass]="'px-0'">
+            <app-button *ngIf="showDummyDataButton" [label]="'Fill Dummy Data'" type="secondary" [htmlType]="'button'" [fullWidth]="true"
+                size="lg" [customClass]="'w-full md:w-auto rounded-lg'" (pressed)="fillDummyData()">
+            </app-button>
             <app-button *ngIf="!isEditMode" [label]="'Submit'" type="primary" [htmlType]="'submit'" [fullWidth]="true"
                 size="lg" [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>

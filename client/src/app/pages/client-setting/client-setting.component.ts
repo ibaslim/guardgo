@@ -17,6 +17,14 @@ import { ProfilePictureUploadComponent } from '../../components/profile-picture-
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
+import {
+  buildAlphabeticDummyTag,
+  buildSeededCaPhone,
+  isLocalhostForDummyData,
+  nextDummySeed,
+  pickCityValueForProvince,
+  pickFirstOptionValue,
+} from '../../shared/helpers/onboarding-dummy-data.helper';
 
 interface PhoneNumber {
   e164: string;
@@ -86,6 +94,7 @@ interface Client {
   styleUrl: './client-setting.component.css'
 })
 export class ClientSettingComponent implements OnInit, OnDestroy {
+  readonly showDummyDataButton = isLocalhostForDummyData();
 
   @Input() showPageWrapper: boolean = true;
   @Input() readonly: boolean = false;
@@ -646,5 +655,40 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
         this.clientErrors.submit = err?.error?.detail || 'Failed to submit client profile.';
       }
     });
+  }
+
+  fillDummyData(): void {
+    const seed = nextDummySeed();
+    const nameTag = buildAlphabeticDummyTag(seed.sequence);
+    const province = pickFirstOptionValue(this.provinceOptions, 'ON');
+    const city = pickCityValueForProvince(this.canadianCitiesByProvinceOptions, province, 'TORONTO');
+    const legalEntityName = `Local Test Client ${nameTag} Inc`;
+
+    this.clientFormModel.clientType = 'company';
+    this.clientFormModel.legalEntityName = legalEntityName;
+    this.clientFormModel.industry = 'Security';
+    this.clientFormModel.companyRegistrationNumber = `CL-REG-${seed.suffix}`;
+    this.clientFormModel.companyWebsite = `https://local-client-${seed.suffix}.example.com`;
+    this.clientFormModel.taxVatNumber = `TAX-${seed.suffix}`;
+    this.clientFormModel.primaryContact = {
+      name: `Primary Client Contact ${nameTag}`,
+      email: `client.primary+${seed.suffix}@example.com`,
+      mobilePhone: buildSeededCaPhone(seed.phoneSuffix, 10, 'mobile'),
+      landlinePhone: buildSeededCaPhone(seed.phoneSuffix, 16, 'landline'),
+    };
+    this.clientFormModel.secondaryContact = {
+      name: `Secondary Client Contact ${nameTag}`,
+      email: `client.secondary+${seed.suffix}@example.com`,
+      mobilePhone: buildSeededCaPhone(seed.phoneSuffix, 11, 'mobile'),
+      landlinePhone: buildSeededCaPhone(seed.phoneSuffix, 17, 'landline'),
+    };
+    this.clientFormModel.billingAddress = {
+      street: `${200 + seed.sequence} Client Avenue`,
+      city,
+      country: 'CA',
+      province,
+      postalCode: 'M5H 2N2',
+    };
+    this.clientErrors = {};
   }
 }

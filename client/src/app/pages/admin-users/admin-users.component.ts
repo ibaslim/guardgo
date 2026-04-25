@@ -52,6 +52,8 @@ interface PlatformAdminUser {
   templateUrl: './admin-users.component.html'
 })
 export class AdminUsersComponent implements OnInit {
+  readonly listScope = 'admin-users:list';
+  readonly saveScope = 'admin-users:save';
   loading = false;
   saving = false;
   users: PlatformAdminUser[] = [];
@@ -191,7 +193,7 @@ export class AdminUsersComponent implements OnInit {
   }
 
   loadRoleOptions(): void {
-    this.api.get<any[]>('admin/platform-roles').subscribe({
+    this.api.get<any[]>('admin/platform-roles', { loadingScope: 'admin-users:roles' }).subscribe({
       next: (res) => {
         this.roleOptions = (res || []).map((r: any) => ({ label: r.label, value: r.value }));
       },
@@ -203,7 +205,7 @@ export class AdminUsersComponent implements OnInit {
 
   loadUsers(): void {
     this.loading = true;
-    this.api.get<PlatformAdminUser[]>('admin/platform-users').subscribe({
+    this.api.get<PlatformAdminUser[]>('admin/platform-users', { loadingScope: this.listScope }).subscribe({
       next: (res) => {
         this.users = (res || []).map((u: any) => ({
           ...u,
@@ -288,7 +290,7 @@ export class AdminUsersComponent implements OnInit {
     this.api.post<any>('admin/platform-users', {
       email: this.createForm.email.trim().toLowerCase(),
       role: this.createForm.role,
-    }).subscribe({
+    }, { loadingScope: this.saveScope }).subscribe({
       next: () => {
         this.saving = false;
         this.showCreateModal = false;
@@ -327,7 +329,7 @@ export class AdminUsersComponent implements OnInit {
     }
 
     this.saving = true;
-    this.api.post<any>(`admin/platform-users/${row.id}/resend-invite`, {}).subscribe({
+    this.api.post<any>(`admin/platform-users/${row.id}/resend-invite`, {}, { loadingScope: this.saveScope }).subscribe({
       next: () => {
         this.saving = false;
         this.notification.show('Invite resent successfully.', 'success', 3500);
@@ -380,7 +382,7 @@ export class AdminUsersComponent implements OnInit {
       role: this.editForm.role,
       status: this.editForm.status,
       status_reason: this.editForm.status_reason?.trim() || null
-    }).subscribe({
+    }, { loadingScope: this.saveScope }).subscribe({
       next: () => {
         this.saving = false;
         this.showEditModal = false;
@@ -407,7 +409,7 @@ export class AdminUsersComponent implements OnInit {
     }
 
     this.saving = true;
-    this.api.post<any>(`admin/platform-users/${row.id}/delete`, { reason }).subscribe({
+    this.api.post<any>(`admin/platform-users/${row.id}/delete`, { reason }, { loadingScope: this.saveScope }).subscribe({
       next: () => {
         this.saving = false;
         this.notification.show('User deleted successfully.', 'success', 3500);
@@ -426,7 +428,7 @@ export class AdminUsersComponent implements OnInit {
     }
 
     this.saving = true;
-    this.api.post<any>(`admin/platform-users/${row.id}/restore`, {}).subscribe({
+    this.api.post<any>(`admin/platform-users/${row.id}/restore`, {}, { loadingScope: this.saveScope }).subscribe({
       next: () => {
         this.saving = false;
         this.notification.show('User restored successfully.', 'success', 3500);
@@ -450,7 +452,7 @@ export class AdminUsersComponent implements OnInit {
     }
 
     this.saving = true;
-    this.api.delete<any>(`admin/platform-users/${row.id}/permanent`).subscribe({
+    this.api.delete<any>(`admin/platform-users/${row.id}/permanent`, { loadingScope: this.saveScope }).subscribe({
       next: () => {
         this.saving = false;
         this.notification.show('User permanently deleted.', 'success', 3500);

@@ -243,6 +243,10 @@ class RequestManager:
         tenant = await self._get_tenant(tenant_id)
         if not tenant:
             raise HTTPException(status_code=400, detail="Invalid tenant association")
+
+        role_value = self._role_value(current_user)
+        if not self._is_platform_role(role_value) and tenant.status != TenantStatus.ACTIVE:
+            raise HTTPException(status_code=403, detail="Tenant must be active")
         return tenant
 
     async def _resolve_request_docs_for_role(self, current_user) -> List[Dict[str, Any]]:

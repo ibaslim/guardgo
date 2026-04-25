@@ -36,6 +36,9 @@ class TenantDataModel(BaseModel):
     image: Optional[str] = None
     tenant_type: Optional[str] = None
     status: Optional[str] = None
+    ownership_type: Optional[str] = None
+    service_provider_tenant_id: Optional[str] = None
+    service_provider: Optional[dict] = None
 
 
 class NodeCallbackModel(BaseModel):

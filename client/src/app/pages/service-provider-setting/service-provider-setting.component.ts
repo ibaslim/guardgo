@@ -22,6 +22,16 @@ import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { getIssuingAuthorityForProvince } from '../../shared/constants/provincial-authorities.constants';
 import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared/helpers/distance.helper';
+import {
+  buildAlphabeticDummyTag,
+  buildSeededCaPhone,
+  isLocalhostForDummyData,
+  isoDateYearsAgo,
+  isoDateYearsAhead,
+  nextDummySeed,
+  pickCityValueForProvince,
+  pickFirstOptionValue,
+} from '../../shared/helpers/onboarding-dummy-data.helper';
 
 interface PhoneNumber {
   e164: string;
@@ -87,7 +97,7 @@ interface ServiceProvider {
   legalCompanyName: string;
   tradingName: string;
   corporationNumber: string;
-  yearOfEstablishment: number | null;
+  yearOfEstablishment: string | number | null;
   companyWebsite: string;
   taxRegistrationNumber: string;
   headOfficeAddress: Address;
@@ -123,6 +133,7 @@ interface ServiceProvider {
   styleUrls: ['./service-provider-setting.component.css']
 })
 export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
+  readonly showDummyDataButton = isLocalhostForDummyData();
 
   @Input() showPageWrapper: boolean = true;
   @Input() readonly: boolean = false;
@@ -1302,5 +1313,75 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
         this.providerErrors.submit = err?.error?.detail || 'Failed to submit service provider profile.';
       }
     });
+  }
+
+  fillDummyData(): void {
+    const seed = nextDummySeed();
+    const nameTag = buildAlphabeticDummyTag(seed.sequence);
+    const province = pickFirstOptionValue(this.provinceOptions, 'ON');
+    const city = pickCityValueForProvince(this.canadianCitiesByProvinceOptions, province, 'TORONTO');
+    const licenseType = pickFirstOptionValue(this.securityLicenseTypeOptions, 'securityGuard');
+    const guardCategory = pickFirstOptionValue(this.guardTypeOptions, 'securityGuard');
+    const legalCompanyName = `Local Test Security Services ${nameTag} Ltd`;
+
+    this.providerFormModel.legalCompanyName = legalCompanyName;
+    this.providerFormModel.tradingName = `Local Test Security ${nameTag}`;
+    this.providerFormModel.corporationNumber = `SP-CORP-${seed.suffix}`;
+    this.providerFormModel.yearOfEstablishment = isoDateYearsAgo(8);
+    this.providerFormModel.companyWebsite = `https://local-sp-${seed.suffix}.example.com`;
+    this.providerFormModel.taxRegistrationNumber = `SP-TAX-${seed.suffix}`;
+    this.providerFormModel.headOfficeAddress = {
+      street: `${500 + seed.sequence} Provider Road`,
+      city,
+      country: 'CA',
+      province,
+      postalCode: 'M4B 1B3',
+    };
+    this.providerFormModel.primaryRepresentative = {
+      name: `Provider Primary Contact ${nameTag}`,
+      email: `provider.primary+${seed.suffix}@example.com`,
+      mobilePhone: buildSeededCaPhone(seed.phoneSuffix, 20, 'mobile'),
+      landlinePhone: buildSeededCaPhone(seed.phoneSuffix, 26, 'landline'),
+    };
+    this.providerFormModel.secondaryContact = {
+      name: `Provider Secondary Contact ${nameTag}`,
+      email: `provider.secondary+${seed.suffix}@example.com`,
+      mobilePhone: buildSeededCaPhone(seed.phoneSuffix, 21, 'mobile'),
+      landlinePhone: buildSeededCaPhone(seed.phoneSuffix, 27, 'landline'),
+    };
+    this.providerFormModel.securityLicenses = [
+      {
+        licenseNumber: `SP-LIC-${seed.suffix}`,
+        licenseType,
+        issuingProvince: province,
+        issuingAuthority: this.getSuggestedIssuingAuthority(province) || 'Provincial Authority',
+        issueDate: isoDateYearsAgo(2),
+        expiryDate: isoDateYearsAhead(3),
+        file: null,
+        id: `sec_license_local_${seed.suffix}`,
+      },
+    ];
+    this.providerFormModel.operatingRegions = [
+      {
+        country: 'CA',
+        regionCode: province,
+        cityEntries: [
+          {
+            cityCode: city,
+            coverageRadiusKm: Math.max(this.minimumCoverageRadiusDisplay, 10),
+          },
+        ],
+      },
+    ];
+    this.providerFormModel.guardCategoriesOffered = [guardCategory];
+    this.providerFormModel.insuranceDetails = {
+      policyNumber: `INS-POL-${seed.suffix}`,
+      coverageAmount: 2500000,
+      currency: 'CAD',
+      expiryDate: isoDateYearsAhead(2),
+      coverageDetails: `General liability coverage package ${nameTag}`,
+      file: null,
+    };
+    this.providerErrors = {};
   }
 }

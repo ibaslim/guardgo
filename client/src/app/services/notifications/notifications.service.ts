@@ -7,6 +7,10 @@ import { LatestNotificationResponse, NotificationItem, NotificationListResponse 
 
 @Injectable({ providedIn: 'root' })
 export class NotificationsService {
+  readonly latestScope = 'notifications:latest';
+  readonly pageScope = 'notifications:page';
+  readonly markAllScope = 'notifications:mark-all';
+
   readonly latestItems = signal<NotificationItem[]>([]);
   readonly unreadCount = signal<number>(0);
   readonly latestLoading = signal<boolean>(false);
@@ -17,7 +21,7 @@ export class NotificationsService {
   loadLatest(limit = 5): Observable<LatestNotificationResponse> {
     this.latestLoading.set(true);
     const params = new HttpParams().set('limit', limit);
-    return this.api.get<LatestNotificationResponse>('notifications/latest', { params }).pipe(
+    return this.api.get<LatestNotificationResponse>('notifications/latest', { params, loadingMode: 'silent', loadingScope: this.latestScope }).pipe(
       tap({
         next: (response) => {
           this.latestItems.set(response.items || []);
@@ -38,7 +42,7 @@ export class NotificationsService {
       .set('rows', rows)
       .set('status', status);
 
-    return this.api.get<NotificationListResponse>('notifications', { params }).pipe(
+    return this.api.get<NotificationListResponse>('notifications', { params, loadingScope: this.pageScope }).pipe(
       tap({
         next: (response) => {
           this.unreadCount.set(Number(response.unread_count || 0));
@@ -52,7 +56,7 @@ export class NotificationsService {
   }
 
   refreshUnreadCount(): Observable<{ unread_count: number }> {
-    return this.api.get<{ unread_count: number }>('notifications/unread-count').pipe(
+    return this.api.get<{ unread_count: number }>('notifications/unread-count', { loadingMode: 'silent' }).pipe(
       tap((response) => {
         this.unreadCount.set(Number(response.unread_count || 0));
       })
@@ -70,7 +74,7 @@ export class NotificationsService {
   }
 
   markAllRead(): Observable<{ message: string; unread_count: number }> {
-    return this.api.patch<{ message: string; unread_count: number }>('notifications/read-all').pipe(
+    return this.api.patch<{ message: string; unread_count: number }>('notifications/read-all', undefined, { loadingScope: this.markAllScope }).pipe(
       tap((response) => {
         this.latestItems.update((items) => items.map((item) => ({ ...item, is_read: true, read_at: item.read_at || new Date().toISOString() })));
         this.unreadCount.set(Number(response.unread_count || 0));

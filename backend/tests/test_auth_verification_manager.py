@@ -27,7 +27,7 @@ class FakeEngine:
 
 
 @pytest.mark.anyio
-async def test_verify_user_auto_activates_client_tenant(monkeypatch):
+async def test_verify_user_activates_user_but_keeps_tenant_onboarding(monkeypatch):
     tenant = db_tenant_model(
         tenant_type=TenantType.CLIENT,
         profile={},
@@ -55,8 +55,8 @@ async def test_verify_user_auto_activates_client_tenant(monkeypatch):
 
     response = await auth_manager.verify_user("token-123")
 
-    assert response["message"] == "Email verified successfully. Your account is active."
+    assert response["message"] == "Email verified successfully. You may continue onboarding."
     assert user.status == UserStatus.ACTIVE
     assert user.verification_token is None
-    assert tenant.status == TenantStatus.ACTIVE
-    assert tenant.verified is True
+    assert tenant.status == TenantStatus.ONBOARDING
+    assert tenant.verified is False

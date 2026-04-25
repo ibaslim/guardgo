@@ -36,7 +36,7 @@
       <app-button
         type="primary"
         label="Save Changes"
-        [loading]="isSaving"
+        [loadingScope]="saveScope"
         [disabled]="!canSubmit"
         (pressed)="save()"
       ></app-button>

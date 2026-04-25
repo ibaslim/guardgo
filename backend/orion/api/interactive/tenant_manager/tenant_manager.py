@@ -1,8 +1,9 @@
 import re
+import secrets
 import threading
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
 from fastapi import HTTPException
@@ -12,13 +13,33 @@ from cryptography.fernet import Fernet
 from orion.api.interactive.account_manager.models.user_model import user_model
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_keys import db_keys
-from orion.services.mongo_manager.shared_model.db_tenant_model import IocCategory, db_tenant_model, TenantRequest, TenantStatus, TenantType, TenantPayload
+from orion.services.mongo_manager.shared_model.db_tenant_model import (
+    IocCategory,
+    db_tenant_model,
+    TenantRequest,
+    TenantStatus,
+    TenantType,
+    TenantPayload,
+    GuardOwnershipType,
+    GuardStatusAction,
+    GuardStatusRequestStatus,
+    GuardStatusChangeRequest,
+)
 from orion.api.interactive.tenant_manager.models.tenant_profile_update import TenantProfileUpdate
-from orion.services.mongo_manager.shared_model.db_auth_models import UserStatus, db_user_account, user_role, is_platform_admin_role, normalize_role_value
+from orion.api.interactive.tenant_manager.models.service_provider_guard_models import (
+    ServiceProviderGuardInviteRequest,
+    ServiceProviderGuardStatusRequestPayload,
+    GuardStatusRequestDecisionPayload,
+    GuardServiceProviderLinkPayload,
+    GuardServiceProviderUnlinkPayload,
+)
+from orion.services.mongo_manager.shared_model.db_auth_models import UserStatus, LicenseName, db_user_account, user_role, is_platform_admin_role, normalize_role_value
 from orion.services.encryption_manager.key_manager import KeyManager
 from orion.constants.constant import CONSTANTS
 from orion.constants import constant
 from orion.services.mail_manager.mail_manager import mail_manager
+from orion.helper_manager.env_handler import env_handler
+from orion.services.session_manager.session_manager import session_manager
 from orion.services.mongo_manager.shared_model.db_tenant_model import TenantStatusAudit
 from orion.api.interactive.activity_manager.activity_manager import ActivityManager
 from configs.metadata_constants import CANADIAN_PROVINCE_OPTIONS, CANADIAN_CITIES_BY_PROVINCE_OPTIONS
@@ -848,6 +869,36 @@ class TenantManager:
                 return value.strip()
         return ""
 
+    async def _provider_summary(self, provider_tenant_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        provider_id = str(provider_tenant_id or "").strip()
+        if not provider_id:
+            return None
+        try:
+            provider = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(provider_id))
+        except Exception:
+            provider = None
+        if not provider:
+            return {"id": provider_id, "name": None}
+        return {
+            "id": str(provider.id),
+            "name": self._extract_tenant_name(provider.profile or {}),
+        }
+
+    async def _get_guard_tenant(self, guard_tenant_id: str) -> db_tenant_model:
+        try:
+            guard = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(guard_tenant_id))
+        except Exception:
+            guard = None
+        if not guard or guard.tenant_type != TenantType.GUARD:
+            raise HTTPException(status_code=404, detail="Guard tenant not found")
+        return guard
+
+    def _is_owned_by_service_provider(self, guard: db_tenant_model, service_provider_tenant_id: str) -> bool:
+        return (
+            guard.ownership_type == GuardOwnershipType.SERVICE_PROVIDER
+            and str(getattr(guard, "service_provider_tenant_id", "") or "").strip() == str(service_provider_tenant_id or "").strip()
+        )
+
     async def get_tenants_datatable(
             self,
             page: int = 1,
@@ -925,11 +976,15 @@ class TenantManager:
             approvals_required = int(doc.get("approvals_required") or 2)
             approvals_done = len(approval_actors)
             approvals_remaining = max(approvals_required - approvals_done, 0)
+            provider_summary = await self._provider_summary(doc.get("service_provider_tenant_id"))
             data.append({
                 "id": str(doc.get("_id")),
                 "name": self._extract_tenant_name(profile),
                 "tenant_type": doc.get("tenant_type"),
                 "status": self._normalized_status_value(doc.get("status")),
+                "ownership_type": doc.get("ownership_type"),
+                "service_provider_tenant_id": doc.get("service_provider_tenant_id"),
+                "service_provider": provider_summary,
                 "verified": bool(doc.get("verified", False)),
                 "subscription": bool(doc.get("subscription", False)),
                 "user_quota": int(doc.get("user_quota", 0) or 0),
@@ -1029,12 +1084,19 @@ class TenantManager:
                     "username": selected_user.username,
                     "full_name": (selected_user.full_name or "").strip() or None,
                     "email": (selected_user.email or "").strip() or None,
+                    "invite_pending": bool(getattr(selected_user, "invite_pending", False)),
+                    "invite_expires_at": getattr(selected_user, "verification_expiry", None),
                 }
+
+        provider_summary = await self._provider_summary(getattr(tenant, "service_provider_tenant_id", None))
 
         return {
             "id": str(tenant.id),
             "tenant_type": tenant.tenant_type,
             "profile": profile,
+            "ownership_type": tenant.ownership_type,
+            "service_provider_tenant_id": tenant.service_provider_tenant_id,
+            "service_provider": provider_summary,
             "subscription": tenant.subscription,
             "verified": tenant.verified,
             "user_quota": tenant.user_quota,
@@ -1155,3 +1217,518 @@ class TenantManager:
             raise e
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e) or "Error creating user")
+
+    async def _generate_invited_guard_username(self, email: str) -> str:
+        local_part = str(email or "").split("@")[0].lower()
+        normalized = re.sub(r"[^a-zA-Z0-9_-]", "_", local_part)
+        if not normalized or not normalized[0].isalpha():
+            normalized = f"guard_{normalized}"
+        base = normalized[:14]
+        if len(base) < 8:
+            base = (base + "_guardusr")[:8]
+
+        for _ in range(20):
+            suffix = secrets.token_hex(2)
+            candidate = f"{base}_{suffix}"[:20]
+            existing = await self._engine.find_one(db_user_account, db_user_account.username == candidate)
+            if not existing:
+                return candidate
+        return f"guard_{secrets.token_hex(4)}"[:20]
+
+    async def _get_guard_admin_user(self, guard_tenant_id: str):
+        users = await self._engine.find(
+            db_user_account,
+            (db_user_account.tenant_uuid == str(guard_tenant_id)) & (db_user_account.role == user_role.GUARD_ADMIN),
+            limit=1,
+        )
+        return users[0] if users else None
+
+    async def invite_guard_for_service_provider(
+        self,
+        data: ServiceProviderGuardInviteRequest,
+        current_user,
+    ) -> Dict[str, Any]:
+        provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
+        if not provider_tenant_id:
+            raise HTTPException(status_code=400, detail="Invalid service provider association")
+
+        provider = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(provider_tenant_id))
+        if not provider or provider.tenant_type != TenantType.SERVICE_PROVIDER:
+            raise HTTPException(status_code=403, detail="Only service providers can invite guards")
+
+        email = str(data.email).strip().lower()
+        existing_email_user = await self._engine.find_one(db_user_account, db_user_account.email == email)
+        if existing_email_user:
+            raise HTTPException(status_code=400, detail="Email already exists")
+
+        guard_tenant = db_tenant_model(
+            iocs=[],
+            user_quota=2,
+            licenses=["maintainer", "free"],
+            status=TenantStatus.ONBOARDING,
+            tenant_type=TenantType.GUARD,
+            profile={"name": "N/A"},
+            ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+            service_provider_tenant_id=provider_tenant_id,
+            linked_at=datetime.now(timezone.utc),
+            linked_by=getattr(current_user, "username", None),
+            unlinked_at=None,
+            unlinked_by=None,
+        )
+        await self.create_tenant(guard_tenant)
+
+        invite_token = session_manager.get_instance().generate_verification_token()
+        invite_expiry = datetime.now(timezone.utc) + timedelta(days=30)
+        placeholder_username = await self._generate_invited_guard_username(email)
+        temporary_password = CONSTANTS.S_AUTH_PWD_CONTEXT.hash(f"TmpG1!{secrets.token_urlsafe(12)}")
+
+        guard_user = db_user_account(
+            username=placeholder_username,
+            full_name="",
+            email=email,
+            password=temporary_password,
+            role=user_role.GUARD_ADMIN,
+            status=UserStatus.INACTIVE,
+            subscription=False,
+            licenses=[LicenseName.MAINTAINER],
+            tenant_uuid=str(guard_tenant.id),
+            verification_token=invite_token,
+            verification_expiry=invite_expiry,
+            invite_pending=True,
+            status_reason="Invite pending",
+            status_changed_by=getattr(current_user, "username", "system"),
+            status_changed_at=datetime.now(timezone.utc),
+        )
+        await self._engine.save(guard_user)
+
+        try:
+            app_url = env_handler.get_instance().env("APP_URL")
+            invite_url = f"{app_url}/invite/{invite_token}"
+            subject = "You are invited as a Guard"
+            html_content = constant.mail_template.render(
+                username=guard_user.username,
+                email=guard_user.email,
+                subject=subject,
+                lurlHeading="Set your password link : ",
+                url=invite_url,
+            )
+            await mail_manager.get_instance().send_verification_mail(
+                to=guard_user.email,
+                subject=subject,
+                body=html_content,
+            )
+        except Exception:
+            # Roll back pre-linked guard records when invite email cannot be dispatched.
+            try:
+                await self._engine.delete(guard_user)
+            except Exception:
+                pass
+            try:
+                await self._engine.delete(guard_tenant)
+            except Exception:
+                pass
+            raise HTTPException(status_code=503, detail="Failed to send invite email. Please try again.")
+
+        await ActivityManager.get_instance().log_event(
+            module="tenant",
+            entity_type="guard",
+            entity_id=str(guard_tenant.id),
+            action="invite_sent",
+            actor_id=str(getattr(current_user, "id", "") or "") if hasattr(current_user, "id") else None,
+            actor_username=getattr(current_user, "username", None),
+            actor_role=getattr(current_user, "role", None),
+            metadata={
+                "guard_tenant_id": str(guard_tenant.id),
+                "service_provider_tenant_id": provider_tenant_id,
+                "email": email,
+                "invite_expires_at": invite_expiry.isoformat(),
+            },
+        )
+
+        return {
+            "message": "Guard invite sent",
+            "guard_tenant_id": str(guard_tenant.id),
+            "email": email,
+            "invite_expires_at": invite_expiry.isoformat(),
+            "ownership_type": GuardOwnershipType.SERVICE_PROVIDER.value,
+            "service_provider_tenant_id": provider_tenant_id,
+        }
+
+    async def list_service_provider_guards(self, current_user, page: int = 1, rows: int = 20) -> Dict[str, Any]:
+        provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
+        if not provider_tenant_id:
+            raise HTTPException(status_code=400, detail="Invalid service provider association")
+
+        guards = await self._engine.find(
+            db_tenant_model,
+            (db_tenant_model.tenant_type == TenantType.GUARD)
+            & (db_tenant_model.ownership_type == GuardOwnershipType.SERVICE_PROVIDER)
+            & (db_tenant_model.service_provider_tenant_id == provider_tenant_id),
+        )
+
+        items: List[Dict[str, Any]] = []
+        now = datetime.now(timezone.utc)
+        for guard in guards:
+            admin_user = await self._get_guard_admin_user(str(guard.id))
+            invite_pending = bool(getattr(admin_user, "invite_pending", False)) if admin_user else False
+            invite_expiry = getattr(admin_user, "verification_expiry", None) if admin_user else None
+            invite_status = None
+            if invite_pending:
+                expiry_utc = invite_expiry if (invite_expiry and invite_expiry.tzinfo) else (
+                    invite_expiry.replace(tzinfo=timezone.utc) if invite_expiry else None
+                )
+                invite_status = "expired" if expiry_utc and now > expiry_utc else "pending"
+            elif admin_user:
+                invite_status = "accepted"
+
+            items.append({
+                "id": str(guard.id),
+                "name": self._extract_tenant_name(guard.profile or {}),
+                "status": self._normalized_status_value(guard.status),
+                "ownership_type": guard.ownership_type,
+                "service_provider_tenant_id": guard.service_provider_tenant_id,
+                "invite_status": invite_status,
+                "invite_expires_at": invite_expiry,
+                "email": getattr(admin_user, "email", None),
+                "verified": bool(guard.verified),
+                "created_at": guard.created_at,
+                "updated_at": guard.updated_at,
+            })
+
+        items.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        safe_rows = rows if rows and rows > 0 else 20
+        safe_page = page if page and page > 0 else 1
+        total_items = len(items)
+        total_pages = (total_items + safe_rows - 1) // safe_rows if total_items > 0 else 0
+        start = (safe_page - 1) * safe_rows
+        end = start + safe_rows
+
+        return {
+            "items": items[start:end],
+            "pagination": {
+                "page": safe_page,
+                "rows": safe_rows,
+                "total_items": total_items,
+                "total_pages": total_pages,
+            },
+        }
+
+    async def get_service_provider_guard(self, guard_tenant_id: str, current_user) -> Dict[str, Any]:
+        provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
+        guard = await self._get_guard_tenant(guard_tenant_id)
+        if not self._is_owned_by_service_provider(guard, provider_tenant_id):
+            raise HTTPException(status_code=403, detail="Guard does not belong to your service provider")
+        return await self._serialize_tenant(guard)
+
+    async def delete_expired_pending_guard_invite(self, guard_tenant_id: str, current_user) -> Dict[str, Any]:
+        provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
+        guard = await self._get_guard_tenant(guard_tenant_id)
+        if not self._is_owned_by_service_provider(guard, provider_tenant_id):
+            raise HTTPException(status_code=403, detail="Guard does not belong to your service provider")
+
+        admin_user = await self._get_guard_admin_user(guard_tenant_id)
+        if not admin_user or not getattr(admin_user, "invite_pending", False):
+            raise HTTPException(status_code=400, detail="No pending invite found for this guard")
+
+        expiry = getattr(admin_user, "verification_expiry", None)
+        if not expiry:
+            raise HTTPException(status_code=400, detail="Invite expiry not found")
+        expiry_utc = expiry if expiry.tzinfo else expiry.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) <= expiry_utc:
+            raise HTTPException(status_code=400, detail="Invite is not expired")
+
+        await self._engine.delete(admin_user)
+        await self._engine.delete(guard)
+
+        await ActivityManager.get_instance().log_event(
+            module="tenant",
+            entity_type="guard",
+            entity_id=guard_tenant_id,
+            action="invite_deleted",
+            actor_id=str(getattr(current_user, "id", "") or "") if hasattr(current_user, "id") else None,
+            actor_username=getattr(current_user, "username", None),
+            actor_role=getattr(current_user, "role", None),
+            reason="expired_invite_cleanup",
+            metadata={"guard_tenant_id": guard_tenant_id, "service_provider_tenant_id": provider_tenant_id},
+        )
+
+        return {"message": "Expired invite deleted", "guard_tenant_id": guard_tenant_id}
+
+    async def request_guard_status_change(
+        self,
+        guard_tenant_id: str,
+        payload: ServiceProviderGuardStatusRequestPayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
+        guard = await self._get_guard_tenant(guard_tenant_id)
+        if not self._is_owned_by_service_provider(guard, provider_tenant_id):
+            raise HTTPException(status_code=403, detail="Guard does not belong to your service provider")
+
+        action = payload.action
+        reason = (payload.reason or "").strip() or None
+        if action == GuardStatusAction.DEACTIVATE and not reason:
+            raise HTTPException(status_code=400, detail="Reason is required for deactivation request")
+
+        existing_pending = await self._engine.find_one(
+            GuardStatusChangeRequest,
+            (GuardStatusChangeRequest.guard_tenant_id == guard_tenant_id)
+            & (GuardStatusChangeRequest.status == GuardStatusRequestStatus.PENDING),
+        )
+        if existing_pending:
+            raise HTTPException(status_code=400, detail="A pending status request already exists for this guard")
+
+        now = datetime.now(timezone.utc)
+        status_request = GuardStatusChangeRequest(
+            guard_tenant_id=guard_tenant_id,
+            service_provider_tenant_id=provider_tenant_id,
+            requested_action=action,
+            reason=reason,
+            status=GuardStatusRequestStatus.PENDING,
+            requested_by_user_id=str(getattr(current_user, "id", "") or "") if hasattr(current_user, "id") else None,
+            requested_by_username=getattr(current_user, "username", None),
+            created_at=now,
+            updated_at=now,
+        )
+        await self._engine.save(status_request)
+
+        await ActivityManager.get_instance().log_event(
+            module="tenant",
+            entity_type="guard",
+            entity_id=guard_tenant_id,
+            action="status_change_requested",
+            actor_id=status_request.requested_by_user_id,
+            actor_username=status_request.requested_by_username,
+            actor_role=getattr(current_user, "role", None),
+            reason=reason,
+            metadata={
+                "request_id": str(status_request.id),
+                "requested_action": action.value,
+                "service_provider_tenant_id": provider_tenant_id,
+            },
+        )
+
+        return {
+            "message": "Status request submitted",
+            "request_id": str(status_request.id),
+            "guard_tenant_id": guard_tenant_id,
+            "requested_action": action.value,
+            "status": GuardStatusRequestStatus.PENDING.value,
+            "reason": reason,
+        }
+
+    async def list_guard_status_requests(self, page: int = 1, rows: int = 20) -> Dict[str, Any]:
+        docs = await self._engine.find(GuardStatusChangeRequest)
+        items: List[Dict[str, Any]] = []
+        for req in docs:
+            provider_summary = await self._provider_summary(req.service_provider_tenant_id)
+            items.append({
+                "id": str(req.id),
+                "guard_tenant_id": req.guard_tenant_id,
+                "service_provider_tenant_id": req.service_provider_tenant_id,
+                "service_provider": provider_summary,
+                "requested_action": req.requested_action.value if hasattr(req.requested_action, "value") else str(req.requested_action),
+                "status": req.status.value if hasattr(req.status, "value") else str(req.status),
+                "reason": req.reason,
+                "requested_by_user_id": req.requested_by_user_id,
+                "requested_by_username": req.requested_by_username,
+                "reviewed_by_user_id": req.reviewed_by_user_id,
+                "reviewed_by_username": req.reviewed_by_username,
+                "review_comment": req.review_comment,
+                "reviewed_at": req.reviewed_at,
+                "created_at": req.created_at,
+                "updated_at": req.updated_at,
+            })
+
+        items.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        safe_rows = rows if rows and rows > 0 else 20
+        safe_page = page if page and page > 0 else 1
+        total_items = len(items)
+        total_pages = (total_items + safe_rows - 1) // safe_rows if total_items > 0 else 0
+        start = (safe_page - 1) * safe_rows
+        end = start + safe_rows
+        return {
+            "items": items[start:end],
+            "pagination": {
+                "page": safe_page,
+                "rows": safe_rows,
+                "total_items": total_items,
+                "total_pages": total_pages,
+            },
+        }
+
+    async def approve_guard_status_request(
+        self,
+        request_id: str,
+        payload: GuardStatusRequestDecisionPayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        request_doc = await self._engine.find_one(GuardStatusChangeRequest, GuardStatusChangeRequest.id == ObjectId(request_id))
+        if not request_doc:
+            raise HTTPException(status_code=404, detail="Status request not found")
+        if request_doc.status != GuardStatusRequestStatus.PENDING:
+            raise HTTPException(status_code=400, detail="Status request is no longer pending")
+
+        target_status = TenantStatus.ACTIVE if request_doc.requested_action == GuardStatusAction.ACTIVATE else TenantStatus.INACTIVE
+        status_result = await self.set_tenant_status(request_doc.guard_tenant_id, target_status, current_user=current_user)
+
+        request_doc.status = GuardStatusRequestStatus.APPROVED
+        request_doc.review_comment = (payload.comment or "").strip() or None
+        request_doc.reviewed_by_user_id = str(getattr(current_user, "id", "") or "") if hasattr(current_user, "id") else None
+        request_doc.reviewed_by_username = getattr(current_user, "username", None)
+        request_doc.reviewed_at = datetime.now(timezone.utc)
+        request_doc.updated_at = datetime.now(timezone.utc)
+        await self._engine.save(request_doc)
+
+        await ActivityManager.get_instance().log_event(
+            module="tenant",
+            entity_type="guard",
+            entity_id=request_doc.guard_tenant_id,
+            action="status_change_request_approved",
+            actor_id=request_doc.reviewed_by_user_id,
+            actor_username=request_doc.reviewed_by_username,
+            actor_role=getattr(current_user, "role", None),
+            reason=request_doc.reason,
+            metadata={
+                "request_id": str(request_doc.id),
+                "requested_action": request_doc.requested_action.value,
+                "review_comment": request_doc.review_comment,
+            },
+        )
+
+        return {
+            "message": "Status request approved",
+            "request_id": str(request_doc.id),
+            "status": request_doc.status.value,
+            "guard_status": status_result.get("status"),
+        }
+
+    async def reject_guard_status_request(
+        self,
+        request_id: str,
+        payload: GuardStatusRequestDecisionPayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        request_doc = await self._engine.find_one(GuardStatusChangeRequest, GuardStatusChangeRequest.id == ObjectId(request_id))
+        if not request_doc:
+            raise HTTPException(status_code=404, detail="Status request not found")
+        if request_doc.status != GuardStatusRequestStatus.PENDING:
+            raise HTTPException(status_code=400, detail="Status request is no longer pending")
+
+        request_doc.status = GuardStatusRequestStatus.REJECTED
+        request_doc.review_comment = (payload.comment or "").strip() or None
+        request_doc.reviewed_by_user_id = str(getattr(current_user, "id", "") or "") if hasattr(current_user, "id") else None
+        request_doc.reviewed_by_username = getattr(current_user, "username", None)
+        request_doc.reviewed_at = datetime.now(timezone.utc)
+        request_doc.updated_at = datetime.now(timezone.utc)
+        await self._engine.save(request_doc)
+
+        await ActivityManager.get_instance().log_event(
+            module="tenant",
+            entity_type="guard",
+            entity_id=request_doc.guard_tenant_id,
+            action="status_change_request_rejected",
+            actor_id=request_doc.reviewed_by_user_id,
+            actor_username=request_doc.reviewed_by_username,
+            actor_role=getattr(current_user, "role", None),
+            reason=request_doc.reason,
+            metadata={
+                "request_id": str(request_doc.id),
+                "requested_action": request_doc.requested_action.value,
+                "review_comment": request_doc.review_comment,
+            },
+        )
+
+        return {
+            "message": "Status request rejected",
+            "request_id": str(request_doc.id),
+            "status": request_doc.status.value,
+        }
+
+    async def link_guard_to_service_provider(
+        self,
+        guard_tenant_id: str,
+        payload: GuardServiceProviderLinkPayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        guard = await self._get_guard_tenant(guard_tenant_id)
+
+        try:
+            provider = await self._engine.find_one(
+                db_tenant_model, db_tenant_model.id == ObjectId(payload.service_provider_tenant_id)
+            )
+        except Exception:
+            provider = None
+        if not provider or provider.tenant_type != TenantType.SERVICE_PROVIDER:
+            raise HTTPException(status_code=404, detail="Service provider tenant not found")
+
+        previous_provider = str(getattr(guard, "service_provider_tenant_id", "") or "").strip() or None
+        guard.ownership_type = GuardOwnershipType.SERVICE_PROVIDER
+        guard.service_provider_tenant_id = str(provider.id)
+        guard.linked_at = datetime.now(timezone.utc)
+        guard.linked_by = getattr(current_user, "username", None)
+        guard.unlinked_at = None
+        guard.unlinked_by = None
+        guard.updated_at = datetime.now(timezone.utc)
+        await self._engine.save(guard)
+
+        await ActivityManager.get_instance().log_event(
+            module="tenant",
+            entity_type="guard",
+            entity_id=str(guard.id),
+            action="service_provider_linked",
+            actor_id=str(getattr(current_user, "id", "") or "") if hasattr(current_user, "id") else None,
+            actor_username=getattr(current_user, "username", None),
+            actor_role=getattr(current_user, "role", None),
+            reason=payload.reason,
+            metadata={
+                "previous_service_provider_tenant_id": previous_provider,
+                "service_provider_tenant_id": str(provider.id),
+            },
+        )
+
+        return {
+            "message": "Guard linked to service provider",
+            "guard_tenant_id": str(guard.id),
+            "ownership_type": GuardOwnershipType.SERVICE_PROVIDER.value,
+            "service_provider_tenant_id": str(provider.id),
+        }
+
+    async def unlink_guard_from_service_provider(
+        self,
+        guard_tenant_id: str,
+        payload: GuardServiceProviderUnlinkPayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        guard = await self._get_guard_tenant(guard_tenant_id)
+        previous_provider = str(getattr(guard, "service_provider_tenant_id", "") or "").strip() or None
+        if not previous_provider:
+            raise HTTPException(status_code=400, detail="Guard is not linked to a service provider")
+
+        guard.ownership_type = GuardOwnershipType.PLATFORM
+        guard.service_provider_tenant_id = None
+        guard.unlinked_at = datetime.now(timezone.utc)
+        guard.unlinked_by = getattr(current_user, "username", None)
+        guard.updated_at = datetime.now(timezone.utc)
+        await self._engine.save(guard)
+
+        await ActivityManager.get_instance().log_event(
+            module="tenant",
+            entity_type="guard",
+            entity_id=str(guard.id),
+            action="service_provider_unlinked",
+            actor_id=str(getattr(current_user, "id", "") or "") if hasattr(current_user, "id") else None,
+            actor_username=getattr(current_user, "username", None),
+            actor_role=getattr(current_user, "role", None),
+            reason=payload.reason,
+            metadata={
+                "previous_service_provider_tenant_id": previous_provider,
+            },
+        )
+
+        return {
+            "message": "Guard unlinked from service provider",
+            "guard_tenant_id": str(guard.id),
+            "ownership_type": GuardOwnershipType.PLATFORM.value,
+            "service_provider_tenant_id": None,
+        }
