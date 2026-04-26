@@ -18,6 +18,7 @@ from orion.services.mongo_manager.shared_model.db_auth_models import PLATFORM_AD
 from orion.services.mongo_manager.shared_model.db_request_model import (
     ClientRequestCreatePayload,
     ClientRequestRecord,
+    RequestFulfillmentMode,
     ClientRequestStatusUpdatePayload,
     ClientRequestUpdatePayload,
     RequestAssignmentCreatePayload,
@@ -100,6 +101,44 @@ class RequestManager:
         return TenantType.GUARD if target_type == RequestTargetType.GUARD else TenantType.SERVICE_PROVIDER
 
     @staticmethod
+    def _fulfillment_mode_to_target_type(fulfillment_mode: RequestFulfillmentMode) -> RequestTargetType:
+        if fulfillment_mode == RequestFulfillmentMode.INDIVIDUAL_ONLY:
+            return RequestTargetType.GUARD
+        if fulfillment_mode == RequestFulfillmentMode.SERVICE_PROVIDER_ONLY:
+            return RequestTargetType.SERVICE_PROVIDER
+        raise HTTPException(
+            status_code=400,
+            detail="Hybrid fulfillment mode is planned for a later phase and is not available yet",
+        )
+
+    @classmethod
+    def _resolve_fulfillment_mode_from_record(cls, record: ClientRequestRecord | Dict[str, Any]) -> RequestFulfillmentMode:
+        raw_value = None
+        if isinstance(record, dict):
+            raw_value = record.get("fulfillment_mode")
+            if raw_value:
+                try:
+                    return RequestFulfillmentMode(str(raw_value))
+                except Exception:
+                    pass
+            raw_target = record.get("target_type")
+        else:
+            raw_value = getattr(record, "fulfillment_mode", None)
+            if raw_value:
+                if isinstance(raw_value, RequestFulfillmentMode):
+                    return raw_value
+                try:
+                    return RequestFulfillmentMode(str(raw_value))
+                except Exception:
+                    pass
+            raw_target = getattr(record, "target_type", None)
+
+        target_value = str(getattr(raw_target, "value", raw_target) or "").strip().lower()
+        if target_value == RequestTargetType.SERVICE_PROVIDER.value:
+            return RequestFulfillmentMode.SERVICE_PROVIDER_ONLY
+        return RequestFulfillmentMode.INDIVIDUAL_ONLY
+
+    @staticmethod
     def _allowed_assignment_transition(current_status: RequestAssignmentStatus, next_status: RequestAssignmentStatus) -> bool:
         allowed = {
             RequestAssignmentStatus.OFFERED: {RequestAssignmentStatus.ACCEPTED, RequestAssignmentStatus.DECLINED},
@@ -118,8 +157,8 @@ class RequestManager:
         }
         return next_status in allowed.get(current_status, set())
 
-    @staticmethod
-    def _serialize(record: ClientRequestRecord | Dict[str, Any]) -> Dict[str, Any]:
+    @classmethod
+    def _serialize(cls, record: ClientRequestRecord | Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(record, dict):
             return {
                 "id": str(record.get("_id") or record.get("id") or ""),
@@ -127,6 +166,7 @@ class RequestManager:
                 "created_by_user_id": record.get("created_by_user_id"),
                 "created_by_username": record.get("created_by_username"),
                 "title": record.get("title") or "",
+                "fulfillment_mode": cls._resolve_fulfillment_mode_from_record(record).value,
                 "target_type": record.get("target_type"),
                 "requested_guard_type": record.get("requested_guard_type"),
                 "guards_required": record.get("guards_required") or 0,
@@ -148,6 +188,7 @@ class RequestManager:
             "created_by_user_id": record.created_by_user_id,
             "created_by_username": record.created_by_username,
             "title": record.title,
+            "fulfillment_mode": cls._resolve_fulfillment_mode_from_record(record).value,
             "target_type": record.target_type.value if hasattr(record.target_type, 'value') else str(record.target_type),
             "requested_guard_type": record.requested_guard_type,
             "guards_required": record.guards_required,
@@ -422,7 +463,15 @@ class RequestManager:
             raise HTTPException(status_code=400, detail="Provide request site details or select a saved site")
         return self._resolve_saved_site_snapshot(client_profile, payload.site_index)
 
-    async def _preview_matches_for_request(self, target_type: RequestTargetType, site_snapshot: Dict[str, Any], max_results: int) -> Any:
+    async def _preview_matches_for_request(
+        self,
+        fulfillment_mode: RequestFulfillmentMode,
+        site_snapshot: Dict[str, Any],
+        max_results: int,
+        requested_start_at: Optional[datetime] = None,
+        requested_end_at: Optional[datetime] = None,
+    ) -> Any:
+        target_type = self._fulfillment_mode_to_target_type(fulfillment_mode)
         request_address = cast(Dict[str, Any], site_snapshot.get("site_address") or {})
         normalized_target = cast(TargetType, "service_provider" if target_type == RequestTargetType.SERVICE_PROVIDER else "guard")
         match_payload = RequestMatchingPreviewPayload(
@@ -434,6 +483,8 @@ class RequestManager:
                 latitude=request_address.get("latitude"),
                 longitude=request_address.get("longitude"),
             ),
+            requested_start_at=requested_start_at,
+            requested_end_at=requested_end_at,
             max_results=max_results,
             fallback_to_province_when_missing_geo=True,
         )
@@ -447,9 +498,16 @@ class RequestManager:
         client_tenant = await self._get_client_tenant(current_user)
         client_profile = client_tenant.profile if isinstance(client_tenant.profile, dict) else {}
         site_snapshot = self._resolve_site_snapshot(payload, client_profile)
-        match_preview = await self._preview_matches_for_request(payload.target_type, site_snapshot, payload.max_match_results)
-        title = self._validate_trimmed_title(payload.title)
+        target_type = self._fulfillment_mode_to_target_type(payload.fulfillment_mode)
         self._validate_requested_window(payload.requested_start_at, payload.requested_end_at)
+        match_preview = await self._preview_matches_for_request(
+            payload.fulfillment_mode,
+            site_snapshot,
+            payload.max_match_results,
+            payload.requested_start_at,
+            payload.requested_end_at,
+        )
+        title = self._validate_trimmed_title(payload.title)
 
         request_status = RequestStatus.SUBMITTED if payload.commit else RequestStatus.DRAFT
 
@@ -460,7 +518,8 @@ class RequestManager:
             created_by_user_id=str(getattr(current_user, "id", "") or ""),
             created_by_username=str(getattr(current_user, "username", "") or ""),
             title=title,
-            target_type=payload.target_type,
+            fulfillment_mode=payload.fulfillment_mode,
+            target_type=target_type,
             requested_guard_type=(payload.requested_guard_type or "").strip() or None,
             guards_required=int(payload.guards_required or 1),
             request_status=request_status,
@@ -485,7 +544,8 @@ class RequestManager:
             action_label="Open requests",
             metadata={
                 "request_id": str(saved.id),
-                "target_type": match_preview.summary.get("target_type"),
+                "target_type": target_type.value,
+                "fulfillment_mode": payload.fulfillment_mode.value,
                 "eligible_count": match_preview.summary.get("eligible_count", 0),
                 "request_status": request_status.value,
             },
@@ -497,7 +557,7 @@ class RequestManager:
             entity_id=str(saved.id),
             current_user=current_user,
             new_status=request_status.value,
-            metadata={"target_type": payload.target_type.value},
+            metadata={"target_type": target_type.value, "fulfillment_mode": payload.fulfillment_mode.value},
         )
 
         return {
@@ -529,8 +589,9 @@ class RequestManager:
 
         if "title" in provided and payload.title is not None:
             record.title = self._validate_trimmed_title(payload.title)
-        if "target_type" in provided and payload.target_type is not None:
-            record.target_type = payload.target_type
+        if "fulfillment_mode" in provided and payload.fulfillment_mode is not None:
+            record.fulfillment_mode = payload.fulfillment_mode
+            record.target_type = self._fulfillment_mode_to_target_type(payload.fulfillment_mode)
         if "requested_guard_type" in provided:
             record.requested_guard_type = (payload.requested_guard_type or "").strip() or None
         if "guards_required" in provided and payload.guards_required is not None:
@@ -549,7 +610,14 @@ class RequestManager:
             record.site_snapshot = self._resolve_site_input_snapshot(payload.site)
 
         max_results = payload.max_match_results if payload.max_match_results is not None else 25
-        match_preview = await self._preview_matches_for_request(record.target_type, record.site_snapshot or {}, max_results)
+        fulfillment_mode = self._resolve_fulfillment_mode_from_record(record)
+        match_preview = await self._preview_matches_for_request(
+            fulfillment_mode,
+            record.site_snapshot or {},
+            max_results,
+            record.requested_start_at,
+            record.requested_end_at,
+        )
         record.match_summary = match_preview.summary
         record.matched_candidates = [candidate.model_dump() for candidate in match_preview.results]
         record.updated_at = datetime.utcnow()
@@ -563,7 +631,7 @@ class RequestManager:
             current_user=current_user,
             previous_status=RequestStatus.DRAFT.value,
             new_status=RequestStatus.DRAFT.value,
-            metadata={"request_id": str(record.id)},
+            metadata={"request_id": str(record.id), "fulfillment_mode": fulfillment_mode.value},
         )
 
         return {
@@ -571,24 +639,26 @@ class RequestManager:
             "item": self._serialize(record),
         }
 
-    async def list_requests(self, current_user, page: int = 1, rows: int = 20, keyword: str = "", request_status: str = "", target_type: str = "") -> Dict[str, Any]:
+    async def list_requests(self, current_user, page: int = 1, rows: int = 20, keyword: str = "", request_status: str = "", fulfillment_mode: str = "") -> Dict[str, Any]:
         docs = await self._resolve_request_docs_for_role(current_user)
 
         normalized_keyword = self._normalize_text(keyword)
         normalized_status = self._normalize_text(request_status)
-        normalized_target = self._normalize_text(target_type)
+        normalized_fulfillment_mode = self._normalize_text(fulfillment_mode)
 
         filtered_docs: List[Dict[str, Any]] = []
         for doc in docs:
             title = self._normalize_text(doc.get("title"))
             current_status = self._normalize_text(doc.get("request_status"))
-            current_target = self._normalize_text(doc.get("target_type"))
+            current_mode = self._normalize_text(doc.get("fulfillment_mode"))
+            if not current_mode:
+                current_mode = self._normalize_text(self._resolve_fulfillment_mode_from_record(doc).value)
             site_name = self._normalize_text((doc.get("site_snapshot") or {}).get("site_name"))
             guard_type = self._normalize_text(doc.get("requested_guard_type"))
 
             if normalized_status and current_status != normalized_status:
                 continue
-            if normalized_target and current_target != normalized_target:
+            if normalized_fulfillment_mode and current_mode != normalized_fulfillment_mode:
                 continue
             if normalized_keyword and normalized_keyword not in " ".join([title, site_name, guard_type]):
                 continue
@@ -615,7 +685,7 @@ class RequestManager:
             "filters": {
                 "keyword": keyword,
                 "request_status": request_status,
-                "target_type": target_type,
+                "fulfillment_mode": fulfillment_mode,
             },
         }
 

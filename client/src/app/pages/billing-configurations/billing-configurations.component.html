@@ -19,6 +19,11 @@
       [type]="activeBillingTab === 'addons' ? 'primary' : 'secondary'"
       (pressed)="activeBillingTab = 'addons'"
     ></app-button>
+    <app-button
+      label="Travel Policy"
+      [type]="activeBillingTab === 'travel' ? 'primary' : 'secondary'"
+      (pressed)="activeBillingTab = 'travel'"
+    ></app-button>
   </div>
 
   <div *ngIf="activeBillingTab === 'guards'">
@@ -966,6 +971,327 @@
             [loading]="providerCommissionSaving"
             [disabled]="providerCommissionSaving"
             (pressed)="saveProviderCommissionRates()"
+          ></app-button>
+        </div>
+      </div>
+
+    </app-section>
+
+  </div>
+
+  <div *ngIf="activeBillingTab === 'travel'">
+    <app-section
+      title="Travel Policy Overview"
+      subtitle="Define how far the platform can dispatch candidates and when travel uplift starts applying."
+    >
+      <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900/30 dark:text-slate-100">
+        <div class="mt-2 grid gap-3 md:grid-cols-3">
+          <div>
+            <div class="font-semibold">1. Dispatch Rule</div>
+            <div class="mt-1 text-slate-700 dark:text-slate-300">
+              These settings control how far the platform is allowed to match or notify a candidate for a request.
+            </div>
+          </div>
+          <div>
+            <div class="font-semibold">2. Travel Charge Rule</div>
+            <div class="mt-1 text-slate-700 dark:text-slate-300">
+              They also control when extra travel pricing starts and how much is added beyond the included local distance.
+            </div>
+          </div>
+          <div>
+            <div class="font-semibold">3. Province Then City</div>
+            <div class="mt-1 text-slate-700 dark:text-slate-300">
+              Set a province default first, then override only the cities where travel conditions or pricing need to be different.
+            </div>
+          </div>
+        </div>
+      </div>
+    </app-section>
+
+    <app-section
+      class="mt-4"
+      title="Guard Travel Policy Defaults"
+      subtitle="Configure included radius, per-km travel uplift, and auto-match thresholds for direct guards."
+    >
+
+      <div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-950 dark:border-amber-800/60 dark:bg-amber-900/10 dark:text-amber-100">
+        <div class="text-sm font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">Guard Travel Policy Guide</div>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <div>
+            <div class="font-semibold">What This Section Controls</div>
+            <div class="mt-1 text-amber-900/90 dark:text-amber-100/90">
+              Use this section only for direct individual guards that the platform matches itself. It does not control guards managed inside a service provider.
+            </div>
+          </div>
+          <div>
+            <div class="font-semibold">Included Radius</div>
+            <div class="mt-1 text-amber-900/90 dark:text-amber-100/90">
+              This is the local distance included in normal pricing. If a request is inside this radius, no extra travel charge is added.
+            </div>
+          </div>
+          <div>
+            <div class="font-semibold">Rate / km</div>
+            <div class="mt-1 text-amber-900/90 dark:text-amber-100/90">
+              Once the included radius is crossed, this is the additional amount charged for every extra kilometre.
+            </div>
+          </div>
+          <div>
+            <div class="font-semibold">Max Auto-Match</div>
+            <div class="mt-1 text-amber-900/90 dark:text-amber-100/90">
+              This is the hard distance limit for automatic dispatch. If the request is beyond this distance, the platform should not auto-notify the guard.
+            </div>
+          </div>
+          <div>
+            <div class="font-semibold">Manual Review Over</div>
+            <div class="mt-1 text-amber-900/90 dark:text-amber-100/90">
+              Use this as an escalation threshold. Long-distance requests above this level should be checked by operations before they move forward.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="guardTravelLoading" class="flex justify-center py-8">
+        <app-loader></app-loader>
+      </div>
+
+      <div *ngIf="!guardTravelLoading" class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead>
+            <tr class="bg-gray-50 dark:bg-gray-800">
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Location</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Included Radius (km)</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Rate / km (CAD)</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Max Auto-Match (km)</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Manual Review Over (km)</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-100 dark:divide-gray-800">
+            @for (group of getGroupedTravelPolicies(guardTravelPolicies); track group.region_code) {
+              <tr class="bg-slate-50 dark:bg-slate-800/50">
+                <td colspan="5" class="px-4 py-2">
+                  <button
+                    type="button"
+                    class="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100"
+                    (click)="toggleRegion('guard-travel', group.region_code)"
+                  >
+                    <span>{{ isRegionCollapsed('guard-travel', group.region_code) ? '▸' : '▾' }}</span>
+                    <span>{{ group.region_label }}</span>
+                    <span class="text-xs font-medium text-slate-500 dark:text-slate-400">({{ group.cities.length }} cities)</span>
+                  </button>
+                </td>
+              </tr>
+              @if (!isRegionCollapsed('guard-travel', group.region_code) && getTravelPolicyProvinceDefault(group); as provinceDefault) {
+                <tr class="bg-amber-50/70 dark:bg-amber-900/10">
+                  <td class="px-4 py-3 pl-10 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300 whitespace-nowrap">
+                    Province Default
+                  </td>
+                  <td class="px-4 py-3">
+                    <app-base-input type="number" [min]="0" placeholder="10.00" [ngModel]="provinceDefault.included_radius_km" (ngModelChange)="onTravelNumberInput(provinceDefault, 'included_radius_km', $event)" name="guard_travel_included_{{ group.region_code }}"></app-base-input>
+                  </td>
+                  <td class="px-4 py-3">
+                    <app-base-input type="number" [min]="0" placeholder="0.00" [ngModel]="provinceDefault.rate_per_km" (ngModelChange)="onTravelNumberInput(provinceDefault, 'rate_per_km', $event)" name="guard_travel_rate_{{ group.region_code }}"></app-base-input>
+                  </td>
+                  <td class="px-4 py-3">
+                    <app-base-input type="number" [min]="0" placeholder="Optional" [ngModel]="provinceDefault.max_auto_match_radius_km" (ngModelChange)="onTravelNumberInput(provinceDefault, 'max_auto_match_radius_km', $event)" name="guard_travel_auto_{{ group.region_code }}"></app-base-input>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                      <app-base-input type="number" [min]="0" placeholder="Optional" [ngModel]="provinceDefault.manual_review_over_km" (ngModelChange)="onTravelNumberInput(provinceDefault, 'manual_review_over_km', $event)" name="guard_travel_review_{{ group.region_code }}"></app-base-input>
+                      <button
+                        type="button"
+                        class="shrink-0 rounded-md border border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-800 hover:bg-amber-200 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                        (click)="applyProvinceDefaultTravelToCities(group)"
+                      >
+                        Apply to Cities
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                @for (policy of group.cities; track getTravelPolicyRowKey(policy)) {
+                  <tr class="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                    <td class="px-4 py-3 pl-10 text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                      <div>{{ getTravelPolicyCityLabel(policy) }}</div>
+                      <div class="text-xs text-gray-500 dark:text-gray-400">
+                        {{ policy.has_city_override ? 'City override' : 'Inherits province default' }}
+                      </div>
+                    </td>
+                    <td class="px-4 py-3">
+                      <app-base-input type="number" [min]="0" placeholder="10.00" [ngModel]="policy.included_radius_km" (ngModelChange)="onTravelNumberInput(policy, 'included_radius_km', $event)" name="guard_travel_city_included_{{ getTravelPolicyRowKey(policy) }}"></app-base-input>
+                    </td>
+                    <td class="px-4 py-3">
+                      <app-base-input type="number" [min]="0" placeholder="0.00" [ngModel]="policy.rate_per_km" (ngModelChange)="onTravelNumberInput(policy, 'rate_per_km', $event)" name="guard_travel_city_rate_{{ getTravelPolicyRowKey(policy) }}"></app-base-input>
+                    </td>
+                    <td class="px-4 py-3">
+                      <app-base-input type="number" [min]="0" placeholder="Optional" [ngModel]="policy.max_auto_match_radius_km" (ngModelChange)="onTravelNumberInput(policy, 'max_auto_match_radius_km', $event)" name="guard_travel_city_auto_{{ getTravelPolicyRowKey(policy) }}"></app-base-input>
+                    </td>
+                    <td class="px-4 py-3">
+                      <app-base-input type="number" [min]="0" placeholder="Optional" [ngModel]="policy.manual_review_over_km" (ngModelChange)="onTravelNumberInput(policy, 'manual_review_over_km', $event)" name="guard_travel_city_review_{{ getTravelPolicyRowKey(policy) }}"></app-base-input>
+                    </td>
+                  </tr>
+                }
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div *ngIf="!guardTravelLoading" class="flex items-center justify-between gap-2 pt-2">
+        <div class="flex flex-wrap gap-2">
+          <app-button label="Expand All" type="secondary" (pressed)="expandAllRegions('guard-travel', guardTravelPolicies)"></app-button>
+          <app-button label="Collapse All" type="secondary" (pressed)="collapseAllRegions('guard-travel', guardTravelPolicies)"></app-button>
+        </div>
+        <div class="flex flex-wrap justify-end gap-2">
+          <app-button
+            label="Save Guard Travel Policies"
+            type="primary"
+            [loading]="guardTravelSaving"
+            [disabled]="guardTravelSaving"
+            (pressed)="saveGuardTravelPolicies()"
+          ></app-button>
+        </div>
+      </div>
+
+    </app-section>
+
+    <app-section
+      class="mt-4"
+      title="Provider Travel Policy Defaults"
+      subtitle="Configure included radius, per-km travel uplift, and auto-match thresholds for service providers."
+    >
+
+      <div class="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-4 text-sm text-sky-950 dark:border-sky-800/60 dark:bg-sky-900/10 dark:text-sky-100">
+        <div class="text-sm font-semibold uppercase tracking-wide text-sky-800 dark:text-sky-300">Service Provider Travel Policy Guide</div>
+        <div class="mt-3 grid gap-3 md:grid-cols-2">
+          <div>
+            <div class="font-semibold">What This Section Controls</div>
+            <div class="mt-1 text-sky-900/90 dark:text-sky-100/90">
+              Use this section when the request is being offered to a service provider company. The provider then decides how to staff the job internally.
+            </div>
+          </div>
+          <div>
+            <div class="font-semibold">Province Default</div>
+            <div class="mt-1 text-sky-900/90 dark:text-sky-100/90">
+              Start with one default rule for the province, then override only the cities where provider travel cost or dispatch distance should differ.
+            </div>
+          </div>
+          <div>
+            <div class="font-semibold">Included Radius</div>
+            <div class="mt-1 text-sky-900/90 dark:text-sky-100/90">
+              This is the local provider coverage distance included before any extra travel uplift starts.
+            </div>
+          </div>
+          <div>
+            <div class="font-semibold">Rate / km</div>
+            <div class="mt-1 text-sky-900/90 dark:text-sky-100/90">
+              Once the provider goes beyond the included local radius, this amount is added for each extra kilometre.
+            </div>
+          </div>
+          <div>
+            <div class="font-semibold">Max Auto-Match and Manual Review</div>
+            <div class="mt-1 text-sky-900/90 dark:text-sky-100/90">
+              These two thresholds decide how far the platform can auto-offer the request to a provider and when operations should step in before dispatch.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="providerTravelLoading" class="flex justify-center py-8">
+        <app-loader></app-loader>
+      </div>
+
+      <div *ngIf="!providerTravelLoading" class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead>
+            <tr class="bg-gray-50 dark:bg-gray-800">
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Location</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Included Radius (km)</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Rate / km (CAD)</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Max Auto-Match (km)</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Manual Review Over (km)</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-100 dark:divide-gray-800">
+            @for (group of getGroupedTravelPolicies(providerTravelPolicies); track group.region_code) {
+              <tr class="bg-slate-50 dark:bg-slate-800/50">
+                <td colspan="5" class="px-4 py-2">
+                  <button
+                    type="button"
+                    class="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100"
+                    (click)="toggleRegion('provider-travel', group.region_code)"
+                  >
+                    <span>{{ isRegionCollapsed('provider-travel', group.region_code) ? '▸' : '▾' }}</span>
+                    <span>{{ group.region_label }}</span>
+                    <span class="text-xs font-medium text-slate-500 dark:text-slate-400">({{ group.cities.length }} cities)</span>
+                  </button>
+                </td>
+              </tr>
+              @if (!isRegionCollapsed('provider-travel', group.region_code) && getTravelPolicyProvinceDefault(group); as provinceDefault) {
+                <tr class="bg-amber-50/70 dark:bg-amber-900/10">
+                  <td class="px-4 py-3 pl-10 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300 whitespace-nowrap">
+                    Province Default
+                  </td>
+                  <td class="px-4 py-3">
+                    <app-base-input type="number" [min]="0" placeholder="10.00" [ngModel]="provinceDefault.included_radius_km" (ngModelChange)="onTravelNumberInput(provinceDefault, 'included_radius_km', $event)" name="provider_travel_included_{{ group.region_code }}"></app-base-input>
+                  </td>
+                  <td class="px-4 py-3">
+                    <app-base-input type="number" [min]="0" placeholder="0.00" [ngModel]="provinceDefault.rate_per_km" (ngModelChange)="onTravelNumberInput(provinceDefault, 'rate_per_km', $event)" name="provider_travel_rate_{{ group.region_code }}"></app-base-input>
+                  </td>
+                  <td class="px-4 py-3">
+                    <app-base-input type="number" [min]="0" placeholder="Optional" [ngModel]="provinceDefault.max_auto_match_radius_km" (ngModelChange)="onTravelNumberInput(provinceDefault, 'max_auto_match_radius_km', $event)" name="provider_travel_auto_{{ group.region_code }}"></app-base-input>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                      <app-base-input type="number" [min]="0" placeholder="Optional" [ngModel]="provinceDefault.manual_review_over_km" (ngModelChange)="onTravelNumberInput(provinceDefault, 'manual_review_over_km', $event)" name="provider_travel_review_{{ group.region_code }}"></app-base-input>
+                      <button
+                        type="button"
+                        class="shrink-0 rounded-md border border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-800 hover:bg-amber-200 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                        (click)="applyProvinceDefaultTravelToCities(group)"
+                      >
+                        Apply to Cities
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                @for (policy of group.cities; track getTravelPolicyRowKey(policy)) {
+                  <tr class="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                    <td class="px-4 py-3 pl-10 text-sm font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                      <div>{{ getTravelPolicyCityLabel(policy) }}</div>
+                      <div class="text-xs text-gray-500 dark:text-gray-400">
+                        {{ policy.has_city_override ? 'City override' : 'Inherits province default' }}
+                      </div>
+                    </td>
+                    <td class="px-4 py-3">
+                      <app-base-input type="number" [min]="0" placeholder="10.00" [ngModel]="policy.included_radius_km" (ngModelChange)="onTravelNumberInput(policy, 'included_radius_km', $event)" name="provider_travel_city_included_{{ getTravelPolicyRowKey(policy) }}"></app-base-input>
+                    </td>
+                    <td class="px-4 py-3">
+                      <app-base-input type="number" [min]="0" placeholder="0.00" [ngModel]="policy.rate_per_km" (ngModelChange)="onTravelNumberInput(policy, 'rate_per_km', $event)" name="provider_travel_city_rate_{{ getTravelPolicyRowKey(policy) }}"></app-base-input>
+                    </td>
+                    <td class="px-4 py-3">
+                      <app-base-input type="number" [min]="0" placeholder="Optional" [ngModel]="policy.max_auto_match_radius_km" (ngModelChange)="onTravelNumberInput(policy, 'max_auto_match_radius_km', $event)" name="provider_travel_city_auto_{{ getTravelPolicyRowKey(policy) }}"></app-base-input>
+                    </td>
+                    <td class="px-4 py-3">
+                      <app-base-input type="number" [min]="0" placeholder="Optional" [ngModel]="policy.manual_review_over_km" (ngModelChange)="onTravelNumberInput(policy, 'manual_review_over_km', $event)" name="provider_travel_city_review_{{ getTravelPolicyRowKey(policy) }}"></app-base-input>
+                    </td>
+                  </tr>
+                }
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div *ngIf="!providerTravelLoading" class="flex items-center justify-between gap-2 pt-2">
+        <div class="flex flex-wrap gap-2">
+          <app-button label="Expand All" type="secondary" (pressed)="expandAllRegions('provider-travel', providerTravelPolicies)"></app-button>
+          <app-button label="Collapse All" type="secondary" (pressed)="collapseAllRegions('provider-travel', providerTravelPolicies)"></app-button>
+        </div>
+        <div class="flex flex-wrap justify-end gap-2">
+          <app-button
+            label="Save Provider Travel Policies"
+            type="primary"
+            [loading]="providerTravelSaving"
+            [disabled]="providerTravelSaving"
+            (pressed)="saveProviderTravelPolicies()"
           ></app-button>
         </div>
       </div>

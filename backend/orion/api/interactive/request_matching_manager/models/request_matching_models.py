@@ -1,10 +1,18 @@
+from datetime import datetime
 from typing import Optional, Literal, List
 
 from pydantic import BaseModel, Field
 
 
 DistanceSource = Literal["haversine", "province_fallback"]
-ReasonCode = Literal["within_radius", "outside_radius", "province_mismatch", "missing_geo"]
+ReasonCode = Literal[
+    "within_radius",
+    "outside_radius",
+    "province_mismatch",
+    "missing_geo",
+    "ownership_excluded",
+    "outside_availability",
+]
 TargetType = Literal["guard", "service_provider"]
 
 
@@ -19,6 +27,8 @@ class MatchAddress(BaseModel):
 class RequestMatchingPreviewPayload(BaseModel):
     target_type: TargetType = "guard"
     site_address: MatchAddress
+    requested_start_at: Optional[datetime] = None
+    requested_end_at: Optional[datetime] = None
     max_results: int = Field(default=50, ge=1, le=500)
     fallback_to_province_when_missing_geo: bool = True
 

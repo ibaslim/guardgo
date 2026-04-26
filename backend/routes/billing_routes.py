@@ -181,6 +181,56 @@ async def save_provider_commission_rates(
 
 
 @billing_routes.get(
+    "/api/billing/travel/guards/defaults",
+    summary="Get guard travel policy defaults",
+    description="Returns travel pricing and auto-match defaults by province and city for direct guards (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def get_guard_travel_policies():
+    return await BillingManager.get_instance().get_guard_travel_policies()
+
+
+@billing_routes.put(
+    "/api/billing/travel/guards/defaults",
+    summary="Save guard travel policy defaults",
+    description="Upsert travel pricing and auto-match defaults by province and city for direct guards (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def save_guard_travel_policies(
+    payload: List[Dict[str, Any]],
+    current_user=Depends(get_current_user),
+):
+    return await BillingManager.get_instance().save_guard_travel_policies(payload, current_user)
+
+
+@billing_routes.get(
+    "/api/billing/travel/providers/defaults",
+    summary="Get service provider travel policy defaults",
+    description="Returns travel pricing and auto-match defaults by province and city for service providers (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def get_provider_travel_policies():
+    return await BillingManager.get_instance().get_provider_travel_policies()
+
+
+@billing_routes.put(
+    "/api/billing/travel/providers/defaults",
+    summary="Save service provider travel policy defaults",
+    description="Upsert travel pricing and auto-match defaults by province and city for service providers (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def save_provider_travel_policies(
+    payload: List[Dict[str, Any]],
+    current_user=Depends(get_current_user),
+):
+    return await BillingManager.get_instance().save_provider_travel_policies(payload, current_user)
+
+
+@billing_routes.get(
     "/api/billing/providers/list",
     summary="List active service providers",
     description="Returns name + id for each active service provider (admin only).",

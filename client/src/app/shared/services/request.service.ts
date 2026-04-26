@@ -17,13 +17,13 @@ import {
 export class RequestService {
   constructor(private api: ApiService) {}
 
-  listRequests(page = 1, rows = 20, keyword = '', requestStatus = '', targetType = '', options?: ApiRequestOptions) {
+  listRequests(page = 1, rows = 20, keyword = '', requestStatus = '', fulfillmentMode = '', options?: ApiRequestOptions) {
     const params = new HttpParams()
       .set('page', page)
       .set('rows', rows)
       .set('keyword', keyword)
       .set('request_status', requestStatus)
-      .set('target_type', targetType);
+      .set('fulfillment_mode', fulfillmentMode);
     return this.api.get<ClientRequestListResponse>('requests', { ...options, params });
   }
 

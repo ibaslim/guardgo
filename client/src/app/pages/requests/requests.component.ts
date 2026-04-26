@@ -14,9 +14,9 @@ import { ApiService } from '../../shared/services/api.service';
 import { RequestService } from '../../shared/services/request.service';
 import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
 import {
+  ClientRequestFulfillmentMode,
   ClientRequestItem,
   ClientRequestStatus,
-  ClientRequestTargetType,
   RequestAssignmentItem,
   RequestAssignmentStatus,
 } from '../../shared/model/request/client-request.model';
@@ -72,7 +72,7 @@ export class RequestsComponent implements OnInit {
 
   keyword = '';
   requestStatusFilter = '';
-  targetTypeFilter = '';
+  fulfillmentModeFilter = '';
 
   jobKeyword = '';
   jobStatusFilter = '';
@@ -91,7 +91,7 @@ export class RequestsComponent implements OnInit {
 
   requestForm = {
     title: '',
-    targetType: 'guard' as ClientRequestTargetType,
+    fulfillmentMode: 'individual_only' as ClientRequestFulfillmentMode,
     siteName: '',
     siteStreet: '',
     siteCity: '',
@@ -110,9 +110,9 @@ export class RequestsComponent implements OnInit {
     specialInstructions: '',
   };
 
-  targetTypeOptions = [
-    { label: 'Guard', value: 'guard' },
-    { label: 'Service Provider', value: 'service_provider' },
+  fulfillmentModeOptions = [
+    { label: 'Individual Guards', value: 'individual_only' },
+    { label: 'Service Providers', value: 'service_provider_only' },
   ];
 
   requestStatusOptions = [
@@ -135,9 +135,9 @@ export class RequestsComponent implements OnInit {
     { label: 'Cancelled', value: 'cancelled' },
   ];
 
-  targetTypeFilterOptions = [
-    { label: 'All Targets', value: '' },
-    ...this.targetTypeOptions,
+  fulfillmentModeFilterOptions = [
+    { label: 'All Modes', value: '' },
+    ...this.fulfillmentModeOptions,
   ];
 
   guardTypeOptions: { label: string; value: string }[] = [];
@@ -206,7 +206,7 @@ export class RequestsComponent implements OnInit {
 
   loadRequests(page: number): void {
     this.loading = true;
-    this.requestService.listRequests(page, this.rows, this.keyword, this.requestStatusFilter, this.targetTypeFilter, { loadingScope: this.requestListScope }).subscribe({
+    this.requestService.listRequests(page, this.rows, this.keyword, this.requestStatusFilter, this.fulfillmentModeFilter, { loadingScope: this.requestListScope }).subscribe({
       next: (response) => {
         this.items = response.items || [];
         this.page = response.pagination?.page || page;
@@ -362,7 +362,7 @@ export class RequestsComponent implements OnInit {
   resetForm(): void {
     this.requestForm = {
       title: '',
-      targetType: 'guard',
+      fulfillmentMode: 'individual_only',
       siteName: '',
       siteStreet: '',
       siteCity: '',
@@ -506,7 +506,7 @@ export class RequestsComponent implements OnInit {
     this.requestForm = {
       ...this.requestForm,
       title: picked.title,
-      targetType: 'guard',
+      fulfillmentMode: 'individual_only',
       siteName: picked.siteName,
       siteStreet: picked.siteStreet,
       siteCity: picked.siteCity,
@@ -531,7 +531,7 @@ export class RequestsComponent implements OnInit {
     const address = item.site_snapshot?.site_address || {};
     this.requestForm = {
       title: item.title || '',
-      targetType: (item.target_type || 'guard') as ClientRequestTargetType,
+      fulfillmentMode: (item.fulfillment_mode || this.targetTypeToFulfillmentMode(item.target_type || 'guard')) as ClientRequestFulfillmentMode,
       siteName: item.site_snapshot?.site_name || '',
       siteStreet: String(address['street'] || ''),
       siteCity: String(address['city'] || ''),
@@ -558,7 +558,7 @@ export class RequestsComponent implements OnInit {
 
     return {
       title: this.requestForm.title.trim(),
-      target_type: this.requestForm.targetType,
+      fulfillment_mode: this.requestForm.fulfillmentMode,
       site: {
         site_name: this.requestForm.siteName.trim(),
         site_manager_contact: this.requestForm.siteManagerContact.trim() || null,
@@ -616,7 +616,7 @@ export class RequestsComponent implements OnInit {
   clearFilters(): void {
     this.keyword = '';
     this.requestStatusFilter = '';
-    this.targetTypeFilter = '';
+    this.fulfillmentModeFilter = '';
     this.loadRequests(1);
   }
 
@@ -783,6 +783,21 @@ export class RequestsComponent implements OnInit {
 
   getTargetTypeLabel(targetType: string): string {
     return targetType === 'service_provider' ? 'Service Provider' : 'Guard';
+  }
+
+  getFulfillmentModeLabel(fulfillmentMode: string): string {
+    switch (fulfillmentMode) {
+      case 'service_provider_only':
+        return 'Service Providers';
+      case 'hybrid':
+        return 'Hybrid';
+      default:
+        return 'Individual Guards';
+    }
+  }
+
+  private targetTypeToFulfillmentMode(targetType: string): ClientRequestFulfillmentMode {
+    return targetType === 'service_provider' ? 'service_provider_only' : 'individual_only';
   }
 
   getTopCandidateNames(item: ClientRequestItem): string[] {

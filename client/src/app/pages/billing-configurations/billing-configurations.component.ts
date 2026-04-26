@@ -43,6 +43,28 @@ interface ProvinceDefaultRate {
   holiday_rate: number;
 }
 
+interface TravelPolicyRow {
+  region_code: string;
+  region_label: string;
+  city_code?: string;
+  city_label?: string;
+  location_label?: string;
+  included_radius_km: number;
+  rate_per_km: number;
+  max_auto_match_radius_km: number | null;
+  manual_review_over_km: number | null;
+  inherits_region_default?: boolean;
+  has_city_override?: boolean;
+  is_region_default?: boolean;
+}
+
+interface TravelPolicyGroup {
+  region_code: string;
+  region_label: string;
+  provinceDefault: TravelPolicyRow | null;
+  cities: TravelPolicyRow[];
+}
+
 @Component({
   selector: 'app-billing-configurations',
   standalone: true,
@@ -65,7 +87,7 @@ export class BillingConfigurationsComponent implements OnInit {
   private readonly collapsedRegionState: Record<string, Record<string, boolean>> = {};
   private readonly provinceDefaultsBySection: Record<string, Record<string, ProvinceDefaultRate>> = {};
 
-  activeBillingTab: 'guards' | 'providers' | 'addons' = 'guards';
+  activeBillingTab: 'guards' | 'providers' | 'addons' | 'travel' = 'guards';
 
   // -- Guard rates --
   guardRates: ProvinceRate[] = [];
@@ -85,6 +107,14 @@ export class BillingConfigurationsComponent implements OnInit {
   providerCommissionRates: ProvinceRate[] = [];
   providerCommissionLoading = false;
   providerCommissionSaving = false;
+
+  guardTravelPolicies: TravelPolicyRow[] = [];
+  guardTravelLoading = false;
+  guardTravelSaving = false;
+
+  providerTravelPolicies: TravelPolicyRow[] = [];
+  providerTravelLoading = false;
+  providerTravelSaving = false;
 
   // -- Providers --
   providers: { label: string; value: string }[] = [];
@@ -126,6 +156,8 @@ export class BillingConfigurationsComponent implements OnInit {
     this.loadProviderDefaultRates();
     this.loadGuardMarginRates();
     this.loadProviderCommissionRates();
+    this.loadGuardTravelPolicies();
+    this.loadProviderTravelPolicies();
     this.loadProviders();
     this.loadGuards();
   }
@@ -211,8 +243,12 @@ export class BillingConfigurationsComponent implements OnInit {
     this.collapsedRegionState[sectionKey][regionCode] = !this.collapsedRegionState[sectionKey][regionCode];
   }
 
-  collapseAllRegions(sectionKey: string, rates: ProvinceRate[]): void {
-    const regionCodes = this.getGroupedRates(rates).map((group) => group.region_code);
+  collapseAllRegions(sectionKey: string, rates: Array<{ region_code: string; region_label?: string }>): void {
+    const regionCodes = Array.from(new Set(
+      rates
+        .map((rate) => String(rate.region_code || '').trim().toUpperCase())
+        .filter((regionCode) => !!regionCode)
+    ));
     if (!this.collapsedRegionState[sectionKey]) {
       this.collapsedRegionState[sectionKey] = {};
     }
@@ -221,8 +257,12 @@ export class BillingConfigurationsComponent implements OnInit {
     }
   }
 
-  expandAllRegions(sectionKey: string, rates: ProvinceRate[]): void {
-    const regionCodes = this.getGroupedRates(rates).map((group) => group.region_code);
+  expandAllRegions(sectionKey: string, rates: Array<{ region_code: string; region_label?: string }>): void {
+    const regionCodes = Array.from(new Set(
+      rates
+        .map((rate) => String(rate.region_code || '').trim().toUpperCase())
+        .filter((regionCode) => !!regionCode)
+    ));
     if (!this.collapsedRegionState[sectionKey]) {
       this.collapsedRegionState[sectionKey] = {};
     }
@@ -384,6 +424,159 @@ export class BillingConfigurationsComponent implements OnInit {
         this.providerCommissionSaving = false;
       },
     });
+  }
+
+  loadGuardTravelPolicies(): void {
+    this.guardTravelLoading = true;
+    this.api.get<TravelPolicyRow[]>('billing/travel/guards/defaults').subscribe({
+      next: (data) => {
+        this.guardTravelPolicies = data;
+        this.collapseAllRegions('guard-travel', this.guardTravelPolicies);
+        this.guardTravelLoading = false;
+      },
+      error: () => {
+        this.notification.show('Failed to load guard travel policies', 'fail');
+        this.guardTravelLoading = false;
+      },
+    });
+  }
+
+  saveGuardTravelPolicies(): void {
+    this.guardTravelSaving = true;
+    this.api.put<any>('billing/travel/guards/defaults', this.guardTravelPolicies).subscribe({
+      next: (res) => {
+        const updatedCount = Number(res?.updated_count ?? 0);
+        this.notification.show(updatedCount > 0 ? 'Guard travel policies saved' : 'No guard travel policy changes detected', updatedCount > 0 ? 'success' : 'fail');
+        this.guardTravelSaving = false;
+        this.loadGuardTravelPolicies();
+      },
+      error: () => {
+        this.notification.show('Failed to save guard travel policies', 'fail');
+        this.guardTravelSaving = false;
+      },
+    });
+  }
+
+  loadProviderTravelPolicies(): void {
+    this.providerTravelLoading = true;
+    this.api.get<TravelPolicyRow[]>('billing/travel/providers/defaults').subscribe({
+      next: (data) => {
+        this.providerTravelPolicies = data;
+        this.collapseAllRegions('provider-travel', this.providerTravelPolicies);
+        this.providerTravelLoading = false;
+      },
+      error: () => {
+        this.notification.show('Failed to load provider travel policies', 'fail');
+        this.providerTravelLoading = false;
+      },
+    });
+  }
+
+  saveProviderTravelPolicies(): void {
+    this.providerTravelSaving = true;
+    this.api.put<any>('billing/travel/providers/defaults', this.providerTravelPolicies).subscribe({
+      next: (res) => {
+        const updatedCount = Number(res?.updated_count ?? 0);
+        this.notification.show(updatedCount > 0 ? 'Provider travel policies saved' : 'No provider travel policy changes detected', updatedCount > 0 ? 'success' : 'fail');
+        this.providerTravelSaving = false;
+        this.loadProviderTravelPolicies();
+      },
+      error: () => {
+        this.notification.show('Failed to save provider travel policies', 'fail');
+        this.providerTravelSaving = false;
+      },
+    });
+  }
+
+  getGroupedTravelPolicies(rows: TravelPolicyRow[]): TravelPolicyGroup[] {
+    const map = new Map<string, TravelPolicyGroup>();
+
+    for (const row of rows) {
+      const regionCode = String(row.region_code || '').trim().toUpperCase();
+      if (!regionCode) {
+        continue;
+      }
+
+      if (!map.has(regionCode)) {
+        map.set(regionCode, {
+          region_code: regionCode,
+          region_label: String(row.region_label || regionCode),
+          provinceDefault: null,
+          cities: [],
+        });
+      }
+
+      const group = map.get(regionCode)!;
+      if (!row.city_code) {
+        group.provinceDefault = row;
+      } else {
+        group.cities.push(row);
+      }
+    }
+
+    const groups = Array.from(map.values()).sort((a, b) => a.region_label.localeCompare(b.region_label));
+    for (const group of groups) {
+      group.cities.sort((a, b) => this.getTravelPolicyCityLabel(a).localeCompare(this.getTravelPolicyCityLabel(b)));
+    }
+    return groups;
+  }
+
+  getTravelPolicyRowKey(row: TravelPolicyRow): string {
+    const region = String(row.region_code || '').trim().toUpperCase();
+    const city = String(row.city_code || '').trim().toUpperCase() || 'DEFAULT';
+    return `${region}_${city}`;
+  }
+
+  getTravelPolicyCityLabel(row: TravelPolicyRow): string {
+    const cityLabel = String(row.city_label || '').trim();
+    if (cityLabel) {
+      return cityLabel;
+    }
+    const location = String(row.location_label || '').trim();
+    const region = String(row.region_label || '').trim();
+    if (location && region && location.startsWith(`${region} / `)) {
+      return location.slice(region.length + 3);
+    }
+    return location || 'City';
+  }
+
+  getTravelPolicyProvinceDefault(group: TravelPolicyGroup): TravelPolicyRow | null {
+    return group.provinceDefault;
+  }
+
+  onTravelNumberInput(
+    row: TravelPolicyRow,
+    field: keyof Pick<TravelPolicyRow, 'included_radius_km' | 'rate_per_km' | 'max_auto_match_radius_km' | 'manual_review_over_km'>,
+    value: any,
+  ): void {
+    const raw = String(value ?? '').trim();
+    if (!raw && (field === 'max_auto_match_radius_km' || field === 'manual_review_over_km')) {
+      row[field] = null;
+      return;
+    }
+    const parsed = parseFloat(raw);
+    const nextValue = isNaN(parsed)
+      ? (field === 'max_auto_match_radius_km' || field === 'manual_review_over_km' ? null : 0)
+      : Math.round(parsed * 100) / 100;
+
+    if (field === 'included_radius_km' || field === 'rate_per_km') {
+      row[field] = Number(nextValue ?? 0);
+      return;
+    }
+
+    row[field] = nextValue;
+  }
+
+  applyProvinceDefaultTravelToCities(group: TravelPolicyGroup): void {
+    if (!group.provinceDefault) {
+      return;
+    }
+    for (const city of group.cities) {
+      city.included_radius_km = group.provinceDefault.included_radius_km;
+      city.rate_per_km = group.provinceDefault.rate_per_km;
+      city.max_auto_match_radius_km = group.provinceDefault.max_auto_match_radius_km;
+      city.manual_review_over_km = group.provinceDefault.manual_review_over_km;
+    }
   }
 
   // ----------------------------------------------------------------

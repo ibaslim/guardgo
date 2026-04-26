@@ -41,7 +41,7 @@ async def list_client_requests(
     rows: int = 20,
     keyword: str = "",
     request_status: str = "",
-    target_type: str = "",
+    fulfillment_mode: str = "",
     current_user=Depends(get_current_user),
 ):
     return await RequestManager.get_instance().list_requests(
@@ -50,7 +50,7 @@ async def list_client_requests(
         rows=rows,
         keyword=keyword,
         request_status=request_status,
-        target_type=target_type,
+        fulfillment_mode=fulfillment_mode,
     )
 
 

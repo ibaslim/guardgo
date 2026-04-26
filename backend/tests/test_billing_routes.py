@@ -97,3 +97,41 @@ async def test_get_provider_default_rates_calls_manager(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()[0]["province"] == "ON"
+
+
+@pytest.mark.anyio
+async def test_get_guard_travel_policies_calls_manager(monkeypatch):
+    class FakeManager:
+        async def get_guard_travel_policies(self):
+            return [{"region_code": "ON", "city_code": "", "included_radius_km": 10.0}]
+
+    monkeypatch.setattr(BillingManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as client:
+        response = await client.get("/api/billing/travel/guards/defaults")
+
+    assert response.status_code == 200
+    assert response.json()[0]["region_code"] == "ON"
+
+
+@pytest.mark.anyio
+async def test_save_provider_travel_policies_forwards_payload_and_current_user(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def save_provider_travel_policies(self, payload, current_user):
+            captured["payload"] = payload
+            captured["user"] = current_user.username
+            return {"updated": len(payload)}
+
+    monkeypatch.setattr(BillingManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as client:
+        response = await client.put(
+            "/api/billing/travel/providers/defaults",
+            json=[{"region_code": "ON", "city_code": "", "included_radius_km": 10.0, "rate_per_km": 0.45, "max_auto_match_radius_km": 50, "manual_review_over_km": 70}],
+        )
+
+    assert response.status_code == 200
+    assert response.json()["updated"] == 1
+    assert captured["user"] == "platformadmin"

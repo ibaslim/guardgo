@@ -42,14 +42,14 @@ async def test_list_client_requests_forwards_filters(monkeypatch):
     monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
 
     async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as client:
-        response = await client.get("/api/requests?page=2&rows=5&keyword=night&request_status=draft&target_type=guard")
+        response = await client.get("/api/requests?page=2&rows=5&keyword=night&request_status=draft&fulfillment_mode=individual_only")
 
     assert response.status_code == 200
     assert captured["page"] == 2
     assert captured["rows"] == 5
     assert captured["keyword"] == "night"
     assert captured["request_status"] == "draft"
-    assert captured["target_type"] == "guard"
+    assert captured["fulfillment_mode"] == "individual_only"
     assert captured["current_user"].username == "tester"
 
 
@@ -60,7 +60,7 @@ async def test_create_client_request_calls_manager(monkeypatch):
     class FakeManager:
         async def create_request(self, payload, current_user):
             captured["title"] = payload.title
-            captured["target_type"] = payload.target_type.value
+            captured["fulfillment_mode"] = payload.fulfillment_mode.value
             captured["user"] = current_user.username
             return {"id": "req-1", "title": payload.title}
 
@@ -69,11 +69,11 @@ async def test_create_client_request_calls_manager(monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=_app(user_role.CLIENT_ADMIN)), base_url="http://test") as client:
         response = await client.post(
             "/api/requests",
-            json={"title": "Night shift", "target_type": "guard", "guards_required": 2, "commit": True},
+            json={"title": "Night shift", "fulfillment_mode": "individual_only", "guards_required": 2, "commit": True},
         )
 
     assert response.status_code == 201
-    assert captured == {"title": "Night shift", "target_type": "guard", "user": "tester"}
+    assert captured == {"title": "Night shift", "fulfillment_mode": "individual_only", "user": "tester"}
 
 
 @pytest.mark.anyio
@@ -87,7 +87,7 @@ async def test_create_client_request_forbidden_for_guard_admin(monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=_app(user_role.GUARD_ADMIN)), base_url="http://test") as client:
         response = await client.post(
             "/api/requests",
-            json={"title": "Night shift", "target_type": "guard", "guards_required": 2, "commit": True},
+            json={"title": "Night shift", "fulfillment_mode": "individual_only", "guards_required": 2, "commit": True},
         )
 
     assert response.status_code == 403

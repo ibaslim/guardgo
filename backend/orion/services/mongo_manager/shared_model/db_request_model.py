@@ -20,6 +20,12 @@ class RequestTargetType(str, Enum):
     SERVICE_PROVIDER = "service_provider"
 
 
+class RequestFulfillmentMode(str, Enum):
+    INDIVIDUAL_ONLY = "individual_only"
+    SERVICE_PROVIDER_ONLY = "service_provider_only"
+    HYBRID = "hybrid"
+
+
 class RequestAssignmentStatus(str, Enum):
     OFFERED = "offered"
     ACCEPTED = "accepted"
@@ -65,6 +71,7 @@ class ClientRequestRecord(Model):
     created_by_user_id: str = Field(index=True)
     created_by_username: str = ""
     title: str = Field(index=True)
+    fulfillment_mode: RequestFulfillmentMode = Field(default=RequestFulfillmentMode.INDIVIDUAL_ONLY, index=True)
     target_type: RequestTargetType = Field(index=True)
     requested_guard_type: Optional[str] = Field(default=None, index=True)
     guards_required: int = Field(default=1)
@@ -103,7 +110,7 @@ class RequestAssignmentRecord(Model):
 
 class ClientRequestCreatePayload(BaseModel):
     title: str = PydanticField(min_length=3, max_length=140)
-    target_type: RequestTargetType = RequestTargetType.GUARD
+    fulfillment_mode: RequestFulfillmentMode = RequestFulfillmentMode.INDIVIDUAL_ONLY
     site_index: Optional[int] = PydanticField(default=None, ge=0)
     site: Optional[RequestSiteInput] = None
     requested_guard_type: Optional[str] = None
@@ -117,7 +124,7 @@ class ClientRequestCreatePayload(BaseModel):
 
 class ClientRequestUpdatePayload(BaseModel):
     title: Optional[str] = PydanticField(default=None, min_length=3, max_length=140)
-    target_type: Optional[RequestTargetType] = None
+    fulfillment_mode: Optional[RequestFulfillmentMode] = None
     site: Optional[RequestSiteInput] = None
     requested_guard_type: Optional[str] = None
     guards_required: Optional[int] = PydanticField(default=None, ge=1, le=500)
@@ -147,4 +154,4 @@ class ClientRequestListFilters(BaseModel):
     rows: int = 20
     keyword: str = ""
     request_status: str = ""
-    target_type: str = ""
+    fulfillment_mode: str = ""

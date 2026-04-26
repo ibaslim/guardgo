@@ -1,5 +1,6 @@
 export type ClientRequestStatus = 'draft' | 'submitted' | 'cancelled' | 'closed';
 export type ClientRequestTargetType = 'guard' | 'service_provider';
+export type ClientRequestFulfillmentMode = 'individual_only' | 'service_provider_only' | 'hybrid';
 export type RequestAssignmentStatus = 'offered' | 'accepted' | 'declined' | 'in_progress' | 'completed' | 'cancelled';
 
 export interface ClientRequestItem {
@@ -8,6 +9,7 @@ export interface ClientRequestItem {
   created_by_user_id: string;
   created_by_username: string;
   title: string;
+  fulfillment_mode: ClientRequestFulfillmentMode;
   target_type: ClientRequestTargetType;
   requested_guard_type?: string | null;
   guards_required: number;
@@ -85,13 +87,13 @@ export interface ClientRequestListResponse {
   filters: {
     keyword: string;
     request_status: string;
-    target_type: string;
+    fulfillment_mode: string;
   };
 }
 
 export interface ClientRequestCreatePayload {
   title: string;
-  target_type: ClientRequestTargetType;
+  fulfillment_mode: ClientRequestFulfillmentMode;
   site_index?: number | null;
   site?: {
     site_name: string;
@@ -120,7 +122,7 @@ export interface ClientRequestCreatePayload {
 
 export interface ClientRequestUpdatePayload {
   title?: string | null;
-  target_type?: ClientRequestTargetType;
+  fulfillment_mode?: ClientRequestFulfillmentMode;
   site?: {
     site_name: string;
     site_manager_contact?: string | null;
