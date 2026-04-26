@@ -20,3 +20,8 @@ CSRF_TRUSTED_ORIGINS = (
         'http://0.0.0.0:8070', ] if DEBUG else [f'https://{PRODUCTION_DOMAIN}', ])
 
 ALLOWED_CORS_ORIGINS = CSRF_TRUSTED_ORIGINS if DEBUG else [f'https://{PRODUCTION_DOMAIN}']
+
+# Google Maps integration toggles (used by request matching/geocoding features).
+GOOGLE_MAPS_API_KEY = env_handler.get_instance().env("GOOGLE_MAPS_API_KEY", "")
+GOOGLE_MAPS_GEOCODING_ENABLED = env_handler.get_instance().env("GOOGLE_MAPS_GEOCODING_ENABLED", "0") == "1"
+GOOGLE_MAPS_DISTANCE_MATRIX_ENABLED = env_handler.get_instance().env("GOOGLE_MAPS_DISTANCE_MATRIX_ENABLED", "0") == "1"

@@ -157,6 +157,8 @@ export interface GuardErrors {
   trainingCertificates?: string;
   preferredGuardTypes?: string;
   operationalRadius?: string;
+  operationalRegionCode?: string;
+  operationalCityCode?: string;
   weeklyAvailability?: string;
   submit?: string;
   [key: string]: string | undefined; // For dynamic identification document errors
@@ -177,5 +179,7 @@ export interface Guard {
   trainingCertificates: TrainingCertificate[];
   preferredGuardTypes: string[];
   operationalRadius: number | null;
+  operationalRegionCode: string;
+  operationalCityCode: string;
   weeklyAvailability: WeeklyAvailability;
 }

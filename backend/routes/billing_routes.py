@@ -13,9 +13,20 @@ billing_routes = APIRouter(
 
 
 @billing_routes.get(
+    "/api/billing/metadata",
+    summary="Get billing location metadata",
+    description="Returns province and city metadata used in billing configuration tables.",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def get_billing_location_metadata():
+    return await BillingManager.get_instance().get_billing_location_metadata()
+
+
+@billing_routes.get(
     "/api/billing/guards",
     summary="Get guard default pay rates",
-    description="Returns default pay rates by province for guards (admin only).",
+    description="Returns default pay rates by province and city for guards (admin only).",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
@@ -26,7 +37,7 @@ async def get_guard_rates():
 @billing_routes.put(
     "/api/billing/guards",
     summary="Save guard default pay rates",
-    description="Upsert default pay rates by province for guards (admin only).",
+    description="Upsert default pay rates by province and city for guards (admin only).",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
@@ -35,6 +46,31 @@ async def save_guard_rates(
     current_user=Depends(get_current_user),
 ):
     return await BillingManager.get_instance().save_guard_rates(payload, current_user)
+
+
+@billing_routes.get(
+    "/api/billing/margins/guards/defaults",
+    summary="Get guard margin defaults",
+    description="Returns default guard margin values by province and city (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def get_guard_margin_rates():
+    return await BillingManager.get_instance().get_guard_margin_rates()
+
+
+@billing_routes.put(
+    "/api/billing/margins/guards/defaults",
+    summary="Save guard margin defaults",
+    description="Upsert default guard margin values by province and city (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def save_guard_margin_rates(
+    payload: List[Dict[str, Any]],
+    current_user=Depends(get_current_user),
+):
+    return await BillingManager.get_instance().save_guard_margin_rates(payload, current_user)
 
 
 @billing_routes.get(
@@ -51,7 +87,7 @@ async def list_active_guards():
 @billing_routes.get(
     "/api/billing/guards/{guard_id}",
     summary="Get guard pay rates",
-    description="Returns pay rates by province for a specific guard (admin only).",
+    description="Returns pay rates by province and city for a specific guard (admin only).",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
@@ -64,7 +100,7 @@ async def get_guard_override_rates(
 @billing_routes.put(
     "/api/billing/guards/{guard_id}",
     summary="Save guard pay rates",
-    description="Upsert pay rates by province for a specific guard (admin only).",
+    description="Upsert pay rates by province and city for a specific guard (admin only).",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
@@ -97,7 +133,7 @@ async def sync_guard_override_rates_from_defaults(
 @billing_routes.get(
     "/api/billing/providers/defaults",
     summary="Get service provider default pay rates",
-    description="Returns default pay rates by province for service providers (admin only).",
+    description="Returns default pay rates by province and city for service providers (admin only).",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
@@ -108,7 +144,7 @@ async def get_provider_default_rates():
 @billing_routes.put(
     "/api/billing/providers/defaults",
     summary="Save service provider default pay rates",
-    description="Upsert default pay rates by province for service providers (admin only).",
+    description="Upsert default pay rates by province and city for service providers (admin only).",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
@@ -117,6 +153,81 @@ async def save_provider_default_rates(
     current_user=Depends(get_current_user),
 ):
     return await BillingManager.get_instance().save_provider_default_rates(payload, current_user)
+
+
+@billing_routes.get(
+    "/api/billing/commissions/providers/defaults",
+    summary="Get provider commission defaults",
+    description="Returns default provider commission values by province and city (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def get_provider_commission_rates():
+    return await BillingManager.get_instance().get_provider_commission_rates()
+
+
+@billing_routes.put(
+    "/api/billing/commissions/providers/defaults",
+    summary="Save provider commission defaults",
+    description="Upsert default provider commission values by province and city (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def save_provider_commission_rates(
+    payload: List[Dict[str, Any]],
+    current_user=Depends(get_current_user),
+):
+    return await BillingManager.get_instance().save_provider_commission_rates(payload, current_user)
+
+
+@billing_routes.get(
+    "/api/billing/travel/guards/defaults",
+    summary="Get guard travel policy defaults",
+    description="Returns travel pricing and auto-match defaults by province and city for direct guards (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def get_guard_travel_policies():
+    return await BillingManager.get_instance().get_guard_travel_policies()
+
+
+@billing_routes.put(
+    "/api/billing/travel/guards/defaults",
+    summary="Save guard travel policy defaults",
+    description="Upsert travel pricing and auto-match defaults by province and city for direct guards (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def save_guard_travel_policies(
+    payload: List[Dict[str, Any]],
+    current_user=Depends(get_current_user),
+):
+    return await BillingManager.get_instance().save_guard_travel_policies(payload, current_user)
+
+
+@billing_routes.get(
+    "/api/billing/travel/providers/defaults",
+    summary="Get service provider travel policy defaults",
+    description="Returns travel pricing and auto-match defaults by province and city for service providers (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def get_provider_travel_policies():
+    return await BillingManager.get_instance().get_provider_travel_policies()
+
+
+@billing_routes.put(
+    "/api/billing/travel/providers/defaults",
+    summary="Save service provider travel policy defaults",
+    description="Upsert travel pricing and auto-match defaults by province and city for service providers (admin only).",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.ADMIN]))],
+)
+async def save_provider_travel_policies(
+    payload: List[Dict[str, Any]],
+    current_user=Depends(get_current_user),
+):
+    return await BillingManager.get_instance().save_provider_travel_policies(payload, current_user)
 
 
 @billing_routes.get(
@@ -133,7 +244,7 @@ async def list_active_providers():
 @billing_routes.get(
     "/api/billing/providers/{provider_id}",
     summary="Get provider pay rates",
-    description="Returns pay rates by province for a specific service provider (admin only).",
+    description="Returns pay rates by province and city for a specific service provider (admin only).",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
@@ -146,7 +257,7 @@ async def get_provider_rates(
 @billing_routes.put(
     "/api/billing/providers/{provider_id}",
     summary="Save provider pay rates",
-    description="Upsert pay rates by province for a specific service provider (admin only).",
+    description="Upsert pay rates by province and city for a specific service provider (admin only).",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )

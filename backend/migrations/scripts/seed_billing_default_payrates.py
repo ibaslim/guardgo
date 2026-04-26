@@ -7,10 +7,10 @@ from typing import Any, Dict
 # Add backend directory to import path when run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from configs.metadata_constants import CANADIAN_PROVINCE_OPTIONS
+from configs.metadata_constants import BILLING_REGION_CITY_OPTIONS
 from orion.api.interactive.billing_manager.billing_manager import BillingManager
 from orion.services.mongo_manager.mongo_controller import mongo_controller
-from orion.services.mongo_manager.shared_model.db_billing_model import BillingRate
+from orion.services.mongo_manager.shared_model.db_billing_model import BillingRate, TravelPricingPolicy
 
 AUTO_RUN = True
 
@@ -47,17 +47,84 @@ DUMMY_PROVIDER_RATES_CAD = {
     "YT": {"standard_rate": 36.0, "weekend_rate": 40.0, "holiday_rate": 44.0},
 }
 
+DUMMY_GUARD_MARGIN_RATES_CAD = {
+    "AB": {"standard_rate": 4.0, "weekend_rate": 4.5, "holiday_rate": 5.0},
+    "BC": {"standard_rate": 4.5, "weekend_rate": 5.0, "holiday_rate": 5.5},
+    "MB": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "NB": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "NL": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "NS": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "NT": {"standard_rate": 5.0, "weekend_rate": 5.5, "holiday_rate": 6.0},
+    "NU": {"standard_rate": 5.5, "weekend_rate": 6.0, "holiday_rate": 6.5},
+    "ON": {"standard_rate": 4.5, "weekend_rate": 5.0, "holiday_rate": 5.5},
+    "PE": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "QC": {"standard_rate": 4.0, "weekend_rate": 4.5, "holiday_rate": 5.0},
+    "SK": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "YT": {"standard_rate": 5.0, "weekend_rate": 5.5, "holiday_rate": 6.0},
+}
+
+DUMMY_PROVIDER_COMMISSION_RATES_CAD = {
+    "AB": {"standard_rate": 3.0, "weekend_rate": 3.5, "holiday_rate": 4.0},
+    "BC": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "MB": {"standard_rate": 2.5, "weekend_rate": 3.0, "holiday_rate": 3.5},
+    "NB": {"standard_rate": 2.5, "weekend_rate": 3.0, "holiday_rate": 3.5},
+    "NL": {"standard_rate": 2.5, "weekend_rate": 3.0, "holiday_rate": 3.5},
+    "NS": {"standard_rate": 2.5, "weekend_rate": 3.0, "holiday_rate": 3.5},
+    "NT": {"standard_rate": 4.0, "weekend_rate": 4.5, "holiday_rate": 5.0},
+    "NU": {"standard_rate": 4.5, "weekend_rate": 5.0, "holiday_rate": 5.5},
+    "ON": {"standard_rate": 3.5, "weekend_rate": 4.0, "holiday_rate": 4.5},
+    "PE": {"standard_rate": 2.5, "weekend_rate": 3.0, "holiday_rate": 3.5},
+    "QC": {"standard_rate": 3.0, "weekend_rate": 3.5, "holiday_rate": 4.0},
+    "SK": {"standard_rate": 2.5, "weekend_rate": 3.0, "holiday_rate": 3.5},
+    "YT": {"standard_rate": 4.0, "weekend_rate": 4.5, "holiday_rate": 5.0},
+}
+
+DUMMY_GUARD_TRAVEL_POLICY = {
+    "included_radius_km": 10.0,
+    "rate_per_km": 0.45,
+    "max_auto_match_radius_km": 50.0,
+    "manual_review_over_km": 70.0,
+}
+
+DUMMY_PROVIDER_TRAVEL_POLICY = {
+    "included_radius_km": 15.0,
+    "rate_per_km": 0.55,
+    "max_auto_match_radius_km": 75.0,
+    "manual_review_over_km": 100.0,
+}
+
 
 def _build_payload(rate_map: Dict[str, Dict[str, float]], fallback: Dict[str, float]) -> list[dict[str, Any]]:
     payload = []
-    for region in CANADIAN_PROVINCE_OPTIONS:
-        code = region["value"]
+    for location in BILLING_REGION_CITY_OPTIONS:
+        code = location["region_code"]
+        city_code = location["city_code"]
         rates = rate_map.get(code, fallback)
         payload.append({
             "region_code": code,
+            "city_code": city_code,
             "standard_rate": rates["standard_rate"],
             "weekend_rate": rates["weekend_rate"],
             "holiday_rate": rates["holiday_rate"],
+        })
+    return payload
+
+
+def _build_travel_policy_payload(defaults: Dict[str, float]) -> list[dict[str, Any]]:
+    payload = []
+    seen_regions = set()
+    for location in BILLING_REGION_CITY_OPTIONS:
+        region_code = location["region_code"]
+        if region_code in seen_regions:
+            continue
+        seen_regions.add(region_code)
+        payload.append({
+            "region_code": region_code,
+            "city_code": "",
+            "included_radius_km": defaults["included_radius_km"],
+            "rate_per_km": defaults["rate_per_km"],
+            "max_auto_match_radius_km": defaults["max_auto_match_radius_km"],
+            "manual_review_over_km": defaults["manual_review_over_km"],
         })
     return payload
 
@@ -69,13 +136,31 @@ async def seed_billing_default_payrates(force: bool = False) -> Dict[str, Any]:
 
     guard_count = await engine.count(BillingRate, BillingRate.scope == manager.SCOPE_GUARD_DEFAULT)
     provider_count = await engine.count(BillingRate, BillingRate.scope == manager.SCOPE_PROVIDER_DEFAULT)
+    guard_margin_count = await engine.count(BillingRate, BillingRate.scope == manager.SCOPE_GUARD_MARGIN_DEFAULT)
+    provider_commission_count = await engine.count(BillingRate, BillingRate.scope == manager.SCOPE_PROVIDER_COMMISSION_DEFAULT)
+    guard_travel_count = await engine.count(TravelPricingPolicy, TravelPricingPolicy.scope == manager.SCOPE_GUARD_TRAVEL_DEFAULT)
+    provider_travel_count = await engine.count(TravelPricingPolicy, TravelPricingPolicy.scope == manager.SCOPE_PROVIDER_TRAVEL_DEFAULT)
+    expected_locations = len(BILLING_REGION_CITY_OPTIONS)
+    expected_regions = len({location["region_code"] for location in BILLING_REGION_CITY_OPTIONS})
 
-    if not force and guard_count > 0 and provider_count > 0:
+    if (
+        not force
+        and guard_count >= expected_locations
+        and provider_count >= expected_locations
+        and guard_margin_count >= expected_locations
+        and provider_commission_count >= expected_locations
+        and guard_travel_count >= expected_regions
+        and provider_travel_count >= expected_regions
+    ):
         return {
             "seeded": False,
             "reason": "already-seeded",
             "guard_default_rows": guard_count,
             "provider_default_rows": provider_count,
+            "guard_margin_default_rows": guard_margin_count,
+            "provider_commission_default_rows": provider_commission_count,
+            "guard_travel_default_rows": guard_travel_count,
+            "provider_travel_default_rows": provider_travel_count,
         }
 
     guard_payload = _build_payload(
@@ -86,14 +171,32 @@ async def seed_billing_default_payrates(force: bool = False) -> Dict[str, Any]:
         DUMMY_PROVIDER_RATES_CAD,
         {"standard_rate": 30.0, "weekend_rate": 33.0, "holiday_rate": 36.0},
     )
+    guard_margin_payload = _build_payload(
+        DUMMY_GUARD_MARGIN_RATES_CAD,
+        {"standard_rate": 4.0, "weekend_rate": 4.5, "holiday_rate": 5.0},
+    )
+    provider_commission_payload = _build_payload(
+        DUMMY_PROVIDER_COMMISSION_RATES_CAD,
+        {"standard_rate": 3.0, "weekend_rate": 3.5, "holiday_rate": 4.0},
+    )
+    guard_travel_payload = _build_travel_policy_payload(DUMMY_GUARD_TRAVEL_POLICY)
+    provider_travel_payload = _build_travel_policy_payload(DUMMY_PROVIDER_TRAVEL_POLICY)
 
     guard_result = await manager.save_guard_rates(guard_payload, current_user=None)
     provider_result = await manager.save_provider_default_rates(provider_payload, current_user=None)
+    guard_margin_result = await manager.save_guard_margin_rates(guard_margin_payload, current_user=None)
+    provider_commission_result = await manager.save_provider_commission_rates(provider_commission_payload, current_user=None)
+    guard_travel_result = await manager.save_guard_travel_policies(guard_travel_payload, current_user=None)
+    provider_travel_result = await manager.save_provider_travel_policies(provider_travel_payload, current_user=None)
 
     return {
         "seeded": True,
         "guard": guard_result,
         "provider": provider_result,
+        "guard_margin": guard_margin_result,
+        "provider_commission": provider_commission_result,
+        "guard_travel": guard_travel_result,
+        "provider_travel": provider_travel_result,
     }
 
 
@@ -108,7 +211,7 @@ async def _main(force: bool) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Seed billing default payrates for guards and service providers")
+    parser = argparse.ArgumentParser(description="Seed billing default rates for payrates, margins, commissions, and travel policy")
     parser.add_argument("--force", action="store_true", help="overwrite existing default rates")
     args = parser.parse_args()
 

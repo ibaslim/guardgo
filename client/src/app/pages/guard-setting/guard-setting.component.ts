@@ -18,12 +18,26 @@ import { ErrorMessageComponent } from "../../components/error-message/error-mess
 import { ProfilePictureUploadComponent } from '../../components/profile-picture-upload/profile-picture-upload.component';
 import { CardComponent } from '../../components/card/card.component';
 import { ClientPreferredGuardTypesComponent } from '../../components/client-preferred-guard-types/client-preferred-guard-types.component';
+import { AlertComponent } from '../../components/alert/alert.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { getIssuingAuthorityForProvince } from '../../shared/constants/provincial-authorities.constants';
 import { Guard, GuardErrors, IdentificationDocument, SecurityLicenseDocument, PoliceClearanceRecord, TrainingCertificate, WeeklyAvailability } from '../../shared/model/guard';
 import { readableTitle } from '../../shared/helpers/format.helper';
+import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared/helpers/distance.helper';
+import {
+  buildAlphabeticDummyTag,
+  buildCaPhone,
+  buildSeededCaPhone,
+  isLocalhostForDummyData,
+  isoDateYearsAgo,
+  isoDateYearsAhead,
+  nextDummySeed,
+  pickCityValueForProvince,
+  pickFirstOptionValue,
+  pickPreferredOptionValue,
+} from '../../shared/helpers/onboarding-dummy-data.helper';
 
 @Component({
   selector: 'app-guard-setting',
@@ -44,12 +58,15 @@ import { readableTitle } from '../../shared/helpers/format.helper';
     ErrorMessageComponent,
     ProfilePictureUploadComponent,
     CardComponent,
-    ClientPreferredGuardTypesComponent
+    ClientPreferredGuardTypesComponent,
+    AlertComponent
   ],
   templateUrl: './guard-setting.component.html',
   styleUrls: ['./guard-setting.component.css']
 })
 export class GuardSettingComponent implements OnInit, OnDestroy {
+  readonly showDummyDataButton = isLocalhostForDummyData();
+  managedByProviderName = '';
 
   @Input() showPageWrapper: boolean = true;
   @Input() readonly: boolean = false;
@@ -90,6 +107,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           }
           if (response?.canadianProvinces?.length) {
             this.provinceOptions = response.canadianProvinces;
+          }
+          if (response?.canadianCitiesByProvince) {
+            this.canadianCitiesByProvinceOptions = response.canadianCitiesByProvince;
           }
           if (response?.identityDocumentTypes?.length) {
             this.identityDocumentTypes = response.identityDocumentTypes;
@@ -230,10 +250,17 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   provinceOptions: { value: string; label: string }[] = [];
+  canadianCitiesByProvinceOptions: Record<string, { value: string; label: string }[]> = {};
 
   countryOptions: { value: string; label: string }[] = [];
 
   passportCountryOptions: { value: string; label: string }[] = [];
+
+  selectedDistanceUnit: DistanceUnit = 'km';
+  readonly distanceUnitOptions: { value: DistanceUnit; label: string }[] = [
+    { value: 'km', label: 'Kilometers (km)' },
+    { value: 'mi', label: 'Miles (mi)' }
+  ];
 
   // UI helper methods
   requiresProvince(type: string): boolean {
@@ -328,6 +355,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     }],
     preferredGuardTypes: [],
     operationalRadius: null,
+    operationalRegionCode: '',
+    operationalCityCode: '',
     weeklyAvailability: {
       Monday: { enabled: false, timeRanges: [] },
       Tuesday: { enabled: false, timeRanges: [] },
@@ -363,6 +392,42 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   trainingCertificateUploadInProgress: Record<string, boolean> = {};
   trainingCertificateUploadErrors: Record<string, string> = {};
 
+  get showServiceProviderInfo(): boolean {
+    return !this.readonly && !!this.serviceProviderDisplayName;
+  }
+
+  get serviceProviderDisplayName(): string {
+    if (this.managedByProviderName) {
+      return this.managedByProviderName;
+    }
+
+    const tenant = this.appService.userSessionData()?.tenant;
+    const provider = tenant?.service_provider;
+    const name = String(provider?.name || '').trim();
+    const id = String(provider?.id || tenant?.service_provider_tenant_id || '').trim();
+    return name || id;
+  }
+
+  private loadServiceProviderInfo(): void {
+    this.apiService.get<any>('tenant', { loadingMode: 'silent' })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          const tenantType = String(response?.tenant_type || '').trim().toLowerCase();
+          const ownershipType = String(response?.ownership_type || '').trim().toLowerCase();
+          const providerName = String(response?.service_provider?.name || '').trim();
+          const providerId = String(response?.service_provider?.id || response?.service_provider_tenant_id || '').trim();
+
+          this.managedByProviderName = tenantType === 'guard' && ownershipType === 'service_provider'
+            ? (providerName || providerId)
+            : '';
+        },
+        error: () => {
+          this.managedByProviderName = '';
+        }
+      });
+  }
+
   constructor(
     private apiService: ApiService,
     private router: Router,
@@ -370,6 +435,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit(): void {
+    this.loadServiceProviderInfo();
+
+    const preferredUnit = this.appService.getConfig().localSettings.distanceUnit;
+    this.selectedDistanceUnit = preferredUnit === 'mi' ? 'mi' : 'km';
+
     this.loadGuardMetadata(() => {
       if (this.guardData && this.hasGuardData(this.guardData)) {
         this.guardFormModel = this.transformBackendDataToForm(this.guardData);
@@ -386,6 +456,151 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       this.ensureCanadaDocumentDefaults();
       this.lastAutoLegalName = this.guardFormModel.name || '';
     });
+  }
+
+  get operationalRadiusLabel(): string {
+    return `Operational Radius (${this.selectedDistanceUnit})`;
+  }
+
+  get minimumOperationalRadiusDisplay(): number {
+    return this.selectedDistanceUnit === 'mi' ? kmToMiles(1) : 1;
+  }
+
+  get minimumOperationalRadiusText(): string {
+    return formatDistance(this.minimumOperationalRadiusDisplay, this.selectedDistanceUnit);
+  }
+
+  onDistanceUnitChange(nextUnitRaw: string): void {
+    const nextUnit: DistanceUnit = nextUnitRaw === 'mi' ? 'mi' : 'km';
+    if (nextUnit === this.selectedDistanceUnit) {
+      return;
+    }
+
+    if (this.guardFormModel.operationalRadius != null && Number.isFinite(this.guardFormModel.operationalRadius)) {
+      this.guardFormModel.operationalRadius = this.convertDistanceBetweenUnits(
+        Number(this.guardFormModel.operationalRadius),
+        this.selectedDistanceUnit,
+        nextUnit
+      );
+    }
+
+    this.selectedDistanceUnit = nextUnit;
+    this.appService.set('distanceUnit', nextUnit);
+  }
+
+  private toDisplayDistance(kmValue: number): number {
+    return this.selectedDistanceUnit === 'mi'
+      ? kmToMiles(kmValue)
+      : Number(kmValue.toFixed(1));
+  }
+
+  private toStorageKm(displayValue: number): number {
+    return this.selectedDistanceUnit === 'mi'
+      ? milesToKm(displayValue)
+      : Number(displayValue.toFixed(2));
+  }
+
+  private convertDistanceBetweenUnits(value: number, from: DistanceUnit, to: DistanceUnit): number {
+    if (from === to) {
+      return value;
+    }
+    return from === 'km' ? kmToMiles(value) : milesToKm(value);
+  }
+
+  getOperationalCityOptions(): { value: string; label: string }[] {
+    if (!this.guardFormModel.operationalRegionCode) {
+      return [];
+    }
+    return this.canadianCitiesByProvinceOptions[this.guardFormModel.operationalRegionCode] || [];
+  }
+
+  getAddressCityOptions(): { value: string; label: string }[] {
+    const provinceCode = this.guardFormModel.address.province || '';
+    const canonical: { value: string; label: string }[] = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const current = String(this.guardFormModel.address.city || '').trim();
+    if (!current) {
+      return canonical;
+    }
+
+    const exists = canonical.some((option: { value: string; label: string }) => option.value === current);
+    if (exists) {
+      return canonical;
+    }
+
+    return [...canonical, { value: current, label: current }];
+  }
+
+  getPoliceClearanceCityOptions(record: PoliceClearanceRecord): { value: string; label: string }[] {
+    const provinceCode = String(record?.issuingProvince || '').trim().toUpperCase();
+    const canonical: { value: string; label: string }[] = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const current = String(record?.issuingCity || '').trim();
+    if (!current) {
+      return canonical;
+    }
+    const exists = canonical.some((option: { value: string; label: string }) => option.value === current);
+    if (exists) {
+      return canonical;
+    }
+    return [...canonical, { value: current, label: current }];
+  }
+
+  onAddressProvinceChange(nextProvinceCode: string): void {
+    this.guardFormModel.address.province = nextProvinceCode;
+    const options = this.getAddressCityOptions();
+    const isCurrentValid = options.some(city => city.value === this.guardFormModel.address.city);
+    if (!isCurrentValid) {
+      this.guardFormModel.address.city = '';
+    }
+  }
+
+  private getCityLabelForProvince(provinceCode: string, cityCode: string): string {
+    const options = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const normalized = String(cityCode || '').trim().toUpperCase();
+    if (!normalized) {
+      return '';
+    }
+    const found = options.find(option => option.value === normalized);
+    return found?.label || String(cityCode || '').trim();
+  }
+
+  onOperationalRegionChange(nextRegionCode: string): void {
+    this.guardFormModel.operationalRegionCode = nextRegionCode;
+    const options = this.getOperationalCityOptions();
+    const isCurrentCityValid = options.some(city => city.value === this.guardFormModel.operationalCityCode);
+    if (!isCurrentCityValid) {
+      this.guardFormModel.operationalCityCode = '';
+    }
+  }
+
+  onPoliceClearanceProvinceChange(record: PoliceClearanceRecord, nextProvinceCode: string): void {
+    record.issuingProvince = String(nextProvinceCode || '').trim().toUpperCase();
+    const options = this.getPoliceClearanceCityOptions(record);
+    const currentCity = String(record.issuingCity || '').trim();
+    const isCurrentValid = options.some(city => city.value === currentCity);
+    if (!isCurrentValid) {
+      record.issuingCity = '';
+    }
+  }
+
+  private resolveCityCodeForProvince(provinceCode: string, valueOrLabel: string): string {
+    const options = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const normalized = String(valueOrLabel || '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const byValue = options.find(option => option.value === normalized.toUpperCase());
+    if (byValue) {
+      return byValue.value;
+    }
+
+    const byLabel = options.find(option => option.label.toLowerCase() === normalized.toLowerCase());
+    return byLabel?.value || '';
+  }
+
+  private getDefaultCityCodeForProvince(provinceCode: string): string {
+    const options = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    return options[0]?.value || '';
   }
 
   getProfileImageUrl(): string | null {
@@ -452,20 +667,29 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     formData.dob = profile.date_of_birth || profile.dateOfBirth || formData.dob || '';
 
     const rawAddress = profile.home_address || profile.homeAddress || profile.address || {};
+    const addressProvinceCode = (rawAddress.province || '').toString().trim();
+    const rawAddressCity = (rawAddress.city || '').toString().trim();
+    const resolvedAddressCity = this.resolveCityCodeForProvince(addressProvinceCode, rawAddressCity);
     formData.address = {
       street: rawAddress.street || '',
-      city: rawAddress.city || '',
+      city: resolvedAddressCity || rawAddressCity || this.getDefaultCityCodeForProvince(addressProvinceCode),
       country: rawAddress.country || 'CA',
-      province: rawAddress.province || '',
+      province: addressProvinceCode,
       postalCode: rawAddress.postal_code || rawAddress.postalCode || ''
     };
+
+    const operationalRegionCode = (profile.operational_region_code || profile.operationalRegionCode || formData.address.province || '').toString().trim();
+    const rawOperationalCity = (profile.operational_city_code || profile.operationalCityCode || formData.address.city || '').toString().trim();
+    formData.operationalRegionCode = operationalRegionCode;
+    formData.operationalCityCode = this.resolveCityCodeForProvince(operationalRegionCode, rawOperationalCity)
+      || this.getDefaultCityCodeForProvince(operationalRegionCode);
 
     const rawAvailability = profile.weekly_availability || profile.weeklyAvailability;
     formData.weeklyAvailability = this.mapWeeklyAvailabilityFromBackend(rawAvailability);
 
     if (profile.max_travel_radius_km != null) {
       const km = Number(profile.max_travel_radius_km);
-      formData.operationalRadius = Number.isFinite(km) ? Number((km / 1.60934).toFixed(1)) : null;
+      formData.operationalRadius = Number.isFinite(km) ? this.toDisplayDistance(km) : null;
     }
 
     // Transform phone numbers from backend
@@ -663,6 +887,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     const rawPoliceClearances = (formData as any).police_clearances || formData.policeClearances || [];
     if (Array.isArray(rawPoliceClearances) && rawPoliceClearances.length > 0) {
       formData.policeClearances = rawPoliceClearances.map((record: any, index: number) => {
+        const issuingProvince = record.issuing_province || record.issuingProvince || '';
+        const rawIssuingCity = record.issuing_city || record.issuingCity || '';
+        const resolvedIssuingCity = this.resolveCityCodeForProvince(issuingProvince, rawIssuingCity);
         const backendId = record.id || record.clearance_id;
         const stableId = backendId || `police_clearance_${record.reference_number || 'unknown'}_${index}`;
         const incomingAuthority = record.issuing_authority || record.issuingAuthority || '';
@@ -676,8 +903,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
             ? 'other'
             : (isKnownAuthority ? normalizedAuthority : (incomingAuthority ? 'other' : '')),
           issuingAuthorityOther: incomingAuthorityOther || (!isKnownAuthority ? incomingAuthority : ''),
-          issuingProvince: record.issuing_province || record.issuingProvince || '',
-          issuingCity: record.issuing_city || record.issuingCity || '',
+          issuingProvince,
+          issuingCity: resolvedIssuingCity || rawIssuingCity || '',
           issueDate: record.issue_date || record.issueDate || '',
           referenceNumber: record.reference_number || record.referenceNumber || undefined,
           file: null,
@@ -756,6 +983,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       (data.policeClearances && data.policeClearances.length > 0) ||
       (data.trainingCertificates && data.trainingCertificates.length > 0) ||
       data.operationalRadius != null ||
+      data.operationalRegionCode?.trim() ||
+      data.operationalCityCode?.trim() ||
       Object.values(data.weeklyAvailability).some(day => day.enabled && day.timeRanges.length > 0)
     );
   }
@@ -1413,6 +1642,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     }
     if (!this.guardFormModel.address.city.trim()) {
       this.guardErrors['addressCity'] = 'City is required.';
+    } else {
+      const cityOptions = this.getAddressCityOptions();
+      if (cityOptions.length && !cityOptions.some(city => city.value === this.guardFormModel.address.city)) {
+        this.guardErrors['addressCity'] = 'Please select a valid city for the selected province.';
+      }
     }
     if (!this.guardFormModel.address.country.trim()) {
       this.guardErrors['addressCountry'] = 'Country is required.';
@@ -1690,6 +1924,12 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
                 this.guardErrors[`police_clearance_${record.id}_issueDate`] = 'Issue date cannot be in the future.';
               }
             }
+            if (record.issuingCity?.trim()) {
+              const cityOptions = this.getPoliceClearanceCityOptions(record);
+              if (cityOptions.length && !cityOptions.some(city => city.value === record.issuingCity)) {
+                this.guardErrors[`police_clearance_${record.id}_issuingCity`] = 'Please select a valid city for the selected province.';
+              }
+            }
           } else {
             // Additional clearances are optional, but if partially filled, validate
             const hasAnyData = record.issuingAuthorityType.trim() || record.issuingAuthorityOther?.trim() ||
@@ -1712,6 +1952,12 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
               }
               if (!record.issueDate) {
                 this.guardErrors[`police_clearance_${record.id}_issueDate`] = 'Issue date is required.';
+              }
+              if (record.issuingCity?.trim()) {
+                const cityOptions = this.getPoliceClearanceCityOptions(record);
+                if (cityOptions.length && !cityOptions.some(city => city.value === record.issuingCity)) {
+                  this.guardErrors[`police_clearance_${record.id}_issuingCity`] = 'Please select a valid city for the selected province.';
+                }
               }
             }
           }
@@ -1828,9 +2074,25 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     if (
       this.guardFormModel.operationalRadius != null &&
       (isNaN(this.guardFormModel.operationalRadius) ||
-        this.guardFormModel.operationalRadius < 1)
+        this.guardFormModel.operationalRadius < this.minimumOperationalRadiusDisplay)
     ) {
-      this.guardErrors['operationalRadius'] = 'Operational radius must be at least 1 mile.';
+      this.guardErrors['operationalRadius'] = `Operational radius must be at least ${this.minimumOperationalRadiusText}.`;
+    }
+
+    if (!this.guardFormModel.operationalRegionCode) {
+      this.guardErrors['operationalRegionCode'] = 'Operational province is required.';
+    } else {
+      const validProvinces = this.provinceOptions.map(p => p.value);
+      if (validProvinces.length && !validProvinces.includes(this.guardFormModel.operationalRegionCode)) {
+        this.guardErrors['operationalRegionCode'] = 'Please select a valid operational province.';
+      }
+    }
+
+    const operationalCityOptions = this.getOperationalCityOptions();
+    if (!this.guardFormModel.operationalCityCode) {
+      this.guardErrors['operationalCityCode'] = 'Operational city is required.';
+    } else if (operationalCityOptions.length && !operationalCityOptions.some(c => c.value === this.guardFormModel.operationalCityCode)) {
+      this.guardErrors['operationalCityCode'] = 'Please select a valid operational city.';
     }
 
     // Weekly Availability validation
@@ -1898,11 +2160,13 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
         date_of_birth: this.guardFormModel.dob,
         home_address: {
           street: this.guardFormModel.address.street,
-          city: this.guardFormModel.address.city,
+          city: this.getCityLabelForProvince(this.guardFormModel.address.province || '', this.guardFormModel.address.city),
           country: this.guardFormModel.address.country,
           province: this.guardFormModel.address.province || '',
           postal_code: this.guardFormModel.address.postalCode
         },
+        operational_region_code: this.guardFormModel.operationalRegionCode,
+        operational_city_code: this.guardFormModel.operationalCityCode,
         identification: {
           ...(primaryIdentification?.documentType && { id_type: primaryIdentification.documentType }),
           ...(primaryIdentification?.number && { id_number: primaryIdentification.number }),
@@ -2001,7 +2265,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
 
     // Add operational radius if set
     if (this.guardFormModel.operationalRadius != null) {
-      payload.profile.max_travel_radius_km = Math.round(this.guardFormModel.operationalRadius * 1.60934);
+      payload.profile.max_travel_radius_km = this.toStorageKm(this.guardFormModel.operationalRadius);
     }
 
     // Determine desired post-submit tenant status. If user is completing onboarding, move to pending_activation.
@@ -2022,5 +2286,129 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           this.guardErrors['submit'] = err?.error?.detail || 'Failed to submit guard profile.';
         }
       });
+  }
+
+  fillDummyData(): void {
+    const seed = nextDummySeed();
+    const nameTag = buildAlphabeticDummyTag(seed.sequence);
+    const province = pickFirstOptionValue(this.provinceOptions, 'ON');
+    const city = pickCityValueForProvince(this.canadianCitiesByProvinceOptions, province, 'TORONTO');
+    const operationalProvince = province;
+    const operationalCity = pickCityValueForProvince(this.canadianCitiesByProvinceOptions, operationalProvince, city);
+
+    const firstDocType = pickPreferredOptionValue(this.documentTypeOptions, ['drivers_license'], 'drivers_license');
+    const secondDocType = pickPreferredOptionValue(
+      this.documentTypeOptions.filter(option => option.value !== firstDocType),
+      ['provincial_id', 'passport'],
+      firstDocType === 'passport' ? 'drivers_license' : 'passport'
+    );
+    const securityLicenseType = pickFirstOptionValue(this.securityLicenseTypeOptions, 'securityGuard');
+    const policeAuthorityType = pickFirstOptionValue(this.policeClearanceAuthorityOptions, 'police');
+    const preferredGuardType = pickFirstOptionValue(this.guardTypeOptions, 'securityGuard');
+    const trainingCertificate = pickFirstOptionValue(this.trainingCertificateOptions, 'basicSecurityTraining');
+    const trainingIssuerOptions = this.getTrainingIssuerOptions(trainingCertificate);
+    const trainingIssuer = pickFirstOptionValue(trainingIssuerOptions, 'other');
+
+    const doc1Id = `doc_local_1_${seed.suffix}`;
+    const doc2Id = `doc_local_2_${seed.suffix}`;
+    const secId = `sec_local_1_${seed.suffix}`;
+    const policeId = `police_local_1_${seed.suffix}`;
+    const trainingId = `training_local_1_${seed.suffix}`;
+    const guardName = `Local Test Guard ${nameTag}`;
+    const guardSecondaryEmail = `local.guard.contact+${seed.suffix}@example.com`;
+    const firstDocNumber = `DL-${seed.suffix}`;
+    const secondDocNumber = secondDocType === 'passport' ? `P-${seed.suffix}` : `PID-${seed.suffix}`;
+
+    this.guardFormModel.name = guardName;
+    this.guardFormModel.dob = isoDateYearsAgo(28);
+    this.guardFormModel.mobilePhone = buildSeededCaPhone(seed.phoneSuffix, 0, 'mobile');
+    this.guardFormModel.landlinePhone = buildSeededCaPhone(seed.phoneSuffix, 6, 'landline');
+    this.guardFormModel.address = {
+      street: `${100 + seed.sequence} Local Street`,
+      city,
+      country: 'CA',
+      province,
+      postalCode: 'M5V 2T6',
+    };
+    this.guardFormModel.secondaryContact = {
+      name: `Local Contact ${nameTag}`,
+      email: guardSecondaryEmail,
+      mobilePhone: buildSeededCaPhone(seed.phoneSuffix, 1, 'mobile'),
+      landlinePhone: buildSeededCaPhone(seed.phoneSuffix, 7, 'landline'),
+    };
+    this.guardFormModel.identification = {
+      ...this.guardFormModel.identification,
+      documents: [
+        {
+          documentType: firstDocType,
+          number: firstDocNumber,
+          province: this.requiresProvince(firstDocType) ? province : undefined,
+          passportCountry: this.isPassportDocument(firstDocType) ? 'CA' : undefined,
+          expiryDate: isoDateYearsAhead(4),
+          file: null,
+          id: doc1Id,
+        },
+        {
+          documentType: secondDocType,
+          number: secondDocNumber,
+          province: this.requiresProvince(secondDocType) ? province : undefined,
+          passportCountry: this.isPassportDocument(secondDocType) ? 'CA' : undefined,
+          expiryDate: isoDateYearsAhead(6),
+          file: null,
+          id: doc2Id,
+        },
+      ],
+      primaryDocumentId: doc1Id,
+    };
+    this.guardFormModel.securityLicenses = [
+      {
+        fullLegalName: guardName,
+        licenseNumber: `SG-${seed.suffix}`,
+        licenseType: securityLicenseType,
+        issuingProvince: province,
+        issuingAuthority: this.getSuggestedIssuingAuthority(province) || 'Provincial Authority',
+        issueDate: isoDateYearsAgo(2),
+        expiryDate: isoDateYearsAhead(2),
+        file: null,
+        id: secId,
+      },
+    ];
+    this.guardFormModel.policeClearances = [
+      {
+        issuingAuthorityType: policeAuthorityType,
+        issuingAuthorityOther: '',
+        issuingProvince: province,
+        issuingCity: city,
+        issueDate: isoDateYearsAgo(1),
+        referenceNumber: `CLR-${seed.suffix}`,
+        file: null,
+        id: policeId,
+      },
+    ];
+    this.guardFormModel.trainingCertificates = [
+      {
+        certificateName: trainingCertificate,
+        issuingOrganizationType: trainingIssuer,
+        issuingOrganizationOther: trainingIssuer === 'other' ? `Local Training Academy ${nameTag}` : '',
+        issueDate: isoDateYearsAgo(1),
+        expiryDate: isoDateYearsAhead(1),
+        file: null,
+        id: trainingId,
+      },
+    ];
+    this.guardFormModel.preferredGuardTypes = [preferredGuardType];
+    this.guardFormModel.operationalRegionCode = operationalProvince;
+    this.guardFormModel.operationalCityCode = operationalCity;
+    this.guardFormModel.operationalRadius = Math.max(this.minimumOperationalRadiusDisplay, 10);
+    this.guardFormModel.weeklyAvailability = {
+      Monday: { enabled: true, timeRanges: [{ start: '09:00', end: '17:00' }] },
+      Tuesday: { enabled: false, timeRanges: [] },
+      Wednesday: { enabled: false, timeRanges: [] },
+      Thursday: { enabled: false, timeRanges: [] },
+      Friday: { enabled: false, timeRanges: [] },
+      Saturday: { enabled: false, timeRanges: [] },
+      Sunday: { enabled: false, timeRanges: [] },
+    };
+    this.guardErrors = {};
   }
 }

@@ -12,6 +12,7 @@ export class AppStorageService {
     'entityFilterCondition',
     'entityfilterCategories',
     'isSidebarOpen',
+    'distanceUnit',
     'matchType',
     'sortType'
   ];
@@ -33,6 +34,7 @@ export class AppStorageService {
       entityFilterCondition: this.getFromStorage<boolean>('entityFilterCondition'),
       entityfilterCategories: this.getFromStorage('entityfilterCategories', true) || {},
       isSidebarOpen: this.getFromStorage('isSidebarOpen', true),
+      distanceUnit: this.getFromStorage<string>('distanceUnit') || 'km',
       matchType: this.getFromStorage<string>('matchType') || 'or',
       sortType: this.getFromStorage<string>('sortType'),
     };

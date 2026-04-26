@@ -16,6 +16,9 @@ import { MessageNotificationService } from '../../services/message_notification/
 interface ProvinceRate {
   region_code: string;
   region_label: string;
+  city_code?: string;
+  city_label?: string;
+  location_label?: string;
   standard_rate: number;
   weekend_rate: number;
   holiday_rate: number;
@@ -26,6 +29,40 @@ interface BillingActivityContext {
   subtitle: string;
   entityId: string;
   emptyMessage: string;
+}
+
+interface ProvinceRateGroup {
+  region_code: string;
+  region_label: string;
+  rates: ProvinceRate[];
+}
+
+interface ProvinceDefaultRate {
+  standard_rate: number;
+  weekend_rate: number;
+  holiday_rate: number;
+}
+
+interface TravelPolicyRow {
+  region_code: string;
+  region_label: string;
+  city_code?: string;
+  city_label?: string;
+  location_label?: string;
+  included_radius_km: number;
+  rate_per_km: number;
+  max_auto_match_radius_km: number | null;
+  manual_review_over_km: number | null;
+  inherits_region_default?: boolean;
+  has_city_override?: boolean;
+  is_region_default?: boolean;
+}
+
+interface TravelPolicyGroup {
+  region_code: string;
+  region_label: string;
+  provinceDefault: TravelPolicyRow | null;
+  cities: TravelPolicyRow[];
 }
 
 @Component({
@@ -47,8 +84,10 @@ interface BillingActivityContext {
 })
 export class BillingConfigurationsComponent implements OnInit {
   private readonly activityRows = 20;
+  private readonly collapsedRegionState: Record<string, Record<string, boolean>> = {};
+  private readonly provinceDefaultsBySection: Record<string, Record<string, ProvinceDefaultRate>> = {};
 
-  activeBillingTab: 'guards' | 'providers' = 'guards';
+  activeBillingTab: 'guards' | 'providers' | 'addons' | 'travel' = 'guards';
 
   // -- Guard rates --
   guardRates: ProvinceRate[] = [];
@@ -59,6 +98,23 @@ export class BillingConfigurationsComponent implements OnInit {
   providerDefaultRates: ProvinceRate[] = [];
   providerDefaultLoading = false;
   providerDefaultSaving = false;
+
+  // -- Margin & Commission defaults --
+  guardMarginRates: ProvinceRate[] = [];
+  guardMarginLoading = false;
+  guardMarginSaving = false;
+
+  providerCommissionRates: ProvinceRate[] = [];
+  providerCommissionLoading = false;
+  providerCommissionSaving = false;
+
+  guardTravelPolicies: TravelPolicyRow[] = [];
+  guardTravelLoading = false;
+  guardTravelSaving = false;
+
+  providerTravelPolicies: TravelPolicyRow[] = [];
+  providerTravelLoading = false;
+  providerTravelSaving = false;
 
   // -- Providers --
   providers: { label: string; value: string }[] = [];
@@ -98,6 +154,10 @@ export class BillingConfigurationsComponent implements OnInit {
   ngOnInit(): void {
     this.loadGuardRates();
     this.loadProviderDefaultRates();
+    this.loadGuardMarginRates();
+    this.loadProviderCommissionRates();
+    this.loadGuardTravelPolicies();
+    this.loadProviderTravelPolicies();
     this.loadProviders();
     this.loadGuards();
   }
@@ -111,6 +171,7 @@ export class BillingConfigurationsComponent implements OnInit {
     this.api.get<ProvinceRate[]>('billing/guards').subscribe({
       next: (data) => {
         this.guardRates = data;
+        this.collapseAllRegions('guard-default', this.guardRates);
         this.guardLoading = false;
       },
       error: () => {
@@ -123,6 +184,137 @@ export class BillingConfigurationsComponent implements OnInit {
   onRateInput(rate: ProvinceRate, field: keyof Pick<ProvinceRate, 'standard_rate' | 'weekend_rate' | 'holiday_rate'>, value: any): void {
     const parsed = parseFloat(String(value));
     rate[field] = isNaN(parsed) ? 0 : Math.round(parsed * 100) / 100;
+  }
+
+  getRateRowKey(rate: ProvinceRate): string {
+    const region = String(rate.region_code || '').trim().toUpperCase();
+    const city = String(rate.city_code || '').trim().toUpperCase() || 'ALL';
+    return `${region}_${city}`;
+  }
+
+  getCityLabel(rate: ProvinceRate): string {
+    const cityLabel = String(rate.city_label || '').trim();
+    if (cityLabel) {
+      return cityLabel;
+    }
+    const location = String(rate.location_label || '').trim();
+    const region = String(rate.region_label || '').trim();
+    if (location && region && location.startsWith(`${region} / `)) {
+      return location.slice(region.length + 3);
+    }
+    return location || 'City';
+  }
+
+  getGroupedRates(rates: ProvinceRate[]): ProvinceRateGroup[] {
+    const map = new Map<string, ProvinceRateGroup>();
+
+    for (const rate of rates) {
+      const regionCode = String(rate.region_code || '').trim().toUpperCase();
+      if (!regionCode) {
+        continue;
+      }
+
+      if (!map.has(regionCode)) {
+        map.set(regionCode, {
+          region_code: regionCode,
+          region_label: String(rate.region_label || regionCode),
+          rates: [],
+        });
+      }
+
+      map.get(regionCode)!.rates.push(rate);
+    }
+
+    const groups = Array.from(map.values()).sort((a, b) => a.region_label.localeCompare(b.region_label));
+    for (const group of groups) {
+      group.rates.sort((a, b) => this.getCityLabel(a).localeCompare(this.getCityLabel(b)));
+    }
+    return groups;
+  }
+
+  isRegionCollapsed(sectionKey: string, regionCode: string): boolean {
+    return !!this.collapsedRegionState[sectionKey]?.[regionCode];
+  }
+
+  toggleRegion(sectionKey: string, regionCode: string): void {
+    if (!this.collapsedRegionState[sectionKey]) {
+      this.collapsedRegionState[sectionKey] = {};
+    }
+    this.collapsedRegionState[sectionKey][regionCode] = !this.collapsedRegionState[sectionKey][regionCode];
+  }
+
+  collapseAllRegions(sectionKey: string, rates: Array<{ region_code: string; region_label?: string }>): void {
+    const regionCodes = Array.from(new Set(
+      rates
+        .map((rate) => String(rate.region_code || '').trim().toUpperCase())
+        .filter((regionCode) => !!regionCode)
+    ));
+    if (!this.collapsedRegionState[sectionKey]) {
+      this.collapsedRegionState[sectionKey] = {};
+    }
+    for (const regionCode of regionCodes) {
+      this.collapsedRegionState[sectionKey][regionCode] = true;
+    }
+  }
+
+  expandAllRegions(sectionKey: string, rates: Array<{ region_code: string; region_label?: string }>): void {
+    const regionCodes = Array.from(new Set(
+      rates
+        .map((rate) => String(rate.region_code || '').trim().toUpperCase())
+        .filter((regionCode) => !!regionCode)
+    ));
+    if (!this.collapsedRegionState[sectionKey]) {
+      this.collapsedRegionState[sectionKey] = {};
+    }
+    for (const regionCode of regionCodes) {
+      this.collapsedRegionState[sectionKey][regionCode] = false;
+    }
+  }
+
+  private ensureProvinceDefault(sectionKey: string, regionCode: string, rates: ProvinceRate[]): ProvinceDefaultRate {
+    if (!this.provinceDefaultsBySection[sectionKey]) {
+      this.provinceDefaultsBySection[sectionKey] = {};
+    }
+
+    const existing = this.provinceDefaultsBySection[sectionKey][regionCode];
+    if (existing) {
+      return existing;
+    }
+
+    const seed = rates[0];
+    const created: ProvinceDefaultRate = {
+      standard_rate: Number(seed?.standard_rate ?? 0),
+      weekend_rate: Number(seed?.weekend_rate ?? 0),
+      holiday_rate: Number(seed?.holiday_rate ?? 0),
+    };
+
+    this.provinceDefaultsBySection[sectionKey][regionCode] = created;
+    return created;
+  }
+
+  getProvinceDefault(sectionKey: string, regionCode: string, rates: ProvinceRate[]): ProvinceDefaultRate {
+    return this.ensureProvinceDefault(sectionKey, regionCode, rates);
+  }
+
+  onProvinceDefaultInput(
+    sectionKey: string,
+    regionCode: string,
+    field: keyof ProvinceDefaultRate,
+    value: any,
+    rates: ProvinceRate[],
+  ): void {
+    const defaults = this.ensureProvinceDefault(sectionKey, regionCode, rates);
+    const parsed = parseFloat(String(value));
+    defaults[field] = isNaN(parsed) ? 0 : Math.round(parsed * 100) / 100;
+  }
+
+  applyProvinceDefaultToCities(sectionKey: string, group: ProvinceRateGroup): void {
+    const defaults = this.ensureProvinceDefault(sectionKey, group.region_code, group.rates);
+    for (const rate of group.rates) {
+      rate.standard_rate = defaults.standard_rate;
+      rate.weekend_rate = defaults.weekend_rate;
+      rate.holiday_rate = defaults.holiday_rate;
+    }
   }
 
   saveGuardRates(): void {
@@ -148,6 +340,7 @@ export class BillingConfigurationsComponent implements OnInit {
     this.api.get<ProvinceRate[]>('billing/providers/defaults').subscribe({
       next: (data) => {
         this.providerDefaultRates = data;
+        this.collapseAllRegions('provider-default', this.providerDefaultRates);
         this.providerDefaultLoading = false;
       },
       error: () => {
@@ -169,6 +362,221 @@ export class BillingConfigurationsComponent implements OnInit {
         this.providerDefaultSaving = false;
       },
     });
+  }
+
+  loadGuardMarginRates(): void {
+    this.guardMarginLoading = true;
+    this.api.get<ProvinceRate[]>('billing/margins/guards/defaults').subscribe({
+      next: (data) => {
+        this.guardMarginRates = data;
+        this.collapseAllRegions('guard-margin', this.guardMarginRates);
+        this.guardMarginLoading = false;
+      },
+      error: () => {
+        this.notification.show('Failed to load guard margin defaults', 'fail');
+        this.guardMarginLoading = false;
+      },
+    });
+  }
+
+  saveGuardMarginRates(): void {
+    this.guardMarginSaving = true;
+    this.api.put<any>('billing/margins/guards/defaults', this.guardMarginRates).subscribe({
+      next: (res) => {
+        const updatedCount = Number(res?.updated_count ?? 0);
+        this.notification.show(updatedCount > 0 ? 'Guard margin defaults saved' : 'No guard margin changes detected', updatedCount > 0 ? 'success' : 'fail');
+        this.guardMarginSaving = false;
+        this.loadGuardMarginRates();
+      },
+      error: () => {
+        this.notification.show('Failed to save guard margin defaults', 'fail');
+        this.guardMarginSaving = false;
+      },
+    });
+  }
+
+  loadProviderCommissionRates(): void {
+    this.providerCommissionLoading = true;
+    this.api.get<ProvinceRate[]>('billing/commissions/providers/defaults').subscribe({
+      next: (data) => {
+        this.providerCommissionRates = data;
+        this.collapseAllRegions('provider-commission', this.providerCommissionRates);
+        this.providerCommissionLoading = false;
+      },
+      error: () => {
+        this.notification.show('Failed to load provider commission defaults', 'fail');
+        this.providerCommissionLoading = false;
+      },
+    });
+  }
+
+  saveProviderCommissionRates(): void {
+    this.providerCommissionSaving = true;
+    this.api.put<any>('billing/commissions/providers/defaults', this.providerCommissionRates).subscribe({
+      next: (res) => {
+        const updatedCount = Number(res?.updated_count ?? 0);
+        this.notification.show(updatedCount > 0 ? 'Provider commission defaults saved' : 'No provider commission changes detected', updatedCount > 0 ? 'success' : 'fail');
+        this.providerCommissionSaving = false;
+        this.loadProviderCommissionRates();
+      },
+      error: () => {
+        this.notification.show('Failed to save provider commission defaults', 'fail');
+        this.providerCommissionSaving = false;
+      },
+    });
+  }
+
+  loadGuardTravelPolicies(): void {
+    this.guardTravelLoading = true;
+    this.api.get<TravelPolicyRow[]>('billing/travel/guards/defaults').subscribe({
+      next: (data) => {
+        this.guardTravelPolicies = data;
+        this.collapseAllRegions('guard-travel', this.guardTravelPolicies);
+        this.guardTravelLoading = false;
+      },
+      error: () => {
+        this.notification.show('Failed to load guard travel policies', 'fail');
+        this.guardTravelLoading = false;
+      },
+    });
+  }
+
+  saveGuardTravelPolicies(): void {
+    this.guardTravelSaving = true;
+    this.api.put<any>('billing/travel/guards/defaults', this.guardTravelPolicies).subscribe({
+      next: (res) => {
+        const updatedCount = Number(res?.updated_count ?? 0);
+        this.notification.show(updatedCount > 0 ? 'Guard travel policies saved' : 'No guard travel policy changes detected', updatedCount > 0 ? 'success' : 'fail');
+        this.guardTravelSaving = false;
+        this.loadGuardTravelPolicies();
+      },
+      error: () => {
+        this.notification.show('Failed to save guard travel policies', 'fail');
+        this.guardTravelSaving = false;
+      },
+    });
+  }
+
+  loadProviderTravelPolicies(): void {
+    this.providerTravelLoading = true;
+    this.api.get<TravelPolicyRow[]>('billing/travel/providers/defaults').subscribe({
+      next: (data) => {
+        this.providerTravelPolicies = data;
+        this.collapseAllRegions('provider-travel', this.providerTravelPolicies);
+        this.providerTravelLoading = false;
+      },
+      error: () => {
+        this.notification.show('Failed to load provider travel policies', 'fail');
+        this.providerTravelLoading = false;
+      },
+    });
+  }
+
+  saveProviderTravelPolicies(): void {
+    this.providerTravelSaving = true;
+    this.api.put<any>('billing/travel/providers/defaults', this.providerTravelPolicies).subscribe({
+      next: (res) => {
+        const updatedCount = Number(res?.updated_count ?? 0);
+        this.notification.show(updatedCount > 0 ? 'Provider travel policies saved' : 'No provider travel policy changes detected', updatedCount > 0 ? 'success' : 'fail');
+        this.providerTravelSaving = false;
+        this.loadProviderTravelPolicies();
+      },
+      error: () => {
+        this.notification.show('Failed to save provider travel policies', 'fail');
+        this.providerTravelSaving = false;
+      },
+    });
+  }
+
+  getGroupedTravelPolicies(rows: TravelPolicyRow[]): TravelPolicyGroup[] {
+    const map = new Map<string, TravelPolicyGroup>();
+
+    for (const row of rows) {
+      const regionCode = String(row.region_code || '').trim().toUpperCase();
+      if (!regionCode) {
+        continue;
+      }
+
+      if (!map.has(regionCode)) {
+        map.set(regionCode, {
+          region_code: regionCode,
+          region_label: String(row.region_label || regionCode),
+          provinceDefault: null,
+          cities: [],
+        });
+      }
+
+      const group = map.get(regionCode)!;
+      if (!row.city_code) {
+        group.provinceDefault = row;
+      } else {
+        group.cities.push(row);
+      }
+    }
+
+    const groups = Array.from(map.values()).sort((a, b) => a.region_label.localeCompare(b.region_label));
+    for (const group of groups) {
+      group.cities.sort((a, b) => this.getTravelPolicyCityLabel(a).localeCompare(this.getTravelPolicyCityLabel(b)));
+    }
+    return groups;
+  }
+
+  getTravelPolicyRowKey(row: TravelPolicyRow): string {
+    const region = String(row.region_code || '').trim().toUpperCase();
+    const city = String(row.city_code || '').trim().toUpperCase() || 'DEFAULT';
+    return `${region}_${city}`;
+  }
+
+  getTravelPolicyCityLabel(row: TravelPolicyRow): string {
+    const cityLabel = String(row.city_label || '').trim();
+    if (cityLabel) {
+      return cityLabel;
+    }
+    const location = String(row.location_label || '').trim();
+    const region = String(row.region_label || '').trim();
+    if (location && region && location.startsWith(`${region} / `)) {
+      return location.slice(region.length + 3);
+    }
+    return location || 'City';
+  }
+
+  getTravelPolicyProvinceDefault(group: TravelPolicyGroup): TravelPolicyRow | null {
+    return group.provinceDefault;
+  }
+
+  onTravelNumberInput(
+    row: TravelPolicyRow,
+    field: keyof Pick<TravelPolicyRow, 'included_radius_km' | 'rate_per_km' | 'max_auto_match_radius_km' | 'manual_review_over_km'>,
+    value: any,
+  ): void {
+    const raw = String(value ?? '').trim();
+    if (!raw && (field === 'max_auto_match_radius_km' || field === 'manual_review_over_km')) {
+      row[field] = null;
+      return;
+    }
+    const parsed = parseFloat(raw);
+    const nextValue = isNaN(parsed)
+      ? (field === 'max_auto_match_radius_km' || field === 'manual_review_over_km' ? null : 0)
+      : Math.round(parsed * 100) / 100;
+
+    if (field === 'included_radius_km' || field === 'rate_per_km') {
+      row[field] = Number(nextValue ?? 0);
+      return;
+    }
+
+    row[field] = nextValue;
+  }
+
+  applyProvinceDefaultTravelToCities(group: TravelPolicyGroup): void {
+    if (!group.provinceDefault) {
+      return;
+    }
+    for (const city of group.cities) {
+      city.included_radius_km = group.provinceDefault.included_radius_km;
+      city.rate_per_km = group.provinceDefault.rate_per_km;
+      city.max_auto_match_radius_km = group.provinceDefault.max_auto_match_radius_km;
+      city.manual_review_over_km = group.provinceDefault.manual_review_over_km;
+    }
   }
 
   // ----------------------------------------------------------------
@@ -230,6 +638,7 @@ export class BillingConfigurationsComponent implements OnInit {
     this.api.get<ProvinceRate[]>(`billing/providers/${providerId}`).subscribe({
       next: (data) => {
         this.providerRates = data;
+        this.collapseAllRegions('provider-override', this.providerRates);
         this.providerRatesLoading = false;
       },
       error: () => {
@@ -281,6 +690,7 @@ export class BillingConfigurationsComponent implements OnInit {
     this.api.get<ProvinceRate[]>(`billing/guards/${guardId}`).subscribe({
       next: (data) => {
         this.guardOverrideRates = data;
+        this.collapseAllRegions('guard-override', this.guardOverrideRates);
         this.guardOverrideLoading = false;
       },
       error: () => {
@@ -360,6 +770,24 @@ export class BillingConfigurationsComponent implements OnInit {
       subtitle: `Service Provider: ${selectedProvider?.label || this.selectedProviderId}`,
       entityId: this.selectedProviderId,
       emptyMessage: 'No activity logs found for this service provider billing override.',
+    });
+  }
+
+  openGuardMarginDefaultLogs(): void {
+    this.openBillingLogs({
+      title: 'Guard Margin Activity Logs',
+      subtitle: 'Default guard margin changes',
+      entityId: 'guard-margin-default-rates',
+      emptyMessage: 'No activity logs found for guard margin defaults.',
+    });
+  }
+
+  openProviderCommissionDefaultLogs(): void {
+    this.openBillingLogs({
+      title: 'Provider Commission Activity Logs',
+      subtitle: 'Default provider commission changes',
+      entityId: 'provider-commission-default-rates',
+      emptyMessage: 'No activity logs found for provider commission defaults.',
     });
   }
 

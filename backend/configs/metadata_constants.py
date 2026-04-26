@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from typing import Dict, List
 
 from orion.services.mongo_manager.shared_model.db_tenant_model import (
@@ -64,6 +66,46 @@ CANADIAN_PROVINCE_OPTIONS: List[Option] = [
     {"value": "SK", "label": "Saskatchewan"},
     {"value": "YT", "label": "Yukon"},
 ]
+
+def _load_canadian_cities_by_province_options() -> Dict[str, List[Option]]:
+    data_file = Path(__file__).resolve().parent / "data" / "canadian_cities_by_province.json"
+    if not data_file.exists():
+        raise RuntimeError(f"Missing Canadian cities dataset file: {data_file}")
+
+    with data_file.open("r", encoding="utf-8") as fh:
+        raw = json.load(fh)
+
+    city_map: Dict[str, List[Option]] = {}
+    for province in CANADIAN_PROVINCE_OPTIONS:
+        code = province["value"]
+        entries = raw.get(code, []) if isinstance(raw, dict) else []
+        normalized: List[Option] = []
+        seen: set[str] = set()
+        for item in entries:
+            value = str(item.get("value") if isinstance(item, dict) else "").strip().upper()
+            label = str(item.get("label") if isinstance(item, dict) else "").strip()
+            if not value or not label or value in seen:
+                continue
+            normalized.append({"value": value, "label": label})
+            seen.add(value)
+        city_map[code] = normalized
+
+    return city_map
+
+
+CANADIAN_CITIES_BY_PROVINCE_OPTIONS: Dict[str, List[Option]] = _load_canadian_cities_by_province_options()
+
+BILLING_REGION_CITY_OPTIONS: List[Dict[str, str]] = []
+for province in CANADIAN_PROVINCE_OPTIONS:
+    region_code = province["value"]
+    region_label = province["label"]
+    for city in CANADIAN_CITIES_BY_PROVINCE_OPTIONS.get(region_code, []):
+        BILLING_REGION_CITY_OPTIONS.append({
+            "region_code": region_code,
+            "region_label": region_label,
+            "city_code": city["value"],
+            "city_label": city["label"],
+        })
 
 IDENTITY_DOCUMENT_TYPES: List[Dict[str, object]] = [
     {

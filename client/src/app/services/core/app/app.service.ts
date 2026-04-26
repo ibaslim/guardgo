@@ -47,7 +47,10 @@ export class AppService {
       licenses: [],
       assigned_quota: '0',
       quota_exceeded: false,
-      status: ''
+      status: '',
+      ownership_type: null,
+      service_provider_tenant_id: null,
+      service_provider: null
     },
     alerts: []
   });
@@ -113,7 +116,10 @@ export class AppService {
             licenses: [],
             assigned_quota: '0',
             quota_exceeded: false,
-            status: ''
+            status: '',
+            ownership_type: null,
+            service_provider_tenant_id: null,
+            service_provider: null
           },
           alerts: []
         });
@@ -236,7 +242,10 @@ export class AppService {
         licenses: [],
         assigned_quota: '0',
         quota_exceeded: false,
-        status: ''
+        status: '',
+        ownership_type: null,
+        service_provider_tenant_id: null,
+        service_provider: null
       },
       alerts: []
     });

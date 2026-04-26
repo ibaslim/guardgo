@@ -5,6 +5,8 @@ from orion.api.server.config_manager.config_controller import config_controller
 from configs.metadata_constants import (
     COUNTRY_OPTIONS,
     CANADIAN_PROVINCE_OPTIONS,
+    CANADIAN_CITIES_BY_PROVINCE_OPTIONS,
+    BILLING_REGION_CITY_OPTIONS,
     IDENTITY_DOCUMENT_TYPES,
     SECURITY_LICENSE_TYPE_OPTIONS,
     TRAINING_CERTIFICATE_TYPE_OPTIONS,
@@ -48,6 +50,7 @@ async def get_guard_metadata():
     return {
         "countries": COUNTRY_OPTIONS,
         "canadianProvinces": CANADIAN_PROVINCE_OPTIONS,
+        "canadianCitiesByProvince": CANADIAN_CITIES_BY_PROVINCE_OPTIONS,
         "identityDocumentTypes": IDENTITY_DOCUMENT_TYPES,
         "securityLicenseTypes": SECURITY_LICENSE_TYPE_OPTIONS,
         "trainingCertificateTypes": TRAINING_CERTIFICATE_TYPE_OPTIONS,
@@ -69,6 +72,8 @@ async def get_client_metadata():
     return {
         "countries": COUNTRY_OPTIONS,
         "canadianProvinces": CANADIAN_PROVINCE_OPTIONS,
+        "canadianCitiesByProvince": CANADIAN_CITIES_BY_PROVINCE_OPTIONS,
+        "billingLocationOptions": BILLING_REGION_CITY_OPTIONS,
         "siteTypeOptions": CLIENT_SITE_TYPE_OPTIONS,
         "guardTypeOptions": CLIENT_GUARD_TYPE_OPTIONS,
         "clientTypeOptions": CLIENT_TYPE_OPTIONS,
@@ -105,7 +110,7 @@ async def get_user_resource(id: str):
 
 
 @public_routes.get("/api/s/static/system/{id}", include_in_schema=False, dependencies=[Depends(cookie_required)])
-async def get_user_resource():
+async def get_user_resource(id: str):
     return await ResourceManager.get_instance().get_system_image(id)
 
 @public_routes.get("/api/tenant/files/identity/{file_id}", include_in_schema=False, dependencies=[Depends(cookie_required)])

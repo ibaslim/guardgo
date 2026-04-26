@@ -27,7 +27,7 @@
       </ng-template>
     </thead>
     <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-      <ng-container *ngIf="loading; else tableRows">
+      <ng-container *ngIf="isLoading; else tableRows">
         <tr *ngFor="let _ of [1,2,3,4,5]">
           <td [attr.colspan]="columnCount" class="px-4 py-2">
             <div class="h-4 rounded bg-gray-200 dark:bg-gray-700 w-full animate-pulse"></div>
@@ -35,7 +35,7 @@
         </tr>
       </ng-container>
       <ng-template #tableRows>
-        <tr *ngIf="!loading && pagedData.length === 0">
+        <tr *ngIf="!isLoading && pagedData.length === 0">
           <td [attr.colspan]="columnCount" class="px-4 py-6 text-center text-gray-400 dark:text-gray-500">
             <div class="flex flex-col items-center justify-center gap-2">
               <svg class="w-12 h-12 mb-2 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 48 48"><circle cx="24" cy="24" r="22" stroke-width="2"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 24h16M16 32h8"/></svg>

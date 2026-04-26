@@ -21,6 +21,17 @@ import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { getIssuingAuthorityForProvince } from '../../shared/constants/provincial-authorities.constants';
+import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared/helpers/distance.helper';
+import {
+  buildAlphabeticDummyTag,
+  buildSeededCaPhone,
+  isLocalhostForDummyData,
+  isoDateYearsAgo,
+  isoDateYearsAhead,
+  nextDummySeed,
+  pickCityValueForProvince,
+  pickFirstOptionValue,
+} from '../../shared/helpers/onboarding-dummy-data.helper';
 
 interface PhoneNumber {
   e164: string;
@@ -63,10 +74,9 @@ interface SecurityLicense {
 }
 
 interface OperatingRegion {
-  city: string;
   country: string;
-  province: string;
-  coverageRadiusKm: number | null;
+  regionCode: string;
+  cityEntries: { cityCode: string; coverageRadiusKm: number | null }[];
 }
 
 interface InsurancePolicy {
@@ -87,7 +97,7 @@ interface ServiceProvider {
   legalCompanyName: string;
   tradingName: string;
   corporationNumber: string;
-  yearOfEstablishment: number | null;
+  yearOfEstablishment: string | number | null;
   companyWebsite: string;
   taxRegistrationNumber: string;
   headOfficeAddress: Address;
@@ -123,6 +133,7 @@ interface ServiceProvider {
   styleUrls: ['./service-provider-setting.component.css']
 })
 export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
+  readonly showDummyDataButton = isLocalhostForDummyData();
 
   @Input() showPageWrapper: boolean = true;
   @Input() readonly: boolean = false;
@@ -177,10 +188,9 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     },
     operatingRegions: [
       {
-        city: '',
         country: 'CA',
-        province: '',
-        coverageRadiusKm: null
+        regionCode: '',
+        cityEntries: [{ cityCode: '', coverageRadiusKm: null }]
       }
     ],
     guardCategoriesOffered: []
@@ -192,8 +202,14 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
 
   countryOptions: { value: string; label: string }[] = [];
   provinceOptions: { value: string; label: string }[] = [];
+  canadianCitiesByProvinceOptions: Record<string, { value: string; label: string }[]> = {};
   securityLicenseTypeOptions: { value: string; label: string }[] = [];
   guardTypeOptions: { value: string; label: string }[] = [];
+  selectedDistanceUnit: DistanceUnit = 'km';
+  readonly distanceUnitOptions: { value: DistanceUnit; label: string }[] = [
+    { value: 'km', label: 'Kilometers (km)' },
+    { value: 'mi', label: 'Miles (mi)' }
+  ];
 
   securityLicenseUploadInProgress: Record<string, boolean> = {};
   securityLicenseUploadErrors: Record<string, string> = {};
@@ -209,6 +225,9 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   ) { }
 
   ngOnInit(): void {
+    const preferredUnit = this.appService.getConfig().localSettings.distanceUnit;
+    this.selectedDistanceUnit = preferredUnit === 'mi' ? 'mi' : 'km';
+
     this.loadProviderMetadata(() => {
       if (this.providerData && this.hasProviderData(this.providerData)) {
         this.providerFormModel = this.transformBackendDataToForm(this.providerData as any);
@@ -246,6 +265,9 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
           if (response?.canadianProvinces?.length) {
             this.provinceOptions = response.canadianProvinces;
           }
+          if (response?.canadianCitiesByProvince) {
+            this.canadianCitiesByProvinceOptions = response.canadianCitiesByProvince;
+          }
           onLoaded?.();
         },
         error: () => {
@@ -279,13 +301,42 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   }
 
   private mapAddressFromBackend(raw: any): Address {
+    const provinceCode = (raw?.province || '').toString().trim();
+    const rawCity = (raw?.city || '').toString().trim();
+    const resolvedCityCode = this.resolveCityCodeForRegion(provinceCode, rawCity);
+    const fallbackDefaultCity = this.getCityOptionsForRegion(provinceCode)[0]?.value || '';
     return {
       street: raw?.street || '',
-      city: raw?.city || '',
+      city: resolvedCityCode || rawCity || fallbackDefaultCity,
       country: raw?.country || 'CA',
-      province: raw?.province || '',
+      province: provinceCode,
       postalCode: raw?.postal_code || raw?.postalCode || ''
     };
+  }
+
+  getHeadOfficeCityOptions(): { value: string; label: string }[] {
+    const provinceCode = this.providerFormModel.headOfficeAddress.province;
+    const canonical = this.getCityOptionsForRegion(provinceCode);
+    const current = String(this.providerFormModel.headOfficeAddress.city || '').trim();
+    if (!current) {
+      return canonical;
+    }
+
+    const exists = canonical.some(option => option.value === current);
+    if (exists) {
+      return canonical;
+    }
+
+    return [...canonical, { value: current, label: current }];
+  }
+
+  onHeadOfficeProvinceChange(nextProvinceCode: string): void {
+    this.providerFormModel.headOfficeAddress.province = nextProvinceCode;
+    const options = this.getHeadOfficeCityOptions();
+    const isCurrentValid = options.some(option => option.value === this.providerFormModel.headOfficeAddress.city);
+    if (!isCurrentValid) {
+      this.providerFormModel.headOfficeAddress.city = '';
+    }
   }
 
   /**
@@ -311,6 +362,167 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     }
   }
 
+  get coverageRadiusLabel(): string {
+    return `Coverage Radius (${this.selectedDistanceUnit})`;
+  }
+
+  get minimumCoverageRadiusDisplay(): number {
+    return this.selectedDistanceUnit === 'mi' ? kmToMiles(1) : 1;
+  }
+
+  get minimumCoverageRadiusText(): string {
+    return formatDistance(this.minimumCoverageRadiusDisplay, this.selectedDistanceUnit);
+  }
+
+  onDistanceUnitChange(nextUnitRaw: string): void {
+    const nextUnit: DistanceUnit = nextUnitRaw === 'mi' ? 'mi' : 'km';
+    if (nextUnit === this.selectedDistanceUnit) {
+      return;
+    }
+
+    this.providerFormModel.operatingRegions = this.providerFormModel.operatingRegions.map((region) => {
+      return {
+        ...region,
+        cityEntries: (region.cityEntries || []).map((entry) => {
+          const normalizedRadius = this.normalizeCoverageRadius(entry.coverageRadiusKm);
+          if (normalizedRadius == null) {
+            return entry;
+          }
+          return {
+            ...entry,
+            coverageRadiusKm: this.convertDistanceBetweenUnits(normalizedRadius, this.selectedDistanceUnit, nextUnit)
+          };
+        })
+      };
+    });
+
+    this.selectedDistanceUnit = nextUnit;
+    this.appService.set('distanceUnit', nextUnit);
+  }
+
+  private toDisplayDistance(kmValue: number): number {
+    return this.selectedDistanceUnit === 'mi'
+      ? kmToMiles(kmValue)
+      : Number(kmValue.toFixed(1));
+  }
+
+  private toStorageKm(displayValue: number): number {
+    return this.selectedDistanceUnit === 'mi'
+      ? milesToKm(displayValue)
+      : Number(displayValue.toFixed(2));
+  }
+
+  private convertDistanceBetweenUnits(value: number, from: DistanceUnit, to: DistanceUnit): number {
+    if (from === to) {
+      return value;
+    }
+    return from === 'km' ? kmToMiles(value) : milesToKm(value);
+  }
+
+  private normalizeCoverageRadius(value: unknown): number | null {
+    if (value == null) {
+      return null;
+    }
+    if (typeof value === 'string' && !value.trim()) {
+      return null;
+    }
+    const normalized = Number(value);
+    return Number.isFinite(normalized) ? normalized : null;
+  }
+
+  getCoverageRadiusDualLabel(displayRadius: number | null | undefined): string {
+    const displayValue = Number(displayRadius);
+    if (!Number.isFinite(displayValue) || displayValue <= 0) {
+      return '';
+    }
+
+    const kmValue = this.toStorageKm(displayValue);
+    const miValue = kmToMiles(kmValue);
+    if (this.selectedDistanceUnit === 'mi') {
+      return `${formatDistance(miValue, 'mi')} (${formatDistance(kmValue, 'km')})`;
+    }
+    return `${formatDistance(kmValue, 'km')} (${formatDistance(miValue, 'mi')})`;
+  }
+
+  getCityOptionsForRegion(regionCode: string): { value: string; label: string }[] {
+    if (!regionCode) {
+      return [];
+    }
+    return this.canadianCitiesByProvinceOptions[regionCode] || [];
+  }
+
+  getProvinceLabel(regionCode: string): string {
+    const normalized = String(regionCode || '').trim().toUpperCase();
+    if (!normalized) {
+      return '';
+    }
+    return this.provinceOptions.find(option => option.value === normalized)?.label || normalized;
+  }
+
+  onRegionCodeChange(index: number, regionCode: string): void {
+    const region = this.providerFormModel.operatingRegions[index];
+    if (!region) {
+      return;
+    }
+
+    region.regionCode = regionCode;
+    const options = this.getCityOptionsForRegion(regionCode);
+    region.cityEntries = (region.cityEntries || []).map((entry) => {
+      const normalized = String(entry.cityCode || '').trim().toUpperCase();
+      return {
+        ...entry,
+        cityCode: options.some(opt => opt.value === normalized) ? normalized : ''
+      };
+    });
+
+    if (!region.cityEntries.length) {
+      region.cityEntries = [{ cityCode: '', coverageRadiusKm: null }];
+    }
+  }
+
+  addRegionCity(index: number): void {
+    const region = this.providerFormModel.operatingRegions[index];
+    if (!region) {
+      return;
+    }
+    region.cityEntries = [...(region.cityEntries || []), { cityCode: '', coverageRadiusKm: null }];
+  }
+
+  removeRegionCity(regionIndex: number, cityIndex: number): void {
+    const region = this.providerFormModel.operatingRegions[regionIndex];
+    if (!region) {
+      return;
+    }
+
+    region.cityEntries.splice(cityIndex, 1);
+    if (!region.cityEntries.length) {
+      region.cityEntries = [{ cityCode: '', coverageRadiusKm: null }];
+    }
+  }
+
+  private resolveCityCodeForRegion(regionCode: string, valueOrLabel: string): string {
+    const options = this.getCityOptionsForRegion(regionCode);
+    const normalized = String(valueOrLabel || '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const byValue = options.find(opt => opt.value === normalized.toUpperCase());
+    if (byValue) {
+      return byValue.value;
+    }
+
+    const byLabel = options.find(opt => opt.label.toLowerCase() === normalized.toLowerCase());
+    return byLabel?.value || '';
+  }
+
+  private cityLabelFromCode(regionCode: string, cityCode: string): string {
+    const options = this.getCityOptionsForRegion(regionCode);
+    const raw = String(cityCode || '').trim();
+    const normalized = raw.toUpperCase();
+    return options.find(opt => opt.value === normalized)?.label || raw;
+  }
+
   private transformBackendDataToForm(data: any): ServiceProvider {
     const profile = data?.profile || data || {};
     const headOfficeAddress = this.mapAddressFromBackend(profile.head_office_address || profile.headOfficeAddress || {});
@@ -326,10 +538,46 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
 
     const mappedRegions = Array.isArray(profile.operating_regions)
       ? profile.operating_regions.map((region: any) => ({
-        city: region.city || '',
         country: region.country || 'CA',
-        province: region.province || '',
-        coverageRadiusKm: region.coverage_radius_km ?? region.coverageRadiusKm ?? null
+        regionCode: region.region_code || region.province || '',
+        cityEntries: (() => {
+          const regionCode = (region.region_code || region.province || '').toString().trim();
+          const firstCityByProvince = this.getCityOptionsForRegion(regionCode)[0]?.value || '';
+          const defaultRadius = (() => {
+            const kmValue = Number(region.coverage_radius_km ?? region.coverageRadiusKm);
+            return Number.isFinite(kmValue) ? this.toDisplayDistance(kmValue) : null;
+          })();
+
+          if (Array.isArray(region.city_entries) && region.city_entries.length > 0) {
+            const mappedEntries = region.city_entries
+              .map((entry: any) => {
+                const cityCode = this.resolveCityCodeForRegion(regionCode, entry?.city_code || entry?.cityCode || '');
+                if (!cityCode) {
+                  return null;
+                }
+                const kmValue = Number(entry?.coverage_radius_km ?? entry?.coverageRadiusKm);
+                return {
+                  cityCode,
+                  coverageRadiusKm: Number.isFinite(kmValue) ? this.toDisplayDistance(kmValue) : defaultRadius
+                };
+              })
+              .filter((entry: any) => !!entry);
+            return mappedEntries.length ? mappedEntries : (firstCityByProvince ? [{ cityCode: firstCityByProvince, coverageRadiusKm: defaultRadius }] : [{ cityCode: '', coverageRadiusKm: defaultRadius }]);
+          }
+
+          if (Array.isArray(region.city_codes) && region.city_codes.length > 0) {
+            const mappedEntries = region.city_codes
+              .map((code: string) => this.resolveCityCodeForRegion(regionCode, code))
+              .filter((code: string) => !!code)
+              .map((cityCode: string) => ({ cityCode, coverageRadiusKm: defaultRadius }));
+            return mappedEntries.length ? mappedEntries : (firstCityByProvince ? [{ cityCode: firstCityByProvince, coverageRadiusKm: defaultRadius }] : [{ cityCode: '', coverageRadiusKm: defaultRadius }]);
+          }
+
+          const legacyCityCode = this.resolveCityCodeForRegion(regionCode, region.city || '');
+          return legacyCityCode
+            ? [{ cityCode: legacyCityCode, coverageRadiusKm: defaultRadius }]
+            : (firstCityByProvince ? [{ cityCode: firstCityByProvince, coverageRadiusKm: defaultRadius }] : [{ cityCode: '', coverageRadiusKm: defaultRadius }]);
+        })(),
       }))
       : [];
 
@@ -385,10 +633,9 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
         ? mappedRegions
         : [
           {
-            city: '',
             country: 'CA',
-            province: '',
-            coverageRadiusKm: null
+            regionCode: '',
+            cityEntries: [{ cityCode: '', coverageRadiusKm: null }]
           }
         ],
       guardCategoriesOffered: Array.isArray(profile.guard_categories_offered)
@@ -419,10 +666,9 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
 
   addRegion(): void {
     this.providerFormModel.operatingRegions.push({
-      city: '',
       country: 'CA',
-      province: '',
-      coverageRadiusKm: null
+      regionCode: '',
+      cityEntries: [{ cityCode: '', coverageRadiusKm: null }]
     });
   }
 
@@ -513,8 +759,11 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     }
     if (!this.providerFormModel.headOfficeAddress.city.trim()) {
       this.providerErrors.officeCity = 'Office city is required.';
-    } else if (!/^[a-zA-Z\s]+$/.test(this.providerFormModel.headOfficeAddress.city)) {
-      this.providerErrors.officeCity = 'City can only contain letters and spaces.';
+    } else {
+      const cityOptions = this.getHeadOfficeCityOptions();
+      if (cityOptions.length && !cityOptions.some(option => option.value === this.providerFormModel.headOfficeAddress.city)) {
+        this.providerErrors.officeCity = 'Please select a valid city for the selected province.';
+      }
     }
     if (!this.providerFormModel.headOfficeAddress.country.trim()) {
       this.providerErrors.officeCountry = 'Office country is required.';
@@ -698,25 +947,50 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     }
 
     // Operating Regions (at least one required)
-    const validRegions = this.providerFormModel.operatingRegions.filter(region => region.city.trim());
+    const validRegions = this.providerFormModel.operatingRegions.filter(region => {
+      const validEntries = (region.cityEntries || []).filter(entry => String(entry.cityCode || '').trim());
+      return !!region.regionCode.trim() && validEntries.length > 0;
+    });
     if (validRegions.length === 0) {
       this.providerErrors.operatingRegions = 'At least one operating region is required.';
     }
     this.providerFormModel.operatingRegions.forEach((region, index) => {
-      if (!region.city.trim()) {
-        this.providerErrors[`region_${index}_city`] = 'City is required.';
-      } else if (!/^[a-zA-Z\s]+$/.test(region.city)) {
-        this.providerErrors[`region_${index}_city`] = 'City can only contain letters and spaces.';
-      }
       if (!region.country.trim()) {
         this.providerErrors[`region_${index}_country`] = 'Country is required.';
       }
-      if (region.country === 'CA' && !region.province.trim()) {
-        this.providerErrors[`region_${index}_province`] = 'Province is required for Canada.';
+
+      if (region.country === 'CA' && !region.regionCode.trim()) {
+        this.providerErrors[`region_${index}_regionCode`] = 'Province is required for Canada.';
+      } else if (region.country === 'CA') {
+        const validProvinces = this.provinceOptions.map(option => option.value);
+        if (validProvinces.length && !validProvinces.includes(region.regionCode)) {
+          this.providerErrors[`region_${index}_regionCode`] = 'Please select a valid province.';
+        }
       }
-      if (region.coverageRadiusKm != null && region.coverageRadiusKm < 1) {
-        this.providerErrors[`region_${index}_radius`] = 'Coverage radius must be at least 1 km.';
+
+      const cityOptions = this.getCityOptionsForRegion(region.regionCode);
+      const cityCodes = (region.cityEntries || []).map(entry => String(entry.cityCode || '').trim().toUpperCase());
+      const uniqueCityCodes = Array.from(new Set(cityCodes.filter(code => !!code)));
+      if (!uniqueCityCodes.length) {
+        this.providerErrors[`region_${index}_cityCodes`] = 'Select at least one city for this province.';
+      } else if (cityOptions.length && uniqueCityCodes.some(code => !cityOptions.some(opt => opt.value === code))) {
+        this.providerErrors[`region_${index}_cityCodes`] = 'One or more selected cities are invalid for this province.';
       }
+
+      (region.cityEntries || []).forEach((entry, cityIndex) => {
+        const cityCode = String(entry.cityCode || '').trim();
+        if (!cityCode) {
+          return;
+        }
+        const normalizedRadius = this.normalizeCoverageRadius(entry.coverageRadiusKm);
+        if (normalizedRadius == null) {
+          this.providerErrors[`region_${index}_city_${cityIndex}_radius`] = 'Coverage radius is required for each selected city.';
+          return;
+        }
+        if (normalizedRadius < this.minimumCoverageRadiusDisplay) {
+          this.providerErrors[`region_${index}_city_${cityIndex}_radius`] = `Coverage radius must be at least ${this.minimumCoverageRadiusText}.`;
+        }
+      });
     });
 
     // Guard Categories (at least one required)
@@ -886,7 +1160,12 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     }
 
     // Filter out empty strings from arrays
-    const validRegions = this.providerFormModel.operatingRegions.filter(region => region.city.trim());
+    const validRegions = this.providerFormModel.operatingRegions.filter(region => {
+      const validEntries = (region.cityEntries || [])
+        .filter(entry => String(entry.cityCode || '').trim().toUpperCase())
+        .filter(entry => this.normalizeCoverageRadius(entry.coverageRadiusKm) != null);
+      return !!region.regionCode.trim() && validEntries.length > 0;
+    });
     const validCategories = this.providerFormModel.guardCategoriesOffered.filter(c => c.trim());
 
     const primaryRepPhone = this.providerFormModel.primaryRepresentative.mobilePhone?.e164
@@ -942,7 +1221,10 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
         tax_registration_number: this.providerFormModel.taxRegistrationNumber || undefined,
         head_office_address: {
           street: this.providerFormModel.headOfficeAddress.street,
-          city: this.providerFormModel.headOfficeAddress.city,
+          city: this.cityLabelFromCode(
+            this.providerFormModel.headOfficeAddress.province,
+            this.providerFormModel.headOfficeAddress.city
+          ),
           country: this.providerFormModel.headOfficeAddress.country,
           province: this.providerFormModel.headOfficeAddress.province || '',
           postal_code: this.providerFormModel.headOfficeAddress.postalCode
@@ -977,12 +1259,40 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
           ...(this.providerFormModel.insuranceDetails.existingFileMimeType && { document_file_mime_type: this.providerFormModel.insuranceDetails.existingFileMimeType }),
           ...(this.providerFormModel.insuranceDetails.existingFileSize != null && { document_file_size: this.providerFormModel.insuranceDetails.existingFileSize })
         },
-        operating_regions: validRegions.map(region => ({
-          city: region.city,
-          country: region.country,
-          province: region.province,
-          coverage_radius_km: region.coverageRadiusKm
-        })),
+        operating_regions: validRegions.map(region => {
+          const cityEntries = (region.cityEntries || [])
+            .map(entry => ({
+              cityCode: String(entry.cityCode || '').trim().toUpperCase(),
+              coverageRadiusKm: this.normalizeCoverageRadius(entry.coverageRadiusKm)
+            }))
+            .filter(entry => !!entry.cityCode)
+            .filter(entry => entry.coverageRadiusKm != null);
+
+          const dedupedEntriesMap = new Map<string, number>();
+          cityEntries.forEach(entry => {
+            if (!dedupedEntriesMap.has(entry.cityCode)) {
+              dedupedEntriesMap.set(entry.cityCode, Number(entry.coverageRadiusKm));
+            }
+          });
+
+          const dedupedEntries = Array.from(dedupedEntriesMap.entries()).map(([cityCode, coverageRadiusKm]) => ({ cityCode, coverageRadiusKm }));
+          const cityCodes = dedupedEntries.map(entry => entry.cityCode);
+          const firstCityCode = cityCodes[0] || '';
+          return {
+            country: 'CA',
+            province: region.regionCode,
+            region_code: region.regionCode,
+            city: this.cityLabelFromCode(region.regionCode, firstCityCode),
+            city_code: firstCityCode,
+            city_codes: cityCodes,
+            coverage_radius_km: dedupedEntries.length ? this.toStorageKm(dedupedEntries[0].coverageRadiusKm) : null,
+            city_entries: dedupedEntries.map(entry => ({
+              city_code: entry.cityCode,
+              city: this.cityLabelFromCode(region.regionCode, entry.cityCode),
+              coverage_radius_km: this.toStorageKm(entry.coverageRadiusKm)
+            }))
+          };
+        }),
         guard_categories_offered: validCategories
       },
       status: 'active'
@@ -1003,5 +1313,75 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
         this.providerErrors.submit = err?.error?.detail || 'Failed to submit service provider profile.';
       }
     });
+  }
+
+  fillDummyData(): void {
+    const seed = nextDummySeed();
+    const nameTag = buildAlphabeticDummyTag(seed.sequence);
+    const province = pickFirstOptionValue(this.provinceOptions, 'ON');
+    const city = pickCityValueForProvince(this.canadianCitiesByProvinceOptions, province, 'TORONTO');
+    const licenseType = pickFirstOptionValue(this.securityLicenseTypeOptions, 'securityGuard');
+    const guardCategory = pickFirstOptionValue(this.guardTypeOptions, 'securityGuard');
+    const legalCompanyName = `Local Test Security Services ${nameTag} Ltd`;
+
+    this.providerFormModel.legalCompanyName = legalCompanyName;
+    this.providerFormModel.tradingName = `Local Test Security ${nameTag}`;
+    this.providerFormModel.corporationNumber = `SP-CORP-${seed.suffix}`;
+    this.providerFormModel.yearOfEstablishment = isoDateYearsAgo(8);
+    this.providerFormModel.companyWebsite = `https://local-sp-${seed.suffix}.example.com`;
+    this.providerFormModel.taxRegistrationNumber = `SP-TAX-${seed.suffix}`;
+    this.providerFormModel.headOfficeAddress = {
+      street: `${500 + seed.sequence} Provider Road`,
+      city,
+      country: 'CA',
+      province,
+      postalCode: 'M4B 1B3',
+    };
+    this.providerFormModel.primaryRepresentative = {
+      name: `Provider Primary Contact ${nameTag}`,
+      email: `provider.primary+${seed.suffix}@example.com`,
+      mobilePhone: buildSeededCaPhone(seed.phoneSuffix, 20, 'mobile'),
+      landlinePhone: buildSeededCaPhone(seed.phoneSuffix, 26, 'landline'),
+    };
+    this.providerFormModel.secondaryContact = {
+      name: `Provider Secondary Contact ${nameTag}`,
+      email: `provider.secondary+${seed.suffix}@example.com`,
+      mobilePhone: buildSeededCaPhone(seed.phoneSuffix, 21, 'mobile'),
+      landlinePhone: buildSeededCaPhone(seed.phoneSuffix, 27, 'landline'),
+    };
+    this.providerFormModel.securityLicenses = [
+      {
+        licenseNumber: `SP-LIC-${seed.suffix}`,
+        licenseType,
+        issuingProvince: province,
+        issuingAuthority: this.getSuggestedIssuingAuthority(province) || 'Provincial Authority',
+        issueDate: isoDateYearsAgo(2),
+        expiryDate: isoDateYearsAhead(3),
+        file: null,
+        id: `sec_license_local_${seed.suffix}`,
+      },
+    ];
+    this.providerFormModel.operatingRegions = [
+      {
+        country: 'CA',
+        regionCode: province,
+        cityEntries: [
+          {
+            cityCode: city,
+            coverageRadiusKm: Math.max(this.minimumCoverageRadiusDisplay, 10),
+          },
+        ],
+      },
+    ];
+    this.providerFormModel.guardCategoriesOffered = [guardCategory];
+    this.providerFormModel.insuranceDetails = {
+      policyNumber: `INS-POL-${seed.suffix}`,
+      coverageAmount: 2500000,
+      currency: 'CAD',
+      expiryDate: isoDateYearsAhead(2),
+      coverageDetails: `General liability coverage package ${nameTag}`,
+      file: null,
+    };
+    this.providerErrors = {};
   }
 }

@@ -78,6 +78,12 @@ class auth_manager:
         if not tenant_uuid and not is_platform_user:
             raise HTTPException(status_code=401, detail="account not found")
 
+        if not is_platform_user and bool(getattr(user, "invite_pending", False)):
+            raise HTTPException(status_code=401, detail="Invite activation pending")
+
+        if not is_platform_user and not getattr(user, "account_verify_at", None):
+            raise HTTPException(status_code=401, detail="Email verification pending")
+
         if tenant_uuid:
             engine = mongo_controller.get_instance().get_engine()
             tenant = await engine.find_one(
@@ -131,7 +137,6 @@ class auth_manager:
         user.verification_token = None
         user.verification_expiry = None
         await engine.save(user)
-
 
         return {"message": "Email verified successfully. You may continue onboarding."}
 

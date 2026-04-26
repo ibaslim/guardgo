@@ -1,13 +1,17 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { LoaderComponent } from '../loader';
+import { LoadingFeedbackService } from '../../shared/services/loading-feedback.service';
 
 @Component({
   selector: 'app-button',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, LoaderComponent],
   templateUrl: './button.component.html'
 })
 export class ButtonComponent {
+  private readonly loadingFeedback = inject(LoadingFeedbackService);
+
   @Output() pressed = new EventEmitter<Event>();
   @Input() type: 'primary' | 'secondary' | 'success' | 'danger' | 'warning' | 'info' | 'outline' | 'link' = 'primary';
   @Input() htmlType: 'button' | 'submit' | 'reset' = 'button';
@@ -18,11 +22,17 @@ export class ButtonComponent {
   @Input() customClass = '';
   @Input() ariaLabel = '';
   @Input() loading = false;
+  @Input() loadingScope = '';
+  @Input() loadingLabel = 'Loading...';
   @Input() iconOnly = false;
   @Input() hasIcon = false;
 
   get showIconSlot(): boolean {
     return this.iconOnly || this.hasIcon;
+  }
+
+  get isLoading(): boolean {
+    return this.loading || (!!this.loadingScope && this.loadingFeedback.isScopeLoading(this.loadingScope));
   }
 
   get sizeClass(): string {
@@ -37,7 +47,7 @@ export class ButtonComponent {
   }
 
   handleClick(event: Event) {
-    if (this.disabled || this.loading) {
+    if (this.disabled || this.isLoading) {
       event.preventDefault();
       event.stopPropagation();
       return;

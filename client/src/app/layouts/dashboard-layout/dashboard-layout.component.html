@@ -39,12 +39,12 @@
           <ng-container *ngIf="canShow(link)">
             <a [routerLink]="link.route"
               routerLinkActive="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20"
-              [attr.title]="sidebarCollapsed ? link.label : null"
-              [attr.aria-label]="link.label"
+              [attr.title]="sidebarCollapsed ? linkLabel(link) : null"
+              [attr.aria-label]="linkLabel(link)"
               class="flex items-center px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
               <app-icon [name]="link.icon" [size]="20"></app-icon>
               @if (!sidebarCollapsed) {
-              <span class="ml-3">{{ link.label }}</span>
+              <span class="ml-3">{{ linkLabel(link) }}</span>
               }
             </a>
           </ng-container>
@@ -106,8 +106,17 @@
           </svg>
         </button>
         }
+        @if (showGuardServiceProviderInfo) {
+        <div class="ml-3 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
+          <span class="inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
+          <span>Managed by {{ guardServiceProviderLabel }}</span>
+        </div>
+        }
       </div>
-      <app-avatar-menu></app-avatar-menu>
+      <div class="flex items-center gap-3">
+        <app-notification-bell *ngIf="shouldShowNotificationBell()"></app-notification-bell>
+        <app-avatar-menu></app-avatar-menu>
+      </div>
     </header>
     <router-outlet></router-outlet>
   </div>

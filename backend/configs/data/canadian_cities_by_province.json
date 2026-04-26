@@ -1,0 +1,4344 @@
+{
+  "AB": [
+    {
+      "value": "AIRDRIE",
+      "label": "Airdrie"
+    },
+    {
+      "value": "ATHABASCA",
+      "label": "Athabasca"
+    },
+    {
+      "value": "BANFF",
+      "label": "Banff"
+    },
+    {
+      "value": "BARRHEAD",
+      "label": "Barrhead"
+    },
+    {
+      "value": "BASSANO",
+      "label": "Bassano"
+    },
+    {
+      "value": "BEAUMONT",
+      "label": "Beaumont"
+    },
+    {
+      "value": "BEAVERLODGE",
+      "label": "Beaverlodge"
+    },
+    {
+      "value": "BLACK_DIAMOND",
+      "label": "Black Diamond"
+    },
+    {
+      "value": "BLACKFALDS",
+      "label": "Blackfalds"
+    },
+    {
+      "value": "BON_ACCORD",
+      "label": "Bon Accord"
+    },
+    {
+      "value": "BONNYVILLE",
+      "label": "Bonnyville"
+    },
+    {
+      "value": "BOW_ISLAND",
+      "label": "Bow Island"
+    },
+    {
+      "value": "BROOKS",
+      "label": "Brooks"
+    },
+    {
+      "value": "CALGARY",
+      "label": "Calgary"
+    },
+    {
+      "value": "CALMAR",
+      "label": "Calmar"
+    },
+    {
+      "value": "CAMROSE",
+      "label": "Camrose"
+    },
+    {
+      "value": "CANMORE",
+      "label": "Canmore"
+    },
+    {
+      "value": "CARDSTON",
+      "label": "Cardston"
+    },
+    {
+      "value": "CARSTAIRS",
+      "label": "Carstairs"
+    },
+    {
+      "value": "CHESTERMERE",
+      "label": "Chestermere"
+    },
+    {
+      "value": "CLARESHOLM",
+      "label": "Claresholm"
+    },
+    {
+      "value": "COALDALE",
+      "label": "Coaldale"
+    },
+    {
+      "value": "COALHURST",
+      "label": "Coalhurst"
+    },
+    {
+      "value": "COCHRANE",
+      "label": "Cochrane"
+    },
+    {
+      "value": "COLD_LAKE",
+      "label": "Cold Lake"
+    },
+    {
+      "value": "CROSSFIELD",
+      "label": "Crossfield"
+    },
+    {
+      "value": "DEVON",
+      "label": "Devon"
+    },
+    {
+      "value": "DIDSBURY",
+      "label": "Didsbury"
+    },
+    {
+      "value": "DRAYTON_VALLEY",
+      "label": "Drayton Valley"
+    },
+    {
+      "value": "EDMONTON",
+      "label": "Edmonton"
+    },
+    {
+      "value": "EDSON",
+      "label": "Edson"
+    },
+    {
+      "value": "ELK_POINT",
+      "label": "Elk Point"
+    },
+    {
+      "value": "FAIRVIEW",
+      "label": "Fairview"
+    },
+    {
+      "value": "FALHER",
+      "label": "Falher"
+    },
+    {
+      "value": "FORT_MACLEOD",
+      "label": "Fort Macleod"
+    },
+    {
+      "value": "FORT_MCMURRAY",
+      "label": "Fort McMurray"
+    },
+    {
+      "value": "FORT_SASKATCHEWAN",
+      "label": "Fort Saskatchewan"
+    },
+    {
+      "value": "FOX_CREEK",
+      "label": "Fox Creek"
+    },
+    {
+      "value": "GIBBONS",
+      "label": "Gibbons"
+    },
+    {
+      "value": "GRAND_CENTRE",
+      "label": "Grand Centre"
+    },
+    {
+      "value": "GRANDE_CACHE",
+      "label": "Grande Cache"
+    },
+    {
+      "value": "GRANDE_PRAIRIE",
+      "label": "Grande Prairie"
+    },
+    {
+      "value": "GRIMSHAW",
+      "label": "Grimshaw"
+    },
+    {
+      "value": "HANNA",
+      "label": "Hanna"
+    },
+    {
+      "value": "HERITAGE_POINTE",
+      "label": "Heritage Pointe"
+    },
+    {
+      "value": "HIGH_LEVEL",
+      "label": "High Level"
+    },
+    {
+      "value": "HIGH_PRAIRIE",
+      "label": "High Prairie"
+    },
+    {
+      "value": "HIGH_RIVER",
+      "label": "High River"
+    },
+    {
+      "value": "HINTON",
+      "label": "Hinton"
+    },
+    {
+      "value": "IRRICANA",
+      "label": "Irricana"
+    },
+    {
+      "value": "JASPER_PARK_LODGE",
+      "label": "Jasper Park Lodge"
+    },
+    {
+      "value": "KILLAM",
+      "label": "Killam"
+    },
+    {
+      "value": "LAC_LA_BICHE",
+      "label": "Lac La Biche"
+    },
+    {
+      "value": "LACOMBE",
+      "label": "Lacombe"
+    },
+    {
+      "value": "LAMONT",
+      "label": "Lamont"
+    },
+    {
+      "value": "LARKSPUR",
+      "label": "Larkspur"
+    },
+    {
+      "value": "LAUREL",
+      "label": "Laurel"
+    },
+    {
+      "value": "LEDUC",
+      "label": "Leduc"
+    },
+    {
+      "value": "LETHBRIDGE",
+      "label": "Lethbridge"
+    },
+    {
+      "value": "LLOYDMINSTER",
+      "label": "Lloydminster"
+    },
+    {
+      "value": "MAGRATH",
+      "label": "Magrath"
+    },
+    {
+      "value": "MANNING",
+      "label": "Manning"
+    },
+    {
+      "value": "MANNVILLE",
+      "label": "Mannville"
+    },
+    {
+      "value": "MAPLE_RIDGE",
+      "label": "Maple Ridge"
+    },
+    {
+      "value": "MAYERTHORPE",
+      "label": "Mayerthorpe"
+    },
+    {
+      "value": "MEDICINE_HAT",
+      "label": "Medicine Hat"
+    },
+    {
+      "value": "MILL_WOODS_TOWN_CENTRE",
+      "label": "Mill Woods Town Centre"
+    },
+    {
+      "value": "MILLET",
+      "label": "Millet"
+    },
+    {
+      "value": "MORINVILLE",
+      "label": "Morinville"
+    },
+    {
+      "value": "NANTON",
+      "label": "Nanton"
+    },
+    {
+      "value": "OKOTOKS",
+      "label": "Okotoks"
+    },
+    {
+      "value": "OLDS",
+      "label": "Olds"
+    },
+    {
+      "value": "PEACE_RIVER",
+      "label": "Peace River"
+    },
+    {
+      "value": "PENHOLD",
+      "label": "Penhold"
+    },
+    {
+      "value": "PICTURE_BUTTE",
+      "label": "Picture Butte"
+    },
+    {
+      "value": "PINCHER_CREEK",
+      "label": "Pincher Creek"
+    },
+    {
+      "value": "PONOKA",
+      "label": "Ponoka"
+    },
+    {
+      "value": "PROVOST",
+      "label": "Provost"
+    },
+    {
+      "value": "RAYMOND",
+      "label": "Raymond"
+    },
+    {
+      "value": "RED_DEER",
+      "label": "Red Deer"
+    },
+    {
+      "value": "RIDEAU_PARK",
+      "label": "Rideau Park"
+    },
+    {
+      "value": "RIMBEY",
+      "label": "Rimbey"
+    },
+    {
+      "value": "ROCKY_MOUNTAIN_HOUSE",
+      "label": "Rocky Mountain House"
+    },
+    {
+      "value": "SEXSMITH",
+      "label": "Sexsmith"
+    },
+    {
+      "value": "SHERWOOD_PARK",
+      "label": "Sherwood Park"
+    },
+    {
+      "value": "SILVER_BERRY",
+      "label": "Silver Berry"
+    },
+    {
+      "value": "SLAVE_LAKE",
+      "label": "Slave Lake"
+    },
+    {
+      "value": "SMOKY_LAKE",
+      "label": "Smoky Lake"
+    },
+    {
+      "value": "SPIRIT_RIVER",
+      "label": "Spirit River"
+    },
+    {
+      "value": "SPRINGBROOK",
+      "label": "Springbrook"
+    },
+    {
+      "value": "SPRUCE_GROVE",
+      "label": "Spruce Grove"
+    },
+    {
+      "value": "ST_ALBERT",
+      "label": "St. Albert"
+    },
+    {
+      "value": "STETTLER",
+      "label": "Stettler"
+    },
+    {
+      "value": "STONY_PLAIN",
+      "label": "Stony Plain"
+    },
+    {
+      "value": "STRATHMORE",
+      "label": "Strathmore"
+    },
+    {
+      "value": "SUNDRE",
+      "label": "Sundre"
+    },
+    {
+      "value": "SWAN_HILLS",
+      "label": "Swan Hills"
+    },
+    {
+      "value": "SYLVAN_LAKE",
+      "label": "Sylvan Lake"
+    },
+    {
+      "value": "TABER",
+      "label": "Taber"
+    },
+    {
+      "value": "TAMARACK",
+      "label": "Tamarack"
+    },
+    {
+      "value": "THREE_HILLS",
+      "label": "Three Hills"
+    },
+    {
+      "value": "TOFIELD",
+      "label": "Tofield"
+    },
+    {
+      "value": "TWO_HILLS",
+      "label": "Two Hills"
+    },
+    {
+      "value": "VALLEYVIEW",
+      "label": "Valleyview"
+    },
+    {
+      "value": "VEGREVILLE",
+      "label": "Vegreville"
+    },
+    {
+      "value": "VERMILION",
+      "label": "Vermilion"
+    },
+    {
+      "value": "VIKING",
+      "label": "Viking"
+    },
+    {
+      "value": "VULCAN",
+      "label": "Vulcan"
+    },
+    {
+      "value": "WAINWRIGHT",
+      "label": "Wainwright"
+    },
+    {
+      "value": "WEMBLEY",
+      "label": "Wembley"
+    },
+    {
+      "value": "WESTLAKE",
+      "label": "Westlake"
+    },
+    {
+      "value": "WESTLOCK",
+      "label": "Westlock"
+    },
+    {
+      "value": "WETASKIWIN",
+      "label": "Wetaskiwin"
+    },
+    {
+      "value": "WHITECOURT",
+      "label": "Whitecourt"
+    },
+    {
+      "value": "WILD_ROSE",
+      "label": "Wild Rose"
+    }
+  ],
+  "BC": [
+    {
+      "value": "ABBOTSFORD",
+      "label": "Abbotsford"
+    },
+    {
+      "value": "AGASSIZ",
+      "label": "Agassiz"
+    },
+    {
+      "value": "ALDERGROVE",
+      "label": "Aldergrove"
+    },
+    {
+      "value": "ALDERGROVE_EAST",
+      "label": "Aldergrove East"
+    },
+    {
+      "value": "ANMORE",
+      "label": "Anmore"
+    },
+    {
+      "value": "ARBUTUS_RIDGE",
+      "label": "Arbutus Ridge"
+    },
+    {
+      "value": "ARMSTRONG",
+      "label": "Armstrong"
+    },
+    {
+      "value": "ASHCROFT",
+      "label": "Ashcroft"
+    },
+    {
+      "value": "BARRI\u00c8RE",
+      "label": "Barri\u00e8re"
+    },
+    {
+      "value": "BOWEN_ISLAND",
+      "label": "Bowen Island"
+    },
+    {
+      "value": "BURNABY",
+      "label": "Burnaby"
+    },
+    {
+      "value": "BURNS_LAKE",
+      "label": "Burns Lake"
+    },
+    {
+      "value": "CACHE_CREEK",
+      "label": "Cache Creek"
+    },
+    {
+      "value": "CAMPBELL_RIVER",
+      "label": "Campbell River"
+    },
+    {
+      "value": "CASTLEGAR",
+      "label": "Castlegar"
+    },
+    {
+      "value": "CEDAR",
+      "label": "Cedar"
+    },
+    {
+      "value": "CENTRAL_COAST_REGIONAL",
+      "label": "Central Coast Regional"
+    },
+    {
+      "value": "CHASE",
+      "label": "Chase"
+    },
+    {
+      "value": "CHEMAINUS",
+      "label": "Chemainus"
+    },
+    {
+      "value": "CHETWYND",
+      "label": "Chetwynd"
+    },
+    {
+      "value": "CHILLIWACK",
+      "label": "Chilliwack"
+    },
+    {
+      "value": "COLWOOD",
+      "label": "Colwood"
+    },
+    {
+      "value": "COOMBS",
+      "label": "Coombs"
+    },
+    {
+      "value": "COQUITLAM",
+      "label": "Coquitlam"
+    },
+    {
+      "value": "COURTENAY",
+      "label": "Courtenay"
+    },
+    {
+      "value": "COWICHAN_BAY",
+      "label": "Cowichan Bay"
+    },
+    {
+      "value": "CRANBROOK",
+      "label": "Cranbrook"
+    },
+    {
+      "value": "CRESTON",
+      "label": "Creston"
+    },
+    {
+      "value": "CUMBERLAND",
+      "label": "Cumberland"
+    },
+    {
+      "value": "DAWSON_CREEK",
+      "label": "Dawson Creek"
+    },
+    {
+      "value": "DELTA",
+      "label": "Delta"
+    },
+    {
+      "value": "DENMAN_ISLAND",
+      "label": "Denman Island"
+    },
+    {
+      "value": "DENMAN_ISLAND_TRUST_AREA",
+      "label": "Denman Island Trust Area"
+    },
+    {
+      "value": "DUCK_LAKE",
+      "label": "Duck Lake"
+    },
+    {
+      "value": "DUNCAN",
+      "label": "Duncan"
+    },
+    {
+      "value": "EAST_WELLINGTON",
+      "label": "East Wellington"
+    },
+    {
+      "value": "ELKFORD",
+      "label": "Elkford"
+    },
+    {
+      "value": "ELLISON",
+      "label": "Ellison"
+    },
+    {
+      "value": "ENDERBY",
+      "label": "Enderby"
+    },
+    {
+      "value": "FAIRWINDS",
+      "label": "Fairwinds"
+    },
+    {
+      "value": "FERNIE",
+      "label": "Fernie"
+    },
+    {
+      "value": "FORT_NELSON",
+      "label": "Fort Nelson"
+    },
+    {
+      "value": "FORT_ST_JOHN",
+      "label": "Fort St. John"
+    },
+    {
+      "value": "FRASER_VALLEY_REGIONAL",
+      "label": "Fraser Valley Regional"
+    },
+    {
+      "value": "FRENCH_CREEK",
+      "label": "French Creek"
+    },
+    {
+      "value": "FRUITVALE",
+      "label": "Fruitvale"
+    },
+    {
+      "value": "GIBSONS",
+      "label": "Gibsons"
+    },
+    {
+      "value": "GOLDEN",
+      "label": "Golden"
+    },
+    {
+      "value": "GRAND_FORKS",
+      "label": "Grand Forks"
+    },
+    {
+      "value": "HANCEVILLE",
+      "label": "Hanceville"
+    },
+    {
+      "value": "HOPE",
+      "label": "Hope"
+    },
+    {
+      "value": "HORNBY_ISLAND",
+      "label": "Hornby Island"
+    },
+    {
+      "value": "HOUSTON",
+      "label": "Houston"
+    },
+    {
+      "value": "INVERMERE",
+      "label": "Invermere"
+    },
+    {
+      "value": "KAMLOOPS",
+      "label": "Kamloops"
+    },
+    {
+      "value": "KELOWNA",
+      "label": "Kelowna"
+    },
+    {
+      "value": "KIMBERLEY",
+      "label": "Kimberley"
+    },
+    {
+      "value": "KITIMAT",
+      "label": "Kitimat"
+    },
+    {
+      "value": "LADNER",
+      "label": "Ladner"
+    },
+    {
+      "value": "LADYSMITH",
+      "label": "Ladysmith"
+    },
+    {
+      "value": "LAKE_COWICHAN",
+      "label": "Lake Cowichan"
+    },
+    {
+      "value": "LANGFORD",
+      "label": "Langford"
+    },
+    {
+      "value": "LANGLEY",
+      "label": "Langley"
+    },
+    {
+      "value": "LILLOOET",
+      "label": "Lillooet"
+    },
+    {
+      "value": "LIONS_BAY",
+      "label": "Lions Bay"
+    },
+    {
+      "value": "LOGAN_LAKE",
+      "label": "Logan Lake"
+    },
+    {
+      "value": "LUMBY",
+      "label": "Lumby"
+    },
+    {
+      "value": "MACKENZIE",
+      "label": "Mackenzie"
+    },
+    {
+      "value": "MAPLE_RIDGE",
+      "label": "Maple Ridge"
+    },
+    {
+      "value": "MERRITT",
+      "label": "Merritt"
+    },
+    {
+      "value": "METCHOSIN",
+      "label": "Metchosin"
+    },
+    {
+      "value": "METRO_VANCOUVER_REGIONAL",
+      "label": "Metro Vancouver Regional"
+    },
+    {
+      "value": "MISSION",
+      "label": "Mission"
+    },
+    {
+      "value": "NAKUSP",
+      "label": "Nakusp"
+    },
+    {
+      "value": "NANAIMO",
+      "label": "Nanaimo"
+    },
+    {
+      "value": "NELSON",
+      "label": "Nelson"
+    },
+    {
+      "value": "NEW_WESTMINSTER",
+      "label": "New Westminster"
+    },
+    {
+      "value": "NORTH_COWICHAN",
+      "label": "North Cowichan"
+    },
+    {
+      "value": "NORTH_OYSTER_YELLOW_POINT",
+      "label": "North Oyster/Yellow Point"
+    },
+    {
+      "value": "NORTH_SAANICH",
+      "label": "North Saanich"
+    },
+    {
+      "value": "NORTH_VANCOUVER",
+      "label": "North Vancouver"
+    },
+    {
+      "value": "OAK_BAY",
+      "label": "Oak Bay"
+    },
+    {
+      "value": "OKANAGAN",
+      "label": "Okanagan"
+    },
+    {
+      "value": "OKANAGAN_FALLS",
+      "label": "Okanagan Falls"
+    },
+    {
+      "value": "OLIVER",
+      "label": "Oliver"
+    },
+    {
+      "value": "OSOYOOS",
+      "label": "Osoyoos"
+    },
+    {
+      "value": "PARKSVILLE",
+      "label": "Parksville"
+    },
+    {
+      "value": "PEACE_RIVER_REGIONAL",
+      "label": "Peace River Regional"
+    },
+    {
+      "value": "PEACHLAND",
+      "label": "Peachland"
+    },
+    {
+      "value": "PEMBERTON",
+      "label": "Pemberton"
+    },
+    {
+      "value": "PENTICTON",
+      "label": "Penticton"
+    },
+    {
+      "value": "PITT_MEADOWS",
+      "label": "Pitt Meadows"
+    },
+    {
+      "value": "PORT_ALBERNI",
+      "label": "Port Alberni"
+    },
+    {
+      "value": "PORT_COQUITLAM",
+      "label": "Port Coquitlam"
+    },
+    {
+      "value": "PORT_MCNEILL",
+      "label": "Port McNeill"
+    },
+    {
+      "value": "PORT_MOODY",
+      "label": "Port Moody"
+    },
+    {
+      "value": "POWELL_RIVER",
+      "label": "Powell River"
+    },
+    {
+      "value": "PRINCE_GEORGE",
+      "label": "Prince George"
+    },
+    {
+      "value": "PRINCE_RUPERT",
+      "label": "Prince Rupert"
+    },
+    {
+      "value": "PRINCETON",
+      "label": "Princeton"
+    },
+    {
+      "value": "PUNTLEDGE",
+      "label": "Puntledge"
+    },
+    {
+      "value": "QUESNEL",
+      "label": "Quesnel"
+    },
+    {
+      "value": "REGIONAL_DISTRICT_OF_ALBERNI_CLAYOQUOT",
+      "label": "Regional District of Alberni-Clayoquot"
+    },
+    {
+      "value": "REGIONAL_DISTRICT_OF_CENTRAL_OKANAGAN",
+      "label": "Regional District of Central Okanagan"
+    },
+    {
+      "value": "REVELSTOKE",
+      "label": "Revelstoke"
+    },
+    {
+      "value": "RICHMOND",
+      "label": "Richmond"
+    },
+    {
+      "value": "ROSSLAND",
+      "label": "Rossland"
+    },
+    {
+      "value": "ROYSTON",
+      "label": "Royston"
+    },
+    {
+      "value": "SALMO",
+      "label": "Salmo"
+    },
+    {
+      "value": "SALMON_ARM",
+      "label": "Salmon Arm"
+    },
+    {
+      "value": "SALT_SPRING_ISLAND",
+      "label": "Salt Spring Island"
+    },
+    {
+      "value": "SALTAIR",
+      "label": "Saltair"
+    },
+    {
+      "value": "SECHELT",
+      "label": "Sechelt"
+    },
+    {
+      "value": "SICAMOUS",
+      "label": "Sicamous"
+    },
+    {
+      "value": "SIX_MILE",
+      "label": "Six Mile"
+    },
+    {
+      "value": "SMITHERS",
+      "label": "Smithers"
+    },
+    {
+      "value": "SOOKE",
+      "label": "Sooke"
+    },
+    {
+      "value": "SOUTH_PENDER_HARBOUR",
+      "label": "South Pender Harbour"
+    },
+    {
+      "value": "SPARWOOD",
+      "label": "Sparwood"
+    },
+    {
+      "value": "SUMMERLAND",
+      "label": "Summerland"
+    },
+    {
+      "value": "SURREY",
+      "label": "Surrey"
+    },
+    {
+      "value": "TERRACE",
+      "label": "Terrace"
+    },
+    {
+      "value": "TOFINO",
+      "label": "Tofino"
+    },
+    {
+      "value": "TRAIL",
+      "label": "Trail"
+    },
+    {
+      "value": "TSAWWASSEN",
+      "label": "Tsawwassen"
+    },
+    {
+      "value": "TUMBLER_RIDGE",
+      "label": "Tumbler Ridge"
+    },
+    {
+      "value": "UCLUELET",
+      "label": "Ucluelet"
+    },
+    {
+      "value": "VANCOUVER",
+      "label": "Vancouver"
+    },
+    {
+      "value": "VANDERHOOF",
+      "label": "Vanderhoof"
+    },
+    {
+      "value": "VERNON",
+      "label": "Vernon"
+    },
+    {
+      "value": "VICTORIA",
+      "label": "Victoria"
+    },
+    {
+      "value": "WALNUT_GROVE",
+      "label": "Walnut Grove"
+    },
+    {
+      "value": "WELCOME_BEACH",
+      "label": "Welcome Beach"
+    },
+    {
+      "value": "WEST_END",
+      "label": "West End"
+    },
+    {
+      "value": "WEST_KELOWNA",
+      "label": "West Kelowna"
+    },
+    {
+      "value": "WEST_VANCOUVER",
+      "label": "West Vancouver"
+    },
+    {
+      "value": "WHISTLER",
+      "label": "Whistler"
+    },
+    {
+      "value": "WHITE_ROCK",
+      "label": "White Rock"
+    },
+    {
+      "value": "WILLIAMS_LAKE",
+      "label": "Williams Lake"
+    }
+  ],
+  "MB": [
+    {
+      "value": "ALTONA",
+      "label": "Altona"
+    },
+    {
+      "value": "BEAUSEJOUR",
+      "label": "Beausejour"
+    },
+    {
+      "value": "BOISSEVAIN",
+      "label": "Boissevain"
+    },
+    {
+      "value": "BRANDON",
+      "label": "Brandon"
+    },
+    {
+      "value": "CARBERRY",
+      "label": "Carberry"
+    },
+    {
+      "value": "CARMAN",
+      "label": "Carman"
+    },
+    {
+      "value": "CROSS_LAKE_19A",
+      "label": "Cross Lake 19A"
+    },
+    {
+      "value": "DAUPHIN",
+      "label": "Dauphin"
+    },
+    {
+      "value": "DE_SALABERRY",
+      "label": "De Salaberry"
+    },
+    {
+      "value": "DELORAINE",
+      "label": "Deloraine"
+    },
+    {
+      "value": "FLIN_FLON",
+      "label": "Flin Flon"
+    },
+    {
+      "value": "GIMLI",
+      "label": "Gimli"
+    },
+    {
+      "value": "GRUNTHAL",
+      "label": "Grunthal"
+    },
+    {
+      "value": "HEADINGLEY",
+      "label": "Headingley"
+    },
+    {
+      "value": "ILE_DES_CH\u00caNES",
+      "label": "Ile des Ch\u00eanes"
+    },
+    {
+      "value": "KILLARNEY",
+      "label": "Killarney"
+    },
+    {
+      "value": "LA_BROQUERIE",
+      "label": "La Broquerie"
+    },
+    {
+      "value": "LAC_DU_BONNET",
+      "label": "Lac du Bonnet"
+    },
+    {
+      "value": "LANDMARK",
+      "label": "Landmark"
+    },
+    {
+      "value": "LORETTE",
+      "label": "Lorette"
+    },
+    {
+      "value": "MELITA",
+      "label": "Melita"
+    },
+    {
+      "value": "MINNEDOSA",
+      "label": "Minnedosa"
+    },
+    {
+      "value": "MOOSE_LAKE",
+      "label": "Moose Lake"
+    },
+    {
+      "value": "MORDEN",
+      "label": "Morden"
+    },
+    {
+      "value": "MORRIS",
+      "label": "Morris"
+    },
+    {
+      "value": "NEEPAWA",
+      "label": "Neepawa"
+    },
+    {
+      "value": "NIVERVILLE",
+      "label": "Niverville"
+    },
+    {
+      "value": "PORTAGE_LA_PRAIRIE",
+      "label": "Portage la Prairie"
+    },
+    {
+      "value": "RIVERS",
+      "label": "Rivers"
+    },
+    {
+      "value": "ROBLIN",
+      "label": "Roblin"
+    },
+    {
+      "value": "SELKIRK",
+      "label": "Selkirk"
+    },
+    {
+      "value": "SHILO",
+      "label": "Shilo"
+    },
+    {
+      "value": "SOURIS",
+      "label": "Souris"
+    },
+    {
+      "value": "ST_ADOLPHE",
+      "label": "St. Adolphe"
+    },
+    {
+      "value": "STEINBACH",
+      "label": "Steinbach"
+    },
+    {
+      "value": "STONEWALL",
+      "label": "Stonewall"
+    },
+    {
+      "value": "SWAN_RIVER",
+      "label": "Swan River"
+    },
+    {
+      "value": "THE_PAS",
+      "label": "The Pas"
+    },
+    {
+      "value": "THOMPSON",
+      "label": "Thompson"
+    },
+    {
+      "value": "VIRDEN",
+      "label": "Virden"
+    },
+    {
+      "value": "WEST_ST_PAUL",
+      "label": "West St. Paul"
+    },
+    {
+      "value": "WINKLER",
+      "label": "Winkler"
+    },
+    {
+      "value": "WINNIPEG",
+      "label": "Winnipeg"
+    }
+  ],
+  "NB": [
+    {
+      "value": "BAIE_STE_ANNE",
+      "label": "Baie Ste. Anne"
+    },
+    {
+      "value": "BATHURST",
+      "label": "Bathurst"
+    },
+    {
+      "value": "BOUCTOUCHE",
+      "label": "Bouctouche"
+    },
+    {
+      "value": "CAMPBELLTON",
+      "label": "Campbellton"
+    },
+    {
+      "value": "DIEPPE",
+      "label": "Dieppe"
+    },
+    {
+      "value": "EDMUNDSTON",
+      "label": "Edmundston"
+    },
+    {
+      "value": "FLORENCEVILLE_BRISTOL",
+      "label": "Florenceville-Bristol"
+    },
+    {
+      "value": "FREDERICTON",
+      "label": "Fredericton"
+    },
+    {
+      "value": "FUNDY_BAY",
+      "label": "Fundy Bay"
+    },
+    {
+      "value": "GRANDE_DIGUE",
+      "label": "Grande-Digue"
+    },
+    {
+      "value": "GREATER_LAKEBURN",
+      "label": "Greater Lakeburn"
+    },
+    {
+      "value": "HAMPTON",
+      "label": "Hampton"
+    },
+    {
+      "value": "HARRISON_BROOK",
+      "label": "Harrison Brook"
+    },
+    {
+      "value": "KESWICK_RIDGE",
+      "label": "Keswick Ridge"
+    },
+    {
+      "value": "LINCOLN",
+      "label": "Lincoln"
+    },
+    {
+      "value": "LUTES_MOUNTAIN",
+      "label": "Lutes Mountain"
+    },
+    {
+      "value": "MCEWEN",
+      "label": "McEwen"
+    },
+    {
+      "value": "MIRAMICHI",
+      "label": "Miramichi"
+    },
+    {
+      "value": "MONCTON",
+      "label": "Moncton"
+    },
+    {
+      "value": "NACKAWIC",
+      "label": "Nackawic"
+    },
+    {
+      "value": "NEW_MARYLAND",
+      "label": "New Maryland"
+    },
+    {
+      "value": "NOONAN",
+      "label": "Noonan"
+    },
+    {
+      "value": "OROMOCTO",
+      "label": "Oromocto"
+    },
+    {
+      "value": "RICHIBUCTO",
+      "label": "Richibucto"
+    },
+    {
+      "value": "SACKVILLE",
+      "label": "Sackville"
+    },
+    {
+      "value": "SAINT_ANDREWS",
+      "label": "Saint Andrews"
+    },
+    {
+      "value": "SAINT_JOHN",
+      "label": "Saint John"
+    },
+    {
+      "value": "SAINT_ANTOINE",
+      "label": "Saint-Antoine"
+    },
+    {
+      "value": "SAINT_L\u00c9ONARD",
+      "label": "Saint-L\u00e9onard"
+    },
+    {
+      "value": "SALISBURY",
+      "label": "Salisbury"
+    },
+    {
+      "value": "SHEDIAC",
+      "label": "Shediac"
+    },
+    {
+      "value": "SHEDIAC_BRIDGE_SHEDIAC_RIVER",
+      "label": "Shediac Bridge-Shediac River"
+    },
+    {
+      "value": "SHIPPAGAN",
+      "label": "Shippagan"
+    },
+    {
+      "value": "STARLIGHT_VILLAGE",
+      "label": "Starlight Village"
+    },
+    {
+      "value": "SUSSEX",
+      "label": "Sussex"
+    },
+    {
+      "value": "TRACADIE_SHEILA",
+      "label": "Tracadie-Sheila"
+    },
+    {
+      "value": "WELLS",
+      "label": "Wells"
+    }
+  ],
+  "NL": [
+    {
+      "value": "BAY_ROBERTS",
+      "label": "Bay Roberts"
+    },
+    {
+      "value": "BAY_ST_GEORGE_SOUTH",
+      "label": "Bay St. George South"
+    },
+    {
+      "value": "BONAVISTA",
+      "label": "Bonavista"
+    },
+    {
+      "value": "BOTWOOD",
+      "label": "Botwood"
+    },
+    {
+      "value": "BURGEO",
+      "label": "Burgeo"
+    },
+    {
+      "value": "CARBONEAR",
+      "label": "Carbonear"
+    },
+    {
+      "value": "CATALINA",
+      "label": "Catalina"
+    },
+    {
+      "value": "CHANNEL_PORT_AUX_BASQUES",
+      "label": "Channel-Port aux Basques"
+    },
+    {
+      "value": "CLARENVILLE_SHOAL_HARBOUR",
+      "label": "Clarenville-Shoal Harbour"
+    },
+    {
+      "value": "CONCEPTION_BAY_SOUTH",
+      "label": "Conception Bay South"
+    },
+    {
+      "value": "CORNER_BROOK",
+      "label": "Corner Brook"
+    },
+    {
+      "value": "DEER_LAKE",
+      "label": "Deer Lake"
+    },
+    {
+      "value": "FOGO_ISLAND",
+      "label": "Fogo Island"
+    },
+    {
+      "value": "GAMBO",
+      "label": "Gambo"
+    },
+    {
+      "value": "GOULDS",
+      "label": "Goulds"
+    },
+    {
+      "value": "GRAND_BANK",
+      "label": "Grand Bank"
+    },
+    {
+      "value": "GRAND_FALLS_WINDSOR",
+      "label": "Grand Falls-Windsor"
+    },
+    {
+      "value": "HAPPY_VALLEY_GOOSE_BAY",
+      "label": "Happy Valley-Goose Bay"
+    },
+    {
+      "value": "HARBOUR_BRETON",
+      "label": "Harbour Breton"
+    },
+    {
+      "value": "LABRADOR_CITY",
+      "label": "Labrador City"
+    },
+    {
+      "value": "LEWISPORTE",
+      "label": "Lewisporte"
+    },
+    {
+      "value": "MARYSTOWN",
+      "label": "Marystown"
+    },
+    {
+      "value": "MOUNT_PEARL",
+      "label": "Mount Pearl"
+    },
+    {
+      "value": "PASADENA",
+      "label": "Pasadena"
+    },
+    {
+      "value": "SPRINGDALE",
+      "label": "Springdale"
+    },
+    {
+      "value": "ST_ANTHONY",
+      "label": "St. Anthony"
+    },
+    {
+      "value": "ST_JOHN_S",
+      "label": "St. John's"
+    },
+    {
+      "value": "STEPHENVILLE",
+      "label": "Stephenville"
+    },
+    {
+      "value": "STEPHENVILLE_CROSSING",
+      "label": "Stephenville Crossing"
+    },
+    {
+      "value": "TORBAY",
+      "label": "Torbay"
+    },
+    {
+      "value": "UPPER_ISLAND_COVE",
+      "label": "Upper Island Cove"
+    },
+    {
+      "value": "WABANA",
+      "label": "Wabana"
+    }
+  ],
+  "NT": [
+    {
+      "value": "BEHCHOK\u01ea",
+      "label": "Behchok\u01eb\u0300"
+    },
+    {
+      "value": "FORT_MCPHERSON",
+      "label": "Fort McPherson"
+    },
+    {
+      "value": "FORT_SMITH",
+      "label": "Fort Smith"
+    },
+    {
+      "value": "HAY_RIVER",
+      "label": "Hay River"
+    },
+    {
+      "value": "INUVIK",
+      "label": "Inuvik"
+    },
+    {
+      "value": "NORMAN_WELLS",
+      "label": "Norman Wells"
+    },
+    {
+      "value": "YELLOWKNIFE",
+      "label": "Yellowknife"
+    }
+  ],
+  "NS": [
+    {
+      "value": "AMHERST",
+      "label": "Amherst"
+    },
+    {
+      "value": "ANNAPOLIS",
+      "label": "Annapolis"
+    },
+    {
+      "value": "ANTIGONISH",
+      "label": "Antigonish"
+    },
+    {
+      "value": "BERWICK",
+      "label": "Berwick"
+    },
+    {
+      "value": "BRIDGEWATER",
+      "label": "Bridgewater"
+    },
+    {
+      "value": "CAPE_BRETON",
+      "label": "Cape Breton"
+    },
+    {
+      "value": "CHESTER",
+      "label": "Chester"
+    },
+    {
+      "value": "COLCHESTER",
+      "label": "Colchester"
+    },
+    {
+      "value": "COLE_HARBOUR",
+      "label": "Cole Harbour"
+    },
+    {
+      "value": "COW_BAY",
+      "label": "Cow Bay"
+    },
+    {
+      "value": "DARTMOUTH",
+      "label": "Dartmouth"
+    },
+    {
+      "value": "DIGBY",
+      "label": "Digby"
+    },
+    {
+      "value": "DIGBY_COUNTY",
+      "label": "Digby County"
+    },
+    {
+      "value": "ENGLISH_CORNER",
+      "label": "English Corner"
+    },
+    {
+      "value": "ESKASONI_3",
+      "label": "Eskasoni 3"
+    },
+    {
+      "value": "FALL_RIVER",
+      "label": "Fall River"
+    },
+    {
+      "value": "GLACE_BAY",
+      "label": "Glace Bay"
+    },
+    {
+      "value": "GREENWOOD",
+      "label": "Greenwood"
+    },
+    {
+      "value": "HALIFAX",
+      "label": "Halifax"
+    },
+    {
+      "value": "HANTSPORT",
+      "label": "Hantsport"
+    },
+    {
+      "value": "HAYES_SUBDIVISION",
+      "label": "Hayes Subdivision"
+    },
+    {
+      "value": "KENTVILLE",
+      "label": "Kentville"
+    },
+    {
+      "value": "LAKE_ECHO",
+      "label": "Lake Echo"
+    },
+    {
+      "value": "LANTZ",
+      "label": "Lantz"
+    },
+    {
+      "value": "LOWER_SACKVILLE",
+      "label": "Lower Sackville"
+    },
+    {
+      "value": "LUNENBURG",
+      "label": "Lunenburg"
+    },
+    {
+      "value": "MIDDLETON",
+      "label": "Middleton"
+    },
+    {
+      "value": "NEW_GLASGOW",
+      "label": "New Glasgow"
+    },
+    {
+      "value": "OXFORD",
+      "label": "Oxford"
+    },
+    {
+      "value": "PARRSBORO",
+      "label": "Parrsboro"
+    },
+    {
+      "value": "PICTOU",
+      "label": "Pictou"
+    },
+    {
+      "value": "PICTOU_COUNTY",
+      "label": "Pictou County"
+    },
+    {
+      "value": "PORT_HAWKESBURY",
+      "label": "Port Hawkesbury"
+    },
+    {
+      "value": "PORT_WILLIAMS",
+      "label": "Port Williams"
+    },
+    {
+      "value": "PRINCEVILLE",
+      "label": "Princeville"
+    },
+    {
+      "value": "SHELBURNE",
+      "label": "Shelburne"
+    },
+    {
+      "value": "SPRINGHILL",
+      "label": "Springhill"
+    },
+    {
+      "value": "SYDNEY",
+      "label": "Sydney"
+    },
+    {
+      "value": "SYDNEY_MINES",
+      "label": "Sydney Mines"
+    },
+    {
+      "value": "TRURO",
+      "label": "Truro"
+    },
+    {
+      "value": "WINDSOR",
+      "label": "Windsor"
+    },
+    {
+      "value": "WOLFVILLE",
+      "label": "Wolfville"
+    },
+    {
+      "value": "YARMOUTH",
+      "label": "Yarmouth"
+    }
+  ],
+  "NU": [
+    {
+      "value": "CLYDE_RIVER",
+      "label": "Clyde River"
+    },
+    {
+      "value": "GJOA_HAVEN",
+      "label": "Gjoa Haven"
+    },
+    {
+      "value": "IQALUIT",
+      "label": "Iqaluit"
+    },
+    {
+      "value": "KUGLUKTUK",
+      "label": "Kugluktuk"
+    },
+    {
+      "value": "PANGNIRTUNG",
+      "label": "Pangnirtung"
+    },
+    {
+      "value": "RANKIN_INLET",
+      "label": "Rankin Inlet"
+    }
+  ],
+  "ON": [
+    {
+      "value": "AJAX",
+      "label": "Ajax"
+    },
+    {
+      "value": "ALGOMA",
+      "label": "Algoma"
+    },
+    {
+      "value": "ALLISTON",
+      "label": "Alliston"
+    },
+    {
+      "value": "AMHERSTBURG",
+      "label": "Amherstburg"
+    },
+    {
+      "value": "AMIGO_BEACH",
+      "label": "Amigo Beach"
+    },
+    {
+      "value": "ANCASTER",
+      "label": "Ancaster"
+    },
+    {
+      "value": "ANGUS",
+      "label": "Angus"
+    },
+    {
+      "value": "ARNPRIOR",
+      "label": "Arnprior"
+    },
+    {
+      "value": "ATIKOKAN",
+      "label": "Atikokan"
+    },
+    {
+      "value": "ATTAWAPISKAT",
+      "label": "Attawapiskat"
+    },
+    {
+      "value": "AURORA",
+      "label": "Aurora"
+    },
+    {
+      "value": "AYLMER",
+      "label": "Aylmer"
+    },
+    {
+      "value": "AZILDA",
+      "label": "Azilda"
+    },
+    {
+      "value": "BALLANTRAE",
+      "label": "Ballantrae"
+    },
+    {
+      "value": "BANCROFT",
+      "label": "Bancroft"
+    },
+    {
+      "value": "BARRIE",
+      "label": "Barrie"
+    },
+    {
+      "value": "BATH",
+      "label": "Bath"
+    },
+    {
+      "value": "BELLEVILLE",
+      "label": "Belleville"
+    },
+    {
+      "value": "BELLS_CORNERS",
+      "label": "Bells Corners"
+    },
+    {
+      "value": "BELMONT",
+      "label": "Belmont"
+    },
+    {
+      "value": "BINBROOK",
+      "label": "Binbrook"
+    },
+    {
+      "value": "BLUEWATER",
+      "label": "Bluewater"
+    },
+    {
+      "value": "BOURGET",
+      "label": "Bourget"
+    },
+    {
+      "value": "BRACEBRIDGE",
+      "label": "Bracebridge"
+    },
+    {
+      "value": "BRAMPTON",
+      "label": "Brampton"
+    },
+    {
+      "value": "BRANT",
+      "label": "Brant"
+    },
+    {
+      "value": "BRANTFORD",
+      "label": "Brantford"
+    },
+    {
+      "value": "BROCKVILLE",
+      "label": "Brockville"
+    },
+    {
+      "value": "BRUSSELS",
+      "label": "Brussels"
+    },
+    {
+      "value": "BURFORD",
+      "label": "Burford"
+    },
+    {
+      "value": "BURLINGTON",
+      "label": "Burlington"
+    },
+    {
+      "value": "CAMBRIDGE",
+      "label": "Cambridge"
+    },
+    {
+      "value": "CAMLACHIE",
+      "label": "Camlachie"
+    },
+    {
+      "value": "CAPREOL",
+      "label": "Capreol"
+    },
+    {
+      "value": "CARLETON_PLACE",
+      "label": "Carleton Place"
+    },
+    {
+      "value": "CASSELMAN",
+      "label": "Casselman"
+    },
+    {
+      "value": "CHATHAM",
+      "label": "Chatham"
+    },
+    {
+      "value": "CHATHAM_KENT",
+      "label": "Chatham-Kent"
+    },
+    {
+      "value": "CLARENCE_ROCKLAND",
+      "label": "Clarence-Rockland"
+    },
+    {
+      "value": "COBOURG",
+      "label": "Cobourg"
+    },
+    {
+      "value": "COCHRANE",
+      "label": "Cochrane"
+    },
+    {
+      "value": "COLLINGWOOD",
+      "label": "Collingwood"
+    },
+    {
+      "value": "CONCORD",
+      "label": "Concord"
+    },
+    {
+      "value": "CONSTANCE_BAY",
+      "label": "Constance Bay"
+    },
+    {
+      "value": "COOKSTOWN",
+      "label": "Cookstown"
+    },
+    {
+      "value": "CORNWALL",
+      "label": "Cornwall"
+    },
+    {
+      "value": "CORUNNA",
+      "label": "Corunna"
+    },
+    {
+      "value": "DEEP_RIVER",
+      "label": "Deep River"
+    },
+    {
+      "value": "DELAWARE",
+      "label": "Delaware"
+    },
+    {
+      "value": "DESERONTO",
+      "label": "Deseronto"
+    },
+    {
+      "value": "DORCHESTER",
+      "label": "Dorchester"
+    },
+    {
+      "value": "DOWLING",
+      "label": "Dowling"
+    },
+    {
+      "value": "DRYDEN",
+      "label": "Dryden"
+    },
+    {
+      "value": "DURHAM",
+      "label": "Durham"
+    },
+    {
+      "value": "EAR_FALLS",
+      "label": "Ear Falls"
+    },
+    {
+      "value": "EAST_GWILLIMBURY",
+      "label": "East Gwillimbury"
+    },
+    {
+      "value": "EAST_YORK",
+      "label": "East York"
+    },
+    {
+      "value": "ELLIOT_LAKE",
+      "label": "Elliot Lake"
+    },
+    {
+      "value": "ELMVALE",
+      "label": "Elmvale"
+    },
+    {
+      "value": "ENGLEHART",
+      "label": "Englehart"
+    },
+    {
+      "value": "ESPANOLA",
+      "label": "Espanola"
+    },
+    {
+      "value": "ESSEX",
+      "label": "Essex"
+    },
+    {
+      "value": "ETOBICOKE",
+      "label": "Etobicoke"
+    },
+    {
+      "value": "EXETER",
+      "label": "Exeter"
+    },
+    {
+      "value": "FORT_ERIE",
+      "label": "Fort Erie"
+    },
+    {
+      "value": "FORT_FRANCES",
+      "label": "Fort Frances"
+    },
+    {
+      "value": "GANANOQUE",
+      "label": "Gananoque"
+    },
+    {
+      "value": "GLENCOE",
+      "label": "Glencoe"
+    },
+    {
+      "value": "GODERICH",
+      "label": "Goderich"
+    },
+    {
+      "value": "GOLDEN",
+      "label": "Golden"
+    },
+    {
+      "value": "GRAVENHURST",
+      "label": "Gravenhurst"
+    },
+    {
+      "value": "GREATER_NAPANEE",
+      "label": "Greater Napanee"
+    },
+    {
+      "value": "GREATER_SUDBURY",
+      "label": "Greater Sudbury"
+    },
+    {
+      "value": "GREENSTONE",
+      "label": "Greenstone"
+    },
+    {
+      "value": "GUELPH",
+      "label": "Guelph"
+    },
+    {
+      "value": "HALDIMAND",
+      "label": "Haldimand"
+    },
+    {
+      "value": "HALIBURTON_VILLAGE",
+      "label": "Haliburton Village"
+    },
+    {
+      "value": "HALTON",
+      "label": "Halton"
+    },
+    {
+      "value": "HAMILTON",
+      "label": "Hamilton"
+    },
+    {
+      "value": "HANOVER",
+      "label": "Hanover"
+    },
+    {
+      "value": "HARRISTON",
+      "label": "Harriston"
+    },
+    {
+      "value": "HAWKESBURY",
+      "label": "Hawkesbury"
+    },
+    {
+      "value": "HEARST",
+      "label": "Hearst"
+    },
+    {
+      "value": "HORNEPAYNE",
+      "label": "Hornepayne"
+    },
+    {
+      "value": "HUNTSVILLE",
+      "label": "Huntsville"
+    },
+    {
+      "value": "HURON_EAST",
+      "label": "Huron East"
+    },
+    {
+      "value": "INGERSOLL",
+      "label": "Ingersoll"
+    },
+    {
+      "value": "INNISFIL",
+      "label": "Innisfil"
+    },
+    {
+      "value": "IROQUOIS_FALLS",
+      "label": "Iroquois Falls"
+    },
+    {
+      "value": "JARVIS",
+      "label": "Jarvis"
+    },
+    {
+      "value": "KANATA",
+      "label": "Kanata"
+    },
+    {
+      "value": "KAPUSKASING",
+      "label": "Kapuskasing"
+    },
+    {
+      "value": "KAWARTHA_LAKES",
+      "label": "Kawartha Lakes"
+    },
+    {
+      "value": "KENORA",
+      "label": "Kenora"
+    },
+    {
+      "value": "KESWICK",
+      "label": "Keswick"
+    },
+    {
+      "value": "KINCARDINE",
+      "label": "Kincardine"
+    },
+    {
+      "value": "KING",
+      "label": "King"
+    },
+    {
+      "value": "KINGSTON",
+      "label": "Kingston"
+    },
+    {
+      "value": "KIRKLAND_LAKE",
+      "label": "Kirkland Lake"
+    },
+    {
+      "value": "KITCHENER",
+      "label": "Kitchener"
+    },
+    {
+      "value": "L_ORIGNAL",
+      "label": "L'Orignal"
+    },
+    {
+      "value": "LAKEFIELD",
+      "label": "Lakefield"
+    },
+    {
+      "value": "LAMBTON_SHORES",
+      "label": "Lambton Shores"
+    },
+    {
+      "value": "LAPPE",
+      "label": "Lappe"
+    },
+    {
+      "value": "LEAMINGTON",
+      "label": "Leamington"
+    },
+    {
+      "value": "LIMOGES",
+      "label": "Limoges"
+    },
+    {
+      "value": "LINDSAY",
+      "label": "Lindsay"
+    },
+    {
+      "value": "LISTOWEL",
+      "label": "Listowel"
+    },
+    {
+      "value": "LITTLE_CURRENT",
+      "label": "Little Current"
+    },
+    {
+      "value": "LIVELY",
+      "label": "Lively"
+    },
+    {
+      "value": "LONDON",
+      "label": "London"
+    },
+    {
+      "value": "LUCAN",
+      "label": "Lucan"
+    },
+    {
+      "value": "MADOC",
+      "label": "Madoc"
+    },
+    {
+      "value": "MANITOULIN",
+      "label": "Manitoulin"
+    },
+    {
+      "value": "MANITOUWADGE",
+      "label": "Manitouwadge"
+    },
+    {
+      "value": "MARATHON",
+      "label": "Marathon"
+    },
+    {
+      "value": "MARKDALE",
+      "label": "Markdale"
+    },
+    {
+      "value": "MARKHAM",
+      "label": "Markham"
+    },
+    {
+      "value": "MATTAWA",
+      "label": "Mattawa"
+    },
+    {
+      "value": "MEAFORD",
+      "label": "Meaford"
+    },
+    {
+      "value": "METCALFE",
+      "label": "Metcalfe"
+    },
+    {
+      "value": "MIDLAND",
+      "label": "Midland"
+    },
+    {
+      "value": "MILDMAY",
+      "label": "Mildmay"
+    },
+    {
+      "value": "MILLBROOK",
+      "label": "Millbrook"
+    },
+    {
+      "value": "MILTON",
+      "label": "Milton"
+    },
+    {
+      "value": "MISSISSAUGA",
+      "label": "Mississauga"
+    },
+    {
+      "value": "MISSISSAUGA_BEACH",
+      "label": "Mississauga Beach"
+    },
+    {
+      "value": "MOOSE_FACTORY",
+      "label": "Moose Factory"
+    },
+    {
+      "value": "MOOSONEE",
+      "label": "Moosonee"
+    },
+    {
+      "value": "MORRISBURG",
+      "label": "Morrisburg"
+    },
+    {
+      "value": "MOUNT_ALBERT",
+      "label": "Mount Albert"
+    },
+    {
+      "value": "MOUNT_BRYDGES",
+      "label": "Mount Brydges"
+    },
+    {
+      "value": "NAPANEE_DOWNTOWN",
+      "label": "Napanee Downtown"
+    },
+    {
+      "value": "NEEBING",
+      "label": "Neebing"
+    },
+    {
+      "value": "NEPEAN",
+      "label": "Nepean"
+    },
+    {
+      "value": "NEW_HAMBURG",
+      "label": "New Hamburg"
+    },
+    {
+      "value": "NEWMARKET",
+      "label": "Newmarket"
+    },
+    {
+      "value": "NIAGARA_FALLS",
+      "label": "Niagara Falls"
+    },
+    {
+      "value": "NIPISSING",
+      "label": "Nipissing"
+    },
+    {
+      "value": "NORFOLK_COUNTY",
+      "label": "Norfolk County"
+    },
+    {
+      "value": "NORTH_BAY",
+      "label": "North Bay"
+    },
+    {
+      "value": "NORTH_PERTH",
+      "label": "North Perth"
+    },
+    {
+      "value": "NORTH_YORK",
+      "label": "North York"
+    },
+    {
+      "value": "NORWOOD",
+      "label": "Norwood"
+    },
+    {
+      "value": "OAKVILLE",
+      "label": "Oakville"
+    },
+    {
+      "value": "OMEMEE",
+      "label": "Omemee"
+    },
+    {
+      "value": "ORANGEVILLE",
+      "label": "Orangeville"
+    },
+    {
+      "value": "ORILLIA",
+      "label": "Orillia"
+    },
+    {
+      "value": "OSGOODE",
+      "label": "Osgoode"
+    },
+    {
+      "value": "OSHAWA",
+      "label": "Oshawa"
+    },
+    {
+      "value": "OTTAWA",
+      "label": "Ottawa"
+    },
+    {
+      "value": "OWEN_SOUND",
+      "label": "Owen Sound"
+    },
+    {
+      "value": "PAISLEY",
+      "label": "Paisley"
+    },
+    {
+      "value": "PARIS",
+      "label": "Paris"
+    },
+    {
+      "value": "PARKHILL",
+      "label": "Parkhill"
+    },
+    {
+      "value": "PARRY_SOUND",
+      "label": "Parry Sound"
+    },
+    {
+      "value": "PARRY_SOUND_DISTRICT",
+      "label": "Parry Sound District"
+    },
+    {
+      "value": "PEEL",
+      "label": "Peel"
+    },
+    {
+      "value": "PEMBROKE",
+      "label": "Pembroke"
+    },
+    {
+      "value": "PERTH",
+      "label": "Perth"
+    },
+    {
+      "value": "PETAWAWA",
+      "label": "Petawawa"
+    },
+    {
+      "value": "PETERBOROUGH",
+      "label": "Peterborough"
+    },
+    {
+      "value": "PETROLIA",
+      "label": "Petrolia"
+    },
+    {
+      "value": "PICKERING",
+      "label": "Pickering"
+    },
+    {
+      "value": "PICTON",
+      "label": "Picton"
+    },
+    {
+      "value": "PLANTAGENET",
+      "label": "Plantagenet"
+    },
+    {
+      "value": "PLATTSVILLE",
+      "label": "Plattsville"
+    },
+    {
+      "value": "PORT_COLBORNE",
+      "label": "Port Colborne"
+    },
+    {
+      "value": "PORT_HOPE",
+      "label": "Port Hope"
+    },
+    {
+      "value": "PORT_ROWAN",
+      "label": "Port Rowan"
+    },
+    {
+      "value": "PORT_STANLEY",
+      "label": "Port Stanley"
+    },
+    {
+      "value": "POWASSAN",
+      "label": "Powassan"
+    },
+    {
+      "value": "PRESCOTT",
+      "label": "Prescott"
+    },
+    {
+      "value": "PRINCE_EDWARD",
+      "label": "Prince Edward"
+    },
+    {
+      "value": "QUEENSWOOD_HEIGHTS",
+      "label": "Queenswood Heights"
+    },
+    {
+      "value": "QUINTE_WEST",
+      "label": "Quinte West"
+    },
+    {
+      "value": "RAINY_RIVER",
+      "label": "Rainy River"
+    },
+    {
+      "value": "RAYSIDE_BALFOUR",
+      "label": "Rayside-Balfour"
+    },
+    {
+      "value": "RED_LAKE",
+      "label": "Red Lake"
+    },
+    {
+      "value": "REGIONAL_MUNICIPALITY_OF_WATERLOO",
+      "label": "Regional Municipality of Waterloo"
+    },
+    {
+      "value": "RENFREW",
+      "label": "Renfrew"
+    },
+    {
+      "value": "RICHMOND",
+      "label": "Richmond"
+    },
+    {
+      "value": "RICHMOND_HILL",
+      "label": "Richmond Hill"
+    },
+    {
+      "value": "RIDGETOWN",
+      "label": "Ridgetown"
+    },
+    {
+      "value": "ROCKWOOD",
+      "label": "Rockwood"
+    },
+    {
+      "value": "RUSSELL",
+      "label": "Russell"
+    },
+    {
+      "value": "SARNIA",
+      "label": "Sarnia"
+    },
+    {
+      "value": "SAULT_STE_MARIE",
+      "label": "Sault Ste. Marie"
+    },
+    {
+      "value": "SCARBOROUGH",
+      "label": "Scarborough"
+    },
+    {
+      "value": "SEAFORTH",
+      "label": "Seaforth"
+    },
+    {
+      "value": "SHELBURNE",
+      "label": "Shelburne"
+    },
+    {
+      "value": "SIMCOE",
+      "label": "Simcoe"
+    },
+    {
+      "value": "SIOUX_LOOKOUT",
+      "label": "Sioux Lookout"
+    },
+    {
+      "value": "SKATEPARK",
+      "label": "Skatepark"
+    },
+    {
+      "value": "SMITHS_FALLS",
+      "label": "Smiths Falls"
+    },
+    {
+      "value": "SOUTH_HURON",
+      "label": "South Huron"
+    },
+    {
+      "value": "SOUTH_RIVER",
+      "label": "South River"
+    },
+    {
+      "value": "ST_CATHARINES",
+      "label": "St. Catharines"
+    },
+    {
+      "value": "ST_GEORGE",
+      "label": "St. George"
+    },
+    {
+      "value": "ST_THOMAS",
+      "label": "St. Thomas"
+    },
+    {
+      "value": "STIRLING",
+      "label": "Stirling"
+    },
+    {
+      "value": "STONEY_POINT",
+      "label": "Stoney Point"
+    },
+    {
+      "value": "STRATFORD",
+      "label": "Stratford"
+    },
+    {
+      "value": "SUDBURY",
+      "label": "Sudbury"
+    },
+    {
+      "value": "TAVISTOCK",
+      "label": "Tavistock"
+    },
+    {
+      "value": "TEMISKAMING_SHORES",
+      "label": "Temiskaming Shores"
+    },
+    {
+      "value": "THESSALON",
+      "label": "Thessalon"
+    },
+    {
+      "value": "THORNHILL",
+      "label": "Thornhill"
+    },
+    {
+      "value": "THOROLD",
+      "label": "Thorold"
+    },
+    {
+      "value": "THUNDER_BAY",
+      "label": "Thunder Bay"
+    },
+    {
+      "value": "THUNDER_BAY_DISTRICT",
+      "label": "Thunder Bay District"
+    },
+    {
+      "value": "TIMISKAMING",
+      "label": "Timiskaming"
+    },
+    {
+      "value": "TIMMINS",
+      "label": "Timmins"
+    },
+    {
+      "value": "TOBERMORY",
+      "label": "Tobermory"
+    },
+    {
+      "value": "TORONTO",
+      "label": "Toronto"
+    },
+    {
+      "value": "TORONTO_COUNTY",
+      "label": "Toronto county"
+    },
+    {
+      "value": "TOTTENHAM",
+      "label": "Tottenham"
+    },
+    {
+      "value": "TWEED",
+      "label": "Tweed"
+    },
+    {
+      "value": "UXBRIDGE",
+      "label": "Uxbridge"
+    },
+    {
+      "value": "VALLEY_EAST",
+      "label": "Valley East"
+    },
+    {
+      "value": "VANIER",
+      "label": "Vanier"
+    },
+    {
+      "value": "VAUGHAN",
+      "label": "Vaughan"
+    },
+    {
+      "value": "VINELAND",
+      "label": "Vineland"
+    },
+    {
+      "value": "VIRGIL",
+      "label": "Virgil"
+    },
+    {
+      "value": "WALPOLE_ISLAND",
+      "label": "Walpole Island"
+    },
+    {
+      "value": "WASAGA_BEACH",
+      "label": "Wasaga Beach"
+    },
+    {
+      "value": "WATERFORD",
+      "label": "Waterford"
+    },
+    {
+      "value": "WATERLOO",
+      "label": "Waterloo"
+    },
+    {
+      "value": "WATFORD",
+      "label": "Watford"
+    },
+    {
+      "value": "WAWA",
+      "label": "Wawa"
+    },
+    {
+      "value": "WELLAND",
+      "label": "Welland"
+    },
+    {
+      "value": "WELLESLEY",
+      "label": "Wellesley"
+    },
+    {
+      "value": "WENDOVER",
+      "label": "Wendover"
+    },
+    {
+      "value": "WEST_LORNE",
+      "label": "West Lorne"
+    },
+    {
+      "value": "WILLOWDALE",
+      "label": "Willowdale"
+    },
+    {
+      "value": "WINCHESTER",
+      "label": "Winchester"
+    },
+    {
+      "value": "WINDSOR",
+      "label": "Windsor"
+    },
+    {
+      "value": "WINGHAM",
+      "label": "Wingham"
+    },
+    {
+      "value": "WOODSTOCK",
+      "label": "Woodstock"
+    },
+    {
+      "value": "YORK",
+      "label": "York"
+    }
+  ],
+  "PE": [
+    {
+      "value": "ALBERTON",
+      "label": "Alberton"
+    },
+    {
+      "value": "BELFAST",
+      "label": "Belfast"
+    },
+    {
+      "value": "CHARLOTTETOWN",
+      "label": "Charlottetown"
+    },
+    {
+      "value": "CORNWALL",
+      "label": "Cornwall"
+    },
+    {
+      "value": "FALLINGBROOK",
+      "label": "Fallingbrook"
+    },
+    {
+      "value": "KENSINGTON",
+      "label": "Kensington"
+    },
+    {
+      "value": "MONTAGUE",
+      "label": "Montague"
+    },
+    {
+      "value": "SOURIS",
+      "label": "Souris"
+    },
+    {
+      "value": "SUMMERSIDE",
+      "label": "Summerside"
+    }
+  ],
+  "QC": [
+    {
+      "value": "ABITIBI_T\u00c9MISCAMINGUE",
+      "label": "Abitibi-T\u00e9miscamingue"
+    },
+    {
+      "value": "ACTON_VALE",
+      "label": "Acton Vale"
+    },
+    {
+      "value": "ADSTOCK",
+      "label": "Adstock"
+    },
+    {
+      "value": "ALBANEL",
+      "label": "Albanel"
+    },
+    {
+      "value": "ALMA",
+      "label": "Alma"
+    },
+    {
+      "value": "AMOS",
+      "label": "Amos"
+    },
+    {
+      "value": "AMQUI",
+      "label": "Amqui"
+    },
+    {
+      "value": "ANGE_GARDIEN",
+      "label": "Ange-Gardien"
+    },
+    {
+      "value": "ASBESTOS",
+      "label": "Asbestos"
+    },
+    {
+      "value": "BAIE_COMEAU",
+      "label": "Baie-Comeau"
+    },
+    {
+      "value": "BAIE_D_URF\u00c9",
+      "label": "Baie-D'Urf\u00e9"
+    },
+    {
+      "value": "BAIE_SAINT_PAUL",
+      "label": "Baie-Saint-Paul"
+    },
+    {
+      "value": "BARRAUTE",
+      "label": "Barraute"
+    },
+    {
+      "value": "BAS_SAINT_LAURENT",
+      "label": "Bas-Saint-Laurent"
+    },
+    {
+      "value": "BEACONSFIELD",
+      "label": "Beaconsfield"
+    },
+    {
+      "value": "BEAUCEVILLE",
+      "label": "Beauceville"
+    },
+    {
+      "value": "BEAUHARNOIS",
+      "label": "Beauharnois"
+    },
+    {
+      "value": "BEAUPR\u00c9",
+      "label": "Beaupr\u00e9"
+    },
+    {
+      "value": "BEDFORD",
+      "label": "Bedford"
+    },
+    {
+      "value": "BELOEIL",
+      "label": "Beloeil"
+    },
+    {
+      "value": "BERTHIERVILLE",
+      "label": "Berthierville"
+    },
+    {
+      "value": "BLAINVILLE",
+      "label": "Blainville"
+    },
+    {
+      "value": "BOIS_DES_FILION",
+      "label": "Bois-des-Filion"
+    },
+    {
+      "value": "BOISBRIAND",
+      "label": "Boisbriand"
+    },
+    {
+      "value": "BONAVENTURE",
+      "label": "Bonaventure"
+    },
+    {
+      "value": "BOUCHERVILLE",
+      "label": "Boucherville"
+    },
+    {
+      "value": "BREAKEYVILLE",
+      "label": "Breakeyville"
+    },
+    {
+      "value": "BROMONT",
+      "label": "Bromont"
+    },
+    {
+      "value": "BROSSARD",
+      "label": "Brossard"
+    },
+    {
+      "value": "BROWNSBURG_CHATHAM",
+      "label": "Brownsburg-Chatham"
+    },
+    {
+      "value": "BUCKINGHAM",
+      "label": "Buckingham"
+    },
+    {
+      "value": "B\u00c9CANCOUR",
+      "label": "B\u00e9cancour"
+    },
+    {
+      "value": "CABANO",
+      "label": "Cabano"
+    },
+    {
+      "value": "CACOUNA",
+      "label": "Cacouna"
+    },
+    {
+      "value": "CANDIAC",
+      "label": "Candiac"
+    },
+    {
+      "value": "CANTLEY",
+      "label": "Cantley"
+    },
+    {
+      "value": "CAP_CHAT",
+      "label": "Cap-Chat"
+    },
+    {
+      "value": "CAP_SANT\u00c9",
+      "label": "Cap-Sant\u00e9"
+    },
+    {
+      "value": "CAPITALE_NATIONALE",
+      "label": "Capitale-Nationale"
+    },
+    {
+      "value": "CARIGNAN",
+      "label": "Carignan"
+    },
+    {
+      "value": "CARLETON",
+      "label": "Carleton"
+    },
+    {
+      "value": "CARLETON_SUR_MER",
+      "label": "Carleton-sur-Mer"
+    },
+    {
+      "value": "CENTRE_DU_QU\u00c9BEC",
+      "label": "Centre-du-Qu\u00e9bec"
+    },
+    {
+      "value": "CHAMBLY",
+      "label": "Chambly"
+    },
+    {
+      "value": "CHAMBORD",
+      "label": "Chambord"
+    },
+    {
+      "value": "CHANDLER",
+      "label": "Chandler"
+    },
+    {
+      "value": "CHAPAIS",
+      "label": "Chapais"
+    },
+    {
+      "value": "CHARLEMAGNE",
+      "label": "Charlemagne"
+    },
+    {
+      "value": "CHAUDI\u00c8RE_APPALACHES",
+      "label": "Chaudi\u00e8re-Appalaches"
+    },
+    {
+      "value": "CHERTSEY",
+      "label": "Chertsey"
+    },
+    {
+      "value": "CHIBOUGAMAU",
+      "label": "Chibougamau"
+    },
+    {
+      "value": "CHUTE_AUX_OUTARDES",
+      "label": "Chute-aux-Outardes"
+    },
+    {
+      "value": "CH\u00c2TEAU_RICHER",
+      "label": "Ch\u00e2teau-Richer"
+    },
+    {
+      "value": "CH\u00c2TEAUGUAY",
+      "label": "Ch\u00e2teauguay"
+    },
+    {
+      "value": "COATICOOK",
+      "label": "Coaticook"
+    },
+    {
+      "value": "CONTRECOEUR",
+      "label": "Contrecoeur"
+    },
+    {
+      "value": "COOKSHIRE",
+      "label": "Cookshire"
+    },
+    {
+      "value": "COOKSHIRE_EATON",
+      "label": "Cookshire-Eaton"
+    },
+    {
+      "value": "COTEAU_DU_LAC",
+      "label": "Coteau-du-Lac"
+    },
+    {
+      "value": "COWANSVILLE",
+      "label": "Cowansville"
+    },
+    {
+      "value": "CRABTREE",
+      "label": "Crabtree"
+    },
+    {
+      "value": "C\u00d4TE_NORD",
+      "label": "C\u00f4te-Nord"
+    },
+    {
+      "value": "C\u00d4TE_SAINT_LUC",
+      "label": "C\u00f4te-Saint-Luc"
+    },
+    {
+      "value": "DANVILLE",
+      "label": "Danville"
+    },
+    {
+      "value": "DAVELUYVILLE",
+      "label": "Daveluyville"
+    },
+    {
+      "value": "DELSON",
+      "label": "Delson"
+    },
+    {
+      "value": "DEUX_MONTAGNES",
+      "label": "Deux-Montagnes"
+    },
+    {
+      "value": "DISRAELI",
+      "label": "Disraeli"
+    },
+    {
+      "value": "DOLBEAU_MISTASSINI",
+      "label": "Dolbeau-Mistassini"
+    },
+    {
+      "value": "DOLLARD_DES_ORMEAUX",
+      "label": "Dollard-Des Ormeaux"
+    },
+    {
+      "value": "DONNACONA",
+      "label": "Donnacona"
+    },
+    {
+      "value": "DORVAL",
+      "label": "Dorval"
+    },
+    {
+      "value": "DRUMMONDVILLE",
+      "label": "Drummondville"
+    },
+    {
+      "value": "DUNHAM",
+      "label": "Dunham"
+    },
+    {
+      "value": "EAST_ANGUS",
+      "label": "East Angus"
+    },
+    {
+      "value": "EAST_BROUGHTON",
+      "label": "East Broughton"
+    },
+    {
+      "value": "FARNHAM",
+      "label": "Farnham"
+    },
+    {
+      "value": "FERME_NEUVE",
+      "label": "Ferme-Neuve"
+    },
+    {
+      "value": "FERMONT",
+      "label": "Fermont"
+    },
+    {
+      "value": "FORESTVILLE",
+      "label": "Forestville"
+    },
+    {
+      "value": "FORT_COULONGE",
+      "label": "Fort-Coulonge"
+    },
+    {
+      "value": "FOSSAMBAULT_SUR_LE_LAC",
+      "label": "Fossambault-sur-le-Lac"
+    },
+    {
+      "value": "FRANKLIN",
+      "label": "Franklin"
+    },
+    {
+      "value": "GASP\u00c9",
+      "label": "Gasp\u00e9"
+    },
+    {
+      "value": "GASP\u00c9SIE_\u00ceLES_DE_LA_MADELEINE",
+      "label": "Gasp\u00e9sie-\u00celes-de-la-Madeleine"
+    },
+    {
+      "value": "GATINEAU",
+      "label": "Gatineau"
+    },
+    {
+      "value": "GODEFROY",
+      "label": "Godefroy"
+    },
+    {
+      "value": "GRANBY",
+      "label": "Granby"
+    },
+    {
+      "value": "HAMPSTEAD",
+      "label": "Hampstead"
+    },
+    {
+      "value": "HAUTERIVE",
+      "label": "Hauterive"
+    },
+    {
+      "value": "HAVRE_SAINT_PIERRE",
+      "label": "Havre-Saint-Pierre"
+    },
+    {
+      "value": "HUDSON",
+      "label": "Hudson"
+    },
+    {
+      "value": "HUNTINGDON",
+      "label": "Huntingdon"
+    },
+    {
+      "value": "H\u00c9ROUXVILLE",
+      "label": "H\u00e9rouxville"
+    },
+    {
+      "value": "JOLIETTE",
+      "label": "Joliette"
+    },
+    {
+      "value": "JONQUI\u00c8RE",
+      "label": "Jonqui\u00e8re"
+    },
+    {
+      "value": "KINGSEY_FALLS",
+      "label": "Kingsey Falls"
+    },
+    {
+      "value": "KIRKLAND",
+      "label": "Kirkland"
+    },
+    {
+      "value": "L_ANCIENNE_LORETTE",
+      "label": "L'Ancienne-Lorette"
+    },
+    {
+      "value": "L_ANGE_GARDIEN",
+      "label": "L'Ange-Gardien"
+    },
+    {
+      "value": "L_ASCENSION_DE_NOTRE_SEIGNEUR",
+      "label": "L'Ascension-de-Notre-Seigneur"
+    },
+    {
+      "value": "L_ASSOMPTION",
+      "label": "L'Assomption"
+    },
+    {
+      "value": "L_\u00c9PIPHANIE",
+      "label": "L'\u00c9piphanie"
+    },
+    {
+      "value": "L_\u00ceLE_PERROT",
+      "label": "L'\u00cele-Perrot"
+    },
+    {
+      "value": "LA_CONCEPTION",
+      "label": "La Conception"
+    },
+    {
+      "value": "LA_HAUTE_SAINT_CHARLES",
+      "label": "La Haute-Saint-Charles"
+    },
+    {
+      "value": "LA_MALBAIE",
+      "label": "La Malbaie"
+    },
+    {
+      "value": "LA_MINERVE",
+      "label": "La Minerve"
+    },
+    {
+      "value": "LA_POCATI\u00c8RE",
+      "label": "La Pocati\u00e8re"
+    },
+    {
+      "value": "LA_PRAIRIE",
+      "label": "La Prairie"
+    },
+    {
+      "value": "LA_SARRE",
+      "label": "La Sarre"
+    },
+    {
+      "value": "LA_TUQUE",
+      "label": "La Tuque"
+    },
+    {
+      "value": "LABELLE",
+      "label": "Labelle"
+    },
+    {
+      "value": "LAC_ALOUETTE",
+      "label": "Lac-Alouette"
+    },
+    {
+      "value": "LAC_BROME",
+      "label": "Lac-Brome"
+    },
+    {
+      "value": "LAC_CONNELLY",
+      "label": "Lac-Connelly"
+    },
+    {
+      "value": "LAC_LAPIERRE",
+      "label": "Lac-Lapierre"
+    },
+    {
+      "value": "LAC_M\u00c9GANTIC",
+      "label": "Lac-M\u00e9gantic"
+    },
+    {
+      "value": "LAC_SIMON",
+      "label": "Lac-Simon"
+    },
+    {
+      "value": "LACHUTE",
+      "label": "Lachute"
+    },
+    {
+      "value": "LACOLLE",
+      "label": "Lacolle"
+    },
+    {
+      "value": "LANORAIE",
+      "label": "Lanoraie"
+    },
+    {
+      "value": "LAVAL",
+      "label": "Laval"
+    },
+    {
+      "value": "LAVALTRIE",
+      "label": "Lavaltrie"
+    },
+    {
+      "value": "LE_BIC",
+      "label": "Le Bic"
+    },
+    {
+      "value": "LE_PLATEAU",
+      "label": "le Plateau"
+    },
+    {
+      "value": "LEBEL_SUR_QU\u00c9VILLON",
+      "label": "Lebel-sur-Qu\u00e9villon"
+    },
+    {
+      "value": "LEBLANC",
+      "label": "Leblanc"
+    },
+    {
+      "value": "LES_COTEAUX",
+      "label": "Les Coteaux"
+    },
+    {
+      "value": "LES_C\u00c8DRES",
+      "label": "Les C\u00e8dres"
+    },
+    {
+      "value": "LES_ESCOUMINS",
+      "label": "Les Escoumins"
+    },
+    {
+      "value": "LINI\u00c8RE",
+      "label": "Lini\u00e8re"
+    },
+    {
+      "value": "LONGUEUIL",
+      "label": "Longueuil"
+    },
+    {
+      "value": "LORRAINE",
+      "label": "Lorraine"
+    },
+    {
+      "value": "LOUISEVILLE",
+      "label": "Louiseville"
+    },
+    {
+      "value": "LUCEVILLE",
+      "label": "Luceville"
+    },
+    {
+      "value": "L\u00c9VIS",
+      "label": "L\u00e9vis"
+    },
+    {
+      "value": "MACAMIC",
+      "label": "Macamic"
+    },
+    {
+      "value": "MAGOG",
+      "label": "Magog"
+    },
+    {
+      "value": "MALARTIC",
+      "label": "Malartic"
+    },
+    {
+      "value": "MALIOTENAM",
+      "label": "Maliotenam"
+    },
+    {
+      "value": "MANAWAN",
+      "label": "Manawan"
+    },
+    {
+      "value": "MANDEVILLE",
+      "label": "Mandeville"
+    },
+    {
+      "value": "MANIWAKI",
+      "label": "Maniwaki"
+    },
+    {
+      "value": "MARIA",
+      "label": "Maria"
+    },
+    {
+      "value": "MARIEVILLE",
+      "label": "Marieville"
+    },
+    {
+      "value": "MASCOUCHE",
+      "label": "Mascouche"
+    },
+    {
+      "value": "MASKINONG\u00c9",
+      "label": "Maskinong\u00e9"
+    },
+    {
+      "value": "MATAGAMI",
+      "label": "Matagami"
+    },
+    {
+      "value": "MATANE",
+      "label": "Matane"
+    },
+    {
+      "value": "MAURICIE",
+      "label": "Mauricie"
+    },
+    {
+      "value": "MELOCHEVILLE",
+      "label": "Melocheville"
+    },
+    {
+      "value": "MERCIER",
+      "label": "Mercier"
+    },
+    {
+      "value": "METABETCHOUAN_LAC_A_LA_CROIX",
+      "label": "Metabetchouan-Lac-a-la-Croix"
+    },
+    {
+      "value": "MIRABEL",
+      "label": "Mirabel"
+    },
+    {
+      "value": "MISTISSINI",
+      "label": "Mistissini"
+    },
+    {
+      "value": "MONT_JOLI",
+      "label": "Mont-Joli"
+    },
+    {
+      "value": "MONT_LAURIER",
+      "label": "Mont-Laurier"
+    },
+    {
+      "value": "MONT_ROYAL",
+      "label": "Mont-Royal"
+    },
+    {
+      "value": "MONT_SAINT_GR\u00c9GOIRE",
+      "label": "Mont-Saint-Gr\u00e9goire"
+    },
+    {
+      "value": "MONT_SAINT_HILAIRE",
+      "label": "Mont-Saint-Hilaire"
+    },
+    {
+      "value": "MONT_TREMBLANT",
+      "label": "Mont-Tremblant"
+    },
+    {
+      "value": "MONTMAGNY",
+      "label": "Montmagny"
+    },
+    {
+      "value": "MONTR\u00c9AL",
+      "label": "Montr\u00e9al"
+    },
+    {
+      "value": "MONTR\u00c9AL_EST",
+      "label": "Montr\u00e9al-Est"
+    },
+    {
+      "value": "MONTR\u00c9AL_OUEST",
+      "label": "Montr\u00e9al-Ouest"
+    },
+    {
+      "value": "MORIN_HEIGHTS",
+      "label": "Morin-Heights"
+    },
+    {
+      "value": "M\u00c9TABETCHOUAN",
+      "label": "M\u00e9tabetchouan"
+    },
+    {
+      "value": "NAPIERVILLE",
+      "label": "Napierville"
+    },
+    {
+      "value": "NEUVILLE",
+      "label": "Neuville"
+    },
+    {
+      "value": "NEW_CARLISLE",
+      "label": "New Carlisle"
+    },
+    {
+      "value": "NEW_RICHMOND",
+      "label": "New-Richmond"
+    },
+    {
+      "value": "NICOLET",
+      "label": "Nicolet"
+    },
+    {
+      "value": "NORD_DU_QU\u00c9BEC",
+      "label": "Nord-du-Qu\u00e9bec"
+    },
+    {
+      "value": "NORMANDIN",
+      "label": "Normandin"
+    },
+    {
+      "value": "NOTRE_DAME_DE_GR\u00c2CE",
+      "label": "Notre-Dame-de-Gr\u00e2ce"
+    },
+    {
+      "value": "NOTRE_DAME_DE_L_\u00ceLE_PERROT",
+      "label": "Notre-Dame-de-l'\u00cele-Perrot"
+    },
+    {
+      "value": "NOTRE_DAME_DES_PRAIRIES",
+      "label": "Notre-Dame-des-Prairies"
+    },
+    {
+      "value": "NOTRE_DAME_DU_LAC",
+      "label": "Notre-Dame-du-Lac"
+    },
+    {
+      "value": "NOTRE_DAME_DU_MONT_CARMEL",
+      "label": "Notre-Dame-du-Mont-Carmel"
+    },
+    {
+      "value": "OKA",
+      "label": "Oka"
+    },
+    {
+      "value": "ORMSTOWN",
+      "label": "Ormstown"
+    },
+    {
+      "value": "OTTERBURN_PARK",
+      "label": "Otterburn Park"
+    },
+    {
+      "value": "OUTAOUAIS",
+      "label": "Outaouais"
+    },
+    {
+      "value": "PAPINEAUVILLE",
+      "label": "Papineauville"
+    },
+    {
+      "value": "PARC_BOUTIN",
+      "label": "Parc-Boutin"
+    },
+    {
+      "value": "PIEDMONT",
+      "label": "Piedmont"
+    },
+    {
+      "value": "PIERREVILLE",
+      "label": "Pierreville"
+    },
+    {
+      "value": "PINCOURT",
+      "label": "Pincourt"
+    },
+    {
+      "value": "PLESSISVILLE",
+      "label": "Plessisville"
+    },
+    {
+      "value": "POH\u00c9N\u00c9GAMOOK",
+      "label": "Poh\u00e9n\u00e9gamook"
+    },
+    {
+      "value": "POINTE_CALUMET",
+      "label": "Pointe-Calumet"
+    },
+    {
+      "value": "POINTE_CLAIRE",
+      "label": "Pointe-Claire"
+    },
+    {
+      "value": "POINTE_DU_LAC",
+      "label": "Pointe-du-Lac"
+    },
+    {
+      "value": "PONT_ROUGE",
+      "label": "Pont Rouge"
+    },
+    {
+      "value": "PORT_CARTIER",
+      "label": "Port-Cartier"
+    },
+    {
+      "value": "PORTNEUF",
+      "label": "Portneuf"
+    },
+    {
+      "value": "PRINCEVILLE",
+      "label": "Princeville"
+    },
+    {
+      "value": "PR\u00c9VOST",
+      "label": "Pr\u00e9vost"
+    },
+    {
+      "value": "QU\u00c9BEC",
+      "label": "Qu\u00e9bec"
+    },
+    {
+      "value": "RAWDON",
+      "label": "Rawdon"
+    },
+    {
+      "value": "REPENTIGNY",
+      "label": "Repentigny"
+    },
+    {
+      "value": "RICHELIEU",
+      "label": "Richelieu"
+    },
+    {
+      "value": "RICHMOND",
+      "label": "Richmond"
+    },
+    {
+      "value": "RIGAUD",
+      "label": "Rigaud"
+    },
+    {
+      "value": "RIMOUSKI",
+      "label": "Rimouski"
+    },
+    {
+      "value": "RIVI\u00c8RE_DU_LOUP",
+      "label": "Rivi\u00e8re-du-Loup"
+    },
+    {
+      "value": "RIVI\u00c8RE_ROUGE",
+      "label": "Rivi\u00e8re-Rouge"
+    },
+    {
+      "value": "ROBERVAL",
+      "label": "Roberval"
+    },
+    {
+      "value": "ROCK_FOREST",
+      "label": "Rock Forest"
+    },
+    {
+      "value": "ROSEM\u00c8RE",
+      "label": "Rosem\u00e8re"
+    },
+    {
+      "value": "ROUGEMONT",
+      "label": "Rougemont"
+    },
+    {
+      "value": "ROUYN_NORANDA",
+      "label": "Rouyn-Noranda"
+    },
+    {
+      "value": "SACR\u00c9_COEUR",
+      "label": "Sacr\u00e9-Coeur"
+    },
+    {
+      "value": "SAGUENAY",
+      "label": "Saguenay"
+    },
+    {
+      "value": "SAINT_ADOLPHE_D_HOWARD",
+      "label": "Saint-Adolphe-d'Howard"
+    },
+    {
+      "value": "SAINT_ALEXANDRE",
+      "label": "Saint-Alexandre"
+    },
+    {
+      "value": "SAINT_AMABLE",
+      "label": "Saint-Amable"
+    },
+    {
+      "value": "SAINT_AMBROISE",
+      "label": "Saint-Ambroise"
+    },
+    {
+      "value": "SAINT_ANDR\u00c9_AVELLIN",
+      "label": "Saint-Andr\u00e9-Avellin"
+    },
+    {
+      "value": "SAINT_ANSELME",
+      "label": "Saint-Anselme"
+    },
+    {
+      "value": "SAINT_ANTOINE_DE_TILLY",
+      "label": "Saint-Antoine-de-Tilly"
+    },
+    {
+      "value": "SAINT_AUGUSTIN",
+      "label": "Saint-Augustin"
+    },
+    {
+      "value": "SAINT_AUGUSTIN_DE_DESMAURES",
+      "label": "Saint-Augustin-de-Desmaures"
+    },
+    {
+      "value": "SAINT_BARNAB\u00c9_SUD",
+      "label": "Saint-Barnab\u00e9-Sud"
+    },
+    {
+      "value": "SAINT_BASILE_LE_GRAND",
+      "label": "Saint-Basile-le-Grand"
+    },
+    {
+      "value": "SAINT_BONIFACE",
+      "label": "Saint-Boniface"
+    },
+    {
+      "value": "SAINT_BRUNO",
+      "label": "Saint-Bruno"
+    },
+    {
+      "value": "SAINT_BRUNO_DE_GUIGUES",
+      "label": "Saint-Bruno-de-Guigues"
+    },
+    {
+      "value": "SAINT_BRUNO_DE_MONTARVILLE",
+      "label": "Saint-Bruno-de-Montarville"
+    },
+    {
+      "value": "SAINT_CANUT",
+      "label": "Saint-Canut"
+    },
+    {
+      "value": "SAINT_CHARLES",
+      "label": "Saint-Charles"
+    },
+    {
+      "value": "SAINT_CONSTANT",
+      "label": "Saint-Constant"
+    },
+    {
+      "value": "SAINT_CYRILLE_DE_WENDOVER",
+      "label": "Saint-Cyrille-de-Wendover"
+    },
+    {
+      "value": "SAINT_C\u00c9SAIRE",
+      "label": "Saint-C\u00e9saire"
+    },
+    {
+      "value": "SAINT_C\u00d4ME_LINI\u00c8RE",
+      "label": "Saint-C\u00f4me-Lini\u00e8re"
+    },
+    {
+      "value": "SAINT_DAMASE",
+      "label": "Saint-Damase"
+    },
+    {
+      "value": "SAINT_DENIS_SUR_RICHELIEU",
+      "label": "Saint-Denis-sur-Richelieu"
+    },
+    {
+      "value": "SAINT_DONAT_DE_MONTCALM",
+      "label": "Saint-Donat-de-Montcalm"
+    },
+    {
+      "value": "SAINT_ELZ\u00c9AR",
+      "label": "Saint-Elz\u00e9ar"
+    },
+    {
+      "value": "SAINT_EUSTACHE",
+      "label": "Saint-Eustache"
+    },
+    {
+      "value": "SAINT_F\u00c9LICIEN",
+      "label": "Saint-F\u00e9licien"
+    },
+    {
+      "value": "SAINT_F\u00c9LIX_DE_VALOIS",
+      "label": "Saint-F\u00e9lix-de-Valois"
+    },
+    {
+      "value": "SAINT_GABRIEL",
+      "label": "Saint-Gabriel"
+    },
+    {
+      "value": "SAINT_GEORGES",
+      "label": "Saint-Georges"
+    },
+    {
+      "value": "SAINT_GERMAIN_DE_GRANTHAM",
+      "label": "Saint-Germain-de-Grantham"
+    },
+    {
+      "value": "SAINT_G\u00c9D\u00c9ON",
+      "label": "Saint-G\u00e9d\u00e9on"
+    },
+    {
+      "value": "SAINT_HENRI",
+      "label": "Saint-Henri"
+    },
+    {
+      "value": "SAINT_HIPPOLYTE",
+      "label": "Saint-Hippolyte"
+    },
+    {
+      "value": "SAINT_HONOR\u00c9",
+      "label": "Saint-Honor\u00e9"
+    },
+    {
+      "value": "SAINT_HYACINTHE",
+      "label": "Saint-Hyacinthe"
+    },
+    {
+      "value": "SAINT_ISIDORE",
+      "label": "Saint-Isidore"
+    },
+    {
+      "value": "SAINT_JACQUES_LE_MINEUR",
+      "label": "Saint-Jacques-le-Mineur"
+    },
+    {
+      "value": "SAINT_JEAN_BAPTISTE",
+      "label": "Saint-Jean-Baptiste"
+    },
+    {
+      "value": "SAINT_JEAN_SUR_RICHELIEU",
+      "label": "Saint-Jean-sur-Richelieu"
+    },
+    {
+      "value": "SAINT_JOSEPH",
+      "label": "Saint-Joseph"
+    },
+    {
+      "value": "SAINT_JOSEPH_DE_BEAUCE",
+      "label": "Saint-Joseph-de-Beauce"
+    },
+    {
+      "value": "SAINT_JOSEPH_DE_COLERAINE",
+      "label": "Saint-Joseph-de-Coleraine"
+    },
+    {
+      "value": "SAINT_JOSEPH_DU_LAC",
+      "label": "Saint-Joseph-du-Lac"
+    },
+    {
+      "value": "SAINT_J\u00c9R\u00d4ME",
+      "label": "Saint-J\u00e9r\u00f4me"
+    },
+    {
+      "value": "SAINT_LAMBERT_DE_LAUZON",
+      "label": "Saint-Lambert-de-Lauzon"
+    },
+    {
+      "value": "SAINT_LAURENT",
+      "label": "Saint-Laurent"
+    },
+    {
+      "value": "SAINT_LAZARE",
+      "label": "Saint-Lazare"
+    },
+    {
+      "value": "SAINT_LIBOIRE",
+      "label": "Saint-Liboire"
+    },
+    {
+      "value": "SAINT_LIN_LAURENTIDES",
+      "label": "Saint-Lin-Laurentides"
+    },
+    {
+      "value": "SAINT_L\u00c9ONARD",
+      "label": "Saint-L\u00e9onard"
+    },
+    {
+      "value": "SAINT_L\u00c9ONARD_D_ASTON",
+      "label": "Saint-L\u00e9onard-d'Aston"
+    },
+    {
+      "value": "SAINT_MARC_DES_CARRI\u00c8RES",
+      "label": "Saint-Marc-des-Carri\u00e8res"
+    },
+    {
+      "value": "SAINT_MATHIEU",
+      "label": "Saint-Mathieu"
+    },
+    {
+      "value": "SAINT_MICHEL",
+      "label": "Saint-Michel"
+    },
+    {
+      "value": "SAINT_MICHEL_DES_SAINTS",
+      "label": "Saint-Michel-des-Saints"
+    },
+    {
+      "value": "SAINT_NAZAIRE",
+      "label": "Saint-Nazaire"
+    },
+    {
+      "value": "SAINT_NORBERT",
+      "label": "Saint-Norbert"
+    },
+    {
+      "value": "SAINT_PAC\u00d4ME",
+      "label": "Saint-Pac\u00f4me"
+    },
+    {
+      "value": "SAINT_PASCAL",
+      "label": "Saint-Pascal"
+    },
+    {
+      "value": "SAINT_PHILIPPE_DE_LA_PRAIRIE",
+      "label": "Saint-Philippe-de-La Prairie"
+    },
+    {
+      "value": "SAINT_PIE",
+      "label": "Saint-Pie"
+    },
+    {
+      "value": "SAINT_PIERRE_LES_BECQUETS",
+      "label": "Saint-Pierre-les-Becquets"
+    },
+    {
+      "value": "SAINT_PRIME",
+      "label": "Saint-Prime"
+    },
+    {
+      "value": "SAINT_RAPHA\u00cbL",
+      "label": "Saint-Rapha\u00ebl"
+    },
+    {
+      "value": "SAINT_RAYMOND",
+      "label": "Saint-Raymond"
+    },
+    {
+      "value": "SAINT_R\u00c9MI",
+      "label": "Saint-R\u00e9mi"
+    },
+    {
+      "value": "SAINT_R\u00c9MI_DE_TINGWICK",
+      "label": "Saint-R\u00e9mi-de-Tingwick"
+    },
+    {
+      "value": "SAINT_SAUVEUR",
+      "label": "Saint-Sauveur"
+    },
+    {
+      "value": "SAINT_SAUVEUR_DES_MONTS",
+      "label": "Saint-Sauveur-des-Monts"
+    },
+    {
+      "value": "SAINT_SIM\u00c9ON",
+      "label": "Saint-Sim\u00e9on"
+    },
+    {
+      "value": "SAINT_THOMAS",
+      "label": "Saint-Thomas"
+    },
+    {
+      "value": "SAINT_TITE",
+      "label": "Saint-Tite"
+    },
+    {
+      "value": "SAINT_VICTOR",
+      "label": "Saint-Victor"
+    },
+    {
+      "value": "SAINT_ZOTIQUE",
+      "label": "Saint-Zotique"
+    },
+    {
+      "value": "SAINT_\u00c9DOUARD",
+      "label": "Saint-\u00c9douard"
+    },
+    {
+      "value": "SAINT_\u00c9PHREM_DE_BEAUCE",
+      "label": "Saint-\u00c9phrem-de-Beauce"
+    },
+    {
+      "value": "SAINTE_CATHERINE_DE_LA_JACQUES_CARTIER",
+      "label": "Sainte Catherine de la Jacques Cartier"
+    },
+    {
+      "value": "SAINTE_AD\u00c8LE",
+      "label": "Sainte-Ad\u00e8le"
+    },
+    {
+      "value": "SAINTE_AGATHE_DES_MONTS",
+      "label": "Sainte-Agathe-des-Monts"
+    },
+    {
+      "value": "SAINTE_ANNE_DE_BELLEVUE",
+      "label": "Sainte-Anne-de-Bellevue"
+    },
+    {
+      "value": "SAINTE_ANNE_DES_MONTS",
+      "label": "Sainte-Anne-des-Monts"
+    },
+    {
+      "value": "SAINTE_ANNE_DES_PLAINES",
+      "label": "Sainte-Anne-des-Plaines"
+    },
+    {
+      "value": "SAINTE_B\u00c9ATRIX",
+      "label": "Sainte-B\u00e9atrix"
+    },
+    {
+      "value": "SAINTE_CATHERINE",
+      "label": "Sainte-Catherine"
+    },
+    {
+      "value": "SAINTE_CROIX",
+      "label": "Sainte-Croix"
+    },
+    {
+      "value": "SAINTE_JULIE",
+      "label": "Sainte-Julie"
+    },
+    {
+      "value": "SAINTE_JULIENNE",
+      "label": "Sainte-Julienne"
+    },
+    {
+      "value": "SAINTE_MADELEINE",
+      "label": "Sainte-Madeleine"
+    },
+    {
+      "value": "SAINTE_MARIE",
+      "label": "Sainte-Marie"
+    },
+    {
+      "value": "SAINTE_MARTHE_SUR_LE_LAC",
+      "label": "Sainte-Marthe-sur-le-Lac"
+    },
+    {
+      "value": "SAINTE_MARTINE",
+      "label": "Sainte-Martine"
+    },
+    {
+      "value": "SAINTE_SOPHIE",
+      "label": "Sainte-Sophie"
+    },
+    {
+      "value": "SAINTE_TH\u00c8CLE",
+      "label": "Sainte-Th\u00e8cle"
+    },
+    {
+      "value": "SAINTE_TH\u00c9R\u00c8SE",
+      "label": "Sainte-Th\u00e9r\u00e8se"
+    },
+    {
+      "value": "SAINTE_\u00c9LISABETH",
+      "label": "Sainte-\u00c9lisabeth"
+    },
+    {
+      "value": "SALABERRY_DE_VALLEYFIELD",
+      "label": "Salaberry-de-Valleyfield"
+    },
+    {
+      "value": "SALLUIT",
+      "label": "Salluit"
+    },
+    {
+      "value": "SENNETERRE",
+      "label": "Senneterre"
+    },
+    {
+      "value": "SEPT_\u00ceLES",
+      "label": "Sept-\u00celes"
+    },
+    {
+      "value": "SHANNON",
+      "label": "Shannon"
+    },
+    {
+      "value": "SHAWINIGAN",
+      "label": "Shawinigan"
+    },
+    {
+      "value": "SHAWVILLE",
+      "label": "Shawville"
+    },
+    {
+      "value": "SHERBROOKE",
+      "label": "Sherbrooke"
+    },
+    {
+      "value": "SOREL_TRACY",
+      "label": "Sorel-Tracy"
+    },
+    {
+      "value": "ST_JEAN_PORT_JOLI",
+      "label": "St-Jean-Port-Joli"
+    },
+    {
+      "value": "SUTTON",
+      "label": "Sutton"
+    },
+    {
+      "value": "TERRASSE_DES_PINS",
+      "label": "Terrasse-des-Pins"
+    },
+    {
+      "value": "TERREBONNE",
+      "label": "Terrebonne"
+    },
+    {
+      "value": "THETFORD_MINES",
+      "label": "Thetford-Mines"
+    },
+    {
+      "value": "THURSO",
+      "label": "Thurso"
+    },
+    {
+      "value": "TROIS_RIVI\u00c8RES",
+      "label": "Trois-Rivi\u00e8res"
+    },
+    {
+      "value": "T\u00c9MISCAMING",
+      "label": "T\u00e9miscaming"
+    },
+    {
+      "value": "VAL_D_OR",
+      "label": "Val-d'Or"
+    },
+    {
+      "value": "VAL_DAVID",
+      "label": "Val-David"
+    },
+    {
+      "value": "VAL_DES_MONTS",
+      "label": "Val-des-Monts"
+    },
+    {
+      "value": "VAL_MORIN",
+      "label": "Val-Morin"
+    },
+    {
+      "value": "VALCOURT",
+      "label": "Valcourt"
+    },
+    {
+      "value": "VALL\u00c9E_JONCTION",
+      "label": "Vall\u00e9e-Jonction"
+    },
+    {
+      "value": "VARENNES",
+      "label": "Varennes"
+    },
+    {
+      "value": "VAUDREUIL_DORION",
+      "label": "Vaudreuil-Dorion"
+    },
+    {
+      "value": "VENISE_EN_QU\u00c9BEC",
+      "label": "Venise-en-Qu\u00e9bec"
+    },
+    {
+      "value": "VERCH\u00c8RES",
+      "label": "Verch\u00e8res"
+    },
+    {
+      "value": "VICTORIAVILLE",
+      "label": "Victoriaville"
+    },
+    {
+      "value": "VILLE_MARIE",
+      "label": "Ville-Marie"
+    },
+    {
+      "value": "WAKEFIELD",
+      "label": "Wakefield"
+    },
+    {
+      "value": "WARWICK",
+      "label": "Warwick"
+    },
+    {
+      "value": "WASKAGANISH",
+      "label": "Waskaganish"
+    },
+    {
+      "value": "WASWANIPI",
+      "label": "Waswanipi"
+    },
+    {
+      "value": "WATERLOO",
+      "label": "Waterloo"
+    },
+    {
+      "value": "WEEDON_CENTRE",
+      "label": "Weedon Centre"
+    },
+    {
+      "value": "WESTMOUNT",
+      "label": "Westmount"
+    },
+    {
+      "value": "WEYMONTACHIE",
+      "label": "Weymontachie"
+    },
+    {
+      "value": "WINDSOR",
+      "label": "Windsor"
+    },
+    {
+      "value": "YAMACHICHE",
+      "label": "Yamachiche"
+    }
+  ],
+  "SK": [
+    {
+      "value": "ASSINIBOIA",
+      "label": "Assiniboia"
+    },
+    {
+      "value": "BIGGAR",
+      "label": "Biggar"
+    },
+    {
+      "value": "CANORA",
+      "label": "Canora"
+    },
+    {
+      "value": "CARLYLE",
+      "label": "Carlyle"
+    },
+    {
+      "value": "DALMENY",
+      "label": "Dalmeny"
+    },
+    {
+      "value": "ESTERHAZY",
+      "label": "Esterhazy"
+    },
+    {
+      "value": "ESTEVAN",
+      "label": "Estevan"
+    },
+    {
+      "value": "FOAM_LAKE",
+      "label": "Foam Lake"
+    },
+    {
+      "value": "GRAVELBOURG",
+      "label": "Gravelbourg"
+    },
+    {
+      "value": "HUDSON_BAY",
+      "label": "Hudson Bay"
+    },
+    {
+      "value": "HUMBOLDT",
+      "label": "Humboldt"
+    },
+    {
+      "value": "INDIAN_HEAD",
+      "label": "Indian Head"
+    },
+    {
+      "value": "KAMSACK",
+      "label": "Kamsack"
+    },
+    {
+      "value": "KERROBERT",
+      "label": "Kerrobert"
+    },
+    {
+      "value": "KINDERSLEY",
+      "label": "Kindersley"
+    },
+    {
+      "value": "LA_RONGE",
+      "label": "La Ronge"
+    },
+    {
+      "value": "LANGENBURG",
+      "label": "Langenburg"
+    },
+    {
+      "value": "LANGHAM",
+      "label": "Langham"
+    },
+    {
+      "value": "LANIGAN",
+      "label": "Lanigan"
+    },
+    {
+      "value": "LUMSDEN",
+      "label": "Lumsden"
+    },
+    {
+      "value": "MACKLIN",
+      "label": "Macklin"
+    },
+    {
+      "value": "MAPLE_CREEK",
+      "label": "Maple Creek"
+    },
+    {
+      "value": "MARTENSVILLE",
+      "label": "Martensville"
+    },
+    {
+      "value": "MEADOW_LAKE",
+      "label": "Meadow Lake"
+    },
+    {
+      "value": "MELFORT",
+      "label": "Melfort"
+    },
+    {
+      "value": "MELVILLE",
+      "label": "Melville"
+    },
+    {
+      "value": "MOOSE_JAW",
+      "label": "Moose Jaw"
+    },
+    {
+      "value": "MOOSOMIN",
+      "label": "Moosomin"
+    },
+    {
+      "value": "NIPAWIN",
+      "label": "Nipawin"
+    },
+    {
+      "value": "NORTH_BATTLEFORD",
+      "label": "North Battleford"
+    },
+    {
+      "value": "OUTLOOK",
+      "label": "Outlook"
+    },
+    {
+      "value": "OXBOW",
+      "label": "Oxbow"
+    },
+    {
+      "value": "PELICAN_NARROWS",
+      "label": "Pelican Narrows"
+    },
+    {
+      "value": "PILOT_BUTTE",
+      "label": "Pilot Butte"
+    },
+    {
+      "value": "PREECEVILLE",
+      "label": "Preeceville"
+    },
+    {
+      "value": "PRINCE_ALBERT",
+      "label": "Prince Albert"
+    },
+    {
+      "value": "REGINA",
+      "label": "Regina"
+    },
+    {
+      "value": "REGINA_BEACH",
+      "label": "Regina Beach"
+    },
+    {
+      "value": "ROSETOWN",
+      "label": "Rosetown"
+    },
+    {
+      "value": "ROSTHERN",
+      "label": "Rosthern"
+    },
+    {
+      "value": "SASKATOON",
+      "label": "Saskatoon"
+    },
+    {
+      "value": "SHAUNAVON",
+      "label": "Shaunavon"
+    },
+    {
+      "value": "SHELLBROOK",
+      "label": "Shellbrook"
+    },
+    {
+      "value": "SWIFT_CURRENT",
+      "label": "Swift Current"
+    },
+    {
+      "value": "TISDALE",
+      "label": "Tisdale"
+    },
+    {
+      "value": "UNITY",
+      "label": "Unity"
+    },
+    {
+      "value": "WADENA",
+      "label": "Wadena"
+    },
+    {
+      "value": "WARMAN",
+      "label": "Warman"
+    },
+    {
+      "value": "WATROUS",
+      "label": "Watrous"
+    },
+    {
+      "value": "WEYBURN",
+      "label": "Weyburn"
+    },
+    {
+      "value": "WHITE_CITY",
+      "label": "White City"
+    },
+    {
+      "value": "WILKIE",
+      "label": "Wilkie"
+    },
+    {
+      "value": "WYNYARD",
+      "label": "Wynyard"
+    },
+    {
+      "value": "YORKTON",
+      "label": "Yorkton"
+    }
+  ],
+  "YT": [
+    {
+      "value": "DAWSON_CITY",
+      "label": "Dawson City"
+    },
+    {
+      "value": "HAINES_JUNCTION",
+      "label": "Haines Junction"
+    },
+    {
+      "value": "WATSON_LAKE",
+      "label": "Watson Lake"
+    },
+    {
+      "value": "WHITEHORSE",
+      "label": "Whitehorse"
+    }
+  ]
+}

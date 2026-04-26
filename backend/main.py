@@ -17,7 +17,10 @@ from routes.admin_routes import admin_routes
 from routes.api_routes import api_routes
 from routes.auth_routes import auth_router
 from routes.billing_routes import billing_routes
+from routes.notification_routes import notification_routes
 from routes.public_api_routes import public_routes
+from routes.request_routes import request_routes
+from routes.request_matching_routes import request_matching_routes
 from routes.tenant_routes import tenant_routes
 from migrations.seeder_manager import seeder_manager
 
@@ -44,6 +47,12 @@ async def lifespan(p_app: FastAPI):
         await migrate_tenant_pending_activation()
     except Exception as e:
         print(f"Warning: Tenant pending activation migration failed: {e}")
+
+    try:
+        from migrations.scripts.normalize_phase1_operational_locations import normalize_phase1_operational_locations
+        await normalize_phase1_operational_locations()
+    except Exception as e:
+        print(f"Warning: Phase 1 operational location normalization failed: {e}")
 
     try:
         seed_results = await seeder_manager.get_instance().run_auto_seeders(force=False)
@@ -77,8 +86,11 @@ configure_swagger(app)
 app.include_router(auth_router, include_in_schema=True)
 app.include_router(admin_routes, include_in_schema=True)
 app.include_router(billing_routes, include_in_schema=True)
+app.include_router(notification_routes, include_in_schema=True)
 app.include_router(public_routes, include_in_schema=True)
+app.include_router(request_routes, include_in_schema=True)
 app.include_router(tenant_routes, include_in_schema=True)
+app.include_router(request_matching_routes, include_in_schema=True)
 app.include_router(api_routes, include_in_schema=True)
 
 app.add_exception_handler(Exception, global_exception_handler)

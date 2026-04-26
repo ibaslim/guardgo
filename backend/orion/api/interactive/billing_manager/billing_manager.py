@@ -9,17 +9,23 @@ from orion.api.interactive.activity_manager.activity_manager import ActivityMana
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_billing_model import (
     BillingRate,
+    TravelPricingPolicy,
 )
 from orion.services.mongo_manager.shared_model.db_tenant_model import (
     db_tenant_model,
     TenantStatus,
     TenantType,
 )
-from configs.metadata_constants import CANADIAN_PROVINCE_OPTIONS
+from configs.metadata_constants import (
+    CANADIAN_PROVINCE_OPTIONS,
+    CANADIAN_CITIES_BY_PROVINCE_OPTIONS,
+    BILLING_REGION_CITY_OPTIONS,
+)
 
 
 # Use all Canadian provinces and territories
 CANADIAN_PROVINCES = CANADIAN_PROVINCE_OPTIONS
+BILLING_LOCATIONS = BILLING_REGION_CITY_OPTIONS
 
 
 class BillingManager:
@@ -42,6 +48,10 @@ class BillingManager:
     SCOPE_GUARD_DEFAULT = "guard_default"
     SCOPE_GUARD_DEFAULT_LEGACY = "guard"
     SCOPE_PROVIDER_DEFAULT = "provider_default"
+    SCOPE_GUARD_MARGIN_DEFAULT = "guard_margin_default"
+    SCOPE_PROVIDER_COMMISSION_DEFAULT = "provider_commission_default"
+    SCOPE_GUARD_TRAVEL_DEFAULT = "guard_travel_default"
+    SCOPE_PROVIDER_TRAVEL_DEFAULT = "provider_travel_default"
 
     @staticmethod
     def _extract_tenant_name(profile: Any) -> str:
@@ -61,12 +71,58 @@ class BillingManager:
         return region_code
 
     @staticmethod
+    def _normalize_city_code(city_code: Any) -> str:
+        return str(city_code or "").strip().upper()
+
+    @staticmethod
+    def _rate_key(region_code: str, city_code: str) -> str:
+        return f"{region_code}:{city_code}"
+
+    @staticmethod
+    def _city_label(region_code: str, city_code: str) -> str:
+        normalized = city_code.strip().upper()
+        if not normalized:
+            return ""
+        for city in CANADIAN_CITIES_BY_PROVINCE_OPTIONS.get(region_code, []):
+            if city["value"] == normalized:
+                return city["label"]
+        return normalized
+
+    def _location_label(self, region_code: str, city_code: str) -> str:
+        region_label = self._region_label(region_code)
+        city_label = self._city_label(region_code, city_code)
+        if city_label:
+            return f"{region_label} / {city_label}"
+        return region_label
+
+    @staticmethod
+    def _policy_key(region_code: str, city_code: str) -> str:
+        return f"{region_code}:{city_code}"
+
+    @staticmethod
     def _provider_scope(provider_id: str) -> str:
         return f"provider:{provider_id}"
 
     @staticmethod
     def _guard_scope(guard_id: str) -> str:
         return f"guard:{guard_id}"
+
+    @classmethod
+    def _default_travel_policy_values(cls, scope: str) -> Dict[str, Any]:
+        if scope == cls.SCOPE_PROVIDER_TRAVEL_DEFAULT:
+            return {
+                "included_radius_km": 15.0,
+                "rate_per_km": 0.55,
+                "max_auto_match_radius_km": 75.0,
+                "manual_review_over_km": 100.0,
+            }
+
+        return {
+            "included_radius_km": 10.0,
+            "rate_per_km": 0.45,
+            "max_auto_match_radius_km": 50.0,
+            "manual_review_over_km": 70.0,
+        }
 
     @staticmethod
     def _has_rate_change(
@@ -83,6 +139,24 @@ class BillingManager:
             or prev_hol != new_hol
         )
 
+    @staticmethod
+    def _has_travel_policy_change(
+        prev_included_radius_km: float,
+        prev_rate_per_km: float,
+        prev_max_auto_match_radius_km: float | None,
+        prev_manual_review_over_km: float | None,
+        next_included_radius_km: float,
+        next_rate_per_km: float,
+        next_max_auto_match_radius_km: float | None,
+        next_manual_review_over_km: float | None,
+    ) -> bool:
+        return (
+            prev_included_radius_km != next_included_radius_km
+            or prev_rate_per_km != next_rate_per_km
+            or prev_max_auto_match_radius_km != next_max_auto_match_radius_km
+            or prev_manual_review_over_km != next_manual_review_over_km
+        )
+
     async def _compose_rates_by_scope_priority(
         self,
         scopes: List[str],
@@ -90,25 +164,107 @@ class BillingManager:
         by_scope: Dict[str, Dict[str, BillingRate]] = {}
         for scope in scopes:
             existing = await self._engine.find(BillingRate, BillingRate.scope == scope)
-            by_scope[scope] = {r.region_code: r for r in existing}
+            by_scope[scope] = {
+                self._rate_key(r.region_code, self._normalize_city_code(getattr(r, "city_code", ""))): r
+                for r in existing
+            }
 
         result = []
-        for prov in CANADIAN_PROVINCES:
-            code = prov["value"]
+        for location in BILLING_LOCATIONS:
+            code = location["region_code"]
+            city_code = self._normalize_city_code(location.get("city_code"))
+            province_label = location["region_label"]
+            city_label = location.get("city_label", "")
             rec = None
             for scope in scopes:
-                rec = by_scope.get(scope, {}).get(code)
+                scoped_rates = by_scope.get(scope, {})
+                rec = scoped_rates.get(self._rate_key(code, city_code))
+                if not rec:
+                    # Backward compatibility: province-level defaults without city_code.
+                    rec = scoped_rates.get(self._rate_key(code, ""))
                 if rec:
                     break
 
             result.append({
                 "region_code": code,
-                "region_label": prov["label"],
+                "region_label": province_label,
+                "city_code": city_code,
+                "city_label": city_label,
+                "location_label": self._location_label(code, city_code),
                 "standard_rate": rec.standard_rate if rec else 0.0,
                 "weekend_rate": rec.weekend_rate if rec else 0.0,
                 "holiday_rate": rec.holiday_rate if rec else 0.0,
                 "currency": "CAD",
             })
+        return result
+
+    async def _compose_travel_policies_by_scope_priority(
+        self,
+        scopes: List[str],
+    ) -> List[Dict[str, Any]]:
+        by_scope: Dict[str, Dict[str, TravelPricingPolicy]] = {}
+        for scope in scopes:
+            existing = await self._engine.find(TravelPricingPolicy, TravelPricingPolicy.scope == scope)
+            by_scope[scope] = {
+                self._policy_key(policy.region_code, self._normalize_city_code(getattr(policy, "city_code", ""))): policy
+                for policy in existing
+            }
+
+        province_defaults: Dict[str, TravelPricingPolicy] = {}
+        for scope in scopes:
+            scoped = by_scope.get(scope, {})
+            for key, policy in scoped.items():
+                if key.endswith(":"):
+                    province_defaults.setdefault(policy.region_code, policy)
+
+        result: List[Dict[str, Any]] = []
+        for location in BILLING_LOCATIONS:
+            code = location["region_code"]
+            city_code = self._normalize_city_code(location.get("city_code"))
+            city_policy = None
+            province_policy = None
+            for scope in scopes:
+                scoped = by_scope.get(scope, {})
+                city_policy = scoped.get(self._policy_key(code, city_code))
+                province_policy = scoped.get(self._policy_key(code, ""))
+                if city_policy or province_policy:
+                    break
+
+            effective = city_policy or province_policy
+            scope_defaults = self._default_travel_policy_values(scopes[0]) if scopes else self._default_travel_policy_values(self.SCOPE_GUARD_TRAVEL_DEFAULT)
+            result.append({
+                "region_code": code,
+                "region_label": location["region_label"],
+                "city_code": city_code,
+                "city_label": location.get("city_label", ""),
+                "location_label": self._location_label(code, city_code),
+                "included_radius_km": effective.included_radius_km if effective else scope_defaults["included_radius_km"],
+                "rate_per_km": effective.rate_per_km if effective else scope_defaults["rate_per_km"],
+                "max_auto_match_radius_km": effective.max_auto_match_radius_km if effective else scope_defaults["max_auto_match_radius_km"],
+                "manual_review_over_km": effective.manual_review_over_km if effective else scope_defaults["manual_review_over_km"],
+                "inherits_region_default": city_policy is None and province_policy is not None,
+                "has_city_override": city_policy is not None,
+            })
+
+        for province in CANADIAN_PROVINCES:
+            region_code = province["value"]
+            province_policy = province_defaults.get(region_code)
+            scope_defaults = self._default_travel_policy_values(scopes[0]) if scopes else self._default_travel_policy_values(self.SCOPE_GUARD_TRAVEL_DEFAULT)
+            result.append({
+                "region_code": region_code,
+                "region_label": province["label"],
+                "city_code": "",
+                "city_label": "",
+                "location_label": self._location_label(region_code, ""),
+                "included_radius_km": province_policy.included_radius_km if province_policy else scope_defaults["included_radius_km"],
+                "rate_per_km": province_policy.rate_per_km if province_policy else scope_defaults["rate_per_km"],
+                "max_auto_match_radius_km": province_policy.max_auto_match_radius_km if province_policy else scope_defaults["max_auto_match_radius_km"],
+                "manual_review_over_km": province_policy.manual_review_over_km if province_policy else scope_defaults["manual_review_over_km"],
+                "inherits_region_default": False,
+                "has_city_override": False,
+                "is_region_default": True,
+            })
+
         return result
 
     async def _save_scope_rates(
@@ -121,6 +277,10 @@ class BillingManager:
         write_activity: bool = True,
         force_create_missing: bool = False,
     ) -> Dict[str, Any]:
+        valid_location_keys = {
+            self._rate_key(loc["region_code"], self._normalize_city_code(loc.get("city_code")))
+            for loc in BILLING_LOCATIONS
+        }
         valid_codes = {p["value"] for p in CANADIAN_PROVINCES}
         now = datetime.utcnow()
         actor_id = str(getattr(current_user, "id", "") or "") or None
@@ -129,68 +289,235 @@ class BillingManager:
         updated_count = 0
 
         for row in payload:
-            code = row.get("region_code", "")
+            code = str(row.get("region_code", "")).strip().upper()
             if code not in valid_codes:
                 continue
+
+            input_city_code = self._normalize_city_code(row.get("city_code", ""))
+
+            target_cities: List[str]
+            if input_city_code:
+                if self._rate_key(code, input_city_code) not in valid_location_keys:
+                    continue
+                target_cities = [input_city_code]
+            else:
+                target_cities = [
+                    self._normalize_city_code(loc.get("city_code"))
+                    for loc in BILLING_LOCATIONS
+                    if loc["region_code"] == code
+                ]
+                if not target_cities:
+                    continue
 
             std = round(float(row.get("standard_rate", 0)), 2)
             wkd = round(float(row.get("weekend_rate", 0)), 2)
             hol = round(float(row.get("holiday_rate", 0)), 2)
 
-            existing = await self._engine.find_one(
-                BillingRate,
-                (BillingRate.scope == scope) & (BillingRate.region_code == code),
+            for city_code in target_cities:
+                existing = await self._engine.find_one(
+                    BillingRate,
+                    (BillingRate.scope == scope)
+                    & (BillingRate.region_code == code)
+                    & (BillingRate.city_code == city_code),
+                )
+
+                prev_std = existing.standard_rate if existing else 0.0
+                prev_wkd = existing.weekend_rate if existing else 0.0
+                prev_hol = existing.holiday_rate if existing else 0.0
+
+                changed = self._has_rate_change(prev_std, prev_wkd, prev_hol, std, wkd, hol)
+                if not changed and not (force_create_missing and not existing):
+                    continue
+
+                if existing:
+                    existing.standard_rate = std
+                    existing.weekend_rate = wkd
+                    existing.holiday_rate = hol
+                    existing.updated_at = now
+                    existing.updated_by = actor
+                    await self._engine.save(existing)
+                else:
+                    await self._engine.save(BillingRate(
+                        scope=scope,
+                        region_code=code,
+                        city_code=city_code,
+                        standard_rate=std,
+                        weekend_rate=wkd,
+                        holiday_rate=hol,
+                        currency="CAD",
+                        updated_at=now,
+                        updated_by=actor,
+                    ))
+
+                if write_activity and changed:
+                    await self._write_activity_log(
+                        entity_id=entity_id,
+                        entity_name=entity_name,
+                        scope=scope,
+                        region_code=code,
+                        city_code=city_code,
+                        prev_std=prev_std,
+                        prev_wkd=prev_wkd,
+                        prev_hol=prev_hol,
+                        new_std=std,
+                        new_wkd=wkd,
+                        new_hol=hol,
+                        actor_id=actor_id,
+                        actor=actor,
+                        actor_role=actor_role,
+                    )
+
+                updated_count += 1
+
+        return {
+            "count": len(payload),
+            "updated_count": updated_count,
+        }
+
+    async def _save_scope_travel_policies(
+        self,
+        scope: str,
+        payload: List[Dict[str, Any]],
+        current_user,
+        entity_id: str,
+        entity_name: str,
+    ) -> Dict[str, Any]:
+        valid_location_keys = {
+            self._policy_key(loc["region_code"], self._normalize_city_code(loc.get("city_code")))
+            for loc in BILLING_LOCATIONS
+        }
+        valid_codes = {p["value"] for p in CANADIAN_PROVINCES}
+        now = datetime.utcnow()
+        actor = getattr(current_user, "username", None)
+        updated_count = 0
+
+        for row in payload:
+            code = str(row.get("region_code", "")).strip().upper()
+            if code not in valid_codes:
+                continue
+
+            city_code = self._normalize_city_code(row.get("city_code", ""))
+            if city_code and self._policy_key(code, city_code) not in valid_location_keys:
+                continue
+
+            included_radius_km = round(float(row.get("included_radius_km", 10.0) or 0), 2)
+            rate_per_km = round(float(row.get("rate_per_km", 0.0) or 0), 2)
+
+            raw_max_auto_match_radius_km = row.get("max_auto_match_radius_km")
+            max_auto_match_radius_km = (
+                round(float(raw_max_auto_match_radius_km), 2)
+                if raw_max_auto_match_radius_km not in [None, ""]
+                else None
             )
 
-            prev_std = existing.standard_rate if existing else 0.0
-            prev_wkd = existing.weekend_rate if existing else 0.0
-            prev_hol = existing.holiday_rate if existing else 0.0
+            raw_manual_review_over_km = row.get("manual_review_over_km")
+            manual_review_over_km = (
+                round(float(raw_manual_review_over_km), 2)
+                if raw_manual_review_over_km not in [None, ""]
+                else None
+            )
 
-            changed = self._has_rate_change(prev_std, prev_wkd, prev_hol, std, wkd, hol)
-            if not changed and not (force_create_missing and not existing):
+            if included_radius_km < 0 or rate_per_km < 0:
+                continue
+
+            if max_auto_match_radius_km is not None and max_auto_match_radius_km < 0:
+                continue
+
+            if manual_review_over_km is not None and manual_review_over_km < 0:
+                continue
+
+            if (
+                max_auto_match_radius_km is not None
+                and manual_review_over_km is not None
+                and manual_review_over_km < max_auto_match_radius_km
+            ):
+                continue
+
+            existing = await self._engine.find_one(
+                TravelPricingPolicy,
+                (TravelPricingPolicy.scope == scope)
+                & (TravelPricingPolicy.region_code == code)
+                & (TravelPricingPolicy.city_code == city_code),
+            )
+
+            prev_included_radius_km = existing.included_radius_km if existing else 10.0
+            prev_rate_per_km = existing.rate_per_km if existing else 0.0
+            prev_max_auto_match_radius_km = existing.max_auto_match_radius_km if existing else None
+            prev_manual_review_over_km = existing.manual_review_over_km if existing else None
+
+            changed = self._has_travel_policy_change(
+                prev_included_radius_km,
+                prev_rate_per_km,
+                prev_max_auto_match_radius_km,
+                prev_manual_review_over_km,
+                included_radius_km,
+                rate_per_km,
+                max_auto_match_radius_km,
+                manual_review_over_km,
+            )
+            if not changed:
                 continue
 
             if existing:
-                existing.standard_rate = std
-                existing.weekend_rate = wkd
-                existing.holiday_rate = hol
+                existing.included_radius_km = included_radius_km
+                existing.rate_per_km = rate_per_km
+                existing.max_auto_match_radius_km = max_auto_match_radius_km
+                existing.manual_review_over_km = manual_review_over_km
                 existing.updated_at = now
                 existing.updated_by = actor
                 await self._engine.save(existing)
             else:
-                await self._engine.save(BillingRate(
+                await self._engine.save(TravelPricingPolicy(
                     scope=scope,
                     region_code=code,
-                    standard_rate=std,
-                    weekend_rate=wkd,
-                    holiday_rate=hol,
+                    city_code=city_code,
+                    included_radius_km=included_radius_km,
+                    rate_per_km=rate_per_km,
+                    max_auto_match_radius_km=max_auto_match_radius_km,
+                    manual_review_over_km=manual_review_over_km,
                     currency="CAD",
                     updated_at=now,
                     updated_by=actor,
                 ))
-
-            if write_activity and changed:
-                await self._write_activity_log(
-                    entity_id=entity_id,
-                    entity_name=entity_name,
-                    scope=scope,
-                    region_code=code,
-                    prev_std=prev_std,
-                    prev_wkd=prev_wkd,
-                    prev_hol=prev_hol,
-                    new_std=std,
-                    new_wkd=wkd,
-                    new_hol=hol,
-                    actor_id=actor_id,
-                    actor=actor,
-                    actor_role=actor_role,
-                )
 
             updated_count += 1
 
         return {
             "count": len(payload),
             "updated_count": updated_count,
+        }
+
+    async def _ensure_default_travel_policy_seed(self, scope: str) -> Dict[str, Any]:
+        existing = await self._engine.find_one(TravelPricingPolicy, TravelPricingPolicy.scope == scope)
+        if existing:
+            return {"created": False, "count": 0}
+
+        defaults = self._default_travel_policy_values(scope)
+        now = datetime.utcnow()
+        created_count = 0
+
+        for province in CANADIAN_PROVINCES:
+            await self._engine.save(TravelPricingPolicy(
+                scope=scope,
+                region_code=province["value"],
+                city_code="",
+                included_radius_km=defaults["included_radius_km"],
+                rate_per_km=defaults["rate_per_km"],
+                max_auto_match_radius_km=defaults["max_auto_match_radius_km"],
+                manual_review_over_km=defaults["manual_review_over_km"],
+                currency="CAD",
+                updated_at=now,
+                updated_by="system_seed",
+            ))
+            created_count += 1
+
+        return {"created": True, "count": created_count}
+
+    async def get_billing_location_metadata(self) -> Dict[str, Any]:
+        return {
+            "canadianProvinces": CANADIAN_PROVINCES,
+            "canadianCitiesByProvince": CANADIAN_CITIES_BY_PROVINCE_OPTIONS,
+            "billingLocationOptions": BILLING_LOCATIONS,
         }
 
     async def _get_tenant_or_404(self, tenant_id: str, tenant_type: TenantType, detail: str):
@@ -231,6 +558,30 @@ class BillingManager:
 
         return {
             "message": "Guard rates saved",
+            "count": save_result["count"],
+            "updated_count": save_result["updated_count"],
+        }
+
+    async def get_guard_margin_rates(self) -> List[Dict[str, Any]]:
+        """Return one record per Canadian province for guard margin defaults."""
+        return await self._compose_rates_by_scope_priority([
+            self.SCOPE_GUARD_MARGIN_DEFAULT,
+        ])
+
+    async def save_guard_margin_rates(
+        self, payload: List[Dict[str, Any]], current_user=None
+    ) -> Dict[str, Any]:
+        """Upsert guard margin defaults by province."""
+        save_result = await self._save_scope_rates(
+            scope=self.SCOPE_GUARD_MARGIN_DEFAULT,
+            payload=payload,
+            current_user=current_user,
+            entity_id="guard-margin-default-rates",
+            entity_name="Guard Margin Default Rates",
+        )
+
+        return {
+            "message": "Guard margin defaults saved",
             "count": save_result["count"],
             "updated_count": save_result["updated_count"],
         }
@@ -343,6 +694,117 @@ class BillingManager:
             "message": "Provider default rates saved",
             "count": save_result["count"],
             "updated_count": save_result["updated_count"],
+        }
+
+    async def get_provider_commission_rates(self) -> List[Dict[str, Any]]:
+        """Return one record per Canadian province for provider commission defaults."""
+        return await self._compose_rates_by_scope_priority([
+            self.SCOPE_PROVIDER_COMMISSION_DEFAULT,
+        ])
+
+    async def save_provider_commission_rates(
+        self, payload: List[Dict[str, Any]], current_user=None
+    ) -> Dict[str, Any]:
+        """Upsert provider commission defaults by province."""
+        save_result = await self._save_scope_rates(
+            scope=self.SCOPE_PROVIDER_COMMISSION_DEFAULT,
+            payload=payload,
+            current_user=current_user,
+            entity_id="provider-commission-default-rates",
+            entity_name="Provider Commission Default Rates",
+        )
+
+        return {
+            "message": "Provider commission defaults saved",
+            "count": save_result["count"],
+            "updated_count": save_result["updated_count"],
+        }
+
+    async def get_guard_travel_policies(self) -> List[Dict[str, Any]]:
+        await self._ensure_default_travel_policy_seed(self.SCOPE_GUARD_TRAVEL_DEFAULT)
+        return await self._compose_travel_policies_by_scope_priority([
+            self.SCOPE_GUARD_TRAVEL_DEFAULT,
+        ])
+
+    async def save_guard_travel_policies(
+        self, payload: List[Dict[str, Any]], current_user=None
+    ) -> Dict[str, Any]:
+        save_result = await self._save_scope_travel_policies(
+            scope=self.SCOPE_GUARD_TRAVEL_DEFAULT,
+            payload=payload,
+            current_user=current_user,
+            entity_id="guard-travel-default-policies",
+            entity_name="Guard Travel Policies",
+        )
+        return {
+            "message": "Guard travel policies saved",
+            "count": save_result["count"],
+            "updated_count": save_result["updated_count"],
+        }
+
+    async def get_provider_travel_policies(self) -> List[Dict[str, Any]]:
+        await self._ensure_default_travel_policy_seed(self.SCOPE_PROVIDER_TRAVEL_DEFAULT)
+        return await self._compose_travel_policies_by_scope_priority([
+            self.SCOPE_PROVIDER_TRAVEL_DEFAULT,
+        ])
+
+    async def save_provider_travel_policies(
+        self, payload: List[Dict[str, Any]], current_user=None
+    ) -> Dict[str, Any]:
+        save_result = await self._save_scope_travel_policies(
+            scope=self.SCOPE_PROVIDER_TRAVEL_DEFAULT,
+            payload=payload,
+            current_user=current_user,
+            entity_id="provider-travel-default-policies",
+            entity_name="Provider Travel Policies",
+        )
+        return {
+            "message": "Provider travel policies saved",
+            "count": save_result["count"],
+            "updated_count": save_result["updated_count"],
+        }
+
+    async def resolve_travel_policy(
+        self,
+        scope: str,
+        region_code: str,
+        city_code: str = "",
+    ) -> Dict[str, Any]:
+        normalized_region_code = str(region_code or "").strip().upper()
+        normalized_city_code = self._normalize_city_code(city_code)
+
+        if not normalized_region_code:
+            raise HTTPException(status_code=400, detail="Region code is required")
+
+        city_policy = None
+        if normalized_city_code:
+            city_policy = await self._engine.find_one(
+                TravelPricingPolicy,
+                (TravelPricingPolicy.scope == scope)
+                & (TravelPricingPolicy.region_code == normalized_region_code)
+                & (TravelPricingPolicy.city_code == normalized_city_code),
+            )
+
+        province_policy = await self._engine.find_one(
+            TravelPricingPolicy,
+            (TravelPricingPolicy.scope == scope)
+            & (TravelPricingPolicy.region_code == normalized_region_code)
+            & (TravelPricingPolicy.city_code == ""),
+        )
+
+        effective = city_policy or province_policy
+        return {
+            "scope": scope,
+            "region_code": normalized_region_code,
+            "region_label": self._region_label(normalized_region_code),
+            "city_code": normalized_city_code,
+            "city_label": self._city_label(normalized_region_code, normalized_city_code),
+            "location_label": self._location_label(normalized_region_code, normalized_city_code),
+            "included_radius_km": effective.included_radius_km if effective else 10.0,
+            "rate_per_km": effective.rate_per_km if effective else 0.0,
+            "max_auto_match_radius_km": effective.max_auto_match_radius_km if effective else None,
+            "manual_review_over_km": effective.manual_review_over_km if effective else None,
+            "source": "city_override" if city_policy else ("region_default" if province_policy else "system_default"),
         }
 
     # ------------------------------------------------------------------
@@ -494,6 +956,7 @@ class BillingManager:
         entity_name: str,
         scope: str,
         region_code: str,
+        city_code: str,
         prev_std: float,
         prev_wkd: float,
         prev_hol: float,
@@ -518,6 +981,9 @@ class BillingManager:
                     "scope": scope,
                     "region_code": region_code,
                     "region_label": self._region_label(region_code),
+                    "city_code": city_code,
+                    "city_label": self._city_label(region_code, city_code),
+                    "location_label": self._location_label(region_code, city_code),
                     "currency": "CAD",
                     "previous_rates": {
                         "standard_rate": prev_std,

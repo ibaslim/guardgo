@@ -165,13 +165,6 @@
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="City" name="billingCity" [(ngModel)]="clientFormModel.billingAddress.city"
-                        [required]="true" [disabled]="readonly">
-                    </app-base-input>
-                    <app-error-message [errorMessage]="clientErrors.billingCity"></app-error-message>
-                </div>
-
-                <div class="flex flex-col">
                     <app-select-input label="Country" name="billingCountry"
                         [(ngModel)]="clientFormModel.billingAddress.country" [options]="countryOptions"
                         placeholder="-- Select Country --" [required]="true" [searchable]="true"
@@ -182,8 +175,17 @@
                 <div class="flex flex-col" *ngIf="clientFormModel.billingAddress.country === 'CA'">
                     <app-select-input label="Province" name="billingProvince"
                         [(ngModel)]="clientFormModel.billingAddress.province" [options]="provinceOptions"
-                        placeholder="-- Select Province --" [required]="true" [searchable]="true" [disabled]="readonly"></app-select-input>
+                        placeholder="-- Select Province --" [required]="true" [searchable]="true"
+                        (ngModelChange)="onBillingProvinceChange($event)" [disabled]="readonly"></app-select-input>
                     <app-error-message [errorMessage]="clientErrors.billingProvince"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-select-input label="City" name="billingCity" [(ngModel)]="clientFormModel.billingAddress.city"
+                        [options]="getBillingCityOptions()" placeholder="-- Select City --" [required]="true"
+                        [searchable]="true" [disabled]="readonly || !clientFormModel.billingAddress.province">
+                    </app-select-input>
+                    <app-error-message [errorMessage]="clientErrors.billingCity"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
@@ -202,6 +204,9 @@
         </div>
 
         <app-sticky-action-bar *ngIf="!readonly" [message]="'Save to activate your client profile.'" [containerClass]="'px-0'">
+            <app-button *ngIf="showDummyDataButton" [label]="'Fill Dummy Data'" type="secondary" [htmlType]="'button'" [fullWidth]="true"
+                size="lg" [customClass]="'w-full md:w-auto rounded-lg'" (pressed)="fillDummyData()">
+            </app-button>
             <app-button *ngIf="!isEditMode" [label]="'Submit'" type="primary" [htmlType]="'submit'" [fullWidth]="true"
                 size="lg" [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>

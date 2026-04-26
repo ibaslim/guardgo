@@ -7,7 +7,7 @@ from orion.api.interactive.auth_manager.auth_manager import auth_manager
 from orion.api.interactive.tenant_manager.tenant_manager import TenantManager
 from orion.constants.constant import CONSTANTS
 from orion.services.mongo_manager.mongo_controller import mongo_controller
-from orion.services.mongo_manager.shared_model.db_auth_models import db_user_account, user_role, LicenseName
+from orion.services.mongo_manager.shared_model.db_auth_models import db_user_account, user_role, LicenseName, UserStatus
 from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus, TenantType
 from orion.api.interactive.signup_manager.model.signup_request_model import SignupRequest
 from orion.services.redis_manager.redis_controller import redis_controller
@@ -99,6 +99,7 @@ class SignupManager:
             email=email,
             password=hashed_password,
             role=user_role_assigned,
+            status=UserStatus.INACTIVE,
             verification_token=_verification_token,
             verification_expiry=_verification_token_expire,
             licenses=[LicenseName.MAINTAINER],

@@ -17,6 +17,14 @@ import { ProfilePictureUploadComponent } from '../../components/profile-picture-
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
+import {
+  buildAlphabeticDummyTag,
+  buildSeededCaPhone,
+  isLocalhostForDummyData,
+  nextDummySeed,
+  pickCityValueForProvince,
+  pickFirstOptionValue,
+} from '../../shared/helpers/onboarding-dummy-data.helper';
 
 interface PhoneNumber {
   e164: string;
@@ -86,6 +94,7 @@ interface Client {
   styleUrl: './client-setting.component.css'
 })
 export class ClientSettingComponent implements OnInit, OnDestroy {
+  readonly showDummyDataButton = isLocalhostForDummyData();
 
   @Input() showPageWrapper: boolean = true;
   @Input() readonly: boolean = false;
@@ -128,6 +137,7 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
 
   countryOptions: { value: string; label: string }[] = [];
   provinceOptions: { value: string; label: string }[] = [];
+  canadianCitiesByProvinceOptions: Record<string, { value: string; label: string }[]> = {};
   siteTypeOptions: { value: string; label: string }[] = [];
   guardTypeOptions: { value: string; label: string }[] = [];
   clientTypeOptions: { value: string; label: string }[] = [];
@@ -177,6 +187,9 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
           }
           if (response?.canadianProvinces?.length) {
             this.provinceOptions = response.canadianProvinces;
+          }
+          if (response?.canadianCitiesByProvince) {
+            this.canadianCitiesByProvinceOptions = response.canadianCitiesByProvince;
           }
           if (response?.siteTypeOptions?.length) {
             this.siteTypeOptions = response.siteTypeOptions;
@@ -275,13 +288,70 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
   }
 
   private mapAddressFromBackend(raw: any): Address {
+    const provinceCode = (raw?.province || '').toString().trim();
+    const rawCity = (raw?.city || '').toString().trim();
+    const resolvedCityCode = this.resolveCityCodeForProvince(provinceCode, rawCity);
+    const fallbackDefaultCity = this.getDefaultCityCodeForProvince(provinceCode);
     return {
       street: raw?.street || '',
-      city: raw?.city || '',
+      city: resolvedCityCode || rawCity || fallbackDefaultCity,
       country: raw?.country || 'CA',
-      province: raw?.province || '',
+      province: provinceCode,
       postalCode: raw?.postal_code || raw?.postalCode || ''
     };
+  }
+
+  private resolveCityCodeForProvince(provinceCode: string, valueOrLabel: string): string {
+    const options = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const normalized = String(valueOrLabel || '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const byValue = options.find(option => option.value === normalized.toUpperCase());
+    if (byValue) {
+      return byValue.value;
+    }
+
+    const byLabel = options.find(option => option.label.toLowerCase() === normalized.toLowerCase());
+    return byLabel?.value || '';
+  }
+
+  private getDefaultCityCodeForProvince(provinceCode: string): string {
+    const options = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    return options[0]?.value || '';
+  }
+
+  getBillingCityOptions(): { value: string; label: string }[] {
+    const provinceCode = this.clientFormModel.billingAddress.province || '';
+    const canonical: { value: string; label: string }[] = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const current = String(this.clientFormModel.billingAddress.city || '').trim();
+    if (!current) {
+      return canonical;
+    }
+
+    const exists = canonical.some(option => option.value === current);
+    if (exists) {
+      return canonical;
+    }
+
+    return [...canonical, { value: current, label: current }];
+  }
+
+  onBillingProvinceChange(nextProvinceCode: string): void {
+    this.clientFormModel.billingAddress.province = nextProvinceCode;
+    const options = this.getBillingCityOptions();
+    const isCurrentValid = options.some(city => city.value === this.clientFormModel.billingAddress.city);
+    if (!isCurrentValid) {
+      this.clientFormModel.billingAddress.city = this.getDefaultCityCodeForProvince(nextProvinceCode);
+    }
+  }
+
+  private getCityLabelForProvince(provinceCode: string, cityCode: string): string {
+    const options = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const raw = String(cityCode || '').trim();
+    const normalized = raw.toUpperCase();
+    return options.find(option => option.value === normalized)?.label || raw;
   }
 
   private transformBackendDataToForm(data: any): Client {
@@ -486,8 +556,11 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     }
     if (!this.clientFormModel.billingAddress.city.trim()) {
       this.clientErrors.billingCity = 'Billing city is required.';
-    } else if (!/^[a-zA-Z\s]+$/.test(this.clientFormModel.billingAddress.city)) {
-      this.clientErrors.billingCity = 'City can only contain letters and spaces.';
+    } else {
+      const cityOptions = this.getBillingCityOptions();
+      if (cityOptions.length && !cityOptions.some(city => city.value === this.clientFormModel.billingAddress.city)) {
+        this.clientErrors.billingCity = 'Please select a valid city for the selected province.';
+      }
     }
     if (!this.clientFormModel.billingAddress.country.trim()) {
       this.clientErrors.billingCountry = 'Billing country is required.';
@@ -555,7 +628,10 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
         },
         billing_address: {
           street: this.clientFormModel.billingAddress.street,
-          city: this.clientFormModel.billingAddress.city,
+          city: this.getCityLabelForProvince(
+            this.clientFormModel.billingAddress.province || '',
+            this.clientFormModel.billingAddress.city
+          ),
           country: this.clientFormModel.billingAddress.country,
           province: this.clientFormModel.billingAddress.province || '',
           postal_code: this.clientFormModel.billingAddress.postalCode
@@ -579,5 +655,40 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
         this.clientErrors.submit = err?.error?.detail || 'Failed to submit client profile.';
       }
     });
+  }
+
+  fillDummyData(): void {
+    const seed = nextDummySeed();
+    const nameTag = buildAlphabeticDummyTag(seed.sequence);
+    const province = pickFirstOptionValue(this.provinceOptions, 'ON');
+    const city = pickCityValueForProvince(this.canadianCitiesByProvinceOptions, province, 'TORONTO');
+    const legalEntityName = `Local Test Client ${nameTag} Inc`;
+
+    this.clientFormModel.clientType = 'company';
+    this.clientFormModel.legalEntityName = legalEntityName;
+    this.clientFormModel.industry = 'Security';
+    this.clientFormModel.companyRegistrationNumber = `CL-REG-${seed.suffix}`;
+    this.clientFormModel.companyWebsite = `https://local-client-${seed.suffix}.example.com`;
+    this.clientFormModel.taxVatNumber = `TAX-${seed.suffix}`;
+    this.clientFormModel.primaryContact = {
+      name: `Primary Client Contact ${nameTag}`,
+      email: `client.primary+${seed.suffix}@example.com`,
+      mobilePhone: buildSeededCaPhone(seed.phoneSuffix, 10, 'mobile'),
+      landlinePhone: buildSeededCaPhone(seed.phoneSuffix, 16, 'landline'),
+    };
+    this.clientFormModel.secondaryContact = {
+      name: `Secondary Client Contact ${nameTag}`,
+      email: `client.secondary+${seed.suffix}@example.com`,
+      mobilePhone: buildSeededCaPhone(seed.phoneSuffix, 11, 'mobile'),
+      landlinePhone: buildSeededCaPhone(seed.phoneSuffix, 17, 'landline'),
+    };
+    this.clientFormModel.billingAddress = {
+      street: `${200 + seed.sequence} Client Avenue`,
+      city,
+      country: 'CA',
+      province,
+      postalCode: 'M5H 2N2',
+    };
+    this.clientErrors = {};
   }
 }

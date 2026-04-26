@@ -10,7 +10,8 @@ export type AccessPolicy =
   | 'tenantSettings'
   | 'tenantManagement'
   | 'platformUserManagement'
-  | 'billingConfigurations';
+  | 'billingConfigurations'
+  | 'clientRequests';
 
 type AccessPolicyRule = {
   metadataKey?: keyof RoleMetadataModel;
@@ -22,12 +23,25 @@ const policyRules: Record<AccessPolicy, AccessPolicyRule> = {
   tenantSettings: { metadataKey: 'tenantSettingsRoles' },
   tenantManagement: { metadataKey: 'tenantManagementRoles' },
   platformUserManagement: { allowedRoles: ['admin'] },
-  billingConfigurations: { allowedRoles: ['admin'] }
+  billingConfigurations: { allowedRoles: ['admin'] },
+  clientRequests: {
+    allowedRoles: [
+      'admin',
+      'ops_admin',
+      'support_admin',
+      'compliance_admin',
+      'read_only_admin',
+      'client_admin',
+      'guard_admin',
+      'sp_admin'
+    ]
+  }
 };
 
 const routePolicyMap: Record<string, AccessPolicy> = {
   '/dashboard/admin-users': 'platformUserManagement',
-  '/dashboard/billing-configurations': 'billingConfigurations'
+  '/dashboard/billing-configurations': 'billingConfigurations',
+  '/dashboard/requests': 'clientRequests'
 };
 
 export const normalizeRole = (role: string | undefined | null): string => {

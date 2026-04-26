@@ -10,6 +10,13 @@
 
 <ng-template #formContent>
     <form (ngSubmit)="submitGuardForm()" class="space-y-8">
+        <app-alert
+            *ngIf="showServiceProviderInfo"
+            type="info"
+            [closable]="false"
+            [message]="'Your guard account is managed by service provider: ' + serviceProviderDisplayName">
+        </app-alert>
+
         <!-- Profile Picture Section -->
         <app-section title="Profile Picture" subtitle="Your photo helps clients recognize you.">
                 <ng-container *ngIf="!readonly">
@@ -63,9 +70,14 @@
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="Operational Radius (miles)" name="operationalRadius" type="number"
-                        [(ngModel)]="guardFormModel.operationalRadius" [min]="0" [disabled]="readonly"></app-base-input>
-                    <p class="text-xs sm:text-xs text-gray-500 mt-2">Leave blank if you are location-flexible.</p>
+                    <app-select-input label="Distance Unit" [name]="'distanceUnit'" [(ngModel)]="selectedDistanceUnit"
+                        [options]="distanceUnitOptions" [disabled]="readonly" (ngModelChange)="onDistanceUnitChange($event)">
+                    </app-select-input>
+                </div>
+                <div class="flex flex-col">
+                    <app-base-input [label]="operationalRadiusLabel" name="operationalRadius" type="number"
+                        [(ngModel)]="guardFormModel.operationalRadius" [min]="minimumOperationalRadiusDisplay" [disabled]="readonly"></app-base-input>
+                    <p class="text-xs sm:text-xs text-gray-500 mt-2">Leave blank if you are location-flexible. Minimum {{ minimumOperationalRadiusText }}.</p>
                     <app-error-message [errorMessage]="guardErrors.operationalRadius || null"></app-error-message>
                 </div>
             </div>
@@ -84,13 +96,15 @@
                 <div class="flex flex-col">
                     <app-select-input label="Province/State" [name]="'addressProvince'"
                         [(ngModel)]="guardFormModel.address.province" [options]="provinceOptions"
-                        placeholder="-- Select Province --" [required]="true" [searchable]="true" [disabled]="readonly"></app-select-input>
+                        placeholder="-- Select Province --" [required]="true" [searchable]="true"
+                        (ngModelChange)="onAddressProvinceChange($event)" [disabled]="readonly"></app-select-input>
                     <app-error-message [errorMessage]="guardErrors.addressProvince || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
-                    <app-base-input label="City" name="addressCity" [(ngModel)]="guardFormModel.address.city"
-                        [required]="true" [disabled]="readonly"></app-base-input>
+                    <app-select-input label="City" [name]="'addressCity'" [(ngModel)]="guardFormModel.address.city"
+                        [options]="getAddressCityOptions()" placeholder="-- Select City --" [required]="true"
+                        [searchable]="true" [disabled]="readonly || !guardFormModel.address.province"></app-select-input>
                     <app-error-message [errorMessage]="guardErrors.addressCity || null"></app-error-message>
                 </div>
 
@@ -104,6 +118,28 @@
                     <app-base-input label="Street Address" name="addressStreet"
                         [(ngModel)]="guardFormModel.address.street" [required]="true" [disabled]="readonly"></app-base-input>
                     <app-error-message [errorMessage]="guardErrors.addressStreet || null"></app-error-message>
+                </div>
+            </div>
+        </app-section>
+
+        <app-section title="Operational region" subtitle="Where you actively accept and prioritize shifts.">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col">
+                    <app-select-input label="Operational Province" [name]="'operationalRegionCode'"
+                        [(ngModel)]="guardFormModel.operationalRegionCode" [options]="provinceOptions"
+                        placeholder="-- Select Province --" [required]="true" [searchable]="true"
+                        (ngModelChange)="onOperationalRegionChange($event)" [disabled]="readonly">
+                    </app-select-input>
+                    <app-error-message [errorMessage]="guardErrors.operationalRegionCode || null"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-select-input label="Operational City" [name]="'operationalCityCode'"
+                        [(ngModel)]="guardFormModel.operationalCityCode" [options]="getOperationalCityOptions()"
+                        placeholder="-- Select City --" [required]="true" [searchable]="true"
+                        [disabled]="readonly || !guardFormModel.operationalRegionCode">
+                    </app-select-input>
+                    <app-error-message [errorMessage]="guardErrors.operationalCityCode || null"></app-error-message>
                 </div>
             </div>
         </app-section>
@@ -466,14 +502,18 @@
                             <app-select-input label="Issuing Province" [name]="'policeClearanceProvince_' + i"
                                 [(ngModel)]="record.issuingProvince" [options]="provinceOptions"
                                 placeholder="-- Select Province --" [required]="i === 0"
-                                [searchable]="true" [disabled]="readonly"></app-select-input>
+                                [searchable]="true" (ngModelChange)="onPoliceClearanceProvinceChange(record, $event)" [disabled]="readonly"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['police_clearance_' + record.id + '_issuingProvince'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
-                            <app-base-input label="Issuing City (Optional)" [name]="'policeClearanceCity_' + i"
-                                [(ngModel)]="record.issuingCity" [disabled]="readonly"></app-base-input>
+                            <app-select-input label="Issuing City (Optional)" [name]="'policeClearanceCity_' + i"
+                                [(ngModel)]="record.issuingCity" [options]="getPoliceClearanceCityOptions(record)"
+                                placeholder="-- Select City --" [searchable]="true"
+                                [disabled]="readonly || !record.issuingProvince"></app-select-input>
+                            <app-error-message
+                                [errorMessage]="guardErrors['police_clearance_' + record.id + '_issuingCity'] || null"></app-error-message>
                         </div>
 
                         <div class="flex flex-col">
@@ -631,6 +671,10 @@
         </div>
 
         <app-sticky-action-bar *ngIf="!readonly" [message]="'Save to continue onboarding.'">
+            <app-button *ngIf="showDummyDataButton" [label]="'Fill Dummy Data'" type="secondary"
+                [htmlType]="'button'" [disabled]="isSubmitting" [fullWidth]="true" size="lg"
+                [customClass]="'w-full md:w-auto rounded-lg'" (pressed)="fillDummyData()">
+            </app-button>
             <app-button *ngIf="!isEditMode" [label]="isSubmitting ? 'Submitting...' : 'Submit'" type="primary"
                 [htmlType]="'submit'" [disabled]="isSubmitting" [fullWidth]="true" size="lg"
                 [customClass]="'w-full md:w-auto rounded-lg'">

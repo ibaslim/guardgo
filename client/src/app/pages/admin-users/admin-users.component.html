@@ -107,7 +107,7 @@
 
         <app-table
           [data]="filteredUsers"
-          [loading]="loading"
+          [loadingScope]="listScope"
           [showFilter]="false"
           [showPagination]="true"
           [pageSize]="rows"
@@ -131,7 +131,7 @@
           <td app-table-td>
             <div class="flex items-center gap-2">
               <app-button *ngIf="row.invite_pending" type="outline" size="sm" [iconOnly]="true" [customClass]="'p-1 rounded'"
-                ariaLabel="Resend invite" title="Resend invite" [loading]="saving" (pressed)="resendInvite(row)">
+                ariaLabel="Resend invite" title="Resend invite" [loadingScope]="saveScope" (pressed)="resendInvite(row)">
                 <app-icon icon name="send" [size]="16"></app-icon>
               </app-button>
 
@@ -141,17 +141,17 @@
               </app-button>
 
               <app-button *ngIf="row.status !== 'deleted'" type="danger" size="sm" [iconOnly]="true" [customClass]="'p-1 rounded'"
-                ariaLabel="Delete user" title="Delete user" [loading]="saving" (pressed)="softDelete(row)">
+                ariaLabel="Delete user" title="Delete user" [loadingScope]="saveScope" (pressed)="softDelete(row)">
                 <app-icon icon name="trash" [size]="16"></app-icon>
               </app-button>
 
               <app-button *ngIf="row.status === 'deleted'" type="outline" size="sm" [iconOnly]="true" [customClass]="'p-1 rounded'"
-                ariaLabel="Restore user" title="Restore user" [loading]="saving" (pressed)="restoreUser(row)">
+                ariaLabel="Restore user" title="Restore user" [loadingScope]="saveScope" (pressed)="restoreUser(row)">
                 <app-icon icon name="check-circle" [size]="16"></app-icon>
               </app-button>
 
               <app-button *ngIf="row.status === 'deleted'" type="danger" size="sm" [iconOnly]="true" [customClass]="'p-1 rounded'"
-                ariaLabel="Permanently delete user" title="Permanently delete user" [loading]="saving" (pressed)="permanentlyDeleteUser(row)">
+                ariaLabel="Permanently delete user" title="Permanently delete user" [loadingScope]="saveScope" (pressed)="permanentlyDeleteUser(row)">
                 <app-icon icon name="trash-2" [size]="16"></app-icon>
               </app-button>
             </div>
@@ -182,7 +182,7 @@
 
   <div modal-actions class="flex items-center justify-end gap-2 mt-6">
     <app-button type="secondary" size="sm" label="Cancel" (pressed)="closeCreateModal()"></app-button>
-    <app-button type="primary" size="sm" label="Send Invite" [loading]="saving" (pressed)="createUser()"></app-button>
+    <app-button type="primary" size="sm" label="Send Invite" [loadingScope]="saveScope" (pressed)="createUser()"></app-button>
   </div>
 </app-modal>
 
@@ -202,6 +202,6 @@
 
   <div modal-actions class="flex items-center justify-end gap-2 mt-6">
     <app-button type="secondary" size="sm" label="Cancel" (pressed)="closeEditModal()"></app-button>
-    <app-button type="primary" size="sm" label="Save" [loading]="saving" (pressed)="saveEdit()"></app-button>
+    <app-button type="primary" size="sm" label="Save" [loadingScope]="saveScope" (pressed)="saveEdit()"></app-button>
   </div>
 </app-modal>

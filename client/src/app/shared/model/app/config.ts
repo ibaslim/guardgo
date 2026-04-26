@@ -25,6 +25,7 @@ export class LocalSettingsModel {
   entityfilterCategories: Record<string, string[]> = {};
   entityFilterCondition: boolean = true;
   isSidebarOpen: boolean = true;
+  distanceUnit: string = 'km';
   matchType: string = "";
   sortType: string = "";
 }
