@@ -187,3 +187,205 @@ async def test_update_client_request_status_forwards_payload(monkeypatch):
 
     assert response.status_code == 200
     assert captured == {"request_id": "req-2", "request_status": "submitted", "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_publish_client_request_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def publish_request(self, request_id, payload, current_user):
+            captured["request_id"] = request_id
+            captured["max_match_results"] = payload.max_match_results
+            captured["user"] = current_user.username
+            return {"id": request_id, "message": "published"}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.CLIENT_ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/requests/req-7/publish",
+            json={"max_match_results": 15},
+        )
+
+    assert response.status_code == 200
+    assert captured == {"request_id": "req-7", "max_match_results": 15, "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_get_client_request_wave_forwards_wave_id(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def get_request_wave_by_id(self, wave_id, current_user):
+            captured["wave_id"] = wave_id
+            captured["user"] = current_user.username
+            return {"id": wave_id}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.OPS_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/request-waves/wave-77")
+
+    assert response.status_code == 200
+    assert captured == {"wave_id": "wave-77", "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_publish_client_request_update_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def publish_request_update(self, request_id, payload, current_user):
+            captured["request_id"] = request_id
+            captured["requested_start_at"] = payload.requested_start_at
+            captured["user"] = current_user.username
+            return {"id": request_id, "message": "publish-update"}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.CLIENT_ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/requests/req-8/publish-update",
+            json={"requested_start_at": "2026-05-16T18:00:00Z", "max_match_results": 25},
+        )
+
+    assert response.status_code == 200
+    assert captured["request_id"] == "req-8"
+    assert captured["requested_start_at"] is not None
+    assert captured["user"] == "tester"
+
+
+@pytest.mark.anyio
+async def test_request_additional_coverage_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def request_additional_coverage(self, request_id, payload, current_user):
+            captured["request_id"] = request_id
+            captured["additional_slots"] = payload.additional_slots
+            captured["user"] = current_user.username
+            return {"id": request_id, "message": "additional-coverage"}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.CLIENT_ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/requests/req-9/additional-coverage",
+            json={"additional_slots": 2, "max_match_results": 30},
+        )
+
+    assert response.status_code == 200
+    assert captured == {"request_id": "req-9", "additional_slots": 2, "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_get_request_job_forwards_assignment_id(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def get_job_by_id(self, assignment_id, current_user):
+            captured["assignment_id"] = assignment_id
+            captured["user"] = current_user.username
+            return {"id": assignment_id}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.GUARD_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/jobs/as-55")
+
+    assert response.status_code == 200
+    assert captured == {"assignment_id": "as-55", "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_list_client_request_waves_forwards_filters(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def list_request_waves(self, **kwargs):
+            captured.update(kwargs)
+            return {"items": [], "pagination": {"page": kwargs["page"], "rows": kwargs["rows"]}}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.CLIENT_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/requests/req-10/waves?page=2&rows=5")
+
+    assert response.status_code == 200
+    assert captured["request_id"] == "req-10"
+    assert captured["page"] == 2
+    assert captured["rows"] == 5
+    assert captured["current_user"].username == "tester"
+
+
+@pytest.mark.anyio
+async def test_list_request_review_waves_forwards_filters(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def list_review_waves(self, **kwargs):
+            captured.update(kwargs)
+            return {"items": [], "pagination": {"page": kwargs["page"], "rows": kwargs["rows"]}}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.OPS_ADMIN)), base_url="http://test") as client:
+        response = await client.get(
+            "/api/request-review-waves?page=3&rows=10&wave_status=pending_review&trigger=initial_publish&request_id=req-11&client_tenant_id=tenant-2"
+        )
+
+    assert response.status_code == 200
+    assert captured["page"] == 3
+    assert captured["rows"] == 10
+    assert captured["wave_status"] == "pending_review"
+    assert captured["trigger"] == "initial_publish"
+    assert captured["request_id"] == "req-11"
+    assert captured["client_tenant_id"] == "tenant-2"
+    assert captured["current_user"].username == "tester"
+
+
+@pytest.mark.anyio
+async def test_approve_request_review_wave_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def approve_request_wave(self, wave_id, payload, current_user):
+            captured["wave_id"] = wave_id
+            captured["note"] = payload.note
+            captured["user"] = current_user.username
+            return {"id": wave_id, "message": "approved"}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/request-review-waves/wave-1/approve",
+            json={"note": "approved for broadcast"},
+        )
+
+    assert response.status_code == 200
+    assert captured == {"wave_id": "wave-1", "note": "approved for broadcast", "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_return_request_review_wave_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def return_request_wave(self, wave_id, payload, current_user):
+            captured["wave_id"] = wave_id
+            captured["note"] = payload.note
+            captured["user"] = current_user.username
+            return {"id": wave_id, "message": "returned"}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/request-review-waves/wave-2/return",
+            json={"note": "location needs correction"},
+        )
+
+    assert response.status_code == 200
+    assert captured == {"wave_id": "wave-2", "note": "location needs correction", "user": "tester"}

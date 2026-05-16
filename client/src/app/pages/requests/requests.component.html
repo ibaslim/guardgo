@@ -24,6 +24,12 @@
         [type]="activeTab === 'jobs' ? 'primary' : 'secondary'"
         (pressed)="activeTab = 'jobs'"
       ></app-button>
+      <app-button
+        *ngIf="canReviewBroadcastWaves"
+        label="Review Queue"
+        [type]="activeTab === 'review' ? 'primary' : 'secondary'"
+        (pressed)="activeTab = 'review'"
+      ></app-button>
     </div>
   </app-card>
 
@@ -75,6 +81,9 @@
               <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(item.request_status)">
                 {{ item.request_status }}
               </span>
+              <span *ngIf="item.staffing_status" class="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                {{ formatTokenLabel(item.staffing_status) }}
+              </span>
               <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                 {{ getFulfillmentModeLabel(item.fulfillment_mode || item.target_type) }}
               </span>
@@ -85,6 +94,8 @@
               <span>{{ item.site_snapshot.site_name || 'Unnamed site' }}</span>
               <span>•</span>
               <span>{{ item.guards_required }} guard{{ item.guards_required === 1 ? '' : 's' }}</span>
+              <span *ngIf="item.open_slots != null">•</span>
+              <span *ngIf="item.open_slots != null">{{ item.open_slots }} open slot{{ item.open_slots === 1 ? '' : 's' }}</span>
               <span *ngIf="item.requested_guard_type">•</span>
               <span *ngIf="item.requested_guard_type">{{ item.requested_guard_type }}</span>
             </div>
@@ -106,7 +117,9 @@
           <div class="flex shrink-0 flex-wrap gap-2 pt-1 xl:pl-6">
             <app-button label="Details" type="secondary" (pressed)="openRequestDetails(item)"></app-button>
             <app-button *ngIf="canEditRequest(item)" label="Edit" type="secondary" (pressed)="openEditRequestDrawer(item)"></app-button>
-            <app-button *ngIf="canCommitRequest(item)" label="Commit" type="primary" [loadingScope]="getRequestStatusScope(item.id)" (pressed)="commitDraft(item)"></app-button>
+            <app-button *ngIf="canPublishUpdate(item)" label="Publish Update" type="secondary" (pressed)="openPublishUpdateDrawer(item)"></app-button>
+            <app-button *ngIf="canRequestAdditionalCoverage(item)" label="Add Coverage" type="secondary" [loadingScope]="getRequestStatusScope(item.id)" (pressed)="requestAdditionalCoverage(item)"></app-button>
+            <app-button *ngIf="canCommitRequest(item)" label="Publish" type="primary" [loadingScope]="getRequestStatusScope(item.id)" (pressed)="commitDraft(item)"></app-button>
             <app-button *ngIf="canShowRequestStatusActions(item)" label="Cancel" type="danger" [loadingScope]="getRequestStatusScope(item.id)" (pressed)="updateStatus(item, 'cancelled')"></app-button>
             <app-button *ngIf="canShowRequestStatusActions(item)" label="Close" type="secondary" [loadingScope]="getRequestStatusScope(item.id)" (pressed)="updateStatus(item, 'closed')"></app-button>
           </div>
@@ -143,6 +156,94 @@
   </app-card>
 
   <app-card
+    *ngIf="activeTab === 'review'"
+    [showHeader]="false"
+    [containerClass]="'mt-3 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
+    [bodyClass]="'p-0'"
+  >
+    <div class="border-b border-gray-100 px-6 py-6 dark:border-gray-800">
+      <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Broadcast Review Queue</h2>
+          <p class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ reviewTotalItems }} wave{{ reviewTotalItems === 1 ? '' : 's' }} in the platform review scope.</p>
+        </div>
+        <div class="grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-3 xl:items-end dark:bg-gray-800/50">
+          <app-select-input label="Wave Status" [name]="'reviewStatusFilter'" [(ngModel)]="reviewStatusFilter" [options]="reviewStatusOptions"></app-select-input>
+          <app-select-input label="Trigger" [name]="'reviewTriggerFilter'" [(ngModel)]="reviewTriggerFilter" [options]="reviewTriggerOptions"></app-select-input>
+          <div class="flex flex-wrap gap-2 pb-0.5 sm:justify-end">
+            <app-button label="Apply" type="primary" (pressed)="applyReviewFilters()"></app-button>
+            <app-button label="Clear" type="secondary" (pressed)="clearReviewFilters()"></app-button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="isScopeLoading(reviewListScope)" class="space-y-4 p-6">
+      <div *ngFor="let _ of [1,2,3]" class="animate-pulse rounded-lg border border-gray-100 p-5 dark:border-gray-800">
+        <div class="mb-3 h-4 w-48 rounded bg-gray-200 dark:bg-gray-700"></div>
+        <div class="mb-3 h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800"></div>
+        <div class="h-3 w-1/2 rounded bg-gray-100 dark:bg-gray-800"></div>
+      </div>
+    </div>
+
+    <div *ngIf="!isScopeLoading(reviewListScope) && !reviewWaves.length" class="px-6 py-16 text-center">
+      <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+        <app-icon name="alert-triangle" [size]="22"></app-icon>
+      </div>
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">No review waves waiting</h3>
+      <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Broadcast waves that need admin approval will appear here.</p>
+    </div>
+
+    <div *ngIf="!isScopeLoading(reviewListScope) && reviewWaves.length" class="divide-y divide-gray-100 dark:divide-gray-800">
+      <div *ngFor="let wave of reviewWaves; trackBy: trackByWaveId" class="px-6 py-6">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div class="min-w-0 flex-1">
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+              <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(wave.wave_status)">
+                {{ wave.wave_status }}
+              </span>
+              <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                {{ formatTokenLabel(wave.trigger) }}
+              </span>
+              <span class="text-xs text-gray-400 dark:text-gray-500">Wave {{ wave.wave_number }} • Revision {{ wave.request_revision }}</span>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getWaveTitle(wave) }}</h3>
+            <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
+              <span>{{ getWaveSiteName(wave) }}</span>
+              <span *ngIf="wave.wave_expires_at">•</span>
+              <span *ngIf="wave.wave_expires_at">Wave expires {{ formatBackendDateTime(wave.wave_expires_at) }}</span>
+            </div>
+            <div *ngIf="getWaveReasonCodes(wave).length" class="mt-4 flex flex-wrap gap-2">
+              <span *ngFor="let reason of getWaveReasonCodes(wave)" class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+                {{ formatTokenLabel(reason) }}
+              </span>
+            </div>
+            <div *ngIf="wave.review_note" class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+              {{ wave.review_note }}
+            </div>
+          </div>
+          <div class="flex shrink-0 flex-wrap gap-2 pt-1 xl:pl-6">
+            <app-button label="Details" type="secondary" (pressed)="openWaveDetails(wave)"></app-button>
+            <ng-container *ngIf="wave.wave_status === 'pending_review'">
+            <app-button label="Approve & Broadcast" type="primary" [loadingScope]="getReviewActionScope(wave.id)" (pressed)="approveWave(wave)"></app-button>
+            <app-button label="Return to Client" type="secondary" [loadingScope]="getReviewActionScope(wave.id)" (pressed)="returnWave(wave)"></app-button>
+            </ng-container>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="!isScopeLoading(reviewListScope) && reviewTotalPages > 1" class="flex flex-col gap-3 border-t border-gray-100 px-6 py-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
+      <p class="text-sm text-gray-500 dark:text-gray-400">Page {{ reviewPage }} of {{ reviewTotalPages }}</p>
+      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+        <app-button label="Previous" type="secondary" [disabled]="reviewPage <= 1" (pressed)="loadReviewWaves(reviewPage - 1)"></app-button>
+        <app-button *ngFor="let pageNumber of reviewPaginationPages" [label]="getPageLabel(pageNumber)" [type]="pageNumber === reviewPage ? 'primary' : 'secondary'" (pressed)="loadReviewWaves(pageNumber)"></app-button>
+        <app-button label="Next" type="secondary" [disabled]="reviewPage >= reviewTotalPages" (pressed)="loadReviewWaves(reviewPage + 1)"></app-button>
+      </div>
+    </div>
+  </app-card>
+
+  <app-card
     *ngIf="activeTab === 'jobs'"
     [showHeader]="false"
     [containerClass]="'mt-3 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
@@ -151,7 +252,7 @@
     <div class="border-b border-gray-100 px-6 py-6 dark:border-gray-800">
       <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Accepted & Ongoing Jobs</h2>
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Offers, Accepted & Ongoing Jobs</h2>
           <p class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ jobTotalItems }} assignment{{ jobTotalItems === 1 ? '' : 's' }} in your role scope.</p>
         </div>
         <div class="grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-3 xl:items-end dark:bg-gray-800/50">
@@ -200,14 +301,8 @@
             </div>
             <div *ngIf="job.note" class="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">{{ job.note }}</div>
           </div>
-          <div class="flex shrink-0 flex-wrap gap-2 pt-1 xl:pl-6" *ngIf="canShowJobActions(job)">
-            <app-button
-              *ngFor="let action of getJobActions(job)"
-              [label]="action.label"
-              [type]="action.type"
-              [loadingScope]="getJobUpdateScope(job.id)"
-              (pressed)="updateJobStatus(job, action.status)"
-            ></app-button>
+          <div class="flex shrink-0 flex-wrap gap-2 pt-1 xl:pl-6">
+            <app-button label="Details" type="secondary" (pressed)="openJobDetails(job)"></app-button>
           </div>
         </div>
       </div>
@@ -227,10 +322,8 @@
     <div drawer-header>
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
-            {{ requestFormMode === 'create' ? 'Add Request' : 'Edit Request Draft' }}
-          </h3>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Capture site details, staffing needs, and commit when ready.</p>
+          <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ getRequestFormHeading() }}</h3>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ getRequestFormSubtitle() }}</p>
         </div>
         <button
           *ngIf="requestFormMode === 'create'"
@@ -245,7 +338,14 @@
 
     <div drawer-body class="space-y-6">
       <div class="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
-        <app-base-input label="Request Title" name="requestTitleDrawer" [(ngModel)]="requestForm.title" [required]="true"></app-base-input>
+        <app-base-input
+          label="Request Title"
+          name="requestTitleDrawer"
+          [(ngModel)]="requestForm.title"
+          [required]="true"
+          [readonly]="requestFormMode === 'publish_update'"
+          [helperText]="requestFormMode === 'publish_update' ? 'Title edits are handled outside the publish-update flow.' : ''"
+        ></app-base-input>
 
         <app-select-input
           label="Fulfillment Mode"
@@ -255,7 +355,7 @@
           [required]="true"
         ></app-select-input>
         <div class="md:col-span-2 -mt-2 text-xs text-gray-500 dark:text-gray-400">
-          Hybrid fulfillment is planned for the next phase. This form currently supports individual guards or service providers only.
+          {{ getFulfillmentModeHelperText() }}
         </div>
 
         <div>
@@ -279,6 +379,8 @@
             [(ngModel)]="requestForm.guardsRequired"
             [min]="1"
             [required]="true"
+            [readonly]="requestFormMode === 'publish_update'"
+            [helperText]="requestFormMode === 'publish_update' ? 'Use Additional Coverage to increase staffing on a live request.' : ''"
           ></app-base-input>
           <div *ngIf="requestErrors['guardsRequired']" class="mt-1 text-xs text-red-500">{{ requestErrors['guardsRequired'] }}</div>
         </div>
@@ -293,6 +395,16 @@
         <app-base-input label="Requested Start Date" name="requestedStartAtDrawer" type="date" [(ngModel)]="requestForm.requestedStartAt"></app-base-input>
         <app-base-input label="Requested End Date" name="requestedEndAtDrawer" type="date" [(ngModel)]="requestForm.requestedEndAt"></app-base-input>
         <div *ngIf="requestErrors['requestedEndAt']" class="md:col-span-2 -mt-2 text-xs text-red-500">{{ requestErrors['requestedEndAt'] }}</div>
+        <div>
+          <app-base-input
+            label="Request Expiry"
+            name="requestExpiresAtDrawer"
+            type="date"
+            [(ngModel)]="requestForm.requestExpiresAt"
+            [helperText]="'Required before publishing. Expired requests become read-only.'"
+          ></app-base-input>
+          <div *ngIf="requestErrors['requestExpiresAt']" class="mt-1 text-xs text-red-500">{{ requestErrors['requestExpiresAt'] }}</div>
+        </div>
 
         <div class="md:col-span-2 rounded-md border border-gray-200 bg-gray-50/60 p-5 dark:border-gray-800 dark:bg-gray-800/30">
           <div class="flex flex-col gap-4">
@@ -349,8 +461,8 @@
     <div drawer-footer class="flex flex-wrap justify-end gap-2">
       <app-button label="Close" type="secondary" (pressed)="closeRequestFormDrawer()"></app-button>
       <app-button *ngIf="requestFormMode === 'create'" label="Reset" type="secondary" (pressed)="resetForm()"></app-button>
-      <app-button label="Save Draft" type="secondary" [loadingScope]="saveRequestScope" (pressed)="submitRequest(false)"></app-button>
-      <app-button label="Commit Request" type="primary" [loadingScope]="saveRequestScope" (pressed)="submitRequest(true)"></app-button>
+      <app-button *ngIf="requestFormMode !== 'publish_update'" label="Save Draft" type="secondary" [loadingScope]="saveRequestScope" (pressed)="submitRequest(false)"></app-button>
+      <app-button [label]="getRequestFormPrimaryActionLabel()" type="primary" [loadingScope]="saveRequestScope" (pressed)="submitRequest(true)"></app-button>
     </div>
   </app-side-drawer>
 
@@ -368,9 +480,17 @@
           <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Status</div>
           <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.request_status }}</div>
         </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70" *ngIf="request.staffing_status">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Staffing</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(request.staffing_status) }}</div>
+        </div>
         <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
           <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Fulfillment</div>
           <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ getFulfillmentModeLabel(request.fulfillment_mode || request.target_type) }}</div>
+        </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70" *ngIf="request.request_expires_at">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Request Expiry</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatBackendDateTime(request.request_expires_at) }}</div>
         </div>
       </div>
 
@@ -397,12 +517,436 @@
           </span>
         </div>
       </div>
+
+      <div class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
+        <div class="flex items-center justify-between gap-3">
+          <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Broadcast History</h4>
+          <span class="text-xs text-gray-400 dark:text-gray-500">{{ selectedRequestWaves.length }} wave{{ selectedRequestWaves.length === 1 ? '' : 's' }}</span>
+        </div>
+
+        <div *ngIf="isScopeLoading(requestWavesScope)" class="mt-4 space-y-2">
+          <div *ngFor="let _ of [1,2]" class="h-12 animate-pulse rounded-md bg-gray-100 dark:bg-gray-800"></div>
+        </div>
+
+        <div *ngIf="!isScopeLoading(requestWavesScope) && !selectedRequestWaves.length" class="mt-3 text-sm text-gray-500 dark:text-gray-400">
+          No broadcast waves have been issued for this request yet.
+        </div>
+
+        <div *ngIf="!isScopeLoading(requestWavesScope) && selectedRequestWaves.length" class="mt-3 space-y-3">
+          <div *ngFor="let wave of selectedRequestWaves | slice:0:6" class="rounded-md border border-gray-100 px-4 py-3 dark:border-gray-700">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(wave.wave_status)">
+                    {{ wave.wave_status }}
+                  </span>
+                  <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                    {{ formatTokenLabel(wave.trigger) }}
+                  </span>
+                  <span class="text-xs text-gray-400 dark:text-gray-500">Wave {{ wave.wave_number }} • Revision {{ wave.request_revision }}</span>
+                </div>
+                <div class="mt-2 text-sm text-gray-600 dark:text-gray-300">{{ getWaveReviewSummary(wave) }}</div>
+              </div>
+              <div class="flex shrink-0 items-start">
+                <app-button label="View Wave" type="secondary" (pressed)="openWaveDetails(wave)"></app-button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div drawer-footer class="flex flex-wrap justify-end gap-2" *ngIf="selectedRequest as request">
+      <app-button *ngIf="canPublishUpdate(request)" label="Publish Update" type="secondary" (pressed)="openPublishUpdateDrawer(request)"></app-button>
+      <app-button *ngIf="canRequestAdditionalCoverage(request)" label="Add Coverage" type="secondary" [loadingScope]="getRequestStatusScope(request.id)" (pressed)="requestAdditionalCoverage(request)"></app-button>
       <app-button *ngIf="canShowRequestStatusActions(request)" label="Cancel" type="danger" [loadingScope]="getRequestStatusScope(request.id)" (pressed)="updateStatus(request, 'cancelled')"></app-button>
       <app-button *ngIf="canShowRequestStatusActions(request)" label="Close" type="secondary" [loadingScope]="getRequestStatusScope(request.id)" (pressed)="updateStatus(request, 'closed')"></app-button>
       <app-button label="Done" type="primary" (pressed)="closeRequestDrawer()"></app-button>
+    </div>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showWaveDrawer" size="xl" (close)="closeWaveDrawer()">
+    <div drawer-header *ngIf="selectedWave as wave">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ getWaveTitle(wave) }}</h3>
+      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        {{ getWaveSiteName(wave) }} • Wave {{ wave.wave_number }} • Revision {{ wave.request_revision }}
+      </p>
+    </div>
+
+    <div drawer-body *ngIf="selectedWave as wave" class="space-y-5">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Wave Status</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(wave.wave_status) }}</div>
+        </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Trigger</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(wave.trigger) }}</div>
+        </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Wave Expiry</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ wave.wave_expires_at ? formatBackendDateTime(wave.wave_expires_at) : 'Not set' }}</div>
+        </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Open Slots At Send</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ wave.open_slots_at_send || 0 }}</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Auto Broadcast</div>
+          <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getWaveBroadcastCandidateCount(wave, 'auto_broadcast') }}</div>
+        </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Pending Review</div>
+          <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getWaveBroadcastCandidateCount(wave, 'pending_review') }}</div>
+        </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Outside Policy</div>
+          <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getWaveBroadcastCandidateCount(wave, 'outside_policy') }}</div>
+        </div>
+      </div>
+
+      <div *ngIf="getWaveReasonCodes(wave).length" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Review Reasons</h4>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <span *ngFor="let reason of getWaveReasonCodes(wave)" class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+            {{ formatTokenLabel(reason) }}
+          </span>
+        </div>
+      </div>
+
+      <div *ngIf="getWaveReviewFindings(wave).length" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Review Findings</h4>
+        <div class="mt-3 space-y-2">
+          <div *ngFor="let finding of getWaveReviewFindings(wave)" class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
+            {{ getWaveFindingLabel(finding) }}
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="getWaveCandidateSnapshots(wave).length" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Candidate Snapshot</h4>
+        <div class="mt-3 space-y-3">
+          <div *ngFor="let candidate of getWaveCandidateSnapshots(wave) | slice:0:8" class="rounded-md border border-gray-100 px-4 py-3 dark:border-gray-700">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ getWaveCandidateName(candidate) }}</span>
+              <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">{{ formatTokenLabel(candidate['target_type'] || '') }}</span>
+              <span class="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">{{ formatTokenLabel(candidate['broadcast_outcome'] || 'unknown') }}</span>
+            </div>
+            <div class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              Distance: {{ candidate['distance_km'] ?? 'N/A' }} km
+              <span *ngIf="candidate['broadcast_reason_code']">• {{ formatTokenLabel(candidate['broadcast_reason_code']) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="wave.review_note" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Reviewer Note</h4>
+        <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{{ wave.review_note }}</p>
+      </div>
+    </div>
+
+    <div drawer-footer class="flex flex-wrap justify-end gap-2" *ngIf="selectedWave as wave">
+      <app-button *ngIf="wave.wave_status === 'pending_review'" label="Return to Client" type="secondary" [loadingScope]="getReviewActionScope(wave.id)" (pressed)="returnWave(wave)"></app-button>
+      <app-button *ngIf="wave.wave_status === 'pending_review'" label="Approve & Broadcast" type="primary" [loadingScope]="getReviewActionScope(wave.id)" (pressed)="approveWave(wave)"></app-button>
+      <app-button label="Done" type="primary" (pressed)="closeWaveDrawer()"></app-button>
+    </div>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showJobDrawer" size="xl" (close)="closeJobDrawer()">
+    <div drawer-header *ngIf="selectedJob as job">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ job.request?.title || selectedJobRequest?.title || 'Job details' }}</h3>
+      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        {{ selectedJobRequest?.site_snapshot?.site_name || job.request?.site_name || 'Unknown site' }} • {{ getTargetTypeLabel(job.assignee_tenant_type) }}
+      </p>
+    </div>
+
+    <div drawer-body *ngIf="selectedJob as job" class="space-y-5">
+      <div *ngIf="getJobStateMessage(job)" [class]="getJobStateMessageClasses(job)">
+        {{ getJobStateMessage(job) }}
+      </div>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Status</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(job.assignment_status) }}</div>
+        </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Offer Origin</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(job.assignment_origin || 'manual') }}</div>
+        </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Slots Committed</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ job.slots_committed || 1 }}</div>
+        </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">
+            {{ job.assignment_status === 'reconfirmation_required' ? 'Reconfirm By' : 'Response Due' }}
+          </div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {{
+              job.assignment_status === 'reconfirmation_required'
+                ? (job.reconfirmation_due_at ? formatBackendDateTime(job.reconfirmation_due_at) : 'Not set')
+                : (job.response_due_at ? formatBackendDateTime(job.response_due_at) : 'Not set')
+            }}
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="isScopeLoading(jobDetailRequestScope)" class="space-y-3">
+        <div *ngFor="let _ of [1,2,3]" class="h-20 animate-pulse rounded-md bg-gray-100 dark:bg-gray-800"></div>
+      </div>
+
+      <ng-container *ngIf="!isScopeLoading(jobDetailRequestScope) && selectedJobRequest as request">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Fulfillment</div>
+            <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ getFulfillmentModeLabel(request.fulfillment_mode || request.target_type) }}</div>
+          </div>
+          <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Requested Guard Type</div>
+            <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.requested_guard_type || 'Not specified' }}</div>
+          </div>
+          <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Schedule</div>
+            <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {{ request.requested_start_at ? formatBackendDateTime(request.requested_start_at) : 'Not scheduled' }}
+              <span *ngIf="request.requested_end_at"> to {{ formatBackendDateTime(request.requested_end_at) }}</span>
+            </div>
+          </div>
+          <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Request Staffing</div>
+            <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {{ request.accepted_slots || 0 }} accepted • {{ request.open_slots || 0 }} open • {{ request.guards_required }} total
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
+          <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Site Details</h4>
+          <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">{{ request.site_snapshot.site_name || 'Unnamed site' }}</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {{ getSiteAddressField(request, 'street') }}
+            {{ getSiteAddressField(request, 'city') }}
+            {{ getSiteAddressField(request, 'province') }}
+            {{ getSiteAddressField(request, 'postal_code') }}
+          </p>
+          <p *ngIf="request.site_snapshot.site_manager_contact || request.site_snapshot.manager_email" class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+            Contact: {{ request.site_snapshot.site_manager_contact || 'Not provided' }}
+            <span *ngIf="request.site_snapshot.manager_email"> • {{ request.site_snapshot.manager_email }}</span>
+          </p>
+        </div>
+
+        <div *ngIf="request.special_instructions" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
+          <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Client Instructions</h4>
+          <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{{ request.special_instructions }}</p>
+        </div>
+      </ng-container>
+
+      <div *ngIf="!isScopeLoading(jobDetailRequestScope) && !selectedJobRequest" class="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-300">
+        Full request details could not be loaded for this assignment.
+      </div>
+
+      <div class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
+        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Candidate Snapshot</h4>
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
+            Candidate: {{ job.candidate_snapshot?.['candidate_name'] || job.candidate_snapshot?.['candidate_id'] || 'Unknown' }}
+          </div>
+          <div class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
+            Distance: {{ job.candidate_snapshot?.['distance_km'] ?? 'N/A' }} km
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Broadcast Context</h4>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Wave and revision information for this offer.</p>
+          </div>
+          <app-button
+            *ngIf="getSelectedJobWave()"
+            label="View Wave"
+            type="secondary"
+            (pressed)="openSelectedJobWaveDetails()"
+          ></app-button>
+        </div>
+
+        <div *ngIf="isScopeLoading(jobDetailWavesScope)" class="mt-4 space-y-2">
+          <div *ngFor="let _ of [1,2]" class="h-12 animate-pulse rounded-md bg-gray-100 dark:bg-gray-800"></div>
+        </div>
+
+        <div *ngIf="!isScopeLoading(jobDetailWavesScope) && getSelectedJobWave() as wave" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
+            Wave {{ wave.wave_number }} • {{ formatTokenLabel(wave.trigger) }}
+          </div>
+          <div class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
+            Status: {{ formatTokenLabel(wave.wave_status) }}
+          </div>
+          <div class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
+            Request revision at offer: {{ job.request_revision_at_offer || wave.request_revision || 1 }}
+          </div>
+          <div class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
+            Wave expiry: {{ wave.wave_expires_at ? formatBackendDateTime(wave.wave_expires_at) : 'Not set' }}
+          </div>
+        </div>
+
+        <div *ngIf="!isScopeLoading(jobDetailWavesScope) && !getSelectedJobWave()" class="mt-3 text-sm text-gray-500 dark:text-gray-400">
+          This assignment was not linked to a broadcast wave, or the wave is no longer available in your visible history.
+        </div>
+      </div>
+    </div>
+
+    <div drawer-footer class="flex flex-wrap justify-end gap-2" *ngIf="selectedJob as job">
+      <app-button label="Close" type="secondary" (pressed)="closeJobDrawer()"></app-button>
+      <app-button
+        *ngFor="let action of getJobActions(job)"
+        [label]="action.label"
+        [type]="action.type"
+        [loadingScope]="getJobUpdateScope(job.id)"
+        (pressed)="updateJobStatus(job, action.status)"
+      ></app-button>
+    </div>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showCoverageDrawer" size="md" (close)="closeCoverageDrawer()">
+    <div drawer-header *ngIf="selectedCoverageRequest as request">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Request Additional Coverage</h3>
+      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ request.title }} • {{ request.site_snapshot.site_name || 'Unnamed site' }}</p>
+    </div>
+
+    <div drawer-body *ngIf="selectedCoverageRequest as request" class="space-y-5">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Required Guards</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.guards_required }}</div>
+        </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Open Slots</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.open_slots ?? 0 }}</div>
+        </div>
+      </div>
+
+      <div>
+        <app-base-input
+          label="Additional Slots"
+          name="additionalCoverageSlots"
+          type="number"
+          [(ngModel)]="coverageForm.additionalSlots"
+          [min]="1"
+          [required]="true"
+        ></app-base-input>
+        <div *ngIf="coverageErrors['additionalSlots']" class="mt-1 text-xs text-red-500">{{ coverageErrors['additionalSlots'] }}</div>
+      </div>
+
+      <div>
+        <app-base-input
+          label="Request Expiry"
+          name="additionalCoverageExpiry"
+          type="date"
+          [(ngModel)]="coverageForm.requestExpiresAt"
+          [helperText]="'Optional. Leave unchanged to keep the current request expiry.'"
+        ></app-base-input>
+        <div *ngIf="coverageErrors['requestExpiresAt']" class="mt-1 text-xs text-red-500">{{ coverageErrors['requestExpiresAt'] }}</div>
+      </div>
+    </div>
+
+    <div drawer-footer class="flex flex-wrap justify-end gap-2">
+      <app-button label="Close" type="secondary" (pressed)="closeCoverageDrawer()"></app-button>
+      <app-button label="Request Coverage" type="primary" [loadingScope]="selectedCoverageRequest ? getRequestStatusScope(selectedCoverageRequest.id) : ''" (pressed)="submitAdditionalCoverage()"></app-button>
+    </div>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showReturnWaveDrawer" size="md" (close)="closeReturnWaveDrawer()">
+    <div drawer-header *ngIf="returnWaveTarget as wave">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Return Broadcast To Client</h3>
+      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ getWaveTitle(wave) }} • Wave {{ wave.wave_number }}</p>
+    </div>
+
+    <div drawer-body class="space-y-4">
+      <app-textarea
+        label="Return Note"
+        name="returnWaveNote"
+        [(ngModel)]="returnWaveForm.note"
+        [required]="true"
+        [helperText]="'Explain what the client must correct before the broadcast can be reissued.'"
+      ></app-textarea>
+      <div *ngIf="returnWaveErrors['note']" class="text-xs text-red-500">{{ returnWaveErrors['note'] }}</div>
+    </div>
+
+    <div drawer-footer class="flex flex-wrap justify-end gap-2" *ngIf="returnWaveTarget as wave">
+      <app-button label="Close" type="secondary" (pressed)="closeReturnWaveDrawer()"></app-button>
+      <app-button label="Return To Client" type="primary" [loadingScope]="getReviewActionScope(wave.id)" (pressed)="submitReturnWave()"></app-button>
+    </div>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showAcceptJobDrawer" size="md" (close)="closeAcceptJobDrawer()">
+    <div drawer-header *ngIf="selectedAcceptJob as job">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ getAcceptJobDrawerTitle() }}</h3>
+      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ getAcceptJobDrawerSubtitle() }}</p>
+    </div>
+
+    <div drawer-body *ngIf="selectedAcceptJob as job" class="space-y-5">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Request</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ job.request?.title || 'Request' }}</div>
+        </div>
+        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Current Status</div>
+          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(job.assignment_status) }}</div>
+        </div>
+      </div>
+
+      <div>
+        <app-base-input
+          label="Slots Committed"
+          name="acceptJobSlotsCommitted"
+          type="number"
+          [(ngModel)]="acceptJobForm.slotsCommitted"
+          [min]="1"
+          [required]="true"
+          [helperText]="'Enter how many guard slots your service provider can cover for this request.'"
+        ></app-base-input>
+        <div *ngIf="acceptJobErrors['slotsCommitted']" class="mt-1 text-xs text-red-500">{{ acceptJobErrors['slotsCommitted'] }}</div>
+      </div>
+    </div>
+
+    <div drawer-footer class="flex flex-wrap justify-end gap-2" *ngIf="selectedAcceptJob as job">
+      <app-button label="Close" type="secondary" (pressed)="closeAcceptJobDrawer()"></app-button>
+      <app-button label="Confirm Acceptance" type="primary" [loadingScope]="getJobUpdateScope(job.id)" (pressed)="submitAcceptJob()"></app-button>
+    </div>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showReasonDrawer" size="md" (close)="closeReasonDrawer()">
+    <div drawer-header>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ getReasonDrawerTitle() }}</h3>
+      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ getReasonDrawerSubtitle() }}</p>
+    </div>
+
+    <div drawer-body class="space-y-4">
+      <app-textarea
+        label="Reason"
+        name="reasonActionNote"
+        [(ngModel)]="reasonForm.note"
+        [required]="true"
+        [helperText]="'This note will be saved with the action for audit and visibility.'"
+      ></app-textarea>
+      <div *ngIf="reasonErrors['note']" class="text-xs text-red-500">{{ reasonErrors['note'] }}</div>
+    </div>
+
+    <div drawer-footer class="flex flex-wrap justify-end gap-2">
+      <app-button label="Close" type="secondary" (pressed)="closeReasonDrawer()"></app-button>
+      <app-button
+        [label]="getReasonDrawerActionLabel()"
+        type="primary"
+        [loadingScope]="reasonRequestTarget ? getRequestStatusScope(reasonRequestTarget.id) : (reasonJobTarget ? getJobUpdateScope(reasonJobTarget.id) : '')"
+        (pressed)="submitReasonAction()"
+      ></app-button>
     </div>
   </app-side-drawer>
 </app-page>

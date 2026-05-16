@@ -429,9 +429,12 @@ class BillingManager:
             if (
                 max_auto_match_radius_km is not None
                 and manual_review_over_km is not None
-                and manual_review_over_km < max_auto_match_radius_km
+                and manual_review_over_km > max_auto_match_radius_km
             ):
-                continue
+                raise HTTPException(
+                    status_code=400,
+                    detail="Manual review distance cannot exceed max auto-match radius",
+                )
 
             existing = await self._engine.find_one(
                 TravelPricingPolicy,
@@ -805,6 +808,34 @@ class BillingManager:
             "max_auto_match_radius_km": effective.max_auto_match_radius_km if effective else None,
             "manual_review_over_km": effective.manual_review_over_km if effective else None,
             "source": "city_override" if city_policy else ("region_default" if province_policy else "system_default"),
+        }
+
+    @staticmethod
+    def evaluate_broadcast_distance(distance_km: float | None, policy: Dict[str, Any]) -> Dict[str, Any]:
+        if distance_km is None:
+            return {
+                "outcome": "pending_review",
+                "reason_code": "distance_unverified",
+            }
+
+        max_auto_match_radius_km = policy.get("max_auto_match_radius_km")
+        manual_review_over_km = policy.get("manual_review_over_km")
+
+        if max_auto_match_radius_km is not None and float(distance_km) > float(max_auto_match_radius_km):
+            return {
+                "outcome": "outside_policy",
+                "reason_code": "outside_policy",
+            }
+
+        if manual_review_over_km is not None and float(distance_km) > float(manual_review_over_km):
+            return {
+                "outcome": "pending_review",
+                "reason_code": "manual_review_distance",
+            }
+
+        return {
+            "outcome": "auto_broadcast",
+            "reason_code": "within_policy",
         }
 
     # ------------------------------------------------------------------
