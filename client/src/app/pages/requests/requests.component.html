@@ -25,10 +25,22 @@
         (pressed)="activeTab = 'jobs'"
       ></app-button>
       <app-button
+        *ngIf="canViewShifts"
+        label="Shifts"
+        [type]="activeTab === 'shifts' ? 'primary' : 'secondary'"
+        (pressed)="activeTab = 'shifts'"
+      ></app-button>
+      <app-button
         *ngIf="canReviewBroadcastWaves"
         label="Review Queue"
         [type]="activeTab === 'review' ? 'primary' : 'secondary'"
         (pressed)="activeTab = 'review'"
+      ></app-button>
+      <app-button
+        *ngIf="canViewShiftExceptions"
+        label="Shift Exceptions"
+        [type]="activeTab === 'exceptions' ? 'primary' : 'secondary'"
+        (pressed)="activeTab = 'exceptions'"
       ></app-button>
     </div>
   </app-card>
@@ -39,120 +51,97 @@
     [containerClass]="'mt-3 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
     [bodyClass]="'p-0'"
   >
-    <div class="border-b border-gray-100 px-6 py-6 dark:border-gray-800">
-      <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Request Pipeline</h2>
-          <p class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ totalItems }} request{{ totalItems === 1 ? '' : 's' }} in your role scope.</p>
-        </div>
-        <div class="grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-end dark:bg-gray-800/50">
-          <app-base-input label="Search" name="keyword" [(ngModel)]="keyword" placeholder="Title or site"></app-base-input>
-          <app-select-input label="Status" [name]="'requestStatusFilter'" [(ngModel)]="requestStatusFilter" [options]="requestStatusOptions"></app-select-input>
-          <app-select-input label="Fulfillment" [name]="'fulfillmentModeFilter'" [(ngModel)]="fulfillmentModeFilter" [options]="fulfillmentModeFilterOptions"></app-select-input>
-          <div class="flex flex-wrap gap-2 pb-0.5 sm:justify-end">
-            <app-button label="Apply" type="primary" (pressed)="applyFilters()"></app-button>
-            <app-button label="Clear" type="secondary" (pressed)="clearFilters()"></app-button>
-          </div>
-        </div>
+    <app-list-toolbar
+      title="Request Pipeline"
+      [subtitle]="getCountSummary(totalItems, 'request', 'in your role scope.')"
+      [controlsClass]="listToolbarControlsFourColumnClass"
+      [showFooter]="!isScopeLoading(requestListScope) && items.length > 0"
+      [footerClass]="requestToolbarSummaryFooterClass"
+    >
+      <div toolbar-controls class="contents">
+        <app-base-input label="Search" name="keyword" [(ngModel)]="keyword" placeholder="Title or site"></app-base-input>
+        <app-select-input label="Status" [name]="'requestStatusFilter'" [(ngModel)]="requestStatusFilter" [options]="requestStatusOptions"></app-select-input>
+        <app-select-input label="Fulfillment" [name]="'fulfillmentModeFilter'" [(ngModel)]="fulfillmentModeFilter" [options]="fulfillmentModeFilterOptions"></app-select-input>
+        <app-filter-action-bar (apply)="applyFilters()" (clear)="clearFilters()"></app-filter-action-bar>
       </div>
+
+      <div toolbar-footer class="contents">
+        <app-summary-metric-card
+          label="Drafts"
+          [value]="visibleDraftRequestCount"
+          helperText="Current filtered page"
+          [containerClass]="requestSummaryMetricContainerClass"
+          [valueClass]="requestSummaryMetricValueClass"
+        ></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Needs Review"
+          [value]="visibleNeedsReviewRequestCount"
+          helperText="Pending or returned broadcasts"
+          [containerClass]="requestSummaryMetricContainerClass"
+          [valueClass]="requestSummaryMetricValueClass"
+        ></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Open Coverage"
+          [value]="visibleOpenCoverageRequestCount"
+          helperText="Open or partially filled"
+          [containerClass]="requestSummaryMetricContainerClass"
+          [valueClass]="requestSummaryMetricValueClass"
+        ></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Filled"
+          [value]="visibleFilledRequestCount"
+          helperText="All required slots covered"
+          [containerClass]="requestSummaryMetricContainerClass"
+          [valueClass]="requestSummaryMetricValueClass"
+        ></app-summary-metric-card>
+      </div>
+    </app-list-toolbar>
+
+    <app-list-state-panel *ngIf="isScopeLoading(requestListScope)" mode="loading" [loadingRows]="3"></app-list-state-panel>
+
+    <app-list-state-panel
+      *ngIf="!isScopeLoading(requestListScope) && !items.length"
+      mode="empty"
+      icon="file-text"
+      title="No requests in scope"
+      message="Adjust filters or create a new request to continue."
+    ></app-list-state-panel>
+
+    <div *ngIf="!isScopeLoading(requestListScope) && items.length" class="space-y-8 bg-slate-50/60 px-4 py-7 sm:px-6 dark:bg-slate-950/40">
+      <app-request-list-card
+        *ngFor="let item of items; trackBy: trackByRequestId"
+        [request]="item"
+        [canEdit]="canEditRequest(item)"
+        [canPublishUpdate]="canPublishUpdate(item)"
+        [canRequestAdditionalCoverage]="canRequestAdditionalCoverage(item)"
+        [canPublish]="canCommitRequest(item)"
+        [canShowStatusActions]="canShowRequestStatusActions(item)"
+        [canSoftDelete]="canSoftDeleteRequest(item)"
+        [canShowAssignmentActions]="canShowAssignmentActions(item)"
+        [selectedCandidateId]="selectedCandidateByRequestId[item.id] || ''"
+        [candidateOptions]="getEligibleCandidateOptions(item)"
+        [requestStatusScope]="getRequestStatusScope(item.id)"
+        [assignScope]="getAssignScope(item.id)"
+        (selectedCandidateIdChange)="selectedCandidateByRequestId[item.id] = $event"
+        (details)="openRequestDetails(item)"
+        (edit)="openEditRequestDrawer(item)"
+        (publishUpdate)="openPublishUpdateDrawer(item)"
+        (requestAdditionalCoverage)="requestAdditionalCoverage(item)"
+        (publish)="commitDraft(item)"
+        (cancel)="updateStatus(item, 'cancelled')"
+        (close)="updateStatus(item, 'closed')"
+        (softDelete)="openRequestSoftDeleteDrawer(item)"
+        (assign)="assignSelectedCandidate(item)"
+      ></app-request-list-card>
     </div>
 
-    <div *ngIf="isScopeLoading(requestListScope)" class="space-y-4 p-6">
-      <div *ngFor="let _ of [1,2,3]" class="animate-pulse rounded-lg border border-gray-100 p-5 dark:border-gray-800">
-        <div class="mb-3 h-4 w-40 rounded bg-gray-200 dark:bg-gray-700"></div>
-        <div class="mb-3 h-3 w-3/4 rounded bg-gray-100 dark:bg-gray-800"></div>
-        <div class="h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800"></div>
-      </div>
-    </div>
-
-    <div *ngIf="!isScopeLoading(requestListScope) && !items.length" class="px-6 py-16 text-center">
-      <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-        <app-icon name="file-text" [size]="22"></app-icon>
-      </div>
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">No requests in scope</h3>
-      <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Adjust filters or create a new request to continue.</p>
-    </div>
-
-    <div *ngIf="!isScopeLoading(requestListScope) && items.length" class="divide-y divide-gray-100 dark:divide-gray-800">
-      <div *ngFor="let item of items; trackBy: trackByRequestId" class="px-6 py-6">
-        <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div class="min-w-0 flex-1">
-            <div class="mb-3 flex flex-wrap items-center gap-2">
-              <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(item.request_status)">
-                {{ item.request_status }}
-              </span>
-              <span *ngIf="item.staffing_status" class="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-                {{ formatTokenLabel(item.staffing_status) }}
-              </span>
-              <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                {{ getFulfillmentModeLabel(item.fulfillment_mode || item.target_type) }}
-              </span>
-              <span class="text-xs text-gray-400 dark:text-gray-500">Created {{ formatBackendDateTime(item.created_at) }}</span>
-            </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ item.title }}</h3>
-            <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
-              <span>{{ item.site_snapshot.site_name || 'Unnamed site' }}</span>
-              <span>•</span>
-              <span>{{ item.guards_required }} guard{{ item.guards_required === 1 ? '' : 's' }}</span>
-              <span *ngIf="item.open_slots != null">•</span>
-              <span *ngIf="item.open_slots != null">{{ item.open_slots }} open slot{{ item.open_slots === 1 ? '' : 's' }}</span>
-              <span *ngIf="item.requested_guard_type">•</span>
-              <span *ngIf="item.requested_guard_type">{{ item.requested_guard_type }}</span>
-            </div>
-            <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-                <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Eligible Matches</div>
-                <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getMatchCount(item, 'eligible_count') }}</div>
-              </div>
-              <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-                <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Missing Geo</div>
-                <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getMatchCount(item, 'missing_geo_count') }}</div>
-              </div>
-              <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-                <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Outside Radius</div>
-                <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getMatchCount(item, 'outside_radius_count') }}</div>
-              </div>
-            </div>
-          </div>
-          <div class="flex shrink-0 flex-wrap gap-2 pt-1 xl:pl-6">
-            <app-button label="Details" type="secondary" (pressed)="openRequestDetails(item)"></app-button>
-            <app-button *ngIf="canEditRequest(item)" label="Edit" type="secondary" (pressed)="openEditRequestDrawer(item)"></app-button>
-            <app-button *ngIf="canPublishUpdate(item)" label="Publish Update" type="secondary" (pressed)="openPublishUpdateDrawer(item)"></app-button>
-            <app-button *ngIf="canRequestAdditionalCoverage(item)" label="Add Coverage" type="secondary" [loadingScope]="getRequestStatusScope(item.id)" (pressed)="requestAdditionalCoverage(item)"></app-button>
-            <app-button *ngIf="canCommitRequest(item)" label="Publish" type="primary" [loadingScope]="getRequestStatusScope(item.id)" (pressed)="commitDraft(item)"></app-button>
-            <app-button *ngIf="canShowRequestStatusActions(item)" label="Cancel" type="danger" [loadingScope]="getRequestStatusScope(item.id)" (pressed)="updateStatus(item, 'cancelled')"></app-button>
-            <app-button *ngIf="canShowRequestStatusActions(item)" label="Close" type="secondary" [loadingScope]="getRequestStatusScope(item.id)" (pressed)="updateStatus(item, 'closed')"></app-button>
-          </div>
-        </div>
-
-        <div *ngIf="canShowAssignmentActions(item)" class="mt-5 grid grid-cols-1 gap-3 rounded-md border border-blue-100 bg-blue-50/60 p-5 md:grid-cols-[1fr_auto] dark:border-blue-900/40 dark:bg-blue-950/20">
-          <app-select-input
-            label="Assign Eligible Candidate"
-            [name]="'candidate-' + item.id"
-            [(ngModel)]="selectedCandidateByRequestId[item.id]"
-            [options]="getEligibleCandidateOptions(item)"
-            placeholder="Select candidate"
-          ></app-select-input>
-          <div class="flex items-end md:justify-end">
-              <app-button
-                label="Assign"
-                type="primary"
-                [loadingScope]="getAssignScope(item.id)"
-                (pressed)="assignSelectedCandidate(item)"
-              ></app-button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div *ngIf="!isScopeLoading(requestListScope) && totalPages > 1" class="flex flex-col gap-3 border-t border-gray-100 px-6 py-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
-      <p class="text-sm text-gray-500 dark:text-gray-400">Page {{ page }} of {{ totalPages }}</p>
-      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-        <app-button label="Previous" type="secondary" [disabled]="page <= 1" (pressed)="loadRequests(page - 1)"></app-button>
-        <app-button *ngFor="let pageNumber of paginationPages" [label]="getPageLabel(pageNumber)" [type]="pageNumber === page ? 'primary' : 'secondary'" (pressed)="loadRequests(pageNumber)"></app-button>
-        <app-button label="Next" type="secondary" [disabled]="page >= totalPages" (pressed)="loadRequests(page + 1)"></app-button>
-      </div>
-    </div>
+    <app-pagination-footer
+      *ngIf="!isScopeLoading(requestListScope)"
+      [page]="page"
+      [totalPages]="totalPages"
+      [pages]="paginationPages"
+      (pageChange)="loadRequests($event)"
+    ></app-pagination-footer>
   </app-card>
 
   <app-card
@@ -161,86 +150,248 @@
     [containerClass]="'mt-3 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
     [bodyClass]="'p-0'"
   >
-    <div class="border-b border-gray-100 px-6 py-6 dark:border-gray-800">
-      <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Broadcast Review Queue</h2>
-          <p class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ reviewTotalItems }} wave{{ reviewTotalItems === 1 ? '' : 's' }} in the platform review scope.</p>
-        </div>
-        <div class="grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-3 xl:items-end dark:bg-gray-800/50">
-          <app-select-input label="Wave Status" [name]="'reviewStatusFilter'" [(ngModel)]="reviewStatusFilter" [options]="reviewStatusOptions"></app-select-input>
-          <app-select-input label="Trigger" [name]="'reviewTriggerFilter'" [(ngModel)]="reviewTriggerFilter" [options]="reviewTriggerOptions"></app-select-input>
-          <div class="flex flex-wrap gap-2 pb-0.5 sm:justify-end">
-            <app-button label="Apply" type="primary" (pressed)="applyReviewFilters()"></app-button>
-            <app-button label="Clear" type="secondary" (pressed)="clearReviewFilters()"></app-button>
-          </div>
-        </div>
+    <app-list-toolbar
+      title="Broadcast Review Queue"
+      [subtitle]="getCountSummary(reviewTotalItems, 'wave', 'in the platform review scope.')"
+      [controlsClass]="listToolbarControlsThreeColumnClass"
+    >
+      <div toolbar-controls class="contents">
+        <app-select-input label="Wave Status" [name]="'reviewStatusFilter'" [(ngModel)]="reviewStatusFilter" [options]="reviewStatusOptions"></app-select-input>
+        <app-select-input label="Trigger" [name]="'reviewTriggerFilter'" [(ngModel)]="reviewTriggerFilter" [options]="reviewTriggerOptions"></app-select-input>
+        <app-filter-action-bar (apply)="applyReviewFilters()" (clear)="clearReviewFilters()"></app-filter-action-bar>
       </div>
-    </div>
+    </app-list-toolbar>
 
-    <div *ngIf="isScopeLoading(reviewListScope)" class="space-y-4 p-6">
-      <div *ngFor="let _ of [1,2,3]" class="animate-pulse rounded-lg border border-gray-100 p-5 dark:border-gray-800">
-        <div class="mb-3 h-4 w-48 rounded bg-gray-200 dark:bg-gray-700"></div>
-        <div class="mb-3 h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800"></div>
-        <div class="h-3 w-1/2 rounded bg-gray-100 dark:bg-gray-800"></div>
-      </div>
-    </div>
+    <app-list-state-panel *ngIf="isScopeLoading(reviewListScope)" mode="loading" [loadingRows]="3"></app-list-state-panel>
 
-    <div *ngIf="!isScopeLoading(reviewListScope) && !reviewWaves.length" class="px-6 py-16 text-center">
-      <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-        <app-icon name="alert-triangle" [size]="22"></app-icon>
-      </div>
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">No review waves waiting</h3>
-      <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Broadcast waves that need admin approval will appear here.</p>
-    </div>
+    <app-list-state-panel
+      *ngIf="!isScopeLoading(reviewListScope) && !reviewWaves.length"
+      mode="empty"
+      icon="alert-triangle"
+      title="No review waves waiting"
+      message="Broadcast waves that need admin approval will appear here."
+    ></app-list-state-panel>
 
     <div *ngIf="!isScopeLoading(reviewListScope) && reviewWaves.length" class="divide-y divide-gray-100 dark:divide-gray-800">
-      <div *ngFor="let wave of reviewWaves; trackBy: trackByWaveId" class="px-6 py-6">
-        <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div class="min-w-0 flex-1">
-            <div class="mb-3 flex flex-wrap items-center gap-2">
-              <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(wave.wave_status)">
-                {{ wave.wave_status }}
-              </span>
-              <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                {{ formatTokenLabel(wave.trigger) }}
-              </span>
-              <span class="text-xs text-gray-400 dark:text-gray-500">Wave {{ wave.wave_number }} • Revision {{ wave.request_revision }}</span>
-            </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getWaveTitle(wave) }}</h3>
-            <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
-              <span>{{ getWaveSiteName(wave) }}</span>
-              <span *ngIf="wave.wave_expires_at">•</span>
-              <span *ngIf="wave.wave_expires_at">Wave expires {{ formatBackendDateTime(wave.wave_expires_at) }}</span>
-            </div>
-            <div *ngIf="getWaveReasonCodes(wave).length" class="mt-4 flex flex-wrap gap-2">
-              <span *ngFor="let reason of getWaveReasonCodes(wave)" class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-                {{ formatTokenLabel(reason) }}
-              </span>
-            </div>
-            <div *ngIf="wave.review_note" class="mt-3 text-sm text-gray-600 dark:text-gray-300">
-              {{ wave.review_note }}
-            </div>
+      <app-record-list-item *ngFor="let wave of reviewWaves; trackBy: trackByWaveId">
+        <div record-badges>
+          <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(wave.wave_status)">
+            {{ wave.wave_status }}
+          </span>
+          <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+            {{ formatTokenLabel(wave.trigger) }}
+          </span>
+          <span class="text-xs text-gray-400 dark:text-gray-500">Wave {{ wave.wave_number }} • Revision {{ wave.request_revision }}</span>
+        </div>
+
+        <h3 record-title class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getWaveTitle(wave) }}</h3>
+
+        <div record-meta>
+          <span>{{ getWaveSiteName(wave) }}</span>
+          <span *ngIf="wave.wave_expires_at">Wave expires {{ formatBackendDateTime(wave.wave_expires_at) }}</span>
+        </div>
+
+        <div record-body>
+          <div *ngIf="getWaveReasonCodes(wave).length" class="mt-1 flex flex-wrap gap-2">
+            <span *ngFor="let reason of getWaveReasonCodes(wave)" class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+              {{ formatTokenLabel(reason) }}
+            </span>
           </div>
-          <div class="flex shrink-0 flex-wrap gap-2 pt-1 xl:pl-6">
-            <app-button label="Details" type="secondary" (pressed)="openWaveDetails(wave)"></app-button>
-            <ng-container *ngIf="wave.wave_status === 'pending_review'">
-            <app-button label="Approve & Broadcast" type="primary" [loadingScope]="getReviewActionScope(wave.id)" (pressed)="approveWave(wave)"></app-button>
-            <app-button label="Return to Client" type="secondary" [loadingScope]="getReviewActionScope(wave.id)" (pressed)="returnWave(wave)"></app-button>
-            </ng-container>
+          <div *ngIf="wave.review_note" class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+            {{ wave.review_note }}
           </div>
         </div>
-      </div>
+
+        <div record-actions>
+          <app-button label="Details" type="secondary" (pressed)="openWaveDetails(wave)"></app-button>
+          <ng-container *ngIf="wave.wave_status === 'pending_review'">
+            <app-button label="Approve & Broadcast" type="primary" [loadingScope]="getReviewActionScope(wave.id)" (pressed)="approveWave(wave)"></app-button>
+            <app-button label="Return to Client" type="secondary" [loadingScope]="getReviewActionScope(wave.id)" (pressed)="returnWave(wave)"></app-button>
+          </ng-container>
+        </div>
+      </app-record-list-item>
     </div>
 
-    <div *ngIf="!isScopeLoading(reviewListScope) && reviewTotalPages > 1" class="flex flex-col gap-3 border-t border-gray-100 px-6 py-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
-      <p class="text-sm text-gray-500 dark:text-gray-400">Page {{ reviewPage }} of {{ reviewTotalPages }}</p>
-      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-        <app-button label="Previous" type="secondary" [disabled]="reviewPage <= 1" (pressed)="loadReviewWaves(reviewPage - 1)"></app-button>
-        <app-button *ngFor="let pageNumber of reviewPaginationPages" [label]="getPageLabel(pageNumber)" [type]="pageNumber === reviewPage ? 'primary' : 'secondary'" (pressed)="loadReviewWaves(pageNumber)"></app-button>
-        <app-button label="Next" type="secondary" [disabled]="reviewPage >= reviewTotalPages" (pressed)="loadReviewWaves(reviewPage + 1)"></app-button>
+    <app-pagination-footer
+      *ngIf="!isScopeLoading(reviewListScope)"
+      [page]="reviewPage"
+      [totalPages]="reviewTotalPages"
+      [pages]="reviewPaginationPages"
+      (pageChange)="loadReviewWaves($event)"
+    ></app-pagination-footer>
+  </app-card>
+
+  <app-card
+    *ngIf="activeTab === 'shifts'"
+    [showHeader]="false"
+    [containerClass]="'mt-3 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
+    [bodyClass]="'p-0'"
+  >
+    <app-list-toolbar
+      title="Shift Operations"
+      [subtitle]="getCountSummary(shiftTotalItems, 'shift', 'in your visible operations scope.')"
+      [showFooter]="true"
+      [controlsClass]="listToolbarControlsFourColumnClass"
+      [footerClass]="listToolbarFooterClass"
+    >
+      <div toolbar-controls class="contents">
+        <app-select-input label="Shift Status" [name]="'shiftStatusFilter'" [(ngModel)]="shiftStatusFilter" [options]="shiftStatusOptions"></app-select-input>
+        <app-base-input label="Date From" name="shiftDateFrom" type="date" [(ngModel)]="shiftDateFrom"></app-base-input>
+        <app-base-input label="Date To" name="shiftDateTo" type="date" [(ngModel)]="shiftDateTo"></app-base-input>
+        <app-filter-action-bar (apply)="applyShiftFilters()" (clear)="clearShiftFilters()"></app-filter-action-bar>
       </div>
+
+      <div toolbar-footer class="contents">
+        <div class="flex flex-wrap items-center gap-2">
+          <app-button
+            label="Calendar"
+            [type]="shiftViewMode === 'calendar' ? 'primary' : 'secondary'"
+            (pressed)="setShiftViewMode('calendar')"
+          ></app-button>
+          <app-button
+            label="List"
+            [type]="shiftViewMode === 'list' ? 'primary' : 'secondary'"
+            (pressed)="setShiftViewMode('list')"
+          ></app-button>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          Calendar uses the current month window and the selected shift-status filter.
+        </p>
+      </div>
+    </app-list-toolbar>
+
+    <app-shift-calendar
+      *ngIf="shiftViewMode === 'calendar'"
+      [monthAnchor]="shiftCalendarMonthAnchor"
+      [shifts]="shiftCalendarItems"
+      [loading]="isScopeLoading(shiftCalendarScope)"
+      [filteredIsoDate]="shiftDateFrom && shiftDateFrom === shiftDateTo ? shiftDateFrom : ''"
+      [requestSummaries]="shiftRequestSummaries"
+      (previousMonth)="goToPreviousShiftCalendarMonth()"
+      (nextMonth)="goToNextShiftCalendarMonth()"
+      (currentMonth)="goToCurrentShiftCalendarMonth()"
+      (selectDate)="focusShiftCalendarDate($event)"
+      (openShift)="openShiftDetails($event)"
+    ></app-shift-calendar>
+
+    <app-list-state-panel *ngIf="shiftViewMode === 'list' && isScopeLoading(shiftListScope)" mode="loading" [loadingRows]="3"></app-list-state-panel>
+
+    <app-list-state-panel
+      *ngIf="shiftViewMode === 'list' && !isScopeLoading(shiftListScope) && !shifts.length"
+      mode="empty"
+      icon="clock"
+      title="No shifts found"
+      message="Generated shift instances, rostering work, and attendance operations will appear here."
+    ></app-list-state-panel>
+
+    <div *ngIf="shiftViewMode === 'list' && !isScopeLoading(shiftListScope) && shifts.length" class="divide-y divide-gray-100 dark:divide-gray-800">
+      <app-record-list-item *ngFor="let shift of shifts; trackBy: trackByShiftId">
+        <div record-badges>
+          <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(shift.instance_status)">
+            {{ formatTokenLabel(shift.instance_status) }}
+          </span>
+          <span *ngIf="shift.client_action_required" class="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+            Client Action Required
+          </span>
+          <span class="text-xs text-gray-400 dark:text-gray-500">{{ shift.shift_date_local }} • {{ formatBackendDateTime(shift.shift_start_at_utc) }}</span>
+        </div>
+
+        <h3 record-title class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getShiftRequestTitle(shift) }}</h3>
+
+        <div record-meta>
+          <span>{{ getShiftRequestSiteName(shift) }}</span>
+          <span>{{ getShiftStatusSummary(shift) }}</span>
+          <span *ngIf="shift.roster_due_at">Roster due {{ formatBackendDateTime(shift.roster_due_at) }}</span>
+        </div>
+
+        <div record-actions>
+          <app-button label="Details" type="secondary" (pressed)="openShiftDetails(shift)"></app-button>
+        </div>
+      </app-record-list-item>
     </div>
+
+    <app-pagination-footer
+      *ngIf="shiftViewMode === 'list' && !isScopeLoading(shiftListScope)"
+      [page]="shiftPage"
+      [totalPages]="shiftTotalPages"
+      [pages]="shiftPaginationPages"
+      (pageChange)="loadShifts($event)"
+    ></app-pagination-footer>
+  </app-card>
+
+  <app-card
+    *ngIf="activeTab === 'exceptions'"
+    [showHeader]="false"
+    [containerClass]="'mt-3 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
+    [bodyClass]="'p-0'"
+  >
+    <app-list-toolbar
+      title="Shift Exception Queue"
+      [subtitle]="getCountSummary(exceptionTotalItems, 'exception', 'in platform scope.')"
+      [controlsClass]="listToolbarControlsFourColumnClass"
+    >
+      <div toolbar-controls class="contents">
+        <app-select-input label="Exception Status" [name]="'exceptionStatusFilter'" [(ngModel)]="exceptionStatusFilter" [options]="exceptionStatusOptions"></app-select-input>
+        <app-base-input label="Date From" name="exceptionDateFrom" type="date" [(ngModel)]="exceptionDateFrom"></app-base-input>
+        <app-base-input label="Date To" name="exceptionDateTo" type="date" [(ngModel)]="exceptionDateTo"></app-base-input>
+        <app-filter-action-bar (apply)="applyExceptionFilters()" (clear)="clearExceptionFilters()"></app-filter-action-bar>
+      </div>
+    </app-list-toolbar>
+
+    <app-list-state-panel *ngIf="isScopeLoading(exceptionListScope)" mode="loading" [loadingRows]="3"></app-list-state-panel>
+
+    <app-list-state-panel
+      *ngIf="!isScopeLoading(exceptionListScope) && !shiftExceptions.length"
+      mode="empty"
+      icon="alert-triangle"
+      title="No shift exceptions waiting"
+      message="Unavailable guards, no-shows, and replacement cases will appear here."
+    ></app-list-state-panel>
+
+    <div *ngIf="!isScopeLoading(exceptionListScope) && shiftExceptions.length" class="divide-y divide-gray-100 dark:divide-gray-800">
+      <app-record-list-item *ngFor="let item of shiftExceptions; trackBy: trackByExceptionSlotId">
+        <div record-badges>
+          <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(item.slot.slot_status)">
+            {{ item.slot.slot_status }}
+          </span>
+          <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+            Slot {{ item.slot.slot_number }}
+          </span>
+          <span class="text-xs text-gray-400 dark:text-gray-500">{{ item.shift.shift_date_local }} • {{ formatBackendDateTime(item.shift.shift_start_at_utc) }}</span>
+        </div>
+
+        <h3 record-title class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getExceptionTitle(item) }}</h3>
+
+        <div record-meta>
+          <span>{{ getExceptionSubtitle(item) }}</span>
+          <span>Coverage: {{ getTargetTypeLabel(item.slot.coverage_source_type || 'guard') }}</span>
+          <span>Guard / Tenant: {{ getExceptionGuardLabel(item) }}</span>
+        </div>
+
+        <div record-body class="text-sm text-gray-600 dark:text-gray-300">
+          {{ getExceptionSummary(item) }}
+        </div>
+
+        <div record-actions>
+          <app-button label="Details" type="secondary" (pressed)="openExceptionDetails(item)"></app-button>
+          <app-button
+            *ngIf="canReopenException(item)"
+            label="Reopen For Replacement"
+            type="primary"
+            [loadingScope]="getExceptionActionScope(item.slot.id)"
+            (pressed)="openReopenExceptionDrawer(item)"
+          ></app-button>
+        </div>
+      </app-record-list-item>
+    </div>
+
+    <app-pagination-footer
+      *ngIf="!isScopeLoading(exceptionListScope)"
+      [page]="exceptionPage"
+      [totalPages]="exceptionTotalPages"
+      [pages]="exceptionPaginationPages"
+      (pageChange)="loadShiftExceptions($event)"
+    ></app-pagination-footer>
   </app-card>
 
   <app-card
@@ -249,92 +400,80 @@
     [containerClass]="'mt-3 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
     [bodyClass]="'p-0'"
   >
-    <div class="border-b border-gray-100 px-6 py-6 dark:border-gray-800">
-      <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Offers, Accepted & Ongoing Jobs</h2>
-          <p class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ jobTotalItems }} assignment{{ jobTotalItems === 1 ? '' : 's' }} in your role scope.</p>
-        </div>
-        <div class="grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-3 xl:items-end dark:bg-gray-800/50">
-          <app-base-input label="Search" name="jobKeyword" [(ngModel)]="jobKeyword" placeholder="Request or site"></app-base-input>
-          <app-select-input label="Status" [name]="'jobStatusFilter'" [(ngModel)]="jobStatusFilter" [options]="jobStatusOptions"></app-select-input>
-          <div class="flex flex-wrap gap-2 pb-0.5 sm:justify-end">
-            <app-button label="Apply" type="primary" (pressed)="applyJobFilters()"></app-button>
-            <app-button label="Clear" type="secondary" (pressed)="clearJobFilters()"></app-button>
-          </div>
-        </div>
+    <app-list-toolbar
+      title="Offers, Accepted & Ongoing Jobs"
+      [subtitle]="getCountSummary(jobTotalItems, 'assignment', 'in your role scope.')"
+      [controlsClass]="listToolbarControlsThreeColumnClass"
+    >
+      <div toolbar-controls class="contents">
+        <app-base-input label="Search" name="jobKeyword" [(ngModel)]="jobKeyword" placeholder="Request or site"></app-base-input>
+        <app-select-input label="Status" [name]="'jobStatusFilter'" [(ngModel)]="jobStatusFilter" [options]="jobStatusOptions"></app-select-input>
+        <app-filter-action-bar (apply)="applyJobFilters()" (clear)="clearJobFilters()"></app-filter-action-bar>
       </div>
-    </div>
+    </app-list-toolbar>
 
-    <div *ngIf="isScopeLoading(jobListScope)" class="space-y-4 p-6">
-      <div *ngFor="let _ of [1,2,3]" class="animate-pulse rounded-lg border border-gray-100 p-5 dark:border-gray-800">
-        <div class="mb-3 h-4 w-40 rounded bg-gray-200 dark:bg-gray-700"></div>
-        <div class="h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800"></div>
-      </div>
-    </div>
+    <app-list-state-panel *ngIf="isScopeLoading(jobListScope)" mode="loading" [loadingRows]="3"></app-list-state-panel>
 
-    <div *ngIf="!isScopeLoading(jobListScope) && !jobs.length" class="px-6 py-16 text-center">
-      <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-        <app-icon name="file-text" [size]="22"></app-icon>
-      </div>
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">No jobs found</h3>
-      <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">You will see offered, accepted, and in-progress jobs here.</p>
-    </div>
+    <app-list-state-panel
+      *ngIf="!isScopeLoading(jobListScope) && !jobs.length"
+      mode="empty"
+      icon="file-text"
+      title="No jobs found"
+      message="You will see offered, accepted, and in-progress jobs here."
+    ></app-list-state-panel>
 
     <div *ngIf="!isScopeLoading(jobListScope) && jobs.length" class="divide-y divide-gray-100 dark:divide-gray-800">
-      <div *ngFor="let job of jobs; trackBy: trackByJobId" class="px-6 py-6">
-        <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div class="min-w-0 flex-1">
-            <div class="mb-3 flex flex-wrap items-center gap-2">
-              <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(job.assignment_status)">
-                {{ job.assignment_status }}
-              </span>
-              <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                {{ getTargetTypeLabel(job.assignee_tenant_type) }}
-              </span>
-            </div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ job.request?.title || 'Request' }}</h3>
-            <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-600 dark:text-gray-300">
-              <span>{{ job.request?.site_name || 'Unknown site' }}</span>
-              <span>•</span>
-              <span>Candidate: {{ job.candidate_snapshot?.['candidate_name'] || job.candidate_snapshot?.['candidate_id'] || 'Unknown' }}</span>
-            </div>
-            <div *ngIf="job.note" class="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">{{ job.note }}</div>
-          </div>
-          <div class="flex shrink-0 flex-wrap gap-2 pt-1 xl:pl-6">
-            <app-button label="Details" type="secondary" (pressed)="openJobDetails(job)"></app-button>
-          </div>
+      <app-record-list-item *ngFor="let job of jobs; trackBy: trackByJobId">
+        <div record-badges>
+          <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(job.assignment_status)">
+            {{ job.assignment_status }}
+          </span>
+          <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+            {{ getTargetTypeLabel(job.assignee_tenant_type) }}
+          </span>
+          <span *ngIf="job.assignment_scope === 'shift_replacement'" class="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+            Shift Replacement
+          </span>
         </div>
-      </div>
+
+        <h3 record-title class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ job.request?.title || 'Request' }}</h3>
+
+        <div record-meta>
+          <span>{{ job.request?.site_name || 'Unknown site' }}</span>
+          <span>Candidate: {{ job.candidate_snapshot?.['candidate_name'] || job.candidate_snapshot?.['candidate_id'] || 'Unknown' }}</span>
+        </div>
+
+        <div *ngIf="job.note" record-body class="text-sm leading-6 text-gray-600 dark:text-gray-300">
+          {{ job.note }}
+        </div>
+
+        <div record-actions>
+          <app-button label="Details" type="secondary" (pressed)="openJobDetails(job)"></app-button>
+        </div>
+      </app-record-list-item>
     </div>
 
-    <div *ngIf="!isScopeLoading(jobListScope) && jobTotalPages > 1" class="flex flex-col gap-3 border-t border-gray-100 px-6 py-6 sm:flex-row sm:items-center sm:justify-between dark:border-gray-800">
-      <p class="text-sm text-gray-500 dark:text-gray-400">Page {{ jobPage }} of {{ jobTotalPages }}</p>
-      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-        <app-button label="Previous" type="secondary" [disabled]="jobPage <= 1" (pressed)="loadJobs(jobPage - 1)"></app-button>
-        <app-button *ngFor="let pageNumber of jobPaginationPages" [label]="getPageLabel(pageNumber)" [type]="pageNumber === jobPage ? 'primary' : 'secondary'" (pressed)="loadJobs(pageNumber)"></app-button>
-        <app-button label="Next" type="secondary" [disabled]="jobPage >= jobTotalPages" (pressed)="loadJobs(jobPage + 1)"></app-button>
-      </div>
-    </div>
+    <app-pagination-footer
+      *ngIf="!isScopeLoading(jobListScope)"
+      [page]="jobPage"
+      [totalPages]="jobTotalPages"
+      [pages]="jobPaginationPages"
+      (pageChange)="loadJobs($event)"
+    ></app-pagination-footer>
   </app-card>
 
   <app-side-drawer [show]="showRequestFormDrawer" size="xl" (close)="closeRequestFormDrawer()">
-    <div drawer-header>
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ getRequestFormHeading() }}</h3>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ getRequestFormSubtitle() }}</p>
-        </div>
-        <button
-          *ngIf="requestFormMode === 'create'"
-          type="button"
-          (click)="fillDummyData()"
-          class="shrink-0 rounded-md border border-dashed border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 dark:border-amber-500 dark:bg-amber-900/20 dark:text-amber-400 dark:hover:bg-amber-900/40"
-        >
-          Fill Demo Data
-        </button>
-      </div>
-    </div>
+    <app-drawer-title-block drawer-header [title]="getRequestFormHeading()" [subtitle]="getRequestFormSubtitle()">
+      <button
+        drawer-heading-actions
+        *ngIf="requestFormMode === 'create'"
+        type="button"
+        (click)="fillDummyData()"
+        class="shrink-0 rounded-md border border-dashed border-amber-400 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition hover:bg-amber-100 dark:border-amber-500 dark:bg-amber-900/20 dark:text-amber-400 dark:hover:bg-amber-900/40"
+      >
+        Fill Demo Data
+      </button>
+    </app-drawer-title-block>
 
     <div drawer-body class="space-y-6">
       <div class="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
@@ -359,8 +498,13 @@
         </div>
 
         <div>
-          <app-base-input label="Site Name" name="siteNameDrawer" [(ngModel)]="requestForm.siteName" [required]="true"></app-base-input>
-          <div *ngIf="requestErrors['siteName']" class="mt-1 text-xs text-red-500">{{ requestErrors['siteName'] }}</div>
+          <app-base-input
+            label="Site Name"
+            name="siteNameDrawer"
+            [(ngModel)]="requestForm.siteName"
+            [required]="true"
+            [errorText]="requestErrors['siteName'] || ''"
+          ></app-base-input>
         </div>
 
         <app-select-input
@@ -381,20 +525,25 @@
             [required]="true"
             [readonly]="requestFormMode === 'publish_update'"
             [helperText]="requestFormMode === 'publish_update' ? 'Use Additional Coverage to increase staffing on a live request.' : ''"
+            [errorText]="requestErrors['guardsRequired'] || ''"
           ></app-base-input>
-          <div *ngIf="requestErrors['guardsRequired']" class="mt-1 text-xs text-red-500">{{ requestErrors['guardsRequired'] }}</div>
         </div>
 
         <app-base-input label="Site Manager Contact" name="siteManagerContactDrawer" [(ngModel)]="requestForm.siteManagerContact"></app-base-input>
 
         <div>
-          <app-base-input label="Manager Email" name="managerEmailDrawer" type="email" [(ngModel)]="requestForm.managerEmail"></app-base-input>
-          <div *ngIf="requestErrors['managerEmail']" class="mt-1 text-xs text-red-500">{{ requestErrors['managerEmail'] }}</div>
+          <app-base-input
+            label="Manager Email"
+            name="managerEmailDrawer"
+            type="email"
+            [(ngModel)]="requestForm.managerEmail"
+            [errorText]="requestErrors['managerEmail'] || ''"
+          ></app-base-input>
         </div>
 
         <app-base-input label="Requested Start Date" name="requestedStartAtDrawer" type="date" [(ngModel)]="requestForm.requestedStartAt"></app-base-input>
         <app-base-input label="Requested End Date" name="requestedEndAtDrawer" type="date" [(ngModel)]="requestForm.requestedEndAt"></app-base-input>
-        <div *ngIf="requestErrors['requestedEndAt']" class="md:col-span-2 -mt-2 text-xs text-red-500">{{ requestErrors['requestedEndAt'] }}</div>
+        <app-validation-message [message]="requestErrors['requestedEndAt']" [className]="'md:col-span-2 -mt-2 text-xs text-red-500'"></app-validation-message>
         <div>
           <app-base-input
             label="Request Expiry"
@@ -402,8 +551,8 @@
             type="date"
             [(ngModel)]="requestForm.requestExpiresAt"
             [helperText]="'Required before publishing. Expired requests become read-only.'"
+            [errorText]="requestErrors['requestExpiresAt'] || ''"
           ></app-base-input>
-          <div *ngIf="requestErrors['requestExpiresAt']" class="mt-1 text-xs text-red-500">{{ requestErrors['requestExpiresAt'] }}</div>
         </div>
 
         <div class="md:col-span-2 rounded-md border border-gray-200 bg-gray-50/60 p-5 dark:border-gray-800 dark:bg-gray-800/30">
@@ -418,30 +567,50 @@
               <app-base-input label="Street" name="siteStreetDrawer" [(ngModel)]="requestForm.siteStreet"></app-base-input>
 
               <div>
-                <app-base-input label="City" name="siteCityDrawer" [(ngModel)]="requestForm.siteCity" [required]="true"></app-base-input>
-                <div *ngIf="requestErrors['siteCity']" class="mt-1 text-xs text-red-500">{{ requestErrors['siteCity'] }}</div>
+                <app-base-input
+                  label="City"
+                  name="siteCityDrawer"
+                  [(ngModel)]="requestForm.siteCity"
+                  [required]="true"
+                  [errorText]="requestErrors['siteCity'] || ''"
+                ></app-base-input>
               </div>
 
               <div>
-                <app-base-input label="Province / State" name="siteProvinceDrawer" [(ngModel)]="requestForm.siteProvince" [required]="true"></app-base-input>
-                <div *ngIf="requestErrors['siteProvince']" class="mt-1 text-xs text-red-500">{{ requestErrors['siteProvince'] }}</div>
+                <app-base-input
+                  label="Province / State"
+                  name="siteProvinceDrawer"
+                  [(ngModel)]="requestForm.siteProvince"
+                  [required]="true"
+                  [errorText]="requestErrors['siteProvince'] || ''"
+                ></app-base-input>
               </div>
 
               <app-base-input label="Postal Code" name="sitePostalCodeDrawer" [(ngModel)]="requestForm.sitePostalCode"></app-base-input>
               <app-base-input label="Country" name="siteCountryDrawer" [(ngModel)]="requestForm.siteCountry"></app-base-input>
 
               <div>
-                <app-base-input label="Latitude" name="siteLatitudeDrawer" [(ngModel)]="requestForm.latitude" placeholder="43.6532"></app-base-input>
-                <div *ngIf="requestErrors['latitude']" class="mt-1 text-xs text-red-500">{{ requestErrors['latitude'] }}</div>
+                <app-base-input
+                  label="Latitude"
+                  name="siteLatitudeDrawer"
+                  [(ngModel)]="requestForm.latitude"
+                  placeholder="43.6532"
+                  [errorText]="requestErrors['latitude'] || ''"
+                ></app-base-input>
               </div>
 
               <div>
-                <app-base-input label="Longitude" name="siteLongitudeDrawer" [(ngModel)]="requestForm.longitude" placeholder="-79.3832"></app-base-input>
-                <div *ngIf="requestErrors['longitude']" class="mt-1 text-xs text-red-500">{{ requestErrors['longitude'] }}</div>
+                <app-base-input
+                  label="Longitude"
+                  name="siteLongitudeDrawer"
+                  [(ngModel)]="requestForm.longitude"
+                  placeholder="-79.3832"
+                  [errorText]="requestErrors['longitude'] || ''"
+                ></app-base-input>
               </div>
             </div>
 
-            <div *ngIf="requestErrors['coordinates']" class="-mt-2 text-xs text-red-500">{{ requestErrors['coordinates'] }}</div>
+            <app-validation-message [message]="requestErrors['coordinates']" [className]="'-mt-2 text-xs text-red-500'"></app-validation-message>
           </div>
         </div>
 
@@ -454,75 +623,172 @@
           ></app-textarea>
         </div>
 
-        <div *ngIf="requestErrors['title']" class="md:col-span-2 -mt-2 text-xs text-red-500">{{ requestErrors['title'] }}</div>
+        <app-validation-message [message]="requestErrors['title']" [className]="'md:col-span-2 -mt-2 text-xs text-red-500'"></app-validation-message>
       </div>
     </div>
 
-    <div drawer-footer class="flex flex-wrap justify-end gap-2">
+    <app-drawer-action-row drawer-footer>
       <app-button label="Close" type="secondary" (pressed)="closeRequestFormDrawer()"></app-button>
       <app-button *ngIf="requestFormMode === 'create'" label="Reset" type="secondary" (pressed)="resetForm()"></app-button>
       <app-button *ngIf="requestFormMode !== 'publish_update'" label="Save Draft" type="secondary" [loadingScope]="saveRequestScope" (pressed)="submitRequest(false)"></app-button>
       <app-button [label]="getRequestFormPrimaryActionLabel()" type="primary" [loadingScope]="saveRequestScope" (pressed)="submitRequest(true)"></app-button>
-    </div>
+    </app-drawer-action-row>
   </app-side-drawer>
 
   <app-side-drawer [show]="showRequestDrawer" size="lg" (close)="closeRequestDrawer()">
-    <div drawer-header>
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ selectedRequest?.title || 'Request details' }}</h3>
-      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-        {{ selectedRequest?.site_snapshot?.site_name || 'Unnamed site' }}
-      </p>
-    </div>
+    <app-drawer-title-block
+      drawer-header
+      [title]="selectedRequest?.title || 'Request details'"
+      [subtitle]="selectedRequest?.site_snapshot?.site_name || 'Unnamed site'"
+    ></app-drawer-title-block>
 
     <div drawer-body *ngIf="selectedRequest as request" class="space-y-5">
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Status</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.request_status }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70" *ngIf="request.staffing_status">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Staffing</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(request.staffing_status) }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Fulfillment</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ getFulfillmentModeLabel(request.fulfillment_mode || request.target_type) }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70" *ngIf="request.request_expires_at">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Request Expiry</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatBackendDateTime(request.request_expires_at) }}</div>
-        </div>
+        <app-summary-metric-card label="Status" [value]="request.request_status"></app-summary-metric-card>
+        <app-summary-metric-card
+          *ngIf="request.staffing_status"
+          label="Staffing"
+          [value]="formatTokenLabel(request.staffing_status)"
+        ></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Fulfillment"
+          [value]="getFulfillmentModeLabel(request.fulfillment_mode || request.target_type)"
+        ></app-summary-metric-card>
+        <app-summary-metric-card
+          *ngIf="request.request_expires_at"
+          label="Request Expiry"
+          [value]="formatBackendDateTime(request.request_expires_at)"
+        ></app-summary-metric-card>
       </div>
 
-      <div class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
-        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Site Snapshot</h4>
+      <app-section
+        [title]="'Site Snapshot'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+      >
         <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">{{ request.site_snapshot.site_name || 'Unnamed site' }}</p>
         <p class="text-sm text-gray-500 dark:text-gray-400">
           {{ getSiteAddressField(request, 'street') }}
           {{ getSiteAddressField(request, 'city') }}
           {{ getSiteAddressField(request, 'province') }}
         </p>
-      </div>
+      </app-section>
 
-      <div *ngIf="request.special_instructions" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
-        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Special Instructions</h4>
+      <app-section
+        *ngIf="request.special_instructions"
+        [title]="'Special Instructions'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+      >
         <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{{ request.special_instructions }}</p>
-      </div>
+      </app-section>
 
-      <div *ngIf="getTopCandidateNames(request).length" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
-        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Top Eligible Candidates</h4>
+      <app-section
+        [title]="'Operations Schedule'"
+        [subtitle]="'Shift generation, roster deadlines, and attendance cutoffs for this request.'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+        [subtitleClass]="drawerSectionSubtitleClass"
+      >
+        <app-button
+          section-actions
+          *ngIf="canManageRequestSchedule(request)"
+          label="Manage Schedule"
+          type="secondary"
+          (pressed)="openScheduleDrawer(request)"
+        ></app-button>
+
+        <div *ngIf="isScopeLoading(requestScheduleScope)" class="mt-4 space-y-2">
+          <div *ngFor="let _ of [1,2]" class="h-12 animate-pulse rounded-md bg-gray-100 dark:bg-gray-800"></div>
+        </div>
+
+        <div *ngIf="!isScopeLoading(requestScheduleScope) && !selectedRequestSchedule" class="mt-3 rounded-md border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300">
+          No schedule has been configured yet. Add one to generate dated shifts, roster deadlines, and attendance tracking.
+        </div>
+
+        <div *ngIf="!isScopeLoading(requestScheduleScope) && selectedRequestSchedule as schedule" class="mt-4 space-y-4">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <app-summary-metric-card
+              label="Schedule Type"
+              [value]="getScheduleTypeLabel(schedule.schedule_type)"
+              [containerClass]="metricCompactContainerClass"
+              [valueClass]="metricCompactValueClass"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Date Window"
+              [value]="getScheduleDateRangeLabel(schedule)"
+              [containerClass]="metricCompactContainerClass"
+              [valueClass]="metricCompactValueClass"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Local Time"
+              [value]="getScheduleTimeWindowLabel(schedule)"
+              [containerClass]="metricCompactContainerClass"
+              [valueClass]="metricCompactValueClass"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Timezone"
+              [value]="schedule.timezone"
+              [containerClass]="metricCompactContainerClass"
+              [valueClass]="metricCompactValueClass"
+            ></app-summary-metric-card>
+          </div>
+
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <app-summary-metric-card
+              label="Recurrence"
+              [value]="getScheduleRecurrenceLabel(schedule)"
+              [containerClass]="metricCompactContainerClass"
+              [valueClass]="metricCompactValueClass"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Generated Shifts"
+              [value]="schedule.generated_shift_count ?? 0"
+              [containerClass]="metricCompactContainerClass"
+              [valueClass]="metricCompactValueClass"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Roster Due Offset"
+              [value]="schedule.roster_due_offset_minutes + ' min'"
+              [containerClass]="metricCompactContainerClass"
+              [valueClass]="metricCompactValueClass"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Check-In Geofence"
+              [value]="schedule.checkin_geofence_meters + ' m'"
+              [containerClass]="metricCompactContainerClass"
+              [valueClass]="metricCompactValueClass"
+            ></app-summary-metric-card>
+          </div>
+        </div>
+      </app-section>
+
+      <app-section
+        *ngIf="getTopCandidateNames(request).length"
+        [title]="'Top Eligible Candidates'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+      >
         <div class="mt-3 flex flex-wrap gap-2">
           <span *ngFor="let candidateName of getTopCandidateNames(request)" class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 dark:bg-blue-950/30 dark:text-blue-300">
             {{ candidateName }}
           </span>
         </div>
-      </div>
+      </app-section>
 
-      <div class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
-        <div class="flex items-center justify-between gap-3">
-          <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Broadcast History</h4>
-          <span class="text-xs text-gray-400 dark:text-gray-500">{{ selectedRequestWaves.length }} wave{{ selectedRequestWaves.length === 1 ? '' : 's' }}</span>
-        </div>
+      <app-section
+        [title]="'Broadcast History'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+      >
+        <span section-actions class="text-xs text-gray-400 dark:text-gray-500">
+          {{ selectedRequestWaves.length }} wave{{ selectedRequestWaves.length === 1 ? '' : 's' }}
+        </span>
 
         <div *ngIf="isScopeLoading(requestWavesScope)" class="mt-4 space-y-2">
           <div *ngFor="let _ of [1,2]" class="h-12 animate-pulse rounded-md bg-gray-100 dark:bg-gray-800"></div>
@@ -553,81 +819,266 @@
             </div>
           </div>
         </div>
-      </div>
+      </app-section>
     </div>
 
-    <div drawer-footer class="flex flex-wrap justify-end gap-2" *ngIf="selectedRequest as request">
+    <app-drawer-action-row drawer-footer *ngIf="selectedRequest as request">
+      <app-button *ngIf="canManageRequestSchedule(request)" label="Manage Schedule" type="secondary" (pressed)="openScheduleDrawer(request)"></app-button>
       <app-button *ngIf="canPublishUpdate(request)" label="Publish Update" type="secondary" (pressed)="openPublishUpdateDrawer(request)"></app-button>
       <app-button *ngIf="canRequestAdditionalCoverage(request)" label="Add Coverage" type="secondary" [loadingScope]="getRequestStatusScope(request.id)" (pressed)="requestAdditionalCoverage(request)"></app-button>
       <app-button *ngIf="canShowRequestStatusActions(request)" label="Cancel" type="danger" [loadingScope]="getRequestStatusScope(request.id)" (pressed)="updateStatus(request, 'cancelled')"></app-button>
       <app-button *ngIf="canShowRequestStatusActions(request)" label="Close" type="secondary" [loadingScope]="getRequestStatusScope(request.id)" (pressed)="updateStatus(request, 'closed')"></app-button>
+      <app-button *ngIf="canSoftDeleteRequest(request)" label="Remove" type="danger" [loadingScope]="getRequestStatusScope(request.id)" (pressed)="openRequestSoftDeleteDrawer(request)"></app-button>
       <app-button label="Done" type="primary" (pressed)="closeRequestDrawer()"></app-button>
+    </app-drawer-action-row>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showScheduleDrawer" size="xl" (close)="closeScheduleDrawer()">
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="selectedScheduleRequest as request"
+      title="Manage Request Schedule"
+      [subtitle]="request.title + ' • ' + (request.site_snapshot.site_name || 'Unnamed site')"
+    ></app-drawer-title-block>
+
+    <div drawer-body *ngIf="selectedScheduleRequest as request" class="space-y-6">
+      <app-banner
+        tone="info"
+        title="Shift Generation"
+        [showIcon]="false"
+        [message]="'This schedule controls how the request turns into dated shifts, when provider rostering is due, when guards can report unavailable, and how no-show timing is evaluated.'"
+        [containerClass]="'rounded-md p-4'"
+        [bodyClass]="'mt-2 text-sm leading-6'"
+      ></app-banner>
+
+      <div class="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
+        <div>
+          <app-base-input
+            label="Timezone"
+            name="scheduleTimezone"
+            [(ngModel)]="scheduleForm.timezone"
+            [required]="true"
+            [helperText]="'Use an IANA timezone like America/Toronto.'"
+            [errorText]="scheduleErrors['timezone'] || ''"
+          ></app-base-input>
+        </div>
+
+        <div>
+          <app-select-input
+            label="Schedule Type"
+            [name]="'scheduleType'"
+            [(ngModel)]="scheduleForm.scheduleType"
+            [options]="scheduleTypeOptions"
+            [required]="true"
+            (ngModelChange)="onScheduleTypeChange()"
+          ></app-select-input>
+        </div>
+
+        <div>
+          <app-base-input
+            label="Start Date"
+            name="scheduleStartDate"
+            type="date"
+            [(ngModel)]="scheduleForm.startDate"
+            [required]="true"
+            [errorText]="scheduleErrors['startDate'] || ''"
+          ></app-base-input>
+        </div>
+
+        <div *ngIf="scheduleForm.scheduleType !== 'one_time'">
+          <app-base-input
+            label="End Date"
+            name="scheduleEndDate"
+            type="date"
+            [(ngModel)]="scheduleForm.endDate"
+            [required]="true"
+            [errorText]="scheduleErrors['endDate'] || ''"
+          ></app-base-input>
+        </div>
+
+        <div>
+          <app-base-input
+            label="Start Time"
+            name="scheduleStartTime"
+            type="time"
+            [(ngModel)]="scheduleForm.startTimeLocal"
+            [required]="true"
+            [errorText]="scheduleErrors['startTimeLocal'] || ''"
+          ></app-base-input>
+        </div>
+
+        <div>
+          <app-base-input
+            label="End Time"
+            name="scheduleEndTime"
+            type="time"
+            [(ngModel)]="scheduleForm.endTimeLocal"
+            [required]="true"
+            [helperText]="'If the end time is earlier than the start time, the shift is treated as overnight.'"
+            [errorText]="scheduleErrors['endTimeLocal'] || ''"
+          ></app-base-input>
+        </div>
+
+        <div class="md:col-span-2" *ngIf="scheduleForm.scheduleType === 'recurring_weekly'">
+          <div class="rounded-md border border-gray-200 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-800/40">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Recurring Weekdays</h4>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Choose the weekdays that should generate shifts inside the configured date range.</p>
+              </div>
+            </div>
+
+            <div class="mt-4 flex flex-wrap gap-3">
+              <label
+                *ngFor="let option of scheduleWeekdayOptions"
+                class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-blue-800 dark:hover:text-blue-300"
+              >
+                <input
+                  type="checkbox"
+                  class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  [checked]="isScheduleRecurrenceDaySelected(option.value)"
+                  (change)="toggleScheduleRecurrenceDay(option.value, $any($event.target).checked)"
+                />
+                <span>{{ option.label }}</span>
+              </label>
+            </div>
+            <app-validation-message [message]="scheduleErrors['recurrenceDays']" [className]="'mt-3 text-xs text-red-500'"></app-validation-message>
+          </div>
+        </div>
+
+        <div class="md:col-span-2 rounded-md border border-gray-200 bg-gray-50/60 p-5 dark:border-gray-800 dark:bg-gray-800/30">
+          <div class="mb-4">
+            <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Operations Policy</h4>
+            <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+              These controls define how far ahead shifts are generated and how the attendance exception windows behave.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <app-base-input label="Generation Horizon (days)" name="scheduleGenerationHorizon" type="number" [(ngModel)]="scheduleForm.generationHorizonDays" [min]="1" [required]="true" [errorText]="scheduleErrors['generationHorizonDays'] || ''"></app-base-input>
+            </div>
+
+            <div>
+              <app-base-input label="Roster Due Offset (minutes)" name="scheduleRosterDueOffset" type="number" [(ngModel)]="scheduleForm.rosterDueOffsetMinutes" [min]="0" [required]="true" [errorText]="scheduleErrors['rosterDueOffsetMinutes'] || ''"></app-base-input>
+            </div>
+
+            <div>
+              <app-base-input label="Unavailable Cutoff (minutes)" name="scheduleUnavailableCutoff" type="number" [(ngModel)]="scheduleForm.unavailableCutoffMinutes" [min]="0" [required]="true" [errorText]="scheduleErrors['unavailableCutoffMinutes'] || ''"></app-base-input>
+            </div>
+
+            <div>
+              <app-base-input label="Late Grace (minutes)" name="scheduleLateGrace" type="number" [(ngModel)]="scheduleForm.lateGraceMinutes" [min]="0" [required]="true" [errorText]="scheduleErrors['lateGraceMinutes'] || ''"></app-base-input>
+            </div>
+
+            <div>
+              <app-base-input label="No-Show Cutoff (minutes)" name="scheduleNoShowCutoff" type="number" [(ngModel)]="scheduleForm.noShowCutoffMinutes" [min]="0" [required]="true" [errorText]="scheduleErrors['noShowCutoffMinutes'] || ''"></app-base-input>
+            </div>
+
+            <div>
+              <app-base-input label="Check-In Geofence (meters)" name="scheduleCheckinGeofence" type="number" [(ngModel)]="scheduleForm.checkinGeofenceMeters" [min]="1" [required]="true" [errorText]="scheduleErrors['checkinGeofenceMeters'] || ''"></app-base-input>
+            </div>
+          </div>
+
+          <label class="mt-5 inline-flex items-center gap-3 text-sm text-gray-700 dark:text-gray-200">
+            <input
+              type="checkbox"
+              class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              [(ngModel)]="scheduleForm.active"
+              name="scheduleActive"
+            />
+            <span>Schedule is active and should continue generating future shifts</span>
+          </label>
+        </div>
+      </div>
     </div>
+
+    <app-drawer-action-row drawer-footer *ngIf="selectedScheduleRequest as request">
+      <app-button label="Close" type="secondary" (pressed)="closeScheduleDrawer()"></app-button>
+      <app-button
+        [label]="selectedRequestSchedule ? 'Update Schedule' : 'Create Schedule'"
+        type="primary"
+        [loadingScope]="saveRequestScheduleScope"
+        (pressed)="submitRequestSchedule()"
+      ></app-button>
+    </app-drawer-action-row>
   </app-side-drawer>
 
   <app-side-drawer [show]="showWaveDrawer" size="xl" (close)="closeWaveDrawer()">
-    <div drawer-header *ngIf="selectedWave as wave">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ getWaveTitle(wave) }}</h3>
-      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-        {{ getWaveSiteName(wave) }} • Wave {{ wave.wave_number }} • Revision {{ wave.request_revision }}
-      </p>
-    </div>
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="selectedWave as wave"
+      [title]="getWaveTitle(wave)"
+      [subtitle]="getWaveSiteName(wave) + ' • Wave ' + wave.wave_number + ' • Revision ' + wave.request_revision"
+    ></app-drawer-title-block>
 
     <div drawer-body *ngIf="selectedWave as wave" class="space-y-5">
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Wave Status</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(wave.wave_status) }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Trigger</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(wave.trigger) }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Wave Expiry</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ wave.wave_expires_at ? formatBackendDateTime(wave.wave_expires_at) : 'Not set' }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Open Slots At Send</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ wave.open_slots_at_send || 0 }}</div>
-        </div>
+        <app-summary-metric-card label="Wave Status" [value]="formatTokenLabel(wave.wave_status)"></app-summary-metric-card>
+        <app-summary-metric-card label="Trigger" [value]="formatTokenLabel(wave.trigger)"></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Wave Expiry"
+          [value]="wave.wave_expires_at ? formatBackendDateTime(wave.wave_expires_at) : 'Not set'"
+        ></app-summary-metric-card>
+        <app-summary-metric-card label="Open Slots At Send" [value]="wave.open_slots_at_send || 0"></app-summary-metric-card>
       </div>
 
       <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Auto Broadcast</div>
-          <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getWaveBroadcastCandidateCount(wave, 'auto_broadcast') }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Pending Review</div>
-          <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getWaveBroadcastCandidateCount(wave, 'pending_review') }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Outside Policy</div>
-          <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getWaveBroadcastCandidateCount(wave, 'outside_policy') }}</div>
-        </div>
+        <app-summary-metric-card
+          label="Auto Broadcast"
+          [value]="getWaveBroadcastCandidateCount(wave, 'auto_broadcast')"
+          [labelClass]="metricCountLabelClass"
+          [valueClass]="metricCountValueClass"
+        ></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Pending Review"
+          [value]="getWaveBroadcastCandidateCount(wave, 'pending_review')"
+          [labelClass]="metricCountLabelClass"
+          [valueClass]="metricCountValueClass"
+        ></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Outside Policy"
+          [value]="getWaveBroadcastCandidateCount(wave, 'outside_policy')"
+          [labelClass]="metricCountLabelClass"
+          [valueClass]="metricCountValueClass"
+        ></app-summary-metric-card>
       </div>
 
-      <div *ngIf="getWaveReasonCodes(wave).length" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
-        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Review Reasons</h4>
+      <app-section
+        *ngIf="getWaveReasonCodes(wave).length"
+        [title]="'Review Reasons'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+      >
         <div class="mt-3 flex flex-wrap gap-2">
           <span *ngFor="let reason of getWaveReasonCodes(wave)" class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
             {{ formatTokenLabel(reason) }}
           </span>
         </div>
-      </div>
+      </app-section>
 
-      <div *ngIf="getWaveReviewFindings(wave).length" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
-        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Review Findings</h4>
+      <app-section
+        *ngIf="getWaveReviewFindings(wave).length"
+        [title]="'Review Findings'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+      >
         <div class="mt-3 space-y-2">
           <div *ngFor="let finding of getWaveReviewFindings(wave)" class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
             {{ getWaveFindingLabel(finding) }}
           </div>
         </div>
-      </div>
+      </app-section>
 
-      <div *ngIf="getWaveCandidateSnapshots(wave).length" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
-        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Candidate Snapshot</h4>
+      <app-section
+        *ngIf="getWaveCandidateSnapshots(wave).length"
+        [title]="'Candidate Snapshot'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+      >
         <div class="mt-3 space-y-3">
           <div *ngFor="let candidate of getWaveCandidateSnapshots(wave) | slice:0:8" class="rounded-md border border-gray-100 px-4 py-3 dark:border-gray-700">
             <div class="flex flex-wrap items-center gap-2">
@@ -641,59 +1092,628 @@
             </div>
           </div>
         </div>
-      </div>
+      </app-section>
 
-      <div *ngIf="wave.review_note" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
-        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Reviewer Note</h4>
+      <app-section
+        *ngIf="wave.review_note"
+        [title]="'Reviewer Note'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+      >
         <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{{ wave.review_note }}</p>
-      </div>
+      </app-section>
     </div>
 
-    <div drawer-footer class="flex flex-wrap justify-end gap-2" *ngIf="selectedWave as wave">
+    <app-drawer-action-row drawer-footer *ngIf="selectedWave as wave">
       <app-button *ngIf="wave.wave_status === 'pending_review'" label="Return to Client" type="secondary" [loadingScope]="getReviewActionScope(wave.id)" (pressed)="returnWave(wave)"></app-button>
       <app-button *ngIf="wave.wave_status === 'pending_review'" label="Approve & Broadcast" type="primary" [loadingScope]="getReviewActionScope(wave.id)" (pressed)="approveWave(wave)"></app-button>
       <app-button label="Done" type="primary" (pressed)="closeWaveDrawer()"></app-button>
+    </app-drawer-action-row>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showShiftDrawer" size="xl" (close)="closeShiftDrawer()">
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="selectedShift as shift"
+      [title]="getShiftRequestTitle(shift)"
+      [subtitle]="getShiftRequestSiteName(shift) + ' • ' + shift.shift_date_local + ' • ' + formatBackendDateTime(shift.shift_start_at_utc)"
+    ></app-drawer-title-block>
+
+    <div drawer-body *ngIf="selectedShift as shift" class="space-y-5">
+      <app-banner
+        *ngIf="shift.client_action_required"
+        tone="warning"
+        [showIcon]="false"
+        [message]="'This shift has at least one slot that needs client or platform attention before coverage can proceed cleanly.'"
+        [containerClass]="'rounded-md px-4 py-3'"
+        [bodyClass]="'text-sm'"
+      ></app-banner>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <app-summary-metric-card label="Shift Status" [value]="formatTokenLabel(shift.instance_status)"></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Schedule"
+          [value]="formatBackendDateTime(shift.shift_start_at_utc) + ' to ' + formatBackendDateTime(shift.shift_end_at_utc)"
+        ></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Roster Due"
+          [value]="shift.roster_due_at ? formatBackendDateTime(shift.roster_due_at) : 'Not set'"
+        ></app-summary-metric-card>
+        <app-summary-metric-card label="Shift Summary" [value]="getShiftStatusSummary(shift)"></app-summary-metric-card>
+      </div>
+
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-4" *ngIf="selectedShiftSlotSummary as summary">
+        <app-summary-metric-card
+          label="Visible Slots"
+          [value]="summary.total_visible_slots"
+          [labelClass]="metricCountLabelClass"
+          [valueClass]="metricCountValueClass"
+        ></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Open Slots"
+          [value]="summary.open_slots"
+          [labelClass]="metricCountLabelClass"
+          [valueClass]="metricCountValueClass"
+        ></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Reserved Slots"
+          [value]="summary.reserved_slots"
+          [labelClass]="metricCountLabelClass"
+          [valueClass]="metricCountValueClass"
+        ></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Rostered Slots"
+          [value]="summary.rostered_slots"
+          [labelClass]="metricCountLabelClass"
+          [valueClass]="metricCountValueClass"
+        ></app-summary-metric-card>
+      </div>
+
+      <app-section
+        [title]="'Shift Slots'"
+        [subtitle]="'Operational slot state, coverage source, and attendance readiness for this shift.'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+        [subtitleClass]="drawerSectionSubtitleClass"
+      >
+        <div section-actions class="flex flex-wrap items-center justify-end gap-2">
+          <app-button
+            *ngIf="canOpenBulkConfirmForSelectedShift()"
+            label="Bulk Confirm Arrivals"
+            type="secondary"
+            (pressed)="openBulkConfirmDrawer(shift)"
+          ></app-button>
+          <app-button
+            *ngIf="canOpenRosterForSelectedShift()"
+            label="Roster Provider Guards"
+            type="primary"
+            (pressed)="openRosterDrawer(shift)"
+          ></app-button>
+        </div>
+
+        <div *ngIf="!selectedShiftSlots.length" class="mt-3 text-sm text-gray-500 dark:text-gray-400">
+          No visible slots are attached to this shift yet.
+        </div>
+
+        <div *ngIf="selectedShiftSlots.length" class="mt-4 space-y-3">
+          <app-shift-slot-card
+            *ngFor="let slot of selectedShiftSlots; trackBy: trackByShiftSlotId"
+            [statusLabel]="formatTokenLabel(slot.slot_status)"
+            [statusClass]="getStatusClasses(slot.slot_status)"
+            [title]="getShiftSlotLabel(slot)"
+            [titleClass]="'inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300'"
+            [badges]="getShiftSlotReplacementBadges(slot)"
+            [metaItems]="getShiftSlotMetaItems(slot)"
+            [detailItems]="getShiftSlotDetailItems(slot)"
+          >
+            <app-button slot-card-actions label="Open Slot" type="secondary" (pressed)="openShiftSlotDetails(slot)"></app-button>
+            <app-button
+              slot-card-actions
+              *ngIf="getShiftSlotPrimaryAction(slot) as primaryAction"
+              [label]="primaryAction.label"
+              [type]="primaryAction.type"
+              (pressed)="openShiftActionDrawer(slot, primaryAction.action)"
+            ></app-button>
+          </app-shift-slot-card>
+        </div>
+      </app-section>
     </div>
+
+    <app-drawer-action-row drawer-footer *ngIf="selectedShift as shift">
+      <app-button *ngIf="canOpenBulkConfirmForSelectedShift()" label="Bulk Confirm Arrivals" type="secondary" (pressed)="openBulkConfirmDrawer(shift)"></app-button>
+      <app-button *ngIf="canOpenRosterForSelectedShift()" label="Roster Provider Guards" type="secondary" (pressed)="openRosterDrawer(shift)"></app-button>
+      <app-button label="Done" type="primary" (pressed)="closeShiftDrawer()"></app-button>
+    </app-drawer-action-row>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showShiftSlotDrawer" size="lg" (close)="closeShiftSlotDrawer()">
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="selectedShiftSlotDetail?.slot as slot"
+      [title]="getShiftSlotLabel(slot)"
+      [subtitle]="(selectedShift ? getShiftRequestTitle(selectedShift) : 'Shift slot') + ' • ' + (selectedShift ? selectedShift.shift_date_local : 'Schedule')"
+    ></app-drawer-title-block>
+
+    <div drawer-body *ngIf="selectedShiftSlotDetail?.slot as slot" class="space-y-5">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <app-summary-metric-card label="Status" [value]="formatTokenLabel(slot.slot_status)"></app-summary-metric-card>
+        <app-summary-metric-card label="Coverage" [value]="getShiftSlotCoverageLabel(slot)"></app-summary-metric-card>
+        <app-summary-metric-card label="Guard / Tenant" [value]="getShiftSlotTenantLabel(slot)"></app-summary-metric-card>
+        <app-summary-metric-card
+          label="Roster Due"
+          [value]="slot.roster_due_at ? formatBackendDateTime(slot.roster_due_at) : 'Not set'"
+        ></app-summary-metric-card>
+      </div>
+
+      <app-section
+        *ngIf="selectedShift as shift"
+        [title]="'Shift Context'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+      >
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <app-summary-metric-card
+            label="Request"
+            [value]="getShiftRequestTitle(shift)"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Site"
+            [value]="getShiftRequestSiteName(shift)"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Shift Window"
+            [value]="formatBackendDateTime(shift.shift_start_at_utc) + ' to ' + formatBackendDateTime(shift.shift_end_at_utc)"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Shift Status"
+            [value]="formatTokenLabel(shift.instance_status)"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+        </div>
+      </app-section>
+
+      <app-event-timeline
+        title="Attendance Timeline"
+        [events]="selectedShiftSlotDetail?.events"
+        [loading]="isScopeLoading(shiftSlotDetailScope)"
+        [emptyMessage]="'No attendance events have been recorded for this slot yet.'"
+        [showLocationDetails]="true"
+      ></app-event-timeline>
+    </div>
+
+    <app-drawer-action-row drawer-footer *ngIf="selectedShiftSlotDetail?.slot as slot">
+      <app-button *ngIf="canReportShiftSlotUnavailable(slot)" label="Report Unavailable" type="danger" (pressed)="openShiftActionDrawer(slot, 'report_unavailable')"></app-button>
+      <app-button *ngIf="canCheckInShiftSlot(slot)" label="Check In" type="primary" (pressed)="openShiftActionDrawer(slot, 'check_in')"></app-button>
+      <app-button *ngIf="canConfirmShiftSlotArrival(slot)" label="Confirm Arrival" type="primary" (pressed)="openShiftActionDrawer(slot, 'client_confirm')"></app-button>
+      <app-button *ngIf="canStartShiftSlot(slot)" label="Start Shift" type="primary" (pressed)="openShiftActionDrawer(slot, 'start')"></app-button>
+      <app-button *ngIf="canCheckOutShiftSlot(slot)" label="Check Out" type="primary" (pressed)="openShiftActionDrawer(slot, 'check_out')"></app-button>
+      <app-button label="Close" type="secondary" (pressed)="closeShiftSlotDrawer()"></app-button>
+    </app-drawer-action-row>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showRosterDrawer" size="lg" (close)="closeRosterDrawer()">
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="selectedRosterShift as shift"
+      title="Roster Provider Guards"
+      [subtitle]="getShiftRequestTitle(shift) + ' • ' + shift.shift_date_local + ' • ' + formatBackendDateTime(shift.shift_start_at_utc)"
+    ></app-drawer-title-block>
+
+    <div drawer-body *ngIf="selectedRosterShift as shift" class="space-y-5">
+      <app-banner
+        tone="info"
+        title="Provider Rostering"
+        [showIcon]="false"
+        [message]="'Assign named active guards from your service provider guard pool to each provider-backed slot for this shift.'"
+        [containerClass]="'rounded-md p-4'"
+        [bodyClass]="'mt-2 text-sm leading-6'"
+      ></app-banner>
+
+      <app-banner
+        *ngIf="rosterErrors['assignments']"
+        tone="danger"
+        [showIcon]="false"
+        [message]="rosterErrors['assignments']"
+        [containerClass]="'rounded-md px-4 py-3'"
+        [bodyClass]="'text-sm'"
+      ></app-banner>
+
+      <div *ngIf="isScopeLoading(shiftProviderGuardsScope)" class="space-y-2">
+        <div *ngFor="let _ of [1,2,3]" class="h-16 animate-pulse rounded-md bg-gray-100 dark:bg-gray-800"></div>
+      </div>
+
+      <app-banner
+        *ngIf="!isScopeLoading(shiftProviderGuardsScope) && !providerGuards.length"
+        tone="neutral"
+        [showIcon]="false"
+        [message]="'No active provider guards are currently available to roster.'"
+        [containerClass]="'rounded-md px-4 py-3'"
+        [bodyClass]="'text-sm'"
+      ></app-banner>
+
+      <div *ngIf="!isScopeLoading(shiftProviderGuardsScope) && rosterShiftSlots.length" class="space-y-4">
+        <app-shift-slot-card
+          *ngFor="let slot of rosterShiftSlots; trackBy: trackByShiftSlotId"
+          [statusLabel]="formatTokenLabel(slot.slot_status)"
+          [statusClass]="getStatusClasses(slot.slot_status)"
+          [title]="getShiftSlotLabel(slot)"
+          [metaItems]="getRosterSlotMetaItems(slot)"
+          [containerClass]="'rounded-md border border-gray-100 p-4 dark:border-gray-800'"
+        >
+          <app-select-input
+            label="Assigned Guard"
+            [name]="'roster-slot-' + slot.id"
+            [(ngModel)]="rosterSelections[slot.id]"
+            [options]="getProviderGuardOptions()"
+            placeholder="Select provider guard"
+          ></app-select-input>
+        </app-shift-slot-card>
+      </div>
+
+      <app-banner tone="warning" title="Recurring Roster Pattern" [showIcon]="false" [containerClass]="'rounded-md p-4'">
+        <div banner-body>
+          <p class="text-sm leading-6">
+            {{ getRosterPatternPreviewText() }}
+          </p>
+          <div *ngIf="rosterPatternFutureShifts.length" class="mt-3 flex flex-wrap gap-2">
+            <span
+              *ngFor="let futureShift of rosterPatternFutureShifts | slice:0:6; trackBy: trackByShiftId"
+              class="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+            >
+              {{ futureShift.shift_date_local }}
+            </span>
+            <span
+              *ngIf="rosterPatternFutureShifts.length > 6"
+              class="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
+            >
+              +{{ rosterPatternFutureShifts.length - 6 }} more
+            </span>
+          </div>
+
+          <label class="mt-4 inline-flex items-start gap-3 text-sm text-amber-900 dark:text-amber-100">
+            <input
+              type="checkbox"
+              class="mt-1 h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+              [(ngModel)]="rosterPatternForm.applyToFutureShifts"
+              [disabled]="!rosterPatternFutureShifts.length"
+              name="rosterApplyToFutureShifts"
+            />
+            <span>Apply the same named-guard roster pattern to future visible shifts for this request.</span>
+          </label>
+
+          <div *ngIf="isScopeLoading(shiftRosterPatternScope)" class="mt-3 text-xs text-amber-800 dark:text-amber-100">
+            Checking upcoming shifts for this request...
+          </div>
+        </div>
+      </app-banner>
+    </div>
+
+    <app-drawer-action-row drawer-footer *ngIf="selectedRosterShift as shift">
+      <app-button label="Close" type="secondary" (pressed)="closeRosterDrawer()"></app-button>
+      <app-button
+        [label]="rosterPatternForm.applyToFutureShifts && rosterPatternFutureShifts.length ? 'Save & Apply Pattern' : 'Save Roster'"
+        type="primary"
+        [loadingScope]="getShiftRosterScope(shift.id)"
+        (pressed)="submitRosterAssignments()"
+      ></app-button>
+    </app-drawer-action-row>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showBulkConfirmDrawer" size="lg" (close)="closeBulkConfirmDrawer()">
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="selectedBulkConfirmShift as shift"
+      title="Bulk Confirm Arrivals"
+      [subtitle]="getShiftRequestTitle(shift) + ' • ' + shift.shift_date_local + ' • ' + formatBackendDateTime(shift.shift_start_at_utc)"
+    ></app-drawer-title-block>
+
+    <div drawer-body *ngIf="selectedBulkConfirmShift as shift" class="space-y-5">
+      <app-banner
+        tone="info"
+        title="Client Arrival Confirmation"
+        [showIcon]="false"
+        [message]="'Confirm the guards who are physically on site and ready to begin. Only arrived slots are included here.'"
+        [containerClass]="'rounded-md p-4'"
+        [bodyClass]="'mt-2 text-sm leading-6'"
+      ></app-banner>
+
+      <app-banner
+        *ngIf="bulkConfirmErrors['slots']"
+        tone="danger"
+        [showIcon]="false"
+        [message]="bulkConfirmErrors['slots']"
+        [containerClass]="'rounded-md px-4 py-3'"
+        [bodyClass]="'text-sm'"
+      ></app-banner>
+
+      <div class="space-y-3">
+        <app-shift-slot-card
+          *ngFor="let slot of bulkConfirmShiftSlots; trackBy: trackByShiftSlotId"
+          [selectable]="true"
+          [selected]="isBulkConfirmSlotSelected(slot.id)"
+          [selectionName]="'bulk-confirm-' + slot.id"
+          [statusLabel]="formatTokenLabel(slot.slot_status)"
+          [statusClass]="getStatusClasses(slot.slot_status)"
+          [title]="getShiftSlotLabel(slot)"
+          [metaItems]="getBulkConfirmSlotMetaItems(slot)"
+          [detailItems]="getBulkConfirmSlotDetailItems(slot)"
+          [containerClass]="'rounded-md border border-gray-100 px-4 py-3 transition hover:border-blue-200 dark:border-gray-800 dark:hover:border-blue-900/40'"
+          (selectedChange)="toggleBulkConfirmSlot(slot.id, $event)"
+        ></app-shift-slot-card>
+      </div>
+
+      <app-textarea
+        label="Confirmation Note"
+        name="bulkConfirmNote"
+        [(ngModel)]="bulkConfirmForm.note"
+        [helperText]="'Optional note added to every selected arrival confirmation event.'"
+      ></app-textarea>
+    </div>
+
+    <app-drawer-action-row drawer-footer *ngIf="selectedBulkConfirmShift as shift">
+      <app-button label="Close" type="secondary" (pressed)="closeBulkConfirmDrawer()"></app-button>
+      <app-button
+        [label]="'Confirm ' + getSelectedBulkConfirmSlotIds().length + ' Arrival' + (getSelectedBulkConfirmSlotIds().length === 1 ? '' : 's')"
+        type="primary"
+        [loadingScope]="getShiftBulkConfirmScope(shift.id)"
+        (pressed)="submitBulkConfirmArrivals()"
+      ></app-button>
+    </app-drawer-action-row>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showShiftActionDrawer" size="md" (close)="closeShiftActionDrawer()">
+    <app-drawer-title-block
+      drawer-header
+      [title]="getShiftActionDrawerTitle()"
+      [subtitle]="getShiftActionDrawerSubtitle()"
+    ></app-drawer-title-block>
+
+    <div drawer-body *ngIf="shiftActionTarget as slot" class="space-y-5">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <app-summary-metric-card label="Slot Status" [value]="formatTokenLabel(slot.slot_status)"></app-summary-metric-card>
+        <app-summary-metric-card label="Guard / Tenant" [value]="getShiftSlotTenantLabel(slot)"></app-summary-metric-card>
+      </div>
+
+      <div *ngIf="shiftActionType === 'check_in'" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <app-banner
+          class="sm:col-span-2"
+          tone="info"
+          title="Device Location"
+          [showIcon]="false"
+          [containerClass]="'rounded-md p-4'"
+        >
+          <div banner-body>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="min-w-0 flex-1">
+                <p class="text-sm leading-6 text-blue-800 dark:text-blue-100">
+                  Use the current device location for guard check-in. Manual coordinate entry remains available as a fallback.
+                </p>
+              </div>
+              <app-button
+                [label]="getShiftActionLocationButtonLabel()"
+                type="secondary"
+                [disabled]="!canUseBrowserGeolocation()"
+                [loading]="capturingShiftActionLocation"
+                loadingLabel="Locating..."
+                (pressed)="captureShiftActionLocation()"
+              ></app-button>
+            </div>
+
+            <div *ngIf="shiftActionLocationMessage" class="mt-3 text-xs text-blue-700 dark:text-blue-200">
+              {{ shiftActionLocationMessage }}
+            </div>
+            <app-validation-message
+              [message]="shiftActionLocationError"
+              [className]="'mt-3 text-xs text-red-600 dark:text-red-300'"
+            ></app-validation-message>
+            <div *ngIf="!canUseBrowserGeolocation() && !shiftActionLocationError" class="mt-3 text-xs text-amber-700 dark:text-amber-300">
+              Browser location is not available here. Enter coordinates manually to continue.
+            </div>
+          </div>
+        </app-banner>
+
+        <div>
+          <app-base-input
+            label="Latitude"
+            name="shiftActionLatitude"
+            [(ngModel)]="shiftActionForm.latitude"
+            [required]="true"
+            placeholder="43.6532"
+            [helperText]="'Auto-filled from the current device location when available.'"
+            [errorText]="shiftActionErrors['latitude'] || ''"
+          ></app-base-input>
+        </div>
+        <div>
+          <app-base-input
+            label="Longitude"
+            name="shiftActionLongitude"
+            [(ngModel)]="shiftActionForm.longitude"
+            [required]="true"
+            placeholder="-79.3832"
+            [helperText]="'Adjust manually only if the captured coordinate needs correction.'"
+            [errorText]="shiftActionErrors['longitude'] || ''"
+          ></app-base-input>
+        </div>
+      </div>
+
+      <app-textarea
+        label="Note"
+        name="shiftActionNote"
+        [(ngModel)]="shiftActionForm.note"
+        [helperText]="shiftActionType === 'check_in' ? 'Optional site note to include with check-in.' : 'Optional operational note for this slot action.'"
+      ></app-textarea>
+    </div>
+
+    <app-drawer-action-row drawer-footer *ngIf="shiftActionTarget as slot">
+      <app-button label="Close" type="secondary" (pressed)="closeShiftActionDrawer()"></app-button>
+      <app-button
+        [label]="getShiftActionButtonLabel()"
+        type="primary"
+        [loadingScope]="getShiftSlotActionScope(slot.id)"
+        (pressed)="submitShiftAction()"
+      ></app-button>
+    </app-drawer-action-row>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showExceptionDrawer" size="lg" (close)="closeExceptionDrawer()">
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="selectedException as item"
+      [title]="getExceptionTitle(item)"
+      [subtitle]="getExceptionSubtitle(item)"
+    ></app-drawer-title-block>
+
+    <div drawer-body *ngIf="selectedException as item" class="space-y-5">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <app-summary-metric-card label="Exception Status" [value]="formatTokenLabel(item.slot.slot_status)"></app-summary-metric-card>
+        <app-summary-metric-card label="Shift Start" [value]="formatBackendDateTime(item.shift.shift_start_at_utc)"></app-summary-metric-card>
+        <app-summary-metric-card label="Slot" [value]="'Slot ' + item.slot.slot_number"></app-summary-metric-card>
+        <app-summary-metric-card label="Guard / Tenant" [value]="getExceptionGuardLabel(item)"></app-summary-metric-card>
+      </div>
+
+      <app-section
+        [title]="'Request Context'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+      >
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <app-summary-metric-card
+            label="Title"
+            [value]="item.request.title"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Shift Date"
+            [value]="item.shift.shift_date_local"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Shift Status"
+            [value]="formatTokenLabel(item.shift.instance_status)"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Client Action Required"
+            [value]="item.shift.client_action_required ? 'Yes' : 'No'"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+        </div>
+      </app-section>
+
+      <app-event-timeline
+        title="Attendance & Exception Events"
+        [events]="selectedExceptionDetail?.events"
+        [loading]="isScopeLoading(exceptionDetailScope)"
+        [emptyMessage]="'No slot events were recorded for this exception yet.'"
+      ></app-event-timeline>
+    </div>
+
+    <app-drawer-action-row drawer-footer *ngIf="selectedException as item">
+      <app-button
+        *ngIf="canReopenException(item)"
+        label="Reopen For Replacement"
+        type="primary"
+        [loadingScope]="getExceptionActionScope(item.slot.id)"
+        (pressed)="openReopenExceptionDrawer(item)"
+      ></app-button>
+      <app-button label="Done" type="secondary" (pressed)="closeExceptionDrawer()"></app-button>
+    </app-drawer-action-row>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showReopenExceptionDrawer" size="md" (close)="closeReopenExceptionDrawer()">
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="reopenExceptionTarget as item"
+      title="Reopen Shift Slot For Replacement"
+      [subtitle]="getExceptionTitle(item) + ' • ' + getExceptionSubtitle(item)"
+    ></app-drawer-title-block>
+
+    <div drawer-body *ngIf="reopenExceptionTarget as item" class="space-y-5">
+      <app-banner
+        tone="warning"
+        title="Replacement Flow"
+        [showIcon]="false"
+        [message]="'Reopening this exception creates a replacement slot and a fresh broadcast wave for the uncovered shift only. The original exception history stays intact.'"
+        [containerClass]="'rounded-md p-4'"
+        [bodyClass]="'mt-2 text-sm leading-6'"
+      ></app-banner>
+
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <app-summary-metric-card label="Current Status" [value]="formatTokenLabel(item.slot.slot_status)"></app-summary-metric-card>
+        <app-summary-metric-card label="Shift Start" [value]="formatBackendDateTime(item.shift.shift_start_at_utc)"></app-summary-metric-card>
+      </div>
+
+      <div>
+        <app-base-input
+          label="Max Match Results"
+          name="reopenExceptionMaxMatchResults"
+          type="number"
+          [(ngModel)]="reopenExceptionForm.maxMatchResults"
+          [min]="1"
+          [required]="true"
+          [helperText]="'Controls how many candidates the replacement wave should consider from the saved request matching scope.'"
+          [errorText]="reopenExceptionErrors['maxMatchResults'] || ''"
+        ></app-base-input>
+      </div>
+
+      <app-textarea
+        label="Ops Note"
+        name="reopenExceptionNote"
+        [(ngModel)]="reopenExceptionForm.note"
+        [helperText]="'Optional. This note will be saved with the replacement action for audit and review context.'"
+      ></app-textarea>
+    </div>
+
+    <app-drawer-action-row drawer-footer *ngIf="reopenExceptionTarget as item">
+      <app-button label="Close" type="secondary" (pressed)="closeReopenExceptionDrawer()"></app-button>
+      <app-button
+        label="Create Replacement Wave"
+        type="primary"
+        [loadingScope]="getExceptionActionScope(item.slot.id)"
+        (pressed)="submitReopenException()"
+      ></app-button>
+    </app-drawer-action-row>
   </app-side-drawer>
 
   <app-side-drawer [show]="showJobDrawer" size="xl" (close)="closeJobDrawer()">
-    <div drawer-header *ngIf="selectedJob as job">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ job.request?.title || selectedJobRequest?.title || 'Job details' }}</h3>
-      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-        {{ selectedJobRequest?.site_snapshot?.site_name || job.request?.site_name || 'Unknown site' }} • {{ getTargetTypeLabel(job.assignee_tenant_type) }}
-      </p>
-    </div>
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="selectedJob as job"
+      [title]="job.request?.title || selectedJobRequest?.title || 'Job details'"
+      [subtitle]="(selectedJobRequest?.site_snapshot?.site_name || job.request?.site_name || 'Unknown site') + ' • ' + getTargetTypeLabel(job.assignee_tenant_type)"
+    ></app-drawer-title-block>
 
     <div drawer-body *ngIf="selectedJob as job" class="space-y-5">
       <div *ngIf="getJobStateMessage(job)" [class]="getJobStateMessageClasses(job)">
         {{ getJobStateMessage(job) }}
       </div>
 
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Status</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(job.assignment_status) }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Offer Origin</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(job.assignment_origin || 'manual') }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Slots Committed</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ job.slots_committed || 1 }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">
-            {{ job.assignment_status === 'reconfirmation_required' ? 'Reconfirm By' : 'Response Due' }}
-          </div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
-            {{
-              job.assignment_status === 'reconfirmation_required'
-                ? (job.reconfirmation_due_at ? formatBackendDateTime(job.reconfirmation_due_at) : 'Not set')
-                : (job.response_due_at ? formatBackendDateTime(job.response_due_at) : 'Not set')
-            }}
-          </div>
-        </div>
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <app-summary-metric-card label="Status" [value]="formatTokenLabel(job.assignment_status)"></app-summary-metric-card>
+        <app-summary-metric-card label="Offer Origin" [value]="formatTokenLabel(job.assignment_origin || 'manual')"></app-summary-metric-card>
+        <app-summary-metric-card label="Slots Committed" [value]="job.slots_committed || 1"></app-summary-metric-card>
+        <app-summary-metric-card label="Offer Scope" [value]="formatTokenLabel(job.assignment_scope || 'request')"></app-summary-metric-card>
+        <app-summary-metric-card
+          [label]="job.assignment_status === 'reconfirmation_required' ? 'Reconfirm By' : 'Response Due'"
+          [value]="job.assignment_status === 'reconfirmation_required'
+            ? (job.reconfirmation_due_at ? formatBackendDateTime(job.reconfirmation_due_at) : 'Not set')
+            : (job.response_due_at ? formatBackendDateTime(job.response_due_at) : 'Not set')"
+        ></app-summary-metric-card>
       </div>
 
       <div *ngIf="isScopeLoading(jobDetailRequestScope)" class="space-y-3">
@@ -702,31 +1722,32 @@
 
       <ng-container *ngIf="!isScopeLoading(jobDetailRequestScope) && selectedJobRequest as request">
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Fulfillment</div>
-            <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ getFulfillmentModeLabel(request.fulfillment_mode || request.target_type) }}</div>
-          </div>
-          <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Requested Guard Type</div>
-            <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.requested_guard_type || 'Not specified' }}</div>
-          </div>
-          <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Schedule</div>
-            <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {{ request.requested_start_at ? formatBackendDateTime(request.requested_start_at) : 'Not scheduled' }}
-              <span *ngIf="request.requested_end_at"> to {{ formatBackendDateTime(request.requested_end_at) }}</span>
-            </div>
-          </div>
-          <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Request Staffing</div>
-            <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {{ request.accepted_slots || 0 }} accepted • {{ request.open_slots || 0 }} open • {{ request.guards_required }} total
-            </div>
-          </div>
+          <app-summary-metric-card
+            label="Fulfillment"
+            [value]="getFulfillmentModeLabel(request.fulfillment_mode || request.target_type)"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Requested Guard Type"
+            [value]="request.requested_guard_type || 'Not specified'"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Schedule"
+            [value]="request.requested_start_at
+              ? (formatBackendDateTime(request.requested_start_at) + (request.requested_end_at ? ' to ' + formatBackendDateTime(request.requested_end_at) : ''))
+              : 'Not scheduled'"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Request Staffing"
+            [value]="(request.accepted_slots || 0) + ' accepted • ' + (request.open_slots || 0) + ' open • ' + request.guards_required + ' total'"
+          ></app-summary-metric-card>
         </div>
 
-        <div class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
-          <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Site Details</h4>
+        <app-section
+          [title]="'Site Details'"
+          [containerClass]="drawerSectionContainerClass"
+          [headerClass]="drawerSectionHeaderClass"
+          [titleClass]="drawerSectionTitleClass"
+        >
           <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">{{ request.site_snapshot.site_name || 'Unnamed site' }}</p>
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {{ getSiteAddressField(request, 'street') }}
@@ -738,70 +1759,114 @@
             Contact: {{ request.site_snapshot.site_manager_contact || 'Not provided' }}
             <span *ngIf="request.site_snapshot.manager_email"> • {{ request.site_snapshot.manager_email }}</span>
           </p>
-        </div>
+        </app-section>
 
-        <div *ngIf="request.special_instructions" class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
-          <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Client Instructions</h4>
+        <app-section
+          *ngIf="request.special_instructions"
+          [title]="'Client Instructions'"
+          [containerClass]="drawerSectionContainerClass"
+          [headerClass]="drawerSectionHeaderClass"
+          [titleClass]="drawerSectionTitleClass"
+        >
           <p class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{{ request.special_instructions }}</p>
-        </div>
+        </app-section>
       </ng-container>
 
-      <div *ngIf="!isScopeLoading(jobDetailRequestScope) && !selectedJobRequest" class="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-300">
-        Full request details could not be loaded for this assignment.
-      </div>
+      <app-banner
+        *ngIf="!isScopeLoading(jobDetailRequestScope) && !selectedJobRequest"
+        tone="neutral"
+        [showIcon]="false"
+        [message]="'Full request details could not be loaded for this assignment.'"
+        [containerClass]="'rounded-md px-4 py-3'"
+        [bodyClass]="'text-sm'"
+      ></app-banner>
 
-      <div class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
-        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Candidate Snapshot</h4>
+      <app-section
+        [title]="'Candidate Snapshot'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+      >
         <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
-            Candidate: {{ job.candidate_snapshot?.['candidate_name'] || job.candidate_snapshot?.['candidate_id'] || 'Unknown' }}
-          </div>
-          <div class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
-            Distance: {{ job.candidate_snapshot?.['distance_km'] ?? 'N/A' }} km
-          </div>
+          <app-summary-metric-card
+            label="Candidate"
+            [value]="job.candidate_snapshot?.['candidate_name'] || job.candidate_snapshot?.['candidate_id'] || 'Unknown'"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Distance"
+            [value]="(job.candidate_snapshot?.['distance_km'] ?? 'N/A') + ' km'"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
         </div>
-      </div>
+      </app-section>
 
-      <div class="rounded-md border border-gray-100 p-4 dark:border-gray-800">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Broadcast Context</h4>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Wave and revision information for this offer.</p>
-          </div>
-          <app-button
-            *ngIf="getSelectedJobWave()"
-            label="View Wave"
-            type="secondary"
-            (pressed)="openSelectedJobWaveDetails()"
-          ></app-button>
-        </div>
+      <app-banner
+        *ngIf="job.assignment_scope === 'shift_replacement'"
+        tone="warning"
+        title="Shift Replacement Context"
+        [showIcon]="false"
+        [message]="'This offer was created to refill a specific uncovered shift slot. After acceptance, platform or provider rostering will move execution into the shift-attendance flow.'"
+        [containerClass]="'rounded-md p-4'"
+        [bodyClass]="'mt-2 text-sm leading-6'"
+      ></app-banner>
+
+      <app-section
+        [title]="'Broadcast Context'"
+        [subtitle]="'Wave and revision information for this offer.'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+        [subtitleClass]="drawerSectionSubtitleClass"
+      >
+        <app-button
+          section-actions
+          *ngIf="getSelectedJobWave()"
+          label="View Wave"
+          type="secondary"
+          (pressed)="openSelectedJobWaveDetails()"
+        ></app-button>
 
         <div *ngIf="isScopeLoading(jobDetailWavesScope)" class="mt-4 space-y-2">
           <div *ngFor="let _ of [1,2]" class="h-12 animate-pulse rounded-md bg-gray-100 dark:bg-gray-800"></div>
         </div>
 
         <div *ngIf="!isScopeLoading(jobDetailWavesScope) && getSelectedJobWave() as wave" class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
-            Wave {{ wave.wave_number }} • {{ formatTokenLabel(wave.trigger) }}
-          </div>
-          <div class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
-            Status: {{ formatTokenLabel(wave.wave_status) }}
-          </div>
-          <div class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
-            Request revision at offer: {{ job.request_revision_at_offer || wave.request_revision || 1 }}
-          </div>
-          <div class="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200">
-            Wave expiry: {{ wave.wave_expires_at ? formatBackendDateTime(wave.wave_expires_at) : 'Not set' }}
-          </div>
+          <app-summary-metric-card
+            label="Wave"
+            [value]="'Wave ' + wave.wave_number + ' • ' + formatTokenLabel(wave.trigger)"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Status"
+            [value]="formatTokenLabel(wave.wave_status)"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Request Revision At Offer"
+            [value]="job.request_revision_at_offer || wave.request_revision || 1"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Wave Expiry"
+            [value]="wave.wave_expires_at ? formatBackendDateTime(wave.wave_expires_at) : 'Not set'"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
         </div>
 
         <div *ngIf="!isScopeLoading(jobDetailWavesScope) && !getSelectedJobWave()" class="mt-3 text-sm text-gray-500 dark:text-gray-400">
           This assignment was not linked to a broadcast wave, or the wave is no longer available in your visible history.
         </div>
-      </div>
+      </app-section>
     </div>
 
-    <div drawer-footer class="flex flex-wrap justify-end gap-2" *ngIf="selectedJob as job">
+    <app-drawer-action-row drawer-footer *ngIf="selectedJob as job">
       <app-button label="Close" type="secondary" (pressed)="closeJobDrawer()"></app-button>
       <app-button
         *ngFor="let action of getJobActions(job)"
@@ -810,25 +1875,21 @@
         [loadingScope]="getJobUpdateScope(job.id)"
         (pressed)="updateJobStatus(job, action.status)"
       ></app-button>
-    </div>
+    </app-drawer-action-row>
   </app-side-drawer>
 
   <app-side-drawer [show]="showCoverageDrawer" size="md" (close)="closeCoverageDrawer()">
-    <div drawer-header *ngIf="selectedCoverageRequest as request">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Request Additional Coverage</h3>
-      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ request.title }} • {{ request.site_snapshot.site_name || 'Unnamed site' }}</p>
-    </div>
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="selectedCoverageRequest as request"
+      title="Request Additional Coverage"
+      [subtitle]="request.title + ' • ' + (request.site_snapshot.site_name || 'Unnamed site')"
+    ></app-drawer-title-block>
 
     <div drawer-body *ngIf="selectedCoverageRequest as request" class="space-y-5">
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Required Guards</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.guards_required }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Open Slots</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ request.open_slots ?? 0 }}</div>
-        </div>
+        <app-summary-metric-card label="Required Guards" [value]="request.guards_required"></app-summary-metric-card>
+        <app-summary-metric-card label="Open Slots" [value]="request.open_slots ?? 0"></app-summary-metric-card>
       </div>
 
       <div>
@@ -839,8 +1900,8 @@
           [(ngModel)]="coverageForm.additionalSlots"
           [min]="1"
           [required]="true"
+          [errorText]="coverageErrors['additionalSlots'] || ''"
         ></app-base-input>
-        <div *ngIf="coverageErrors['additionalSlots']" class="mt-1 text-xs text-red-500">{{ coverageErrors['additionalSlots'] }}</div>
       </div>
 
       <div>
@@ -850,22 +1911,24 @@
           type="date"
           [(ngModel)]="coverageForm.requestExpiresAt"
           [helperText]="'Optional. Leave unchanged to keep the current request expiry.'"
+          [errorText]="coverageErrors['requestExpiresAt'] || ''"
         ></app-base-input>
-        <div *ngIf="coverageErrors['requestExpiresAt']" class="mt-1 text-xs text-red-500">{{ coverageErrors['requestExpiresAt'] }}</div>
       </div>
     </div>
 
-    <div drawer-footer class="flex flex-wrap justify-end gap-2">
+    <app-drawer-action-row drawer-footer>
       <app-button label="Close" type="secondary" (pressed)="closeCoverageDrawer()"></app-button>
       <app-button label="Request Coverage" type="primary" [loadingScope]="selectedCoverageRequest ? getRequestStatusScope(selectedCoverageRequest.id) : ''" (pressed)="submitAdditionalCoverage()"></app-button>
-    </div>
+    </app-drawer-action-row>
   </app-side-drawer>
 
   <app-side-drawer [show]="showReturnWaveDrawer" size="md" (close)="closeReturnWaveDrawer()">
-    <div drawer-header *ngIf="returnWaveTarget as wave">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Return Broadcast To Client</h3>
-      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ getWaveTitle(wave) }} • Wave {{ wave.wave_number }}</p>
-    </div>
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="returnWaveTarget as wave"
+      title="Return Broadcast To Client"
+      [subtitle]="getWaveTitle(wave) + ' • Wave ' + wave.wave_number"
+    ></app-drawer-title-block>
 
     <div drawer-body class="space-y-4">
       <app-textarea
@@ -874,32 +1937,28 @@
         [(ngModel)]="returnWaveForm.note"
         [required]="true"
         [helperText]="'Explain what the client must correct before the broadcast can be reissued.'"
+        [errorText]="returnWaveErrors['note'] || ''"
       ></app-textarea>
-      <div *ngIf="returnWaveErrors['note']" class="text-xs text-red-500">{{ returnWaveErrors['note'] }}</div>
     </div>
 
-    <div drawer-footer class="flex flex-wrap justify-end gap-2" *ngIf="returnWaveTarget as wave">
+    <app-drawer-action-row drawer-footer *ngIf="returnWaveTarget as wave">
       <app-button label="Close" type="secondary" (pressed)="closeReturnWaveDrawer()"></app-button>
       <app-button label="Return To Client" type="primary" [loadingScope]="getReviewActionScope(wave.id)" (pressed)="submitReturnWave()"></app-button>
-    </div>
+    </app-drawer-action-row>
   </app-side-drawer>
 
   <app-side-drawer [show]="showAcceptJobDrawer" size="md" (close)="closeAcceptJobDrawer()">
-    <div drawer-header *ngIf="selectedAcceptJob as job">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ getAcceptJobDrawerTitle() }}</h3>
-      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ getAcceptJobDrawerSubtitle() }}</p>
-    </div>
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="selectedAcceptJob as job"
+      [title]="getAcceptJobDrawerTitle()"
+      [subtitle]="getAcceptJobDrawerSubtitle()"
+    ></app-drawer-title-block>
 
     <div drawer-body *ngIf="selectedAcceptJob as job" class="space-y-5">
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Request</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ job.request?.title || 'Request' }}</div>
-        </div>
-        <div class="rounded-md border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/70">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Current Status</div>
-          <div class="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(job.assignment_status) }}</div>
-        </div>
+        <app-summary-metric-card label="Request" [value]="job.request?.title || 'Request'"></app-summary-metric-card>
+        <app-summary-metric-card label="Current Status" [value]="formatTokenLabel(job.assignment_status)"></app-summary-metric-card>
       </div>
 
       <div>
@@ -911,35 +1970,36 @@
           [min]="1"
           [required]="true"
           [helperText]="'Enter how many guard slots your service provider can cover for this request.'"
+          [errorText]="acceptJobErrors['slotsCommitted'] || ''"
         ></app-base-input>
-        <div *ngIf="acceptJobErrors['slotsCommitted']" class="mt-1 text-xs text-red-500">{{ acceptJobErrors['slotsCommitted'] }}</div>
       </div>
     </div>
 
-    <div drawer-footer class="flex flex-wrap justify-end gap-2" *ngIf="selectedAcceptJob as job">
+    <app-drawer-action-row drawer-footer *ngIf="selectedAcceptJob as job">
       <app-button label="Close" type="secondary" (pressed)="closeAcceptJobDrawer()"></app-button>
       <app-button label="Confirm Acceptance" type="primary" [loadingScope]="getJobUpdateScope(job.id)" (pressed)="submitAcceptJob()"></app-button>
-    </div>
+    </app-drawer-action-row>
   </app-side-drawer>
 
   <app-side-drawer [show]="showReasonDrawer" size="md" (close)="closeReasonDrawer()">
-    <div drawer-header>
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">{{ getReasonDrawerTitle() }}</h3>
-      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ getReasonDrawerSubtitle() }}</p>
-    </div>
+    <app-drawer-title-block
+      drawer-header
+      [title]="getReasonDrawerTitle()"
+      [subtitle]="getReasonDrawerSubtitle()"
+    ></app-drawer-title-block>
 
     <div drawer-body class="space-y-4">
       <app-textarea
-        label="Reason"
+        [label]="getReasonFieldLabel()"
         name="reasonActionNote"
         [(ngModel)]="reasonForm.note"
         [required]="true"
-        [helperText]="'This note will be saved with the action for audit and visibility.'"
+        [helperText]="getReasonFieldHelperText()"
+        [errorText]="reasonErrors['note'] || ''"
       ></app-textarea>
-      <div *ngIf="reasonErrors['note']" class="text-xs text-red-500">{{ reasonErrors['note'] }}</div>
     </div>
 
-    <div drawer-footer class="flex flex-wrap justify-end gap-2">
+    <app-drawer-action-row drawer-footer>
       <app-button label="Close" type="secondary" (pressed)="closeReasonDrawer()"></app-button>
       <app-button
         [label]="getReasonDrawerActionLabel()"
@@ -947,6 +2007,6 @@
         [loadingScope]="reasonRequestTarget ? getRequestStatusScope(reasonRequestTarget.id) : (reasonJobTarget ? getJobUpdateScope(reasonJobTarget.id) : '')"
         (pressed)="submitReasonAction()"
       ></app-button>
-    </div>
+    </app-drawer-action-row>
   </app-side-drawer>
 </app-page>

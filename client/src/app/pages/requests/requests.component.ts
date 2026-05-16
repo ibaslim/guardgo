@@ -2,16 +2,30 @@ import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription, interval } from 'rxjs';
+import { Subscription, forkJoin, interval } from 'rxjs';
 
 import { ButtonComponent } from '../../components/button/button.component';
 import { CardComponent } from '../../components/card/card.component';
+import { DrawerActionRowComponent } from '../../components/drawer-action-row/drawer-action-row.component';
+import { DrawerTitleBlockComponent } from '../../components/drawer-title-block/drawer-title-block.component';
+import { EventTimelineComponent } from '../../components/event-timeline/event-timeline.component';
+import { FilterActionBarComponent } from '../../components/filter-action-bar/filter-action-bar.component';
 import { BaseInputComponent } from '../../components/form/base-input/base-input.component';
 import { SelectInputComponent } from '../../components/form/select-input/select-input.component';
 import { TextareaComponent } from '../../components/form/textarea/textarea.component';
-import { IconComponent } from '../../components/icon/icon.component';
+import { ListStatePanelComponent } from '../../components/list-state-panel/list-state-panel.component';
+import { ListToolbarComponent } from '../../components/list-toolbar/list-toolbar.component';
 import { PageComponent } from '../../components/page/page.component';
+import { PaginationFooterComponent } from '../../components/pagination-footer/pagination-footer.component';
+import { RecordListItemComponent } from '../../components/record-list-item/record-list-item.component';
+import { RequestListCardComponent } from '../../components/request-list-card/request-list-card.component';
+import { SectionComponent } from '../../components/section/section.component';
+import { ShiftSlotCardComponent } from '../../components/shift-slot-card/shift-slot-card.component';
 import { SideDrawerComponent } from '../../components/side-drawer/side-drawer.component';
+import { ShiftCalendarComponent } from '../../components/shift-calendar/shift-calendar.component';
+import { SummaryMetricCardComponent } from '../../components/summary-metric-card/summary-metric-card.component';
+import { ValidationMessageComponent } from '../../components/validation-message/validation-message.component';
+import { BannerComponent } from '../../components/banner/banner.component';
 import { ApiService } from '../../shared/services/api.service';
 import { RequestService } from '../../shared/services/request.service';
 import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
@@ -19,9 +33,18 @@ import {
   ClientRequestFulfillmentMode,
   ClientRequestItem,
   ClientRequestStatus,
+  ProviderRosterPayload,
   RequestAssignmentItem,
   RequestAssignmentStatus,
   RequestBroadcastWaveItem,
+  RequestScheduleItem,
+  RequestScheduleType,
+  ServiceProviderGuardSummaryItem,
+  ShiftExceptionItem,
+  ShiftInstanceItem,
+  ShiftSlotDetailResponse,
+  ShiftSlotItem,
+  ShiftSlotSummary,
 } from '../../shared/model/request/client-request.model';
 import { formatBackendDateTime } from '../../shared/helpers/format.helper';
 import { AppService } from '../../services/core/app/app.service';
@@ -35,13 +58,27 @@ import { LoadingFeedbackService } from '../../shared/services/loading-feedback.s
     CommonModule,
     FormsModule,
     PageComponent,
+    RecordListItemComponent,
+    RequestListCardComponent,
+    SectionComponent,
     CardComponent,
     ButtonComponent,
+    DrawerActionRowComponent,
+    DrawerTitleBlockComponent,
+    EventTimelineComponent,
+    FilterActionBarComponent,
     BaseInputComponent,
     SelectInputComponent,
     TextareaComponent,
     SideDrawerComponent,
-    IconComponent,
+    ListStatePanelComponent,
+    ListToolbarComponent,
+    PaginationFooterComponent,
+    ShiftCalendarComponent,
+    ShiftSlotCardComponent,
+    SummaryMetricCardComponent,
+    ValidationMessageComponent,
+    BannerComponent,
   ],
   templateUrl: './requests.component.html',
 })
@@ -51,9 +88,37 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly metadataScope = 'requests:metadata';
   readonly saveRequestScope = 'requests:save';
   readonly reviewListScope = 'requests:review:list';
+  readonly requestScheduleScope = 'requests:detail:schedule';
+  readonly saveRequestScheduleScope = 'requests:detail:schedule:save';
+  readonly shiftListScope = 'requests:shifts:list';
+  readonly shiftCalendarScope = 'requests:shifts:calendar';
+  readonly shiftDetailScope = 'requests:shifts:detail';
+  readonly shiftSlotDetailScope = 'requests:shifts:slot:detail';
+  readonly shiftProviderGuardsScope = 'requests:shifts:provider-guards';
+  readonly shiftRosterPatternScope = 'requests:shifts:roster-pattern';
+  readonly exceptionListScope = 'requests:exceptions:list';
+  readonly exceptionDetailScope = 'requests:exceptions:detail';
   readonly requestWavesScope = 'requests:detail:waves';
   readonly jobDetailRequestScope = 'requests:job:detail';
   readonly jobDetailWavesScope = 'requests:job:waves';
+  readonly metricCompactContainerClass =
+    'rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200';
+  readonly metricCompactValueClass = 'mt-1 font-semibold text-gray-900 dark:text-gray-100';
+  readonly metricCountLabelClass = 'text-[11px] font-semibold text-gray-500 dark:text-gray-400';
+  readonly metricCountValueClass = 'mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100';
+  readonly requestSummaryMetricContainerClass =
+    'rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-800 dark:bg-gray-900/80';
+  readonly requestSummaryMetricValueClass = 'mt-1 text-base font-semibold text-gray-900 dark:text-gray-100';
+  readonly drawerSectionContainerClass = 'rounded-md border border-gray-100 p-4 dark:border-gray-800';
+  readonly drawerSectionHeaderClass = 'flex items-start justify-between gap-3';
+  readonly drawerSectionTitleClass = 'text-sm font-semibold text-gray-900 dark:text-gray-100';
+  readonly drawerSectionSubtitleClass = 'mt-1 text-xs text-gray-500 dark:text-gray-400';
+  readonly listToolbarControlsThreeColumnClass =
+    'grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-3 xl:items-end dark:bg-gray-800/50';
+  readonly listToolbarControlsFourColumnClass =
+    'grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-end dark:bg-gray-800/50';
+  readonly listToolbarFooterClass = 'mt-4 flex flex-wrap items-center justify-between gap-3';
+  readonly requestToolbarSummaryFooterClass = 'mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4';
   loading = false;
   saving = false;
   jobsLoading = false;
@@ -67,12 +132,17 @@ export class RequestsComponent implements OnInit, OnDestroy {
   role = '';
   tenantType = '';
 
-  activeTab: 'requests' | 'jobs' | 'review' = 'requests';
+  activeTab: 'requests' | 'jobs' | 'review' | 'exceptions' | 'shifts' = 'requests';
+  shiftViewMode: 'calendar' | 'list' = 'calendar';
 
   items: ClientRequestItem[] = [];
   jobs: RequestAssignmentItem[] = [];
   reviewWaves: RequestBroadcastWaveItem[] = [];
+  shifts: ShiftInstanceItem[] = [];
+  shiftCalendarItems: ShiftInstanceItem[] = [];
+  shiftExceptions: ShiftExceptionItem[] = [];
   selectedRequestWaves: RequestBroadcastWaveItem[] = [];
+  shiftRequestSummaries: Record<string, { title: string; siteName: string }> = {};
 
   page = 1;
   rows = 10;
@@ -89,6 +159,17 @@ export class RequestsComponent implements OnInit, OnDestroy {
   reviewTotalPages = 1;
   reviewTotalItems = 0;
 
+  shiftPage = 1;
+  shiftRows = 10;
+  shiftTotalPages = 1;
+  shiftTotalItems = 0;
+  shiftCalendarMonthAnchor = this.getStartOfMonth(new Date());
+
+  exceptionPage = 1;
+  exceptionRows = 10;
+  exceptionTotalPages = 1;
+  exceptionTotalItems = 0;
+
   keyword = '';
   requestStatusFilter = '';
   fulfillmentModeFilter = '';
@@ -99,21 +180,48 @@ export class RequestsComponent implements OnInit, OnDestroy {
   reviewStatusFilter = 'pending_review';
   reviewTriggerFilter = '';
 
+  shiftStatusFilter = '';
+  shiftDateFrom = '';
+  shiftDateTo = '';
+
+  exceptionStatusFilter = '';
+  exceptionDateFrom = '';
+  exceptionDateTo = '';
+
   requestErrors: Record<string, string> = {};
 
   selectedRequest: ClientRequestItem | null = null;
+  selectedRequestSchedule: RequestScheduleItem | null = null;
   selectedWave: RequestBroadcastWaveItem | null = null;
   selectedJob: RequestAssignmentItem | null = null;
   selectedJobRequest: ClientRequestItem | null = null;
   selectedJobWaves: RequestBroadcastWaveItem[] = [];
+  selectedShift: ShiftInstanceItem | null = null;
+  selectedShiftSlots: ShiftSlotItem[] = [];
+  selectedShiftSlotSummary: ShiftSlotSummary | null = null;
+  selectedShiftSlot: ShiftSlotItem | null = null;
+  selectedShiftSlotDetail: ShiftSlotDetailResponse | null = null;
+  selectedException: ShiftExceptionItem | null = null;
+  selectedExceptionDetail: ShiftSlotDetailResponse | null = null;
+  selectedScheduleRequest: ClientRequestItem | null = null;
+  selectedBulkConfirmShift: ShiftInstanceItem | null = null;
+  bulkConfirmShiftSlots: ShiftSlotItem[] = [];
   showRequestDrawer = false;
   showRequestFormDrawer = false;
+  showScheduleDrawer = false;
   showWaveDrawer = false;
   showJobDrawer = false;
+  showShiftDrawer = false;
+  showShiftSlotDrawer = false;
+  showExceptionDrawer = false;
   showCoverageDrawer = false;
   showReturnWaveDrawer = false;
   showAcceptJobDrawer = false;
+  showRosterDrawer = false;
   showReasonDrawer = false;
+  showShiftActionDrawer = false;
+  showReopenExceptionDrawer = false;
+  showBulkConfirmDrawer = false;
   requestFormMode: 'create' | 'edit' | 'publish_update' = 'create';
   editingRequestId = '';
 
@@ -124,14 +232,37 @@ export class RequestsComponent implements OnInit, OnDestroy {
   selectedCoverageRequest: ClientRequestItem | null = null;
   returnWaveTarget: RequestBroadcastWaveItem | null = null;
   selectedAcceptJob: RequestAssignmentItem | null = null;
+  selectedRosterShift: ShiftInstanceItem | null = null;
+  rosterShiftSlots: ShiftSlotItem[] = [];
+  rosterPatternFutureShifts: ShiftInstanceItem[] = [];
+  shiftActionTarget: ShiftSlotItem | null = null;
+  shiftActionType: 'report_unavailable' | 'check_in' | 'client_confirm' | 'start' | 'check_out' | null = null;
+  reopenExceptionTarget: ShiftExceptionItem | null = null;
   reasonRequestTarget: ClientRequestItem | null = null;
   reasonJobTarget: RequestAssignmentItem | null = null;
   reasonRequestStatus: ClientRequestStatus | null = null;
+  reasonRequestSoftDelete = false;
   reasonJobStatus: RequestAssignmentStatus | null = null;
   coverageErrors: Record<string, string> = {};
   returnWaveErrors: Record<string, string> = {};
   acceptJobErrors: Record<string, string> = {};
+  rosterErrors: Record<string, string> = {};
   reasonErrors: Record<string, string> = {};
+  shiftActionErrors: Record<string, string> = {};
+  reopenExceptionErrors: Record<string, string> = {};
+  scheduleErrors: Record<string, string> = {};
+  bulkConfirmErrors: Record<string, string> = {};
+  shiftActionLocationError = '';
+  shiftActionLocationMessage = '';
+  capturingShiftActionLocation = false;
+
+  providerGuards: ServiceProviderGuardSummaryItem[] = [];
+  rosterSelections: Record<string, string> = {};
+  bulkConfirmSelections: Record<string, boolean> = {};
+
+  rosterPatternForm = {
+    applyToFutureShifts: false,
+  };
 
   coverageForm = {
     additionalSlots: 1,
@@ -146,8 +277,40 @@ export class RequestsComponent implements OnInit, OnDestroy {
     slotsCommitted: 1,
   };
 
+  shiftActionForm = {
+    latitude: '',
+    longitude: '',
+    note: '',
+  };
+
+  scheduleForm = {
+    timezone: 'UTC',
+    scheduleType: 'one_time' as RequestScheduleType,
+    startDate: '',
+    endDate: '',
+    startTimeLocal: '08:00',
+    endTimeLocal: '17:00',
+    recurrenceDays: [] as string[],
+    generationHorizonDays: 30,
+    rosterDueOffsetMinutes: 120,
+    unavailableCutoffMinutes: 120,
+    lateGraceMinutes: 15,
+    noShowCutoffMinutes: 30,
+    checkinGeofenceMeters: 200,
+    active: true,
+  };
+
+  bulkConfirmForm = {
+    note: '',
+  };
+
   reasonForm = {
     note: '',
+  };
+
+  reopenExceptionForm = {
+    note: '',
+    maxMatchResults: 25,
   };
 
   requestForm = {
@@ -220,6 +383,42 @@ export class RequestsComponent implements OnInit, OnDestroy {
     { label: 'Capacity Reopened', value: 'capacity_reopened' },
   ];
 
+  shiftStatusOptions = [
+    { label: 'All Shift States', value: '' },
+    { label: 'Scheduled', value: 'scheduled' },
+    { label: 'Partially Staffed', value: 'partially_staffed' },
+    { label: 'Staffed', value: 'staffed' },
+    { label: 'In Progress', value: 'in_progress' },
+    { label: 'Completed', value: 'completed' },
+    { label: 'Cancelled', value: 'cancelled' },
+    { label: 'Expired', value: 'expired' },
+  ];
+
+  scheduleTypeOptions = [
+    { label: 'One-Time Shift', value: 'one_time' },
+    { label: 'Date Range', value: 'date_range' },
+    { label: 'Recurring Weekly', value: 'recurring_weekly' },
+  ];
+
+  scheduleWeekdayOptions = [
+    { label: 'Mon', value: 'mon' },
+    { label: 'Tue', value: 'tue' },
+    { label: 'Wed', value: 'wed' },
+    { label: 'Thu', value: 'thu' },
+    { label: 'Fri', value: 'fri' },
+    { label: 'Sat', value: 'sat' },
+    { label: 'Sun', value: 'sun' },
+  ];
+
+  exceptionStatusOptions = [
+    { label: 'All Exceptions', value: '' },
+    { label: 'Unavailable', value: 'unavailable' },
+    { label: 'Late Risk', value: 'late_risk' },
+    { label: 'No-Show Suspected', value: 'no_show_suspected' },
+    { label: 'No-Show Confirmed', value: 'no_show_confirmed' },
+    { label: 'Replacement Required', value: 'replacement_required' },
+  ];
+
   fulfillmentModeFilterOptions = [
     { label: 'All Modes', value: '' },
     ...this.fulfillmentModeOptions,
@@ -258,8 +457,49 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return ['admin', 'ops_admin', 'support_admin', 'compliance_admin'].includes(this.role);
   }
 
+  getCountSummary(count: number, singularLabel: string, scopeLabel: string): string {
+    return `${count} ${singularLabel}${count === 1 ? '' : 's'} ${scopeLabel}`;
+  }
+
+  get visibleDraftRequestCount(): number {
+    return this.items.filter((item) => item.request_status === 'draft').length;
+  }
+
+  get visibleNeedsReviewRequestCount(): number {
+    return this.items.filter((item) => ['pending_review', 'review_returned'].includes(String(item.staffing_status || ''))).length;
+  }
+
+  get visibleOpenCoverageRequestCount(): number {
+    return this.items.filter((item) => ['open', 'partially_filled'].includes(String(item.staffing_status || ''))).length;
+  }
+
+  get visibleFilledRequestCount(): number {
+    return this.items.filter((item) => item.staffing_status === 'filled').length;
+  }
+
   get canReviewBroadcastWaves(): boolean {
     return ['admin', 'ops_admin'].includes(this.role);
+  }
+
+  get canViewShifts(): boolean {
+    return [
+      'admin',
+      'ops_admin',
+      'support_admin',
+      'compliance_admin',
+      'read_only_admin',
+      'client_admin',
+      'guard_admin',
+      'sp_admin',
+    ].includes(this.role);
+  }
+
+  get canViewShiftExceptions(): boolean {
+    return ['admin', 'ops_admin', 'support_admin', 'compliance_admin', 'read_only_admin'].includes(this.role);
+  }
+
+  get canReopenShiftExceptions(): boolean {
+    return ['admin', 'ops_admin', 'support_admin', 'compliance_admin'].includes(this.role);
   }
 
   get isClientAdmin(): boolean {
@@ -270,6 +510,18 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return (this.role === 'guard_admin' && this.tenantType === 'guard') || (this.role === 'sp_admin' && this.tenantType === 'service_provider');
   }
 
+  get canManageProviderRoster(): boolean {
+    return this.role === 'sp_admin' && this.tenantType === 'service_provider';
+  }
+
+  get canManageShiftAttendance(): boolean {
+    return this.isPlatformAdmin || (this.role === 'guard_admin' && this.tenantType === 'guard');
+  }
+
+  get canConfirmShiftArrivals(): boolean {
+    return this.isPlatformAdmin || this.isClientAdmin;
+  }
+
   get canAssignRequests(): boolean {
     return this.isPlatformAdmin || this.isClientAdmin;
   }
@@ -278,6 +530,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     const session = this.appService.userSessionData();
     this.role = normalizeRole(session?.user?.role);
     this.tenantType = String(session?.tenant?.tenant_type || '').trim().toLowerCase();
+    this.scheduleForm.timezone = this.getDefaultScheduleTimezone();
 
     this.activeTab = this.isGuardOrProvider ? 'jobs' : 'requests';
 
@@ -287,6 +540,13 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.loadJobs(1);
     if (this.canReviewBroadcastWaves) {
       this.loadReviewWaves(1);
+    }
+    if (this.canViewShifts) {
+      this.loadShifts(1);
+      this.loadShiftCalendar(this.shiftCalendarMonthAnchor);
+    }
+    if (this.canViewShiftExceptions) {
+      this.loadShiftExceptions(1);
     }
     this.routeQuerySubscription = this.route.queryParams.subscribe((params) => {
       this.handleRouteFocusParams(params || {});
@@ -337,21 +597,49 @@ export class RequestsComponent implements OnInit, OnDestroy {
       if (this.showWaveDrawer && this.selectedWave?.id) {
         this.openWaveById(this.selectedWave.id, { silent: true, suppressError: true });
       }
+      return;
+    }
+
+    if (this.activeTab === 'shifts' && this.canViewShifts) {
+      this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+      this.loadShiftCalendar(this.shiftCalendarMonthAnchor, { silent: true, suppressError: true });
+      if (this.showShiftDrawer && this.selectedShift?.id) {
+        this.openShiftById(this.selectedShift.id, { silent: true, suppressError: true });
+      }
+      if (this.showShiftSlotDrawer && this.selectedShiftSlot?.id) {
+        this.openShiftSlotById(this.selectedShiftSlot.id, { silent: true, suppressError: true });
+      }
+      return;
+    }
+
+    if (this.activeTab === 'exceptions' && this.canViewShiftExceptions) {
+      this.loadShiftExceptions(this.exceptionPage, { silent: true, suppressError: true });
+      if (this.showExceptionDrawer && this.selectedException?.slot?.id) {
+        this.openExceptionBySlotId(this.selectedException.slot.id, { silent: true, suppressError: true });
+      }
     }
   }
 
   handleRouteFocusParams(params: Record<string, any>): void {
     const tab = String(params['tab'] || '').trim().toLowerCase();
-    if (tab === 'jobs' || tab === 'requests' || (tab === 'review' && this.canReviewBroadcastWaves)) {
-      this.activeTab = tab as 'requests' | 'jobs' | 'review';
+    if (
+      tab === 'jobs'
+      || tab === 'requests'
+      || (tab === 'shifts' && this.canViewShifts)
+      || (tab === 'review' && this.canReviewBroadcastWaves)
+      || (tab === 'exceptions' && this.canViewShiftExceptions)
+    ) {
+      this.activeTab = tab as 'requests' | 'jobs' | 'review' | 'exceptions' | 'shifts';
     }
 
     const requestId = String(params['request'] || '').trim();
     const jobId = String(params['job'] || '').trim();
     const waveId = String(params['wave'] || '').trim();
-    const focusKey = `${tab}|${requestId}|${jobId}|${waveId}`;
+    const shiftId = String(params['shift'] || '').trim();
+    const slotId = String(params['slot'] || '').trim();
+    const focusKey = `${tab}|${requestId}|${jobId}|${waveId}|${shiftId}|${slotId}`;
 
-    if (!requestId && !jobId && !waveId) {
+    if (!requestId && !jobId && !waveId && !shiftId && !slotId) {
       this.lastHandledRouteFocus = '';
       return;
     }
@@ -365,6 +653,16 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.openJobById(jobId);
       return;
     }
+    if (slotId && this.canViewShifts) {
+      this.activeTab = 'shifts';
+      this.openShiftSlotById(slotId);
+      return;
+    }
+    if (shiftId && this.canViewShifts) {
+      this.activeTab = 'shifts';
+      this.openShiftById(shiftId);
+      return;
+    }
     if (waveId) {
       this.openWaveById(waveId);
       return;
@@ -374,7 +672,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
   }
 
-  clearRouteFocusParams(keys: Array<'request' | 'job' | 'wave'>): void {
+  clearRouteFocusParams(keys: Array<'request' | 'job' | 'wave' | 'shift' | 'slot'>): void {
     const queryParams: Record<string, null> = {};
     for (const key of keys) {
       queryParams[key] = null;
@@ -497,6 +795,145 @@ export class RequestsComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadShifts(page: number, options?: { silent?: boolean; suppressError?: boolean }): void {
+    if (!this.canViewShifts) {
+      return;
+    }
+
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    this.requestService.listShifts(
+      page,
+      this.shiftRows,
+      '',
+      this.shiftStatusFilter,
+      this.shiftDateFrom,
+      this.shiftDateTo,
+      {
+        loadingScope: this.shiftListScope,
+        loadingMode: silent ? 'silent' : undefined,
+      },
+    ).subscribe({
+      next: (response) => {
+        this.shifts = response.items || [];
+        this.shiftPage = response.pagination?.page || page;
+        this.shiftTotalPages = response.pagination?.total_pages || 1;
+        this.shiftTotalItems = response.pagination?.total_items || 0;
+        if (this.selectedShift?.id) {
+          const refreshed = this.shifts.find((item) => item.id === this.selectedShift?.id);
+          if (refreshed) {
+            this.selectedShift = refreshed;
+          }
+        }
+        this.ensureShiftRequestSummaries(this.shifts);
+      },
+      error: (error) => {
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to load shifts', 'fail', 5000);
+        }
+      }
+    });
+  }
+
+  loadShiftCalendar(monthAnchor?: Date, options?: { silent?: boolean; suppressError?: boolean }): void {
+    if (!this.canViewShifts) {
+      return;
+    }
+
+    const anchor = monthAnchor ? this.getStartOfMonth(monthAnchor) : this.shiftCalendarMonthAnchor;
+    this.shiftCalendarMonthAnchor = anchor;
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    const monthStart = this.formatDateInput(anchor);
+    const monthEnd = this.formatDateInput(this.getEndOfMonth(anchor));
+
+    this.requestService.listShifts(
+      1,
+      500,
+      '',
+      this.shiftStatusFilter,
+      monthStart,
+      monthEnd,
+      {
+        loadingScope: this.shiftCalendarScope,
+        loadingMode: silent ? 'silent' : undefined,
+      },
+    ).subscribe({
+      next: (response) => {
+        this.shiftCalendarItems = response.items || [];
+        this.ensureShiftRequestSummaries(this.shiftCalendarItems);
+      },
+      error: (error) => {
+        this.shiftCalendarItems = [];
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to load shift calendar', 'fail', 5000);
+        }
+      }
+    });
+  }
+
+  loadShiftExceptions(page: number, options?: { silent?: boolean; suppressError?: boolean }): void {
+    if (!this.canViewShiftExceptions) {
+      return;
+    }
+
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    this.requestService.listShiftExceptions(
+      page,
+      this.exceptionRows,
+      this.exceptionStatusFilter,
+      '',
+      this.exceptionDateFrom,
+      this.exceptionDateTo,
+      {
+        loadingScope: this.exceptionListScope,
+        loadingMode: silent ? 'silent' : undefined,
+      },
+    ).subscribe({
+      next: (response) => {
+        this.shiftExceptions = response.items || [];
+        this.exceptionPage = response.pagination?.page || page;
+        this.exceptionTotalPages = response.pagination?.total_pages || 1;
+        this.exceptionTotalItems = response.pagination?.total_items || 0;
+        if (this.selectedException?.slot?.id) {
+          const refreshed = this.shiftExceptions.find((item) => item.slot?.id === this.selectedException?.slot?.id);
+          if (refreshed) {
+            this.selectedException = refreshed;
+          }
+        }
+      },
+      error: (error) => {
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to load shift exception queue', 'fail', 5000);
+        }
+      }
+    });
+  }
+
+  ensureShiftRequestSummaries(items: ShiftInstanceItem[]): void {
+    const missingRequestIds = items
+      .map((item) => String(item.request_id || '').trim())
+      .filter((requestId) => requestId && !this.shiftRequestSummaries[requestId]);
+
+    for (const requestId of missingRequestIds) {
+      this.requestService.getRequest(requestId, { loadingMode: 'silent' }).subscribe({
+        next: (response) => {
+          this.shiftRequestSummaries[requestId] = {
+            title: String(response.title || 'Client request'),
+            siteName: String(response.site_snapshot?.site_name || 'Unknown site'),
+          };
+        },
+        error: () => {
+          this.shiftRequestSummaries[requestId] = {
+            title: `Request ${requestId.slice(0, 8)}`,
+            siteName: 'Unknown site',
+          };
+        }
+      });
+    }
+  }
+
   loadRequestWaves(requestId: string, options?: { silent?: boolean; suppressError?: boolean }): void {
     const silent = Boolean(options?.silent);
     const suppressError = Boolean(options?.suppressError);
@@ -517,6 +954,204 @@ export class RequestsComponent implements OnInit, OnDestroy {
         }
       }
     });
+  }
+
+  loadRequestSchedule(requestId: string, options?: { silent?: boolean; suppressError?: boolean }): void {
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    this.requestService.getRequestSchedule(requestId, {
+      loadingScope: this.requestScheduleScope,
+      loadingMode: silent ? 'silent' : undefined,
+    }).subscribe({
+      next: (response) => {
+        this.selectedRequestSchedule = response.schedule || null;
+      },
+      error: (error) => {
+        this.selectedRequestSchedule = null;
+        const status = Number(error?.status || error?.statusCode || 0);
+        if (!suppressError && status !== 404) {
+          this.notification.show(error?.error?.detail || 'Failed to load request schedule', 'fail', 5000);
+        }
+      }
+    });
+  }
+
+  getDefaultScheduleTimezone(): string {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+      return 'UTC';
+    }
+  }
+
+  resetScheduleForm(): void {
+    this.scheduleForm = {
+      timezone: this.getDefaultScheduleTimezone(),
+      scheduleType: 'one_time',
+      startDate: '',
+      endDate: '',
+      startTimeLocal: '08:00',
+      endTimeLocal: '17:00',
+      recurrenceDays: [],
+      generationHorizonDays: 30,
+      rosterDueOffsetMinutes: 120,
+      unavailableCutoffMinutes: 120,
+      lateGraceMinutes: 15,
+      noShowCutoffMinutes: 30,
+      checkinGeofenceMeters: 200,
+      active: true,
+    };
+  }
+
+  populateScheduleForm(request: ClientRequestItem, schedule: RequestScheduleItem | null): void {
+    if (schedule) {
+      this.scheduleForm = {
+        timezone: schedule.timezone || this.getDefaultScheduleTimezone(),
+        scheduleType: schedule.schedule_type || 'one_time',
+        startDate: schedule.start_date || '',
+        endDate: schedule.end_date || '',
+        startTimeLocal: schedule.start_time_local || '08:00',
+        endTimeLocal: schedule.end_time_local || '17:00',
+        recurrenceDays: Array.isArray(schedule.recurrence_days) ? [...schedule.recurrence_days] : [],
+        generationHorizonDays: Number(schedule.generation_horizon_days || 30),
+        rosterDueOffsetMinutes: Number(schedule.roster_due_offset_minutes || 120),
+        unavailableCutoffMinutes: Number(schedule.unavailable_cutoff_minutes || 120),
+        lateGraceMinutes: Number(schedule.late_grace_minutes || 15),
+        noShowCutoffMinutes: Number(schedule.no_show_cutoff_minutes || 30),
+        checkinGeofenceMeters: Number(schedule.checkin_geofence_meters || 200),
+        active: Boolean(schedule.active),
+      };
+      return;
+    }
+
+    const requestStartDate = request.requested_start_at ? String(request.requested_start_at).slice(0, 10) : '';
+    const requestEndDate = request.requested_end_at ? String(request.requested_end_at).slice(0, 10) : requestStartDate;
+    this.scheduleForm = {
+      timezone: this.getDefaultScheduleTimezone(),
+      scheduleType: 'one_time',
+      startDate: requestStartDate,
+      endDate: requestEndDate,
+      startTimeLocal: '08:00',
+      endTimeLocal: '17:00',
+      recurrenceDays: [],
+      generationHorizonDays: 30,
+      rosterDueOffsetMinutes: 120,
+      unavailableCutoffMinutes: 120,
+      lateGraceMinutes: 15,
+      noShowCutoffMinutes: 30,
+      checkinGeofenceMeters: 200,
+      active: true,
+    };
+  }
+
+  onScheduleTypeChange(): void {
+    if (this.scheduleForm.scheduleType === 'one_time') {
+      this.scheduleForm.endDate = this.scheduleForm.startDate;
+      this.scheduleForm.recurrenceDays = [];
+      return;
+    }
+    if (!this.scheduleForm.endDate) {
+      this.scheduleForm.endDate = this.scheduleForm.startDate;
+    }
+    if (this.scheduleForm.scheduleType === 'date_range') {
+      this.scheduleForm.recurrenceDays = [];
+    }
+  }
+
+  toggleScheduleRecurrenceDay(day: string, checked: boolean): void {
+    const normalized = String(day || '').trim().toLowerCase();
+    const current = [...this.scheduleForm.recurrenceDays];
+    if (checked) {
+      if (!current.includes(normalized)) {
+        current.push(normalized);
+      }
+    } else {
+      const next = current.filter((item) => item !== normalized);
+      this.scheduleForm.recurrenceDays = next;
+      return;
+    }
+    this.scheduleForm.recurrenceDays = current;
+  }
+
+  isScheduleRecurrenceDaySelected(day: string): boolean {
+    return this.scheduleForm.recurrenceDays.includes(String(day || '').trim().toLowerCase());
+  }
+
+  validateScheduleForm(): boolean {
+    this.scheduleErrors = {};
+    const startDate = String(this.scheduleForm.startDate || '').trim();
+    const endDate = String(this.scheduleForm.endDate || '').trim();
+    const timezone = String(this.scheduleForm.timezone || '').trim();
+    const startTimeLocal = String(this.scheduleForm.startTimeLocal || '').trim();
+    const endTimeLocal = String(this.scheduleForm.endTimeLocal || '').trim();
+
+    if (!timezone) {
+      this.scheduleErrors['timezone'] = 'Timezone is required.';
+    }
+    if (!startDate) {
+      this.scheduleErrors['startDate'] = 'Start date is required.';
+    }
+    if (!startTimeLocal) {
+      this.scheduleErrors['startTimeLocal'] = 'Start time is required.';
+    }
+    if (!endTimeLocal) {
+      this.scheduleErrors['endTimeLocal'] = 'End time is required.';
+    }
+
+    if (this.scheduleForm.scheduleType !== 'one_time') {
+      if (!endDate) {
+        this.scheduleErrors['endDate'] = 'End date is required for this schedule type.';
+      } else if (startDate && endDate < startDate) {
+        this.scheduleErrors['endDate'] = 'End date must be on or after the start date.';
+      }
+    } else if (startDate && endDate && endDate !== startDate) {
+      this.scheduleErrors['endDate'] = 'One-time schedules cannot end on a different date.';
+    }
+
+    if (this.scheduleForm.scheduleType === 'recurring_weekly' && !this.scheduleForm.recurrenceDays.length) {
+      this.scheduleErrors['recurrenceDays'] = 'Select at least one weekday for recurring schedules.';
+    }
+
+    const numericFields: Array<{ key: string; value: number; label: string; min: number }> = [
+      { key: 'generationHorizonDays', value: Number(this.scheduleForm.generationHorizonDays), label: 'Generation horizon', min: 1 },
+      { key: 'rosterDueOffsetMinutes', value: Number(this.scheduleForm.rosterDueOffsetMinutes), label: 'Roster due offset', min: 0 },
+      { key: 'unavailableCutoffMinutes', value: Number(this.scheduleForm.unavailableCutoffMinutes), label: 'Unavailable cutoff', min: 0 },
+      { key: 'lateGraceMinutes', value: Number(this.scheduleForm.lateGraceMinutes), label: 'Late grace', min: 0 },
+      { key: 'noShowCutoffMinutes', value: Number(this.scheduleForm.noShowCutoffMinutes), label: 'No-show cutoff', min: 0 },
+      { key: 'checkinGeofenceMeters', value: Number(this.scheduleForm.checkinGeofenceMeters), label: 'Check-in geofence', min: 1 },
+    ];
+
+    for (const field of numericFields) {
+      if (!Number.isFinite(field.value) || field.value < field.min) {
+        this.scheduleErrors[field.key] = `${field.label} must be ${field.min === 0 ? 'zero or more' : `${field.min} or more`}.`;
+      }
+    }
+
+    return Object.keys(this.scheduleErrors).length === 0;
+  }
+
+  buildSchedulePayload() {
+    const endDate =
+      this.scheduleForm.scheduleType === 'one_time'
+        ? (this.scheduleForm.startDate || null)
+        : (this.scheduleForm.endDate || null);
+
+    return {
+      timezone: this.scheduleForm.timezone.trim(),
+      schedule_type: this.scheduleForm.scheduleType,
+      start_date: this.scheduleForm.startDate,
+      end_date: endDate,
+      start_time_local: this.scheduleForm.startTimeLocal,
+      end_time_local: this.scheduleForm.endTimeLocal,
+      recurrence_days: this.scheduleForm.scheduleType === 'recurring_weekly' ? [...this.scheduleForm.recurrenceDays] : [],
+      generation_horizon_days: Number(this.scheduleForm.generationHorizonDays),
+      roster_due_offset_minutes: Number(this.scheduleForm.rosterDueOffsetMinutes),
+      unavailable_cutoff_minutes: Number(this.scheduleForm.unavailableCutoffMinutes),
+      late_grace_minutes: Number(this.scheduleForm.lateGraceMinutes),
+      no_show_cutoff_minutes: Number(this.scheduleForm.noShowCutoffMinutes),
+      checkin_geofence_meters: Number(this.scheduleForm.checkinGeofenceMeters),
+      active: Boolean(this.scheduleForm.active),
+    };
   }
 
   validateRequestForm(requirePublishFields = false): boolean {
@@ -958,8 +1593,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   openRequestDetails(item: ClientRequestItem): void {
     this.selectedRequest = item;
+    this.selectedRequestSchedule = null;
     this.selectedRequestWaves = [];
     this.showRequestDrawer = true;
+    this.loadRequestSchedule(item.id);
     this.loadRequestWaves(item.id);
   }
 
@@ -978,8 +1615,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
           this.closeJobDrawer();
         }
         this.selectedRequest = response;
+        this.selectedRequestSchedule = null;
         this.selectedRequestWaves = [];
         this.showRequestDrawer = true;
+        this.loadRequestSchedule(requestId, options);
         this.loadRequestWaves(requestId, options);
       },
       error: (error) => {
@@ -993,8 +1632,57 @@ export class RequestsComponent implements OnInit, OnDestroy {
   closeRequestDrawer(): void {
     this.showRequestDrawer = false;
     this.selectedRequest = null;
+    this.selectedRequestSchedule = null;
     this.selectedRequestWaves = [];
     this.clearRouteFocusParams(['request']);
+  }
+
+  openScheduleDrawer(request?: ClientRequestItem | null): void {
+    const targetRequest = request || this.selectedRequest;
+    if (!targetRequest || !this.canManageRequestSchedule(targetRequest)) {
+      this.notification.show('Schedule management is not available for this request.', 'fail', 3500);
+      return;
+    }
+    const existingSchedule = this.selectedRequest?.id === targetRequest.id ? this.selectedRequestSchedule : null;
+    const openDrawer = (schedule: RequestScheduleItem | null) => {
+      if (this.selectedRequest?.id === targetRequest.id) {
+        this.closeRequestDrawer();
+      }
+      this.selectedScheduleRequest = targetRequest;
+      this.selectedRequestSchedule = schedule;
+      this.scheduleErrors = {};
+      this.populateScheduleForm(targetRequest, schedule);
+      this.showScheduleDrawer = true;
+    };
+
+    if (existingSchedule) {
+      openDrawer(existingSchedule);
+      return;
+    }
+
+    this.requestService.getRequestSchedule(targetRequest.id, {
+      loadingScope: this.requestScheduleScope,
+      loadingMode: 'silent',
+    }).subscribe({
+      next: (response) => {
+        openDrawer(response.schedule || null);
+      },
+      error: (error) => {
+        const status = Number(error?.status || error?.statusCode || 0);
+        if (status === 404) {
+          openDrawer(null);
+          return;
+        }
+        this.notification.show(error?.error?.detail || 'Failed to load request schedule', 'fail', 5000);
+      }
+    });
+  }
+
+  closeScheduleDrawer(): void {
+    this.showScheduleDrawer = false;
+    this.selectedScheduleRequest = null;
+    this.scheduleErrors = {};
+    this.resetScheduleForm();
   }
 
   openWaveDetails(wave: RequestBroadcastWaveItem): void {
@@ -1034,6 +1722,164 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.showWaveDrawer = false;
     this.selectedWave = null;
     this.clearRouteFocusParams(['wave']);
+  }
+
+  openShiftDetails(item: ShiftInstanceItem): void {
+    this.openShiftById(item.id);
+  }
+
+  openShiftById(shiftId: string, options?: { silent?: boolean; suppressError?: boolean }): void {
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    this.requestService.getShift(shiftId, {
+      loadingScope: this.shiftDetailScope,
+      loadingMode: silent ? 'silent' : undefined,
+    }).subscribe({
+      next: (response) => {
+        this.selectedShift = response.shift;
+        this.selectedShiftSlots = response.slots || [];
+        this.selectedShiftSlotSummary = response.slot_summary || null;
+        this.ensureShiftRequestSummaries([response.shift]);
+        this.showShiftDrawer = true;
+      },
+      error: (error) => {
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to open shift details', 'fail', 5000);
+        }
+      }
+    });
+  }
+
+  closeShiftDrawer(): void {
+    this.showShiftDrawer = false;
+    this.selectedShift = null;
+    this.selectedShiftSlots = [];
+    this.selectedShiftSlotSummary = null;
+    this.clearRouteFocusParams(['shift']);
+  }
+
+  openBulkConfirmDrawer(shift?: ShiftInstanceItem | null): void {
+    const targetShift = shift || this.selectedShift;
+    if (!targetShift) {
+      return;
+    }
+
+    const slotSource = targetShift.id === this.selectedShift?.id ? this.selectedShiftSlots : [];
+    const confirmableSlots = slotSource.filter((slot) => this.canConfirmShiftSlotArrival(slot));
+    if (!confirmableSlots.length) {
+      this.notification.show('No arrived guards are waiting for client confirmation on this shift.', 'fail', 3500);
+      return;
+    }
+
+    if (this.selectedShift?.id === targetShift.id) {
+      this.closeShiftDrawer();
+    }
+
+    this.selectedBulkConfirmShift = targetShift;
+    this.bulkConfirmShiftSlots = confirmableSlots;
+    this.bulkConfirmSelections = confirmableSlots.reduce<Record<string, boolean>>((accumulator, slot) => {
+      accumulator[slot.id] = true;
+      return accumulator;
+    }, {});
+    this.bulkConfirmErrors = {};
+    this.bulkConfirmForm = { note: '' };
+    this.showBulkConfirmDrawer = true;
+  }
+
+  closeBulkConfirmDrawer(): void {
+    this.showBulkConfirmDrawer = false;
+    this.selectedBulkConfirmShift = null;
+    this.bulkConfirmShiftSlots = [];
+    this.bulkConfirmSelections = {};
+    this.bulkConfirmErrors = {};
+    this.bulkConfirmForm = { note: '' };
+  }
+
+  openShiftSlotDetails(slot: ShiftSlotItem): void {
+    if (this.selectedShift?.id === slot.shift_instance_id) {
+      this.closeShiftDrawer();
+    }
+    this.openShiftSlotById(slot.id);
+  }
+
+  openShiftSlotById(slotId: string, options?: { silent?: boolean; suppressError?: boolean }): void {
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    this.requestService.getShiftSlot(slotId, {
+      loadingScope: this.shiftSlotDetailScope,
+      loadingMode: silent ? 'silent' : undefined,
+    }).subscribe({
+      next: (response) => {
+        this.selectedShiftSlot = response.slot;
+        this.selectedShiftSlotDetail = response;
+        this.showShiftSlotDrawer = true;
+        if (this.selectedShift?.id !== response.slot.shift_instance_id) {
+          this.selectedShift = null;
+          this.selectedShiftSlots = [];
+          this.selectedShiftSlotSummary = null;
+          this.requestService.getShift(response.slot.shift_instance_id, {
+            loadingScope: this.shiftDetailScope,
+            loadingMode: 'silent',
+          }).subscribe({
+            next: (shiftResponse) => {
+              this.selectedShift = shiftResponse.shift;
+              this.selectedShiftSlots = shiftResponse.slots || [];
+              this.selectedShiftSlotSummary = shiftResponse.slot_summary || null;
+              this.ensureShiftRequestSummaries([shiftResponse.shift]);
+            },
+            error: () => {}
+          });
+        }
+      },
+      error: (error) => {
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to open shift slot', 'fail', 5000);
+        }
+      }
+    });
+  }
+
+  closeShiftSlotDrawer(): void {
+    this.showShiftSlotDrawer = false;
+    this.selectedShiftSlot = null;
+    this.selectedShiftSlotDetail = null;
+    this.clearRouteFocusParams(['slot']);
+  }
+
+  openExceptionDetails(item: ShiftExceptionItem): void {
+    this.selectedException = item;
+    this.selectedExceptionDetail = null;
+    this.showExceptionDrawer = true;
+    this.openExceptionBySlotId(item.slot.id);
+  }
+
+  openExceptionBySlotId(slotId: string, options?: { silent?: boolean; suppressError?: boolean }): void {
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    this.requestService.getShiftSlot(slotId, {
+      loadingScope: this.exceptionDetailScope,
+      loadingMode: silent ? 'silent' : undefined,
+    }).subscribe({
+      next: (response) => {
+        this.selectedExceptionDetail = response;
+        const refreshed = this.shiftExceptions.find((item) => item.slot?.id === slotId);
+        if (refreshed) {
+          this.selectedException = refreshed;
+        }
+        this.showExceptionDrawer = true;
+      },
+      error: (error) => {
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to open shift exception', 'fail', 5000);
+        }
+      }
+    });
+  }
+
+  closeExceptionDrawer(): void {
+    this.showExceptionDrawer = false;
+    this.selectedException = null;
+    this.selectedExceptionDetail = null;
   }
 
   openJobDetails(job: RequestAssignmentItem): void {
@@ -1159,6 +2005,115 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.returnWaveForm = { note: '' };
   }
 
+  openRosterDrawer(shift?: ShiftInstanceItem | null): void {
+    const targetShift = shift || this.selectedShift;
+    if (!targetShift) {
+      return;
+    }
+
+    const slotSource = targetShift.id === this.selectedShift?.id ? this.selectedShiftSlots : [];
+    const rosterableSlots = slotSource.filter((slot) => this.isRosterableProviderSlot(slot));
+    if (!this.canManageProviderRoster || !rosterableSlots.length) {
+      this.notification.show('There are no provider-backed slots ready for rostering on this shift.', 'fail', 3500);
+      return;
+    }
+
+    if (this.selectedShift?.id === targetShift.id) {
+      this.closeShiftDrawer();
+    }
+    this.selectedRosterShift = targetShift;
+    this.rosterShiftSlots = rosterableSlots;
+    this.rosterErrors = {};
+    this.rosterSelections = {};
+    this.rosterPatternForm = {
+      applyToFutureShifts: false,
+    };
+    this.rosterPatternFutureShifts = [];
+    for (const slot of rosterableSlots) {
+      if (slot.assigned_guard_tenant_id) {
+        this.rosterSelections[slot.id] = slot.assigned_guard_tenant_id;
+      }
+    }
+    this.providerGuards = [];
+    this.showRosterDrawer = true;
+    this.requestService.listServiceProviderGuards(1, 100, {
+      loadingScope: this.shiftProviderGuardsScope,
+      loadingMode: 'silent',
+    }).subscribe({
+      next: (response) => {
+        this.providerGuards = (response.items || []).filter((guard) => {
+          const status = String(guard.status || '').trim().toLowerCase();
+          const inviteStatus = String(guard.invite_status || '').trim().toLowerCase();
+          return status === 'active' && inviteStatus !== 'expired';
+        });
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to load provider guards', 'fail', 5000);
+      }
+    });
+
+    this.requestService.listShifts(1, 100, targetShift.request_id, '', targetShift.shift_date_local, '', {
+      loadingScope: this.shiftRosterPatternScope,
+      loadingMode: 'silent',
+    }).subscribe({
+      next: (response) => {
+        const currentStartAt = String(targetShift.shift_start_at_utc || '');
+        this.rosterPatternFutureShifts = (response.items || []).filter((item) => {
+          if (item.id === targetShift.id) {
+            return false;
+          }
+          if (String(item.request_id || '') !== String(targetShift.request_id || '')) {
+            return false;
+          }
+          return String(item.shift_start_at_utc || '') >= currentStartAt;
+        });
+      },
+      error: () => {
+        this.rosterPatternFutureShifts = [];
+      }
+    });
+  }
+
+  closeRosterDrawer(): void {
+    this.showRosterDrawer = false;
+    this.selectedRosterShift = null;
+    this.rosterShiftSlots = [];
+    this.rosterPatternFutureShifts = [];
+    this.rosterErrors = {};
+    this.rosterSelections = {};
+    this.rosterPatternForm = {
+      applyToFutureShifts: false,
+    };
+    this.providerGuards = [];
+  }
+
+  openReopenExceptionDrawer(item: ShiftExceptionItem): void {
+    if (!this.canReopenException(item)) {
+      this.notification.show('This shift exception cannot be reopened from its current state.', 'fail', 3500);
+      return;
+    }
+    if (this.selectedException?.slot?.id === item.slot.id) {
+      this.closeExceptionDrawer();
+    }
+    this.reopenExceptionTarget = item;
+    this.reopenExceptionErrors = {};
+    this.reopenExceptionForm = {
+      note: '',
+      maxMatchResults: 25,
+    };
+    this.showReopenExceptionDrawer = true;
+  }
+
+  closeReopenExceptionDrawer(): void {
+    this.showReopenExceptionDrawer = false;
+    this.reopenExceptionTarget = null;
+    this.reopenExceptionErrors = {};
+    this.reopenExceptionForm = {
+      note: '',
+      maxMatchResults: 25,
+    };
+  }
+
   openAcceptJobDrawer(job: RequestAssignmentItem): void {
     if (this.selectedJob?.id === job.id) {
       this.closeJobDrawer();
@@ -1180,6 +2135,42 @@ export class RequestsComponent implements OnInit, OnDestroy {
     };
   }
 
+  openShiftActionDrawer(slot: ShiftSlotItem, action: 'report_unavailable' | 'check_in' | 'client_confirm' | 'start' | 'check_out'): void {
+    this.shiftActionTarget = slot;
+    this.shiftActionType = action;
+    this.shiftActionErrors = {};
+    this.shiftActionLocationError = '';
+    this.shiftActionLocationMessage = '';
+    this.capturingShiftActionLocation = false;
+    this.shiftActionForm = {
+      latitude: '',
+      longitude: '',
+      note: '',
+    };
+    if (this.selectedShiftSlot?.id === slot.id) {
+      this.closeShiftSlotDrawer();
+    }
+    this.showShiftActionDrawer = true;
+    if (action === 'check_in') {
+      this.captureShiftActionLocation(true);
+    }
+  }
+
+  closeShiftActionDrawer(): void {
+    this.showShiftActionDrawer = false;
+    this.shiftActionTarget = null;
+    this.shiftActionType = null;
+    this.shiftActionErrors = {};
+    this.shiftActionLocationError = '';
+    this.shiftActionLocationMessage = '';
+    this.capturingShiftActionLocation = false;
+    this.shiftActionForm = {
+      latitude: '',
+      longitude: '',
+      note: '',
+    };
+  }
+
   openRequestReasonDrawer(item: ClientRequestItem, status: ClientRequestStatus): void {
     if (this.selectedRequest?.id === item.id) {
       this.closeRequestDrawer();
@@ -1187,6 +2178,21 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.reasonRequestTarget = item;
     this.reasonJobTarget = null;
     this.reasonRequestStatus = status;
+    this.reasonRequestSoftDelete = false;
+    this.reasonJobStatus = null;
+    this.reasonErrors = {};
+    this.reasonForm = { note: '' };
+    this.showReasonDrawer = true;
+  }
+
+  openRequestSoftDeleteDrawer(item: ClientRequestItem): void {
+    if (this.selectedRequest?.id === item.id) {
+      this.closeRequestDrawer();
+    }
+    this.reasonRequestTarget = item;
+    this.reasonJobTarget = null;
+    this.reasonRequestStatus = null;
+    this.reasonRequestSoftDelete = true;
     this.reasonJobStatus = null;
     this.reasonErrors = {};
     this.reasonForm = { note: '' };
@@ -1200,6 +2206,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.reasonRequestTarget = null;
     this.reasonJobTarget = job;
     this.reasonRequestStatus = null;
+    this.reasonRequestSoftDelete = false;
     this.reasonJobStatus = status;
     this.reasonErrors = {};
     this.reasonForm = { note: '' };
@@ -1211,6 +2218,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.reasonRequestTarget = null;
     this.reasonJobTarget = null;
     this.reasonRequestStatus = null;
+    this.reasonRequestSoftDelete = false;
     this.reasonJobStatus = null;
     this.reasonErrors = {};
     this.reasonForm = { note: '' };
@@ -1245,6 +2253,56 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.reviewStatusFilter = 'pending_review';
     this.reviewTriggerFilter = '';
     this.loadReviewWaves(1);
+  }
+
+  applyShiftFilters(): void {
+    this.loadShifts(1);
+    this.loadShiftCalendar(this.shiftCalendarMonthAnchor);
+  }
+
+  clearShiftFilters(): void {
+    this.shiftStatusFilter = '';
+    this.shiftDateFrom = '';
+    this.shiftDateTo = '';
+    this.loadShifts(1);
+    this.loadShiftCalendar(this.shiftCalendarMonthAnchor);
+  }
+
+  applyExceptionFilters(): void {
+    this.loadShiftExceptions(1);
+  }
+
+  clearExceptionFilters(): void {
+    this.exceptionStatusFilter = '';
+    this.exceptionDateFrom = '';
+    this.exceptionDateTo = '';
+    this.loadShiftExceptions(1);
+  }
+
+  setShiftViewMode(mode: 'calendar' | 'list'): void {
+    this.shiftViewMode = mode;
+    if (mode === 'calendar' && !this.shiftCalendarItems.length) {
+      this.loadShiftCalendar(this.shiftCalendarMonthAnchor, { silent: true, suppressError: true });
+    }
+  }
+
+  goToPreviousShiftCalendarMonth(): void {
+    this.loadShiftCalendar(this.addMonths(this.shiftCalendarMonthAnchor, -1));
+  }
+
+  goToNextShiftCalendarMonth(): void {
+    this.loadShiftCalendar(this.addMonths(this.shiftCalendarMonthAnchor, 1));
+  }
+
+  goToCurrentShiftCalendarMonth(): void {
+    this.loadShiftCalendar(this.getStartOfMonth(new Date()));
+  }
+
+  focusShiftCalendarDate(isoDate: string): void {
+    this.shiftDateFrom = isoDate;
+    this.shiftDateTo = isoDate;
+    this.shiftViewMode = 'list';
+    this.loadShifts(1);
   }
 
   updateStatus(item: ClientRequestItem, status: ClientRequestStatus): void {
@@ -1376,6 +2434,290 @@ export class RequestsComponent implements OnInit, OnDestroy {
     });
   }
 
+  submitRequestSchedule(): void {
+    const request = this.selectedScheduleRequest;
+    if (!request) {
+      return;
+    }
+
+    if (!this.validateScheduleForm()) {
+      this.notification.show('Please fix the schedule fields before saving.', 'fail', 4000);
+      return;
+    }
+
+    const payload = this.buildSchedulePayload();
+    const action = this.selectedRequestSchedule?.id
+      ? this.requestService.updateRequestSchedule(request.id, payload, { loadingScope: this.saveRequestScheduleScope })
+      : this.requestService.createRequestSchedule(request.id, payload, { loadingScope: this.saveRequestScheduleScope });
+
+    action.subscribe({
+      next: (response) => {
+        this.selectedRequestSchedule = response.schedule || null;
+        this.notification.show('Request schedule saved', 'success', 3500);
+        this.closeScheduleDrawer();
+        this.openRequestById(request.id, { silent: true, suppressError: true });
+        if (this.canViewShifts) {
+          this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+        }
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to save request schedule', 'fail', 5000);
+      }
+    });
+  }
+
+  submitBulkConfirmArrivals(): void {
+    const shift = this.selectedBulkConfirmShift;
+    if (!shift) {
+      return;
+    }
+
+    const selectedSlotIds = this.getSelectedBulkConfirmSlotIds();
+    this.bulkConfirmErrors = {};
+    if (!selectedSlotIds.length) {
+      this.bulkConfirmErrors['slots'] = 'Select at least one arrived slot to confirm.';
+      this.notification.show('Select at least one slot to confirm.', 'fail', 4000);
+      return;
+    }
+
+    const note = this.bulkConfirmForm.note.trim() || null;
+    const loadingScope = this.getShiftBulkConfirmScope(shift.id);
+    forkJoin(
+      selectedSlotIds.map((slotId) =>
+        this.requestService.confirmShiftSlotArrival(slotId, { note }, {
+          loadingScope,
+          loadingMode: 'silent',
+        }),
+      ),
+    ).subscribe({
+      next: () => {
+        this.notification.show(
+          `${selectedSlotIds.length} shift slot${selectedSlotIds.length === 1 ? '' : 's'} confirmed`,
+          'success',
+          3500,
+        );
+        this.closeBulkConfirmDrawer();
+        this.openShiftById(shift.id, { silent: true, suppressError: true });
+        this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+      },
+      error: (error) => {
+        this.notification.show(
+          error?.error?.detail || 'Bulk confirmation did not fully complete. The shift state has been refreshed.',
+          'fail',
+          5000,
+        );
+        this.closeBulkConfirmDrawer();
+        this.openShiftById(shift.id, { silent: true, suppressError: true });
+      }
+    });
+  }
+
+  submitRosterAssignments(): void {
+    const shift = this.selectedRosterShift;
+    if (!shift) {
+      return;
+    }
+
+    this.rosterErrors = {};
+    const selectedAssignments = this.buildRosterAssignmentsForSlots(this.rosterShiftSlots);
+    const assignments: ProviderRosterPayload['assignments'] = selectedAssignments.assignments;
+
+    if (!assignments.length) {
+      this.rosterErrors['assignments'] = 'Select at least one guard assignment before rostering the shift.';
+      this.notification.show('Select at least one provider guard before saving the roster.', 'fail', 4000);
+      return;
+    }
+
+    const loadingScope = this.getShiftRosterScope(shift.id);
+
+    if (!this.rosterPatternForm.applyToFutureShifts || !this.rosterPatternFutureShifts.length) {
+      this.requestService.rosterShift(shift.id, { assignments }, { loadingScope }).subscribe({
+        next: (response) => {
+          this.notification.show('Shift roster updated', 'success', 3500);
+          this.closeRosterDrawer();
+          this.selectedShift = response.shift;
+          this.selectedShiftSlots = response.slots || [];
+          this.selectedShiftSlotSummary = response.slot_summary || null;
+          this.showShiftDrawer = true;
+          this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+        },
+        error: (error) => {
+          this.notification.show(error?.error?.detail || 'Failed to roster provider guards', 'fail', 5000);
+        }
+      });
+      return;
+    }
+
+    const futureShiftIds = this.rosterPatternFutureShifts.map((item) => item.id);
+    const guardByPatternKey = selectedAssignments.guardByPatternKey;
+    forkJoin(
+      [shift.id, ...futureShiftIds].map((shiftId) =>
+        this.requestService.getShift(shiftId, {
+          loadingScope,
+          loadingMode: 'silent',
+        }),
+      ),
+    ).subscribe({
+      next: (shiftResponses) => {
+        const rosterPayloads = shiftResponses
+          .map((response) => {
+            const shiftAssignments = response.shift.id === shift.id
+              ? assignments
+              : this.buildRosterPatternAssignments(response.slots || [], guardByPatternKey);
+            if (!shiftAssignments.length) {
+              return null;
+            }
+            return {
+              shiftId: response.shift.id,
+              assignments: shiftAssignments,
+            };
+          })
+          .filter((item): item is { shiftId: string; assignments: ProviderRosterPayload['assignments'] } => Boolean(item));
+
+        if (!rosterPayloads.length) {
+          this.notification.show('No matching provider-backed slots were found for the future roster pattern.', 'fail', 4000);
+          return;
+        }
+
+        forkJoin(
+          rosterPayloads.map((item) =>
+            this.requestService.rosterShift(item.shiftId, { assignments: item.assignments }, {
+              loadingScope,
+              loadingMode: 'silent',
+            }),
+          ),
+        ).subscribe({
+          next: (responses) => {
+            const currentResponse = responses.find((item) => item.shift.id === shift.id) || responses[0];
+            const affectedShiftCount = responses.length;
+            this.notification.show(
+              affectedShiftCount === 1
+                ? 'Shift roster updated'
+                : `Roster pattern applied to ${affectedShiftCount} shifts`,
+              'success',
+              3500,
+            );
+            this.closeRosterDrawer();
+            this.selectedShift = currentResponse.shift;
+            this.selectedShiftSlots = currentResponse.slots || [];
+            this.selectedShiftSlotSummary = currentResponse.slot_summary || null;
+            this.showShiftDrawer = true;
+            this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+          },
+          error: (error) => {
+            this.notification.show(error?.error?.detail || 'Failed to apply the roster pattern to future shifts', 'fail', 5000);
+          }
+        });
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to load future shift details for the roster pattern', 'fail', 5000);
+      }
+    });
+  }
+
+  submitReopenException(): void {
+    const item = this.reopenExceptionTarget;
+    if (!item) {
+      return;
+    }
+
+    this.reopenExceptionErrors = {};
+    const maxMatchResults = Number(this.reopenExceptionForm.maxMatchResults);
+    if (!Number.isInteger(maxMatchResults) || maxMatchResults < 1) {
+      this.reopenExceptionErrors['maxMatchResults'] = 'Provide a valid whole number of match results.';
+    }
+    if (Object.keys(this.reopenExceptionErrors).length) {
+      this.notification.show('Please fix the replacement fields.', 'fail', 4000);
+      return;
+    }
+
+    this.requestService.reopenShiftSlot(
+      item.slot.id,
+      {
+        note: this.reopenExceptionForm.note.trim() || null,
+        max_match_results: maxMatchResults,
+      },
+      { loadingScope: this.getExceptionActionScope(item.slot.id) },
+    ).subscribe({
+      next: (response) => {
+        this.notification.show(response.message || 'Shift slot reopened for replacement', 'success', 3500);
+        this.closeReopenExceptionDrawer();
+        this.loadShiftExceptions(this.exceptionPage);
+        if (this.selectedException?.slot?.id === item.slot.id) {
+          this.openExceptionBySlotId(item.slot.id, { silent: true, suppressError: true });
+        }
+        if (this.canReviewBroadcastWaves) {
+          this.loadReviewWaves(this.reviewPage, { silent: true, suppressError: true });
+        }
+        this.loadJobs(this.jobPage, { silent: true, suppressError: true });
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to reopen shift slot', 'fail', 5000);
+      }
+    });
+  }
+
+  submitShiftAction(): void {
+    const slot = this.shiftActionTarget;
+    const action = this.shiftActionType;
+    if (!slot || !action) {
+      return;
+    }
+
+    this.shiftActionErrors = {};
+    const note = this.shiftActionForm.note.trim() || null;
+
+    if (action === 'check_in') {
+      const latitude = Number(this.shiftActionForm.latitude);
+      const longitude = Number(this.shiftActionForm.longitude);
+      if (!Number.isFinite(latitude)) {
+        this.shiftActionErrors['latitude'] = 'Latitude is required.';
+      }
+      if (!Number.isFinite(longitude)) {
+        this.shiftActionErrors['longitude'] = 'Longitude is required.';
+      }
+      if (Object.keys(this.shiftActionErrors).length) {
+        this.notification.show('Please fix the shift action fields.', 'fail', 4000);
+        return;
+      }
+      this.requestService.checkInShiftSlot(
+        slot.id,
+        { latitude, longitude, note },
+        { loadingScope: this.getShiftSlotActionScope(slot.id) },
+      ).subscribe({
+        next: (response) => {
+          this.notification.show('Shift slot checked in', 'success', 3500);
+          this.closeShiftActionDrawer();
+          this.handleShiftSlotActionSuccess(slot.id, response);
+        },
+        error: (error) => {
+          this.notification.show(error?.error?.detail || 'Failed to check in to shift slot', 'fail', 5000);
+        }
+      });
+      return;
+    }
+
+    const actionCall =
+      action === 'report_unavailable'
+        ? this.requestService.reportShiftSlotUnavailable(slot.id, { note }, { loadingScope: this.getShiftSlotActionScope(slot.id) })
+        : action === 'client_confirm'
+          ? this.requestService.confirmShiftSlotArrival(slot.id, { note }, { loadingScope: this.getShiftSlotActionScope(slot.id) })
+          : action === 'start'
+            ? this.requestService.startShiftSlot(slot.id, { note }, { loadingScope: this.getShiftSlotActionScope(slot.id) })
+            : this.requestService.checkOutShiftSlot(slot.id, { note }, { loadingScope: this.getShiftSlotActionScope(slot.id) });
+
+    actionCall.subscribe({
+      next: (response) => {
+        this.notification.show(this.getShiftActionSuccessMessage(action), 'success', 3500);
+        this.closeShiftActionDrawer();
+        this.handleShiftSlotActionSuccess(slot.id, response);
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to update shift slot', 'fail', 5000);
+      }
+    });
+  }
+
   assignSelectedCandidate(item: ClientRequestItem): void {
     const candidateId = this.selectedCandidateByRequestId[item.id];
     if (!candidateId) {
@@ -1433,8 +2775,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.reasonErrors = {};
 
     if (!note) {
-      this.reasonErrors['note'] = 'A reason is required.';
-      this.notification.show('A reason is required.', 'fail', 4000);
+      const message = this.reasonRequestSoftDelete ? 'A delete reason is required.' : 'A reason is required.';
+      this.reasonErrors['note'] = message;
+      this.notification.show(message, 'fail', 4000);
       return;
     }
 
@@ -1452,6 +2795,24 @@ export class RequestsComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           this.notification.show(error?.error?.detail || 'Failed to update request', 'fail', 5000);
+        }
+      });
+      return;
+    }
+
+    if (this.reasonRequestTarget && this.reasonRequestSoftDelete) {
+      const item = this.reasonRequestTarget;
+      this.requestService.softDeleteRequest(item.id, note, { loadingScope: this.getRequestStatusScope(item.id) }).subscribe({
+        next: (response) => {
+          this.notification.show(response.message || 'Request removed from dashboard', 'success', 3500);
+          this.closeReasonDrawer();
+          if (this.selectedRequest?.id === item.id) {
+            this.closeRequestDrawer();
+          }
+          this.loadRequests(this.page);
+        },
+        error: (error) => {
+          this.notification.show(error?.error?.detail || 'Failed to remove request from dashboard', 'fail', 5000);
         }
       });
       return;
@@ -1517,6 +2878,20 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return (this.isClientAdmin || this.isPlatformAdmin) && ['submitted', 'assigned', 'in_progress'].includes(item.request_status);
   }
 
+  canSoftDeleteRequest(item: ClientRequestItem): boolean {
+    return this.isPlatformAdmin && ['draft', 'cancelled', 'closed'].includes(item.request_status);
+  }
+
+  canManageRequestSchedule(item: ClientRequestItem | null): boolean {
+    if (!item) {
+      return false;
+    }
+    return (
+      ['admin', 'ops_admin', 'support_admin', 'compliance_admin'].includes(this.role)
+      || this.isClientAdmin
+    ) && !['cancelled', 'closed'].includes(item.request_status) && item.staffing_status !== 'expired';
+  }
+
   canEditRequest(item: ClientRequestItem): boolean {
     return this.isClientAdmin && item.request_status === 'draft';
   }
@@ -1552,6 +2927,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   getJobActions(job: RequestAssignmentItem): Array<{ label: string; status: RequestAssignmentStatus; type: 'primary' | 'secondary' | 'danger' }> {
+    if (job.assignment_scope === 'shift_replacement' && ['accepted', 'in_progress', 'completed', 'cancelled'].includes(job.assignment_status)) {
+      return [];
+    }
     switch (job.assignment_status) {
       case 'offered':
         return [
@@ -1653,6 +3031,474 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return `requests:review:${waveId}`;
   }
 
+  getShiftRosterScope(shiftId: string): string {
+    return `requests:shift:roster:${shiftId}`;
+  }
+
+  getShiftSlotActionScope(slotId: string): string {
+    return `requests:shift-slot:${slotId}`;
+  }
+
+  getExceptionActionScope(slotId: string): string {
+    return `requests:exception:${slotId}`;
+  }
+
+  getShiftRequestTitle(shift: ShiftInstanceItem | null): string {
+    if (!shift) {
+      return 'Shift';
+    }
+    return this.shiftRequestSummaries[shift.request_id]?.title || `Request ${shift.request_id.slice(0, 8)}`;
+  }
+
+  getShiftRequestSiteName(shift: ShiftInstanceItem | null): string {
+    if (!shift) {
+      return 'Unknown site';
+    }
+    return this.shiftRequestSummaries[shift.request_id]?.siteName || 'Unknown site';
+  }
+
+  getShiftStatusSummary(shift: ShiftInstanceItem): string {
+    return `${shift.slots_staffed}/${shift.slots_required} staffed • ${shift.slots_checked_in} checked in • ${shift.slots_completed} completed`;
+  }
+
+  getShiftSlotLabel(slot: ShiftSlotItem): string {
+    return `Slot ${slot.slot_number}`;
+  }
+
+  getShiftSlotReplacementBadges(slot: ShiftSlotItem): Array<{ label: string; className: string }> {
+    if (!slot.replacement_of_slot_id) {
+      return [];
+    }
+    return [
+      {
+        label: 'Replacement Slot',
+        className: 'inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300',
+      },
+    ];
+  }
+
+  getShiftSlotCoverageLabel(slot: ShiftSlotItem): string {
+    const source = slot.coverage_source_type || 'guard';
+    return this.getTargetTypeLabel(source);
+  }
+
+  getShiftSlotTenantLabel(slot: ShiftSlotItem): string {
+    if (slot.assigned_guard_tenant_id) {
+      return slot.assigned_guard_tenant_id;
+    }
+    if (slot.coverage_tenant_id) {
+      return slot.coverage_tenant_id;
+    }
+    return 'Unassigned';
+  }
+
+  getShiftSlotMetaItems(slot: ShiftSlotItem): string[] {
+    const items = [
+      `Coverage: ${this.getShiftSlotCoverageLabel(slot)}`,
+      `Guard / Tenant: ${this.getShiftSlotTenantLabel(slot)}`,
+    ];
+    if (slot.roster_due_at) {
+      items.push(`Roster due ${this.formatBackendDateTime(slot.roster_due_at)}`);
+    }
+    return items;
+  }
+
+  getShiftSlotDetailItems(slot: ShiftSlotItem): string[] {
+    const items: string[] = [];
+    if (slot.arrived_at) {
+      items.push(`Arrived ${this.formatBackendDateTime(slot.arrived_at)}`);
+    }
+    if (slot.client_confirmed_at) {
+      items.push(`Confirmed ${this.formatBackendDateTime(slot.client_confirmed_at)}`);
+    }
+    if (slot.started_at) {
+      items.push(`Started ${this.formatBackendDateTime(slot.started_at)}`);
+    }
+    if (slot.completed_at) {
+      items.push(`Completed ${this.formatBackendDateTime(slot.completed_at)}`);
+    }
+    return items;
+  }
+
+  getRosterSlotMetaItems(slot: ShiftSlotItem): string[] {
+    return [`Coverage owner: ${this.getShiftSlotTenantLabel(slot)}`];
+  }
+
+  getBulkConfirmSlotMetaItems(slot: ShiftSlotItem): string[] {
+    return [
+      `Coverage: ${this.getShiftSlotCoverageLabel(slot)}`,
+      `Guard / Tenant: ${this.getShiftSlotTenantLabel(slot)}`,
+    ];
+  }
+
+  getBulkConfirmSlotDetailItems(slot: ShiftSlotItem): string[] {
+    return [`Arrived ${slot.arrived_at ? this.formatBackendDateTime(slot.arrived_at) : 'Not recorded'}`];
+  }
+
+  isRosterableProviderSlot(slot: ShiftSlotItem): boolean {
+    return this.canManageProviderRoster
+      && slot.coverage_source_type === 'service_provider'
+      && slot.coverage_tenant_id === this.appService.userSessionData()?.tenant?.id
+      && ['reserved', 'rostered'].includes(String(slot.slot_status || ''));
+  }
+
+  canOpenRosterForSelectedShift(): boolean {
+    return this.selectedShiftSlots.some((slot) => this.isRosterableProviderSlot(slot));
+  }
+
+  canOpenBulkConfirmForSelectedShift(): boolean {
+    return this.selectedShiftSlots.some((slot) => this.canConfirmShiftSlotArrival(slot));
+  }
+
+  canReportShiftSlotUnavailable(slot: ShiftSlotItem | null): boolean {
+    return this.canManageShiftAttendance
+      && Boolean(slot?.assigned_guard_tenant_id)
+      && ['reserved', 'rostered'].includes(String(slot?.slot_status || ''))
+      && !slot?.started_at;
+  }
+
+  canCheckInShiftSlot(slot: ShiftSlotItem | null): boolean {
+    return this.canManageShiftAttendance
+      && Boolean(slot?.assigned_guard_tenant_id)
+      && ['reserved', 'rostered'].includes(String(slot?.slot_status || ''))
+      && !slot?.arrived_at
+      && !slot?.started_at;
+  }
+
+  canConfirmShiftSlotArrival(slot: ShiftSlotItem | null): boolean {
+    return this.canConfirmShiftArrivals
+      && Boolean(slot?.arrived_at)
+      && !slot?.client_confirmed_at
+      && !slot?.started_at;
+  }
+
+  canStartShiftSlot(slot: ShiftSlotItem | null): boolean {
+    return this.canManageShiftAttendance
+      && Boolean(slot?.arrived_at)
+      && !slot?.started_at
+      && (Boolean(slot?.client_confirmed_at) || this.isPlatformAdmin);
+  }
+
+  canCheckOutShiftSlot(slot: ShiftSlotItem | null): boolean {
+    return this.canManageShiftAttendance
+      && String(slot?.slot_status || '') === 'in_progress'
+      && Boolean(slot?.started_at);
+  }
+
+  canUseBrowserGeolocation(): boolean {
+    return typeof navigator !== 'undefined' && 'geolocation' in navigator;
+  }
+
+  captureShiftActionLocation(silent = false): void {
+    if (this.shiftActionType !== 'check_in') {
+      return;
+    }
+
+    this.shiftActionLocationError = '';
+    this.shiftActionLocationMessage = '';
+
+    if (!this.canUseBrowserGeolocation()) {
+      if (!silent) {
+        this.shiftActionLocationError = 'Browser geolocation is not available on this device. Enter coordinates manually to continue.';
+      }
+      return;
+    }
+
+    this.capturingShiftActionLocation = true;
+    this.shiftActionLocationMessage = silent ? 'Requesting device location...' : 'Fetching current device location...';
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        this.capturingShiftActionLocation = false;
+        this.shiftActionForm.latitude = position.coords.latitude.toFixed(6);
+        this.shiftActionForm.longitude = position.coords.longitude.toFixed(6);
+        delete this.shiftActionErrors['latitude'];
+        delete this.shiftActionErrors['longitude'];
+        this.shiftActionLocationError = '';
+        this.shiftActionLocationMessage = 'Current device location captured. You can still adjust the coordinates manually if needed.';
+      },
+      (error) => {
+        this.capturingShiftActionLocation = false;
+        this.shiftActionLocationMessage = '';
+        this.shiftActionLocationError = this.getGeolocationErrorMessage(error);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      },
+    );
+  }
+
+  getGeolocationErrorMessage(error: GeolocationPositionError): string {
+    switch (error.code) {
+      case error.PERMISSION_DENIED:
+        return 'Location access was denied. Allow location access in the browser or enter coordinates manually.';
+      case error.POSITION_UNAVAILABLE:
+        return 'Current location could not be determined on this device. Enter coordinates manually or try again.';
+      case error.TIMEOUT:
+        return 'Location request timed out. Try again or enter coordinates manually.';
+      default:
+        return 'Unable to fetch current device location. Enter coordinates manually or try again.';
+    }
+  }
+
+  getShiftActionLocationButtonLabel(): string {
+    if (this.capturingShiftActionLocation) {
+      return 'Locating...';
+    }
+    return this.shiftActionForm.latitude.trim() && this.shiftActionForm.longitude.trim()
+      ? 'Refresh Current Location'
+      : 'Use Current Location';
+  }
+
+  getShiftSlotPrimaryAction(slot: ShiftSlotItem): { label: string; action: 'report_unavailable' | 'check_in' | 'client_confirm' | 'start' | 'check_out'; type: 'primary' | 'secondary' | 'danger' } | null {
+    if (this.canConfirmShiftSlotArrival(slot)) {
+      return { label: 'Confirm Arrival', action: 'client_confirm', type: 'primary' };
+    }
+    if (this.canCheckInShiftSlot(slot)) {
+      return { label: 'Check In', action: 'check_in', type: 'primary' };
+    }
+    if (this.canStartShiftSlot(slot)) {
+      return { label: 'Start Shift', action: 'start', type: 'primary' };
+    }
+    if (this.canCheckOutShiftSlot(slot)) {
+      return { label: 'Check Out', action: 'check_out', type: 'primary' };
+    }
+    if (this.canReportShiftSlotUnavailable(slot)) {
+      return { label: 'Report Unavailable', action: 'report_unavailable', type: 'danger' };
+    }
+    return null;
+  }
+
+  getShiftActionDrawerTitle(): string {
+    switch (this.shiftActionType) {
+      case 'report_unavailable':
+        return 'Report Shift Unavailable';
+      case 'check_in':
+        return 'Check In To Shift';
+      case 'client_confirm':
+        return 'Confirm Guard Arrival';
+      case 'start':
+        return 'Start Shift';
+      case 'check_out':
+        return 'Check Out From Shift';
+      default:
+        return 'Shift Action';
+    }
+  }
+
+  getShiftActionDrawerSubtitle(): string {
+    const slot = this.shiftActionTarget;
+    if (!slot) {
+      return 'Update the selected shift slot.';
+    }
+    const shift = this.selectedShift;
+    return `${this.getShiftSlotLabel(slot)} • ${shift ? this.getShiftRequestTitle(shift) : 'Shift slot'}`;
+  }
+
+  getShiftActionButtonLabel(): string {
+    switch (this.shiftActionType) {
+      case 'report_unavailable':
+        return 'Report Unavailable';
+      case 'check_in':
+        return 'Confirm Check-In';
+      case 'client_confirm':
+        return 'Confirm Arrival';
+      case 'start':
+        return 'Start Shift';
+      case 'check_out':
+        return 'Check Out';
+      default:
+        return 'Submit';
+    }
+  }
+
+  getShiftActionSuccessMessage(action: 'report_unavailable' | 'check_in' | 'client_confirm' | 'start' | 'check_out'): string {
+    switch (action) {
+      case 'report_unavailable':
+        return 'Shift unavailability reported';
+      case 'check_in':
+        return 'Shift check-in recorded';
+      case 'client_confirm':
+        return 'Guard arrival confirmed';
+      case 'start':
+        return 'Shift started';
+      case 'check_out':
+        return 'Shift checked out';
+      default:
+        return 'Shift updated';
+    }
+  }
+
+  getProviderGuardOptions(): Array<{ label: string; value: string }> {
+    return this.providerGuards.map((guard) => ({
+      label: `${guard.name || guard.id} • ${guard.email || 'No email'}`,
+      value: guard.id,
+    }));
+  }
+
+  buildRosterAssignmentsForSlots(slots: ShiftSlotItem[]): {
+    assignments: ProviderRosterPayload['assignments'];
+    guardByPatternKey: Record<string, string>;
+  } {
+    const assignments: ProviderRosterPayload['assignments'] = [];
+    const guardByPatternKey: Record<string, string> = {};
+
+    for (const slot of slots) {
+      const guardTenantId = String(this.rosterSelections[slot.id] || '').trim();
+      if (!guardTenantId) {
+        continue;
+      }
+      assignments.push({
+        slot_id: slot.id,
+        guard_tenant_id: guardTenantId,
+      });
+      guardByPatternKey[this.getRosterPatternKey(slot)] = guardTenantId;
+    }
+
+    return { assignments, guardByPatternKey };
+  }
+
+  buildRosterPatternAssignments(
+    slots: ShiftSlotItem[],
+    guardByPatternKey: Record<string, string>,
+  ): ProviderRosterPayload['assignments'] {
+    return slots
+      .filter((slot) => this.isRosterableProviderSlot(slot))
+      .map((slot) => {
+        const guardTenantId = guardByPatternKey[this.getRosterPatternKey(slot)];
+        if (!guardTenantId) {
+          return null;
+        }
+        return {
+          slot_id: slot.id,
+          guard_tenant_id: guardTenantId,
+        };
+      })
+      .filter((item): item is ProviderRosterPayload['assignments'][number] => Boolean(item));
+  }
+
+  getRosterPatternKey(slot: ShiftSlotItem): string {
+    return `${slot.parent_assignment_id || 'open'}:${slot.coverage_slot_index || 0}`;
+  }
+
+  getRosterPatternPreviewText(): string {
+    const count = this.rosterPatternFutureShifts.length;
+    if (!count) {
+      return 'No future visible shifts are currently available for this request.';
+    }
+    if (count === 1) {
+      return 'This pattern can be copied to 1 future shift in the current generated window.';
+    }
+    return `This pattern can be copied to ${count} future shifts in the current generated window.`;
+  }
+
+  getShiftBulkConfirmScope(shiftId: string): string {
+    return `requests:shift:bulk-confirm:${shiftId}`;
+  }
+
+  getSelectedBulkConfirmSlotIds(): string[] {
+    return this.bulkConfirmShiftSlots
+      .filter((slot) => Boolean(this.bulkConfirmSelections[slot.id]))
+      .map((slot) => slot.id);
+  }
+
+  toggleBulkConfirmSlot(slotId: string, checked: boolean): void {
+    this.bulkConfirmSelections = {
+      ...this.bulkConfirmSelections,
+      [slotId]: checked,
+    };
+  }
+
+  isBulkConfirmSlotSelected(slotId: string): boolean {
+    return Boolean(this.bulkConfirmSelections[slotId]);
+  }
+
+  getScheduleTypeLabel(scheduleType: RequestScheduleType | string): string {
+    switch (scheduleType) {
+      case 'date_range':
+        return 'Date Range';
+      case 'recurring_weekly':
+        return 'Recurring Weekly';
+      default:
+        return 'One-Time Shift';
+    }
+  }
+
+  getScheduleDateRangeLabel(schedule: RequestScheduleItem | null): string {
+    if (!schedule) {
+      return 'Not configured';
+    }
+    if (schedule.schedule_type === 'one_time') {
+      return schedule.start_date || 'Not set';
+    }
+    return `${schedule.start_date || 'Not set'} to ${schedule.end_date || 'Not set'}`;
+  }
+
+  getScheduleTimeWindowLabel(schedule: RequestScheduleItem | null): string {
+    if (!schedule) {
+      return 'Not configured';
+    }
+    const suffix = schedule.is_overnight ? ' (overnight)' : '';
+    return `${schedule.start_time_local} to ${schedule.end_time_local}${suffix}`;
+  }
+
+  getScheduleRecurrenceLabel(schedule: RequestScheduleItem | null): string {
+    if (!schedule) {
+      return 'No recurrence';
+    }
+    if (schedule.schedule_type !== 'recurring_weekly') {
+      return 'No recurrence';
+    }
+    if (!schedule.recurrence_days.length) {
+      return 'No weekdays selected';
+    }
+    return schedule.recurrence_days.map((day) => this.formatTokenLabel(day)).join(', ');
+  }
+
+  getStartOfMonth(value: Date): Date {
+    return new Date(value.getFullYear(), value.getMonth(), 1);
+  }
+
+  getEndOfMonth(value: Date): Date {
+    return new Date(value.getFullYear(), value.getMonth() + 1, 0);
+  }
+
+  addMonths(value: Date, delta: number): Date {
+    return new Date(value.getFullYear(), value.getMonth() + delta, 1);
+  }
+
+  formatDateInput(value: Date): string {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  handleShiftSlotActionSuccess(slotId: string, response: ShiftSlotDetailResponse): void {
+    this.selectedShiftSlot = response.slot;
+    this.selectedShiftSlotDetail = response;
+    this.showShiftSlotDrawer = true;
+    if (this.selectedShift?.id === response.slot.shift_instance_id) {
+      this.requestService.getShift(response.slot.shift_instance_id, {
+        loadingScope: this.shiftDetailScope,
+        loadingMode: 'silent',
+      }).subscribe({
+        next: (shiftResponse) => {
+          this.selectedShift = shiftResponse.shift;
+          this.selectedShiftSlots = shiftResponse.slots || [];
+          this.selectedShiftSlotSummary = shiftResponse.slot_summary || null;
+          this.ensureShiftRequestSummaries([shiftResponse.shift]);
+        },
+        error: () => {}
+      });
+    } else {
+      this.openShiftById(response.slot.shift_instance_id, { silent: true, suppressError: true });
+    }
+    this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+  }
+
   getWaveTitle(item: RequestBroadcastWaveItem): string {
     return String(item.request_snapshot?.['title'] || 'Request');
   }
@@ -1724,6 +3570,20 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   getJobStateMessage(job: RequestAssignmentItem): string {
+    if (job.assignment_scope === 'shift_replacement') {
+      switch (job.assignment_status) {
+        case 'accepted':
+          return 'This is a shift replacement assignment. Slot execution now moves to shift attendance actions rather than generic job status updates.';
+        case 'offered':
+          return job.response_due_at
+            ? `This is a shift replacement offer for a specific uncovered slot. Review the replacement context before responding. Offer closes at ${this.formatBackendDateTime(job.response_due_at)}.`
+            : 'This is a shift replacement offer for a specific uncovered slot. Review the replacement context before responding.';
+        case 'reconfirmation_required':
+          return 'This replacement offer changed after your earlier acceptance. Review the updated shift context before reconfirming.';
+        default:
+          break;
+      }
+    }
     switch (job.assignment_status) {
       case 'reconfirmation_required':
         return 'This request changed after your earlier acceptance. Review the updated request details and reconfirm only if you can still cover the assignment.';
@@ -1761,6 +3621,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   getReasonDrawerTitle(): string {
+    if (this.reasonRequestTarget && this.reasonRequestSoftDelete) {
+      return 'Remove Request';
+    }
     if (this.reasonRequestTarget && this.reasonRequestStatus) {
       return `${this.formatTokenLabel(this.reasonRequestStatus)} Request`;
     }
@@ -1772,6 +3635,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   getReasonDrawerSubtitle(): string {
     if (this.reasonRequestTarget) {
+      if (this.reasonRequestSoftDelete) {
+        return `${this.reasonRequestTarget.title} • This will remove the request from dashboard listings without hard deleting it.`;
+      }
       return `${this.reasonRequestTarget.title} • Reason is required for this request action`;
     }
     if (this.reasonJobTarget) {
@@ -1780,7 +3646,24 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return 'Add the required note to continue.';
   }
 
+  getReasonFieldLabel(): string {
+    if (this.reasonRequestSoftDelete) {
+      return 'Delete Reason';
+    }
+    return 'Reason';
+  }
+
+  getReasonFieldHelperText(): string {
+    if (this.reasonRequestSoftDelete) {
+      return 'Explain why this request is being removed from the dashboard. This note will be saved for audit history.';
+    }
+    return 'This note will be saved with the action for audit and visibility.';
+  }
+
   getReasonDrawerActionLabel(): string {
+    if (this.reasonRequestSoftDelete) {
+      return 'Confirm Remove';
+    }
     if (this.reasonRequestStatus) {
       return `Confirm ${this.formatTokenLabel(this.reasonRequestStatus)}`;
     }
@@ -1820,12 +3703,36 @@ export class RequestsComponent implements OnInit, OnDestroy {
       .map((candidate) => String(candidate['candidate_name'] || candidate['candidate_id'] || 'Candidate'));
   }
 
-  getSiteAddressField(item: ClientRequestItem, key: string): string {
-    return String(item.site_snapshot?.site_address?.[key] || '');
+  getExceptionTitle(item: ShiftExceptionItem): string {
+    return item.request?.title || 'Shift exception';
   }
 
-  getMatchCount(item: ClientRequestItem, key: 'eligible_count' | 'missing_geo_count' | 'outside_radius_count'): number {
-    return Number(item.match_summary?.[key] || 0);
+  getExceptionSubtitle(item: ShiftExceptionItem): string {
+    return `${item.shift?.shift_date_local || 'Shift'} • Slot ${item.slot?.slot_number || 0}`;
+  }
+
+  getExceptionGuardLabel(item: ShiftExceptionItem): string {
+    if (item.slot?.assigned_guard_tenant_id) {
+      return item.slot.assigned_guard_tenant_id;
+    }
+    if (item.slot?.coverage_tenant_id) {
+      return item.slot.coverage_tenant_id;
+    }
+    return 'Unassigned';
+  }
+
+  canReopenException(item: ShiftExceptionItem | null): boolean {
+    const status = item?.slot?.slot_status || '';
+    return this.canReopenShiftExceptions && ['unavailable', 'late_risk', 'no_show_suspected', 'no_show_confirmed'].includes(status);
+  }
+
+  getExceptionSummary(item: ShiftExceptionItem): string {
+    const shiftStart = item.shift?.shift_start_at_utc ? this.formatBackendDateTime(item.shift.shift_start_at_utc) : 'Unknown start';
+    return `${this.formatTokenLabel(item.slot.slot_status)} • Shift starts ${shiftStart}`;
+  }
+
+  getSiteAddressField(item: ClientRequestItem, key: string): string {
+    return String(item.site_snapshot?.site_address?.[key] || '');
   }
 
   parseCoordinate(value: string): number | null {
@@ -1885,38 +3792,52 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
   }
 
-  getPageLabel(pageNumber: number): string {
-    return String(pageNumber);
-  }
-
   get paginationPages(): number[] {
-    if (this.totalPages <= 1) {
-      return [];
-    }
-    const start = Math.max(1, this.page - 2);
-    const end = Math.min(this.totalPages, start + 4);
-    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+    return this.buildPaginationPages(this.page, this.totalPages);
   }
 
   get jobPaginationPages(): number[] {
-    if (this.jobTotalPages <= 1) {
-      return [];
-    }
-    const start = Math.max(1, this.jobPage - 2);
-    const end = Math.min(this.jobTotalPages, start + 4);
-    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+    return this.buildPaginationPages(this.jobPage, this.jobTotalPages);
   }
 
   get reviewPaginationPages(): number[] {
-    if (this.reviewTotalPages <= 1) {
+    return this.buildPaginationPages(this.reviewPage, this.reviewTotalPages);
+  }
+
+  get shiftPaginationPages(): number[] {
+    return this.buildPaginationPages(this.shiftPage, this.shiftTotalPages);
+  }
+
+  get exceptionPaginationPages(): number[] {
+    return this.buildPaginationPages(this.exceptionPage, this.exceptionTotalPages);
+  }
+
+  buildPaginationPages(currentPage: number, totalPages: number): number[] {
+    if (totalPages <= 1) {
       return [];
     }
-    const start = Math.max(1, this.reviewPage - 2);
-    const end = Math.min(this.reviewTotalPages, start + 4);
+    const start = Math.max(1, currentPage - 2);
+    const end = Math.min(totalPages, start + 4);
     return Array.from({ length: end - start + 1 }, (_, index) => start + index);
   }
 
   trackByWaveId(_index: number, item: RequestBroadcastWaveItem): string {
     return item.id;
+  }
+
+  trackByShiftId(_index: number, item: ShiftInstanceItem): string {
+    return item.id;
+  }
+
+  trackByShiftSlotId(_index: number, item: ShiftSlotItem): string {
+    return item.id;
+  }
+
+  trackByProviderGuardId(_index: number, item: ServiceProviderGuardSummaryItem): string {
+    return item.id;
+  }
+
+  trackByExceptionSlotId(_index: number, item: ShiftExceptionItem): string {
+    return item.slot.id;
   }
 }

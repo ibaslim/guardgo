@@ -85,6 +85,30 @@ async def test_get_tenant_returns_404_when_missing(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_get_tenant_returns_empty_payload_for_platform_user_without_tenant_uuid(monkeypatch):
+    manager = object.__new__(TenantManager)
+    manager._engine = FakeEngine(None)
+    monkeypatch.setattr(TenantManager, "get_instance", staticmethod(lambda: manager))
+
+    current_user = SimpleNamespace(
+        username="ops1",
+        role=user_role.OPS_ADMIN,
+        tenant_uuid="",
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_app(user_role.OPS_ADMIN, current_user)),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/api/tenant")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == ""
+    assert response.json()["tenant_type"] is None
+    assert response.json()["profile"] == {}
+
+
+@pytest.mark.anyio
 async def test_get_tenants_datatable_forwards_filters(monkeypatch):
     captured = {}
 

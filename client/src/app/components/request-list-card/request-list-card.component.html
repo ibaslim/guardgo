@@ -1,0 +1,220 @@
+<app-card [showHeader]="false" [containerClass]="cardContainerClass" [bodyClass]="'p-0'">
+  <div class="p-6">
+    <div class="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+      <div class="min-w-0 flex-1 space-y-5">
+        <div [class]="headerSurfaceClass">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="statusClass">
+              {{ formatTokenLabel(request.request_status) }}
+            </span>
+            <span
+              *ngIf="request.staffing_status"
+              class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium"
+              [class]="staffingStatusClass"
+            >
+              {{ formatTokenLabel(request.staffing_status) }}
+            </span>
+            <span class="inline-flex rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-medium text-gray-700 shadow-sm dark:bg-slate-900/80 dark:text-gray-200">
+              {{ fulfillmentLabel }}
+            </span>
+            <span *ngIf="request.last_wave_number" class="text-xs text-gray-500 dark:text-gray-400">
+              Wave {{ request.last_wave_number }}
+            </span>
+            <span class="text-xs text-gray-500 dark:text-gray-400">
+              Created {{ formatBackendDateTime(request.created_at) }}
+            </span>
+          </div>
+
+          <div class="mt-4 flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h3 class="truncate text-xl font-semibold text-gray-900 dark:text-gray-100">{{ request.title }}</h3>
+              <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                {{ siteValue }}
+                <span *ngIf="titleSupportingLabel">• {{ titleSupportingLabel }}</span>
+              </p>
+            </div>
+            <div class="rounded-full border border-white/80 bg-white/90 px-3 py-1 text-xs font-medium text-gray-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-gray-300">
+              Revision {{ request.request_revision || 1 }}
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+          <app-summary-metric-card
+            label="Site"
+            [value]="siteValue"
+            [helperText]="siteHelperText"
+            [containerClass]="statCardContainerClass"
+            [valueClass]="statCardValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Requested Window"
+            [value]="requestedWindowLabel"
+            [helperText]="requestedWindowHelperText"
+            [containerClass]="statCardContainerClass"
+            [valueClass]="statCardValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Request Expiry"
+            [value]="expiryLabel"
+            [helperText]="expiryHelperText"
+            [containerClass]="statCardContainerClass"
+            [valueClass]="statCardValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Coverage"
+            [value]="coverageSummaryValue"
+            [helperText]="coverageHelperText"
+            [containerClass]="statCardContainerClass"
+            [valueClass]="statCardValueClass"
+          ></app-summary-metric-card>
+        </div>
+
+        <div [class]="progressSurfaceClass">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">Staffing Progress</div>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Accepted coverage vs. requested headcount for this client request.
+              </p>
+            </div>
+            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {{ coveragePercent }}%
+            </div>
+          </div>
+
+          <div class="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+            <div
+              class="h-full rounded-full bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-300 transition-all"
+              [style.width.%]="coveragePercent"
+            ></div>
+          </div>
+
+          <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <app-summary-metric-card
+              label="Eligible Matches"
+              [value]="eligibleMatchCount"
+              [containerClass]="miniMetricContainerClass"
+              [labelClass]="miniMetricLabelClass"
+              [valueClass]="miniMetricValueClass"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Missing Geo"
+              [value]="missingGeoCount"
+              [containerClass]="miniMetricContainerClass"
+              [labelClass]="miniMetricLabelClass"
+              [valueClass]="miniMetricValueClass"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Outside Radius"
+              [value]="outsideRadiusCount"
+              [containerClass]="miniMetricContainerClass"
+              [labelClass]="miniMetricLabelClass"
+              [valueClass]="miniMetricValueClass"
+            ></app-summary-metric-card>
+          </div>
+        </div>
+
+        <app-banner
+          *ngIf="insight as requestInsight"
+          [tone]="requestInsight.tone"
+          [title]="requestInsight.title"
+          [message]="requestInsight.message"
+          [showIcon]="false"
+          [containerClass]="insightContainerClass"
+          [bodyClass]="'mt-1 text-sm leading-6'"
+        ></app-banner>
+
+        <div
+          *ngIf="hasManualAssignmentPanel"
+          [class]="manualAssignmentPanelClass"
+        >
+          <div class="flex flex-col gap-3 xl:flex-row xl:items-end">
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-semibold text-blue-900 dark:text-blue-100">Assign Eligible Candidate</div>
+              <p class="mt-1 text-xs text-blue-700 dark:text-blue-200">
+                Manual assignment stays available as an operational fallback when you want to pick from the saved match set.
+              </p>
+              <div class="mt-3">
+                <app-select-input
+                  label="Candidate"
+                  [name]="'candidate-' + request.id"
+                  [ngModel]="selectedCandidateId"
+                  (ngModelChange)="onCandidateSelectionChange($event)"
+                  [options]="candidateOptions"
+                  placeholder="Select candidate"
+                ></app-select-input>
+              </div>
+            </div>
+            <div class="xl:pb-0.5">
+              <app-button
+                label="Assign Candidate"
+                type="primary"
+                size="sm"
+                [loadingScope]="assignScope"
+                (pressed)="assign.emit()"
+              ></app-button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="xl:w-72 xl:pl-3">
+        <div [class]="actionSurfaceClass">
+          <div class="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+            Quick Actions
+          </div>
+
+          <div class="mt-3 grid grid-cols-1 gap-2">
+            <app-button label="Open Details" type="secondary" size="sm" [fullWidth]="true" (pressed)="details.emit()"></app-button>
+            <app-button
+              *ngIf="showPrimaryAction"
+              [label]="primaryActionLabel"
+              [type]="primaryActionType"
+              size="sm"
+              [loadingScope]="requestStatusScope"
+              [fullWidth]="true"
+              (pressed)="emitPrimaryAction()"
+            ></app-button>
+          </div>
+
+          <div class="mt-4 flex flex-wrap gap-2">
+            <app-button *ngIf="canEdit" label="Edit Draft" type="secondary" size="sm" (pressed)="edit.emit()"></app-button>
+            <app-button
+              *ngIf="showSecondaryCoverageAction"
+              label="Add Coverage"
+              type="secondary"
+              size="sm"
+              [loadingScope]="requestStatusScope"
+              (pressed)="requestAdditionalCoverage.emit()"
+            ></app-button>
+            <app-button
+              *ngIf="canShowStatusActions"
+              label="Cancel"
+              type="danger"
+              size="sm"
+              [loadingScope]="requestStatusScope"
+              (pressed)="cancel.emit()"
+            ></app-button>
+            <app-button
+              *ngIf="canShowStatusActions"
+              label="Close"
+              type="secondary"
+              size="sm"
+              [loadingScope]="requestStatusScope"
+              (pressed)="close.emit()"
+            ></app-button>
+            <app-button
+              *ngIf="canSoftDelete"
+              label="Remove"
+              type="danger"
+              size="sm"
+              [loadingScope]="requestStatusScope"
+              (pressed)="softDelete.emit()"
+            ></app-button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</app-card>

@@ -476,9 +476,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (this.guardFormModel.operationalRadius != null && Number.isFinite(this.guardFormModel.operationalRadius)) {
+    const operationalRadius = this.parseOperationalRadius(this.guardFormModel.operationalRadius);
+    if (operationalRadius != null) {
       this.guardFormModel.operationalRadius = this.convertDistanceBetweenUnits(
-        Number(this.guardFormModel.operationalRadius),
+        operationalRadius,
         this.selectedDistanceUnit,
         nextUnit
       );
@@ -494,10 +495,25 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       : Number(kmValue.toFixed(1));
   }
 
-  private toStorageKm(displayValue: number): number {
+  private toStorageKm(displayValue: number | string): number {
+    const parsedValue = this.parseOperationalRadius(displayValue);
+    if (parsedValue == null) {
+      throw new Error('Operational radius must be a valid number.');
+    }
     return this.selectedDistanceUnit === 'mi'
-      ? milesToKm(displayValue)
-      : Number(displayValue.toFixed(2));
+      ? milesToKm(parsedValue)
+      : Number(parsedValue.toFixed(2));
+  }
+
+  private parseOperationalRadius(value: unknown): number | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    if (typeof value === 'string' && !value.trim()) {
+      return null;
+    }
+    const parsedValue = Number(value);
+    return Number.isFinite(parsedValue) ? parsedValue : null;
   }
 
   private convertDistanceBetweenUnits(value: number, from: DistanceUnit, to: DistanceUnit): number {
@@ -2071,10 +2087,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     }
 
     // Operational Radius
+    const operationalRadius = this.parseOperationalRadius(this.guardFormModel.operationalRadius);
     if (
       this.guardFormModel.operationalRadius != null &&
-      (isNaN(this.guardFormModel.operationalRadius) ||
-        this.guardFormModel.operationalRadius < this.minimumOperationalRadiusDisplay)
+      (operationalRadius == null || operationalRadius < this.minimumOperationalRadiusDisplay)
     ) {
       this.guardErrors['operationalRadius'] = `Operational radius must be at least ${this.minimumOperationalRadiusText}.`;
     }
@@ -2264,8 +2280,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     payload.profile.contact = legacyContact;
 
     // Add operational radius if set
-    if (this.guardFormModel.operationalRadius != null) {
-      payload.profile.max_travel_radius_km = this.toStorageKm(this.guardFormModel.operationalRadius);
+    const operationalRadius = this.parseOperationalRadius(this.guardFormModel.operationalRadius);
+    if (operationalRadius != null) {
+      payload.profile.max_travel_radius_km = this.toStorageKm(operationalRadius);
     }
 
     // Determine desired post-submit tenant status. If user is completing onboarding, move to pending_activation.

@@ -15,9 +15,47 @@ export type RequestAssignmentStatus =
   | 'completed'
   | 'cancelled';
 export type RequestAssignmentOrigin = 'manual' | 'broadcast';
+export type RequestAssignmentScope = 'request' | 'shift_replacement';
 export type RequestAssignmentLockReason = 'filled' | 'wave_expired' | 'request_expired' | 'superseded' | 'request_cancelled';
 export type RequestWaveTrigger = 'initial_publish' | 'publish_update' | 'additional_coverage' | 'capacity_reopened';
 export type RequestWaveStatus = 'pending_review' | 'active' | 'returned' | 'filled' | 'expired' | 'superseded' | 'cancelled';
+export type RequestScheduleType = 'one_time' | 'date_range' | 'recurring_weekly';
+export type ShiftInstanceStatus =
+  | 'scheduled'
+  | 'partially_staffed'
+  | 'staffed'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled'
+  | 'expired';
+export type ShiftSlotStatus =
+  | 'open'
+  | 'reserved'
+  | 'rostered'
+  | 'unavailable'
+  | 'late_risk'
+  | 'arrival_pending'
+  | 'client_confirmation_pending'
+  | 'in_progress'
+  | 'completed'
+  | 'no_show_suspected'
+  | 'no_show_confirmed'
+  | 'replacement_required'
+  | 'cancelled';
+export type ShiftAttendanceEventType =
+  | 'unavailable_reported'
+  | 'checkin_attempted'
+  | 'arrived'
+  | 'geo_failed'
+  | 'client_confirmed'
+  | 'ops_start_override'
+  | 'started'
+  | 'checkout'
+  | 'completed'
+  | 'no_show_suspected'
+  | 'no_show_confirmed'
+  | 'replacement_requested'
+  | 'replacement_assigned';
 
 export interface ClientRequestItem {
   id: string;
@@ -70,6 +108,10 @@ export interface ClientRequestItem {
   matched_candidates?: Array<Record<string, any>>;
   cancelled_at?: string | null;
   closed_at?: string | null;
+  deleted_at?: string | null;
+  deleted_by_user_id?: string | null;
+  deleted_by_username?: string | null;
+  deleted_reason?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -82,7 +124,10 @@ export interface RequestAssignmentItem {
   assignee_tenant_type: ClientRequestTargetType;
   assignment_status: RequestAssignmentStatus;
   assignment_origin?: RequestAssignmentOrigin | null;
+  assignment_scope?: RequestAssignmentScope | null;
   broadcast_wave_id?: string | null;
+  shift_instance_id?: string | null;
+  shift_slot_id?: string | null;
   request_revision_at_offer?: number;
   slots_committed?: number | null;
   response_due_at?: string | null;
@@ -153,6 +198,239 @@ export interface RequestBroadcastWaveItem {
   accepted_slots_at_close?: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface RequestScheduleItem {
+  id: string;
+  request_id: string;
+  client_tenant_id: string;
+  timezone: string;
+  schedule_type: RequestScheduleType;
+  start_date: string;
+  end_date?: string | null;
+  start_time_local: string;
+  end_time_local: string;
+  is_overnight: boolean;
+  recurrence_days: string[];
+  generation_horizon_days: number;
+  roster_due_offset_minutes: number;
+  unavailable_cutoff_minutes: number;
+  late_grace_minutes: number;
+  no_show_cutoff_minutes: number;
+  checkin_geofence_meters: number;
+  active: boolean;
+  generated_shift_count?: number;
+  generated_slot_count?: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ShiftSlotItem {
+  id: string;
+  shift_instance_id: string;
+  request_id: string;
+  client_tenant_id: string;
+  parent_assignment_id?: string | null;
+  slot_number: number;
+  coverage_slot_index?: number;
+  coverage_source_type?: ClientRequestTargetType | null;
+  coverage_tenant_id?: string | null;
+  service_provider_tenant_id?: string | null;
+  assigned_guard_tenant_id?: string | null;
+  slot_status: ShiftSlotStatus;
+  replacement_of_slot_id?: string | null;
+  rostered_at?: string | null;
+  roster_due_at?: string | null;
+  guard_unavailable_reported_at?: string | null;
+  arrived_at?: string | null;
+  client_confirmed_at?: string | null;
+  started_at?: string | null;
+  checked_out_at?: string | null;
+  completed_at?: string | null;
+  no_show_confirmed_at?: string | null;
+  geo_check_passed?: boolean | null;
+  actual_start_at?: string | null;
+  actual_end_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ShiftAttendanceEventItem {
+  id: string;
+  shift_slot_id: string;
+  shift_instance_id: string;
+  request_id: string;
+  event_type: ShiftAttendanceEventType | string;
+  actor_user_id?: string | null;
+  actor_role?: string | null;
+  guard_tenant_id?: string | null;
+  service_provider_tenant_id?: string | null;
+  client_tenant_id?: string | null;
+  timestamp: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  distance_meters?: number | null;
+  note?: string | null;
+  metadata?: Record<string, any>;
+}
+
+export interface ShiftInstanceItem {
+  id: string;
+  request_id: string;
+  client_tenant_id: string;
+  schedule_template_id: string;
+  shift_date_local: string;
+  shift_start_at_utc: string;
+  shift_end_at_utc: string;
+  timezone: string;
+  instance_status: ShiftInstanceStatus | string;
+  slots_required: number;
+  slots_staffed: number;
+  slots_checked_in: number;
+  slots_completed: number;
+  client_action_required: boolean;
+  roster_due_at?: string | null;
+  created_from_revision?: number;
+  cancel_reason?: string | null;
+  reduction_reason?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ShiftExceptionItem {
+  slot: ShiftSlotItem;
+  shift: ShiftInstanceItem;
+  request: {
+    id: string;
+    title: string;
+    client_tenant_id: string;
+  };
+}
+
+export interface ShiftExceptionListResponse {
+  items: ShiftExceptionItem[];
+  pagination: {
+    page: number;
+    rows: number;
+    total_items: number;
+    total_pages: number;
+  };
+}
+
+export interface ShiftSlotDetailResponse {
+  slot: ShiftSlotItem;
+  events: ShiftAttendanceEventItem[];
+}
+
+export interface ShiftSlotSummary {
+  total_visible_slots: number;
+  open_slots: number;
+  reserved_slots: number;
+  rostered_slots: number;
+}
+
+export interface ShiftDetailResponse {
+  shift: ShiftInstanceItem;
+  slots: ShiftSlotItem[];
+  slot_summary: ShiftSlotSummary;
+}
+
+export interface ShiftSlotReopenPayload {
+  note?: string | null;
+  max_match_results: number;
+}
+
+export interface ShiftSlotReopenResponse {
+  message: string;
+  original_slot: ShiftSlotItem;
+  replacement_slot: ShiftSlotItem;
+  wave?: RequestBroadcastWaveItem | null;
+}
+
+export interface RequestScheduleResponse {
+  schedule: RequestScheduleItem;
+}
+
+export interface RequestScheduleUpsertPayload {
+  timezone: string;
+  schedule_type: RequestScheduleType;
+  start_date: string;
+  end_date?: string | null;
+  start_time_local: string;
+  end_time_local: string;
+  recurrence_days: string[];
+  generation_horizon_days: number;
+  roster_due_offset_minutes: number;
+  unavailable_cutoff_minutes: number;
+  late_grace_minutes: number;
+  no_show_cutoff_minutes: number;
+  checkin_geofence_meters: number;
+  active: boolean;
+}
+
+export interface ShiftListResponse {
+  items: ShiftInstanceItem[];
+  pagination: {
+    page: number;
+    rows: number;
+    total_items: number;
+    total_pages: number;
+  };
+}
+
+export interface ProviderRosterSelectionPayload {
+  slot_id: string;
+  guard_tenant_id: string;
+}
+
+export interface ProviderRosterPayload {
+  assignments: ProviderRosterSelectionPayload[];
+}
+
+export interface ShiftSlotCheckInPayload {
+  latitude: number;
+  longitude: number;
+  note?: string | null;
+}
+
+export interface ShiftSlotClientConfirmPayload {
+  note?: string | null;
+}
+
+export interface ShiftSlotStartPayload {
+  note?: string | null;
+}
+
+export interface ShiftSlotCheckOutPayload {
+  note?: string | null;
+}
+
+export interface ShiftSlotUnavailablePayload {
+  note?: string | null;
+}
+
+export interface ServiceProviderGuardSummaryItem {
+  id: string;
+  name?: string | null;
+  status?: string | null;
+  ownership_type?: string | null;
+  service_provider_tenant_id?: string | null;
+  invite_status?: string | null;
+  invite_expires_at?: string | null;
+  email?: string | null;
+  verified?: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ServiceProviderGuardListResponse {
+  items: ServiceProviderGuardSummaryItem[];
+  pagination: {
+    page: number;
+    rows: number;
+    total_items: number;
+    total_pages: number;
+  };
 }
 
 export interface ClientRequestListResponse {

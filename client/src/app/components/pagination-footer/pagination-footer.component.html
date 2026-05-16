@@ -1,0 +1,24 @@
+<div *ngIf="showPagination" [class]="containerClass">
+  <p [class]="summaryClass">Page {{ page }} of {{ totalPages }}</p>
+
+  <div [class]="actionsClass">
+    <app-button
+      [label]="previousLabel"
+      type="secondary"
+      [disabled]="page <= 1"
+      (pressed)="goTo(page - 1)"
+    ></app-button>
+    <app-button
+      *ngFor="let pageNumber of pages; trackBy: trackByPageNumber"
+      [label]="getPageLabel(pageNumber)"
+      [type]="pageNumber === page ? 'primary' : 'secondary'"
+      (pressed)="goTo(pageNumber)"
+    ></app-button>
+    <app-button
+      [label]="nextLabel"
+      type="secondary"
+      [disabled]="page >= totalPages"
+      (pressed)="goTo(page + 1)"
+    ></app-button>
+  </div>
+</div>

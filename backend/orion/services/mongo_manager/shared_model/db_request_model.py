@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from enum import Enum
 from typing import Optional, List, Dict, Any
 
@@ -42,6 +42,11 @@ class RequestAssignmentStatus(str, Enum):
 class RequestAssignmentOrigin(str, Enum):
     MANUAL = "manual"
     BROADCAST = "broadcast"
+
+
+class RequestAssignmentScope(str, Enum):
+    REQUEST = "request"
+    SHIFT_REPLACEMENT = "shift_replacement"
 
 
 class RequestStaffingStatus(str, Enum):
@@ -92,6 +97,59 @@ class BroadcastReviewReasonCode(str, Enum):
     TRAVEL_POLICY_MISSING = "travel_policy_missing"
     AMBIGUOUS_LOCATION = "ambiguous_location"
     MANUAL_REVIEW_DISTANCE = "manual_review_distance"
+
+
+class RequestScheduleType(str, Enum):
+    ONE_TIME = "one_time"
+    DATE_RANGE = "date_range"
+    RECURRING_WEEKLY = "recurring_weekly"
+
+
+class ShiftInstanceStatus(str, Enum):
+    SCHEDULED = "scheduled"
+    PARTIALLY_STAFFED = "partially_staffed"
+    STAFFED = "staffed"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
+class ShiftCoverageSourceType(str, Enum):
+    DIRECT_GUARD = "direct_guard"
+    SERVICE_PROVIDER = "service_provider"
+
+
+class ShiftSlotStatus(str, Enum):
+    OPEN = "open"
+    RESERVED = "reserved"
+    ROSTERED = "rostered"
+    UNAVAILABLE = "unavailable"
+    LATE_RISK = "late_risk"
+    ARRIVAL_PENDING = "arrival_pending"
+    CLIENT_CONFIRMATION_PENDING = "client_confirmation_pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    NO_SHOW_SUSPECTED = "no_show_suspected"
+    NO_SHOW_CONFIRMED = "no_show_confirmed"
+    REPLACEMENT_REQUIRED = "replacement_required"
+    CANCELLED = "cancelled"
+
+
+class ShiftAttendanceEventType(str, Enum):
+    UNAVAILABLE_REPORTED = "unavailable_reported"
+    CHECKIN_ATTEMPTED = "checkin_attempted"
+    ARRIVED = "arrived"
+    GEO_FAILED = "geo_failed"
+    CLIENT_CONFIRMED = "client_confirmed"
+    OPS_START_OVERRIDE = "ops_start_override"
+    STARTED = "started"
+    CHECKOUT = "checkout"
+    COMPLETED = "completed"
+    NO_SHOW_SUSPECTED = "no_show_suspected"
+    NO_SHOW_CONFIRMED = "no_show_confirmed"
+    REPLACEMENT_REQUESTED = "replacement_requested"
+    REPLACEMENT_ASSIGNED = "replacement_assigned"
 
 
 class RequestSiteSnapshot(BaseModel):
@@ -155,6 +213,10 @@ class ClientRequestRecord(Model):
     matched_candidates: List[Dict[str, Any]] = []
     cancelled_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = Field(default=None, index=True)
+    deleted_by_user_id: Optional[str] = Field(default=None, index=True)
+    deleted_by_username: Optional[str] = None
+    deleted_reason: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
@@ -166,7 +228,10 @@ class RequestAssignmentRecord(Model):
     assignee_tenant_type: RequestTargetType = Field(index=True)
     assignment_status: RequestAssignmentStatus = Field(default=RequestAssignmentStatus.OFFERED, index=True)
     assignment_origin: RequestAssignmentOrigin = Field(default=RequestAssignmentOrigin.MANUAL, index=True)
+    assignment_scope: RequestAssignmentScope = Field(default=RequestAssignmentScope.REQUEST, index=True)
     broadcast_wave_id: Optional[str] = Field(default=None, index=True)
+    shift_instance_id: Optional[str] = Field(default=None, index=True)
+    shift_slot_id: Optional[str] = Field(default=None, index=True)
     request_revision_at_offer: int = Field(default=0, index=True)
     slots_committed: Optional[int] = None
     response_due_at: Optional[datetime] = Field(default=None, index=True)
@@ -222,6 +287,97 @@ class RequestBroadcastWaveRecord(Model):
     updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
 
+class RequestScheduleTemplateRecord(Model):
+    request_id: str = Field(index=True)
+    client_tenant_id: str = Field(index=True)
+    timezone: str = Field(index=True)
+    schedule_type: RequestScheduleType = Field(index=True)
+    start_date_local: str = Field(index=True)
+    end_date_local: Optional[str] = Field(default=None, index=True)
+    start_time_local: str = ""
+    end_time_local: str = ""
+    is_overnight: bool = False
+    recurrence_days: List[str] = []
+    generation_horizon_days: int = 30
+    roster_due_offset_minutes: int = 120
+    unavailable_cutoff_minutes: int = 120
+    late_grace_minutes: int = 15
+    no_show_cutoff_minutes: int = 30
+    checkin_geofence_meters: int = 200
+    active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class ShiftInstanceRecord(Model):
+    request_id: str = Field(index=True)
+    client_tenant_id: str = Field(index=True)
+    schedule_template_id: str = Field(index=True)
+    shift_date_local: str = Field(index=True)
+    shift_start_at_utc: datetime = Field(index=True)
+    shift_end_at_utc: datetime = Field(index=True)
+    timezone: str = Field(index=True)
+    instance_status: ShiftInstanceStatus = Field(default=ShiftInstanceStatus.SCHEDULED, index=True)
+    slots_required: int = 1
+    slots_staffed: int = 0
+    slots_checked_in: int = 0
+    slots_completed: int = 0
+    client_action_required: bool = False
+    roster_due_at: Optional[datetime] = Field(default=None, index=True)
+    created_from_revision: int = Field(default=0, index=True)
+    cancel_reason: Optional[str] = None
+    reduction_reason: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class ShiftSlotRecord(Model):
+    shift_instance_id: str = Field(index=True)
+    request_id: str = Field(index=True)
+    client_tenant_id: str = Field(index=True)
+    parent_assignment_id: Optional[str] = Field(default=None, index=True)
+    slot_number: int = Field(index=True)
+    coverage_slot_index: int = Field(default=0, index=True)
+    coverage_source_type: Optional[ShiftCoverageSourceType] = Field(default=None, index=True)
+    coverage_tenant_id: Optional[str] = Field(default=None, index=True)
+    service_provider_tenant_id: Optional[str] = Field(default=None, index=True)
+    assigned_guard_tenant_id: Optional[str] = Field(default=None, index=True)
+    slot_status: ShiftSlotStatus = Field(default=ShiftSlotStatus.OPEN, index=True)
+    replacement_of_slot_id: Optional[str] = Field(default=None, index=True)
+    rostered_at: Optional[datetime] = None
+    roster_due_at: Optional[datetime] = Field(default=None, index=True)
+    guard_unavailable_reported_at: Optional[datetime] = None
+    arrived_at: Optional[datetime] = None
+    client_confirmed_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    checked_out_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    no_show_confirmed_at: Optional[datetime] = None
+    geo_check_passed: Optional[bool] = None
+    actual_start_at: Optional[datetime] = None
+    actual_end_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class ShiftAttendanceEventRecord(Model):
+    shift_slot_id: str = Field(index=True)
+    shift_instance_id: str = Field(index=True)
+    request_id: str = Field(index=True)
+    event_type: ShiftAttendanceEventType = Field(index=True)
+    actor_user_id: Optional[str] = Field(default=None, index=True)
+    actor_role: Optional[str] = Field(default=None, index=True)
+    guard_tenant_id: Optional[str] = Field(default=None, index=True)
+    service_provider_tenant_id: Optional[str] = Field(default=None, index=True)
+    client_tenant_id: Optional[str] = Field(default=None, index=True)
+    timestamp: datetime = Field(default_factory=datetime.utcnow, index=True)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    distance_meters: Optional[float] = None
+    note: Optional[str] = None
+    metadata: Dict[str, Any] = {}
+
+
 class ClientRequestCreatePayload(BaseModel):
     title: str = PydanticField(min_length=3, max_length=140)
     fulfillment_mode: RequestFulfillmentMode = RequestFulfillmentMode.INDIVIDUAL_ONLY
@@ -253,6 +409,10 @@ class ClientRequestUpdatePayload(BaseModel):
 class ClientRequestStatusUpdatePayload(BaseModel):
     request_status: RequestStatus
     reason: Optional[str] = PydanticField(default=None, max_length=500)
+
+
+class ClientRequestSoftDeletePayload(BaseModel):
+    reason: str = PydanticField(min_length=3, max_length=500)
 
 
 class RequestAssignmentCreatePayload(BaseModel):
@@ -298,6 +458,68 @@ class RequestWaveListFilters(BaseModel):
     trigger: str = ""
     request_id: str = ""
     client_tenant_id: str = ""
+
+
+class RequestScheduleUpsertPayload(BaseModel):
+    timezone: str = PydanticField(min_length=1, max_length=80)
+    schedule_type: RequestScheduleType
+    start_date: date
+    end_date: Optional[date] = None
+    start_time_local: str = PydanticField(min_length=5, max_length=5, pattern=r"^\d{2}:\d{2}$")
+    end_time_local: str = PydanticField(min_length=5, max_length=5, pattern=r"^\d{2}:\d{2}$")
+    recurrence_days: List[str] = []
+    generation_horizon_days: int = PydanticField(default=30, ge=1, le=90)
+    roster_due_offset_minutes: int = PydanticField(default=120, ge=0, le=1440)
+    unavailable_cutoff_minutes: int = PydanticField(default=120, ge=0, le=1440)
+    late_grace_minutes: int = PydanticField(default=15, ge=0, le=240)
+    no_show_cutoff_minutes: int = PydanticField(default=30, ge=0, le=480)
+    checkin_geofence_meters: int = PydanticField(default=200, ge=25, le=5000)
+    active: bool = True
+
+
+class ShiftListFilters(BaseModel):
+    page: int = 1
+    rows: int = 20
+    request_id: str = ""
+    instance_status: str = ""
+    date_from: Optional[date] = None
+    date_to: Optional[date] = None
+
+
+class ProviderRosterSelectionPayload(BaseModel):
+    slot_id: str = PydanticField(min_length=1, max_length=80)
+    guard_tenant_id: str = PydanticField(min_length=1, max_length=80)
+
+
+class ProviderRosterPayload(BaseModel):
+    assignments: List[ProviderRosterSelectionPayload] = PydanticField(default_factory=list, min_length=1)
+
+
+class ShiftSlotCheckInPayload(BaseModel):
+    latitude: float
+    longitude: float
+    note: Optional[str] = PydanticField(default=None, max_length=500)
+
+
+class ShiftSlotClientConfirmPayload(BaseModel):
+    note: Optional[str] = PydanticField(default=None, max_length=500)
+
+
+class ShiftSlotStartPayload(BaseModel):
+    note: Optional[str] = PydanticField(default=None, max_length=500)
+
+
+class ShiftSlotCheckOutPayload(BaseModel):
+    note: Optional[str] = PydanticField(default=None, max_length=500)
+
+
+class ShiftSlotUnavailablePayload(BaseModel):
+    note: Optional[str] = PydanticField(default=None, max_length=500)
+
+
+class ShiftSlotReopenPayload(BaseModel):
+    note: Optional[str] = PydanticField(default=None, max_length=500)
+    max_match_results: int = PydanticField(default=25, ge=1, le=200)
 
 
 class ClientRequestListFilters(BaseModel):

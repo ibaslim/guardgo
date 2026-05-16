@@ -29,7 +29,7 @@ import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/f
   ]
 })
 export class BaseInputComponent implements ControlValueAccessor {
-  @Input() type: 'text' | 'number' | 'email' | 'password' | 'tel' | 'date' = 'text';
+  @Input() type: 'text' | 'number' | 'email' | 'password' | 'tel' | 'date' | 'time' = 'text';
   @Input() label = '';
   @Input() placeholder?: string;
   @Input() disabled = false;
@@ -38,8 +38,8 @@ export class BaseInputComponent implements ControlValueAccessor {
   @Input() name = '';
   @Input() helperText: string = '';
   @Input() errorText: string = '';
-  @Input() min?: number;
-  @Input() max?: number;
+  @Input() min?: number | string;
+  @Input() max?: number | string;
   @Input() autocomplete: string = 'on';
   value: string | number = '';
   onChange = (value: any) => { };

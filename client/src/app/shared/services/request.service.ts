@@ -8,6 +8,8 @@ import {
   ClientRequestListResponse,
   ClientRequestStatus,
   ClientRequestUpdatePayload,
+  RequestScheduleResponse,
+  RequestScheduleUpsertPayload,
   RequestAdditionalCoveragePayload,
   RequestAssignmentListResponse,
   RequestAssignmentItem,
@@ -16,6 +18,19 @@ import {
   RequestPublishPayload,
   RequestPublishUpdatePayload,
   RequestReviewWaveListResponse,
+  ProviderRosterPayload,
+  ServiceProviderGuardListResponse,
+  ShiftDetailResponse,
+  ShiftExceptionListResponse,
+  ShiftListResponse,
+  ShiftSlotCheckInPayload,
+  ShiftSlotCheckOutPayload,
+  ShiftSlotClientConfirmPayload,
+  ShiftSlotDetailResponse,
+  ShiftSlotStartPayload,
+  ShiftSlotUnavailablePayload,
+  ShiftSlotReopenPayload,
+  ShiftSlotReopenResponse,
   RequestWaveListResponse,
   RequestWaveReviewPayload,
 } from '../model/request/client-request.model';
@@ -23,6 +38,17 @@ import {
 @Injectable({ providedIn: 'root' })
 export class RequestService {
   constructor(private api: ApiService) {}
+
+  private withOptionalParam(params: HttpParams, key: string, value: string | number | null | undefined): HttpParams {
+    if (value === null || value === undefined) {
+      return params;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim();
+      return normalized ? params.set(key, normalized) : params;
+    }
+    return params.set(key, value);
+  }
 
   listRequests(page = 1, rows = 20, keyword = '', requestStatus = '', fulfillmentMode = '', options?: ApiRequestOptions) {
     const params = new HttpParams()
@@ -40,6 +66,18 @@ export class RequestService {
 
   getRequest(requestId: string, options?: ApiRequestOptions) {
     return this.api.get<ClientRequestItem>(`requests/${requestId}`, options);
+  }
+
+  getRequestSchedule(requestId: string, options?: ApiRequestOptions) {
+    return this.api.get<RequestScheduleResponse>(`requests/${requestId}/schedule`, options);
+  }
+
+  createRequestSchedule(requestId: string, payload: RequestScheduleUpsertPayload, options?: ApiRequestOptions) {
+    return this.api.post<RequestScheduleResponse>(`requests/${requestId}/schedule`, payload, options);
+  }
+
+  updateRequestSchedule(requestId: string, payload: RequestScheduleUpsertPayload, options?: ApiRequestOptions) {
+    return this.api.patch<RequestScheduleResponse>(`requests/${requestId}/schedule`, payload, options);
   }
 
   updateRequest(requestId: string, payload: ClientRequestUpdatePayload, options?: ApiRequestOptions) {
@@ -77,6 +115,12 @@ export class RequestService {
     }, options);
   }
 
+  softDeleteRequest(requestId: string, reason: string, options?: ApiRequestOptions) {
+    return this.api.post<{ message: string; item: ClientRequestItem }>(`requests/${requestId}/soft-delete`, {
+      reason,
+    }, options);
+  }
+
   listRequestWaves(requestId: string, page = 1, rows = 20, options?: ApiRequestOptions) {
     const params = new HttpParams()
       .set('page', page)
@@ -88,6 +132,87 @@ export class RequestService {
     return this.api.get<RequestBroadcastWaveItem>(`request-waves/${waveId}`, options);
   }
 
+  listShifts(
+    page = 1,
+    rows = 20,
+    requestId = '',
+    instanceStatus = '',
+    dateFrom = '',
+    dateTo = '',
+    options?: ApiRequestOptions,
+  ) {
+    let params = new HttpParams()
+      .set('page', page)
+      .set('rows', rows);
+    params = this.withOptionalParam(params, 'request_id', requestId);
+    params = this.withOptionalParam(params, 'instance_status', instanceStatus);
+    params = this.withOptionalParam(params, 'date_from', dateFrom);
+    params = this.withOptionalParam(params, 'date_to', dateTo);
+    return this.api.get<ShiftListResponse>('shifts', { ...options, params });
+  }
+
+  getShift(shiftId: string, options?: ApiRequestOptions) {
+    return this.api.get<ShiftDetailResponse>(`shifts/${shiftId}`, options);
+  }
+
+  listShiftExceptions(
+    page = 1,
+    rows = 20,
+    exceptionStatus = '',
+    requestId = '',
+    dateFrom = '',
+    dateTo = '',
+    options?: ApiRequestOptions,
+  ) {
+    let params = new HttpParams()
+      .set('page', page)
+      .set('rows', rows);
+    params = this.withOptionalParam(params, 'exception_status', exceptionStatus);
+    params = this.withOptionalParam(params, 'request_id', requestId);
+    params = this.withOptionalParam(params, 'date_from', dateFrom);
+    params = this.withOptionalParam(params, 'date_to', dateTo);
+    return this.api.get<ShiftExceptionListResponse>('shift-exceptions', { ...options, params });
+  }
+
+  getShiftSlot(slotId: string, options?: ApiRequestOptions) {
+    return this.api.get<ShiftSlotDetailResponse>(`shift-slots/${slotId}`, options);
+  }
+
+  reopenShiftSlot(slotId: string, payload: ShiftSlotReopenPayload, options?: ApiRequestOptions) {
+    return this.api.post<ShiftSlotReopenResponse>(`shift-slots/${slotId}/reopen`, payload, options);
+  }
+
+  rosterShift(shiftId: string, payload: ProviderRosterPayload, options?: ApiRequestOptions) {
+    return this.api.post<ShiftDetailResponse>(`shifts/${shiftId}/roster`, payload, options);
+  }
+
+  reportShiftSlotUnavailable(slotId: string, payload: ShiftSlotUnavailablePayload, options?: ApiRequestOptions) {
+    return this.api.post<ShiftSlotDetailResponse>(`shift-slots/${slotId}/report-unavailable`, payload, options);
+  }
+
+  checkInShiftSlot(slotId: string, payload: ShiftSlotCheckInPayload, options?: ApiRequestOptions) {
+    return this.api.post<ShiftSlotDetailResponse>(`shift-slots/${slotId}/check-in`, payload, options);
+  }
+
+  confirmShiftSlotArrival(slotId: string, payload: ShiftSlotClientConfirmPayload, options?: ApiRequestOptions) {
+    return this.api.post<ShiftSlotDetailResponse>(`shift-slots/${slotId}/client-confirm`, payload, options);
+  }
+
+  startShiftSlot(slotId: string, payload: ShiftSlotStartPayload, options?: ApiRequestOptions) {
+    return this.api.post<ShiftSlotDetailResponse>(`shift-slots/${slotId}/start`, payload, options);
+  }
+
+  checkOutShiftSlot(slotId: string, payload: ShiftSlotCheckOutPayload, options?: ApiRequestOptions) {
+    return this.api.post<ShiftSlotDetailResponse>(`shift-slots/${slotId}/check-out`, payload, options);
+  }
+
+  listServiceProviderGuards(page = 1, rows = 100, options?: ApiRequestOptions) {
+    const params = new HttpParams()
+      .set('page', page)
+      .set('rows', rows);
+    return this.api.get<ServiceProviderGuardListResponse>('sp/guards', { ...options, params });
+  }
+
   listRequestReviewWaves(
     page = 1,
     rows = 20,
@@ -97,13 +222,13 @@ export class RequestService {
     clientTenantId = '',
     options?: ApiRequestOptions,
   ) {
-    const params = new HttpParams()
+    let params = new HttpParams()
       .set('page', page)
-      .set('rows', rows)
-      .set('wave_status', waveStatus)
-      .set('trigger', trigger)
-      .set('request_id', requestId)
-      .set('client_tenant_id', clientTenantId);
+      .set('rows', rows);
+    params = this.withOptionalParam(params, 'wave_status', waveStatus);
+    params = this.withOptionalParam(params, 'trigger', trigger);
+    params = this.withOptionalParam(params, 'request_id', requestId);
+    params = this.withOptionalParam(params, 'client_tenant_id', clientTenantId);
     return this.api.get<RequestReviewWaveListResponse>('request-review-waves', { ...options, params });
   }
 

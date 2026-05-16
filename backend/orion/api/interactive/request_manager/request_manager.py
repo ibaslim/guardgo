@@ -22,12 +22,14 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     BroadcastReviewReasonCode,
     ClientRequestCreatePayload,
     ClientRequestRecord,
+    ClientRequestSoftDeletePayload,
     ClientRequestStatusUpdatePayload,
     ClientRequestUpdatePayload,
     RequestAdditionalCoveragePayload,
     RequestAssignmentCreatePayload,
     RequestAssignmentOrigin,
     RequestAssignmentRecord,
+    RequestAssignmentScope,
     RequestAssignmentStatus,
     RequestAssignmentStatusUpdatePayload,
     RequestBroadcastWaveRecord,
@@ -42,6 +44,9 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestWaveReviewPayload,
     RequestWaveStatus,
     RequestWaveTrigger,
+    ShiftAttendanceEventType,
+    ShiftCoverageSourceType,
+    ShiftSlotStatus,
 )
 from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus, TenantType
 
@@ -195,6 +200,19 @@ class RequestManager:
         return slots if slots > 0 else 1
 
     @staticmethod
+    def _assignment_scope_value(record: RequestAssignmentRecord | Dict[str, Any]) -> str:
+        raw_value = record.get("assignment_scope") if isinstance(record, dict) else getattr(record, "assignment_scope", None)
+        return str(getattr(raw_value, "value", raw_value or RequestAssignmentScope.REQUEST.value))
+
+    @staticmethod
+    def _wave_shift_replacement_context(record: RequestBroadcastWaveRecord | Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        request_snapshot = record.get("request_snapshot") if isinstance(record, dict) else getattr(record, "request_snapshot", {})
+        if not isinstance(request_snapshot, dict):
+            return None
+        context = request_snapshot.get("shift_replacement")
+        return dict(context) if isinstance(context, dict) else None
+
+    @staticmethod
     def _dashboard_requests_url(
         *,
         tab: Optional[str] = None,
@@ -232,6 +250,16 @@ class RequestManager:
             "open_slots": int(record.get("open_slots") or 0) if isinstance(record, dict) else record.open_slots,
         }
 
+    @staticmethod
+    def _is_soft_deleted(record: ClientRequestRecord | Dict[str, Any]) -> bool:
+        value = record.get("deleted_at") if isinstance(record, dict) else getattr(record, "deleted_at", None)
+        return value is not None
+
+    @classmethod
+    def _assert_not_soft_deleted(cls, record: ClientRequestRecord | Dict[str, Any]) -> None:
+        if cls._is_soft_deleted(record):
+            raise HTTPException(status_code=404, detail="Request not found")
+
     @classmethod
     def _serialize(cls, record: ClientRequestRecord | Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(record, dict):
@@ -268,6 +296,10 @@ class RequestManager:
                 "matched_candidates": record.get("matched_candidates") or [],
                 "cancelled_at": record.get("cancelled_at"),
                 "closed_at": record.get("closed_at"),
+                "deleted_at": record.get("deleted_at"),
+                "deleted_by_user_id": record.get("deleted_by_user_id"),
+                "deleted_by_username": record.get("deleted_by_username"),
+                "deleted_reason": record.get("deleted_reason"),
                 "created_at": record.get("created_at"),
                 "updated_at": record.get("updated_at"),
             }
@@ -303,6 +335,10 @@ class RequestManager:
             "matched_candidates": record.matched_candidates or [],
             "cancelled_at": record.cancelled_at,
             "closed_at": record.closed_at,
+            "deleted_at": record.deleted_at,
+            "deleted_by_user_id": record.deleted_by_user_id,
+            "deleted_by_username": record.deleted_by_username,
+            "deleted_reason": record.deleted_reason,
             "created_at": record.created_at,
             "updated_at": record.updated_at,
         }
@@ -318,7 +354,10 @@ class RequestManager:
                 "assignee_tenant_type": cls._enum_value(record.get("assignee_tenant_type")),
                 "assignment_status": cls._enum_value(record.get("assignment_status")),
                 "assignment_origin": cls._enum_value(record.get("assignment_origin")),
+                "assignment_scope": cls._assignment_scope_value(record),
                 "broadcast_wave_id": record.get("broadcast_wave_id"),
+                "shift_instance_id": record.get("shift_instance_id"),
+                "shift_slot_id": record.get("shift_slot_id"),
                 "request_revision_at_offer": int(record.get("request_revision_at_offer") or 0),
                 "slots_committed": record.get("slots_committed"),
                 "response_due_at": record.get("response_due_at"),
@@ -352,7 +391,10 @@ class RequestManager:
             "assignee_tenant_type": cls._enum_value(record.assignee_tenant_type),
             "assignment_status": cls._enum_value(record.assignment_status),
             "assignment_origin": cls._enum_value(record.assignment_origin),
+            "assignment_scope": cls._assignment_scope_value(record),
             "broadcast_wave_id": record.broadcast_wave_id,
+            "shift_instance_id": record.shift_instance_id,
+            "shift_slot_id": record.shift_slot_id,
             "request_revision_at_offer": record.request_revision_at_offer,
             "slots_committed": record.slots_committed,
             "response_due_at": record.response_due_at,
@@ -519,13 +561,13 @@ class RequestManager:
         request_collection = self._engine.get_collection(ClientRequestRecord)
 
         if self._is_platform_role(role_value):
-            return await request_collection.find({}).to_list(length=None)
+            return await request_collection.find({"deleted_at": None}).to_list(length=None)
 
         session_tenant = await self._get_session_tenant(current_user)
         tenant_id = str(session_tenant.id)
 
         if role_value == "client_admin" and session_tenant.tenant_type == TenantType.CLIENT:
-            return await request_collection.find({"client_tenant_id": tenant_id}).to_list(length=None)
+            return await request_collection.find({"client_tenant_id": tenant_id, "deleted_at": None}).to_list(length=None)
 
         if role_value in {"guard_admin", "sp_admin"} and session_tenant.tenant_type in {TenantType.GUARD, TenantType.SERVICE_PROVIDER}:
             assignment_collection = self._engine.get_collection(RequestAssignmentRecord)
@@ -542,7 +584,7 @@ class RequestManager:
                     continue
             if not object_ids:
                 return []
-            return await request_collection.find({"_id": {"$in": object_ids}}).to_list(length=None)
+            return await request_collection.find({"_id": {"$in": object_ids}, "deleted_at": None}).to_list(length=None)
 
         raise HTTPException(status_code=403, detail="Access forbidden")
 
@@ -862,12 +904,22 @@ class RequestManager:
     async def _get_waves_for_request(self, request_id: str) -> List[RequestBroadcastWaveRecord]:
         return await self._engine.find(RequestBroadcastWaveRecord, RequestBroadcastWaveRecord.request_id == str(request_id))
 
-    async def _has_active_assignment_for_candidate(self, request_id: str, assignee_tenant_id: str) -> bool:
+    async def _has_active_assignment_for_candidate(
+        self,
+        request_id: str,
+        assignee_tenant_id: str,
+        *,
+        shift_slot_id: Optional[str] = None,
+    ) -> bool:
         assignments = await self._get_assignments_for_request(request_id)
         for assignment in assignments:
             if assignment.assignee_tenant_id != str(assignee_tenant_id):
                 continue
-            if assignment.assignment_status in ACTIONABLE_ASSIGNMENT_STATUSES:
+            if assignment.assignment_status not in ACTIONABLE_ASSIGNMENT_STATUSES:
+                continue
+            if self._assignment_scope_value(assignment) == RequestAssignmentScope.REQUEST.value:
+                return True
+            if shift_slot_id and str(getattr(assignment, "shift_slot_id", "") or "") == str(shift_slot_id):
                 return True
         return False
 
@@ -1079,6 +1131,8 @@ class RequestManager:
         assignments = await self._get_assignments_for_request(str(record.id))
         accepted_slots = 0
         for assignment in assignments:
+            if self._assignment_scope_value(assignment) != RequestAssignmentScope.REQUEST.value:
+                continue
             if assignment.assignment_status in COMMITTED_SLOT_STATUSES:
                 accepted_slots += self._assignment_slots(assignment)
 
@@ -1137,6 +1191,9 @@ class RequestManager:
     async def _activate_wave(self, wave: RequestBroadcastWaveRecord, record: ClientRequestRecord, current_user) -> int:
         now = datetime.utcnow()
         created_count = 0
+        shift_replacement = self._wave_shift_replacement_context(wave)
+        replacement_slot_id = str((shift_replacement or {}).get("replacement_slot_id") or "").strip()
+        replacement_shift_id = str((shift_replacement or {}).get("shift_instance_id") or "").strip()
         for candidate in wave.candidate_snapshots or []:
             if not bool(candidate.get("eligible")):
                 continue
@@ -1147,7 +1204,11 @@ class RequestManager:
             if not assignee_tenant_id:
                 continue
 
-            if await self._has_active_assignment_for_candidate(str(record.id), assignee_tenant_id):
+            if await self._has_active_assignment_for_candidate(
+                str(record.id),
+                assignee_tenant_id,
+                shift_slot_id=replacement_slot_id or None,
+            ):
                 continue
 
             assignee_target_type = RequestTargetType(
@@ -1161,7 +1222,10 @@ class RequestManager:
                 assignee_tenant_type=assignee_target_type,
                 assignment_status=RequestAssignmentStatus.OFFERED,
                 assignment_origin=RequestAssignmentOrigin.BROADCAST,
+                assignment_scope=RequestAssignmentScope.SHIFT_REPLACEMENT if shift_replacement else RequestAssignmentScope.REQUEST,
                 broadcast_wave_id=str(wave.id),
+                shift_instance_id=replacement_shift_id or None,
+                shift_slot_id=replacement_slot_id or None,
                 request_revision_at_offer=record.request_revision,
                 response_due_at=wave.wave_expires_at,
                 candidate_snapshot=candidate,
@@ -1176,8 +1240,12 @@ class RequestManager:
 
         await NotificationManager.get_instance().create_for_tenant_admin_users(
             tenant_id=assignee_tenant_id,
-            title="New request offer",
-            message=f"{record.title} is available for review.",
+            title="Shift replacement offer" if shift_replacement else "New request offer",
+            message=(
+                f"{record.title}: a shift replacement offer is available for review."
+                if shift_replacement
+                else f"{record.title} is available for review."
+            ),
             category="info",
             source_module="requests",
             action_url=self._dashboard_requests_url(tab="jobs", assignment_id=str(saved.id)),
@@ -1189,6 +1257,8 @@ class RequestManager:
                     "request_revision": record.request_revision,
                     "wave_number": wave.wave_number,
                     "assignment_origin": RequestAssignmentOrigin.BROADCAST.value,
+                    "assignment_scope": RequestAssignmentScope.SHIFT_REPLACEMENT.value if shift_replacement else RequestAssignmentScope.REQUEST.value,
+                    "shift_slot_id": replacement_slot_id or None,
                 },
             )
 
@@ -1196,6 +1266,52 @@ class RequestManager:
         wave.updated_at = now
         await self._engine.save(wave)
         return created_count
+
+    async def create_shift_replacement_wave(
+        self,
+        record: ClientRequestRecord,
+        *,
+        shift_instance_id: str,
+        original_slot_id: str,
+        replacement_slot_id: str,
+        current_user,
+        max_match_results: int,
+    ) -> Optional[RequestBroadcastWaveRecord]:
+        evaluation = await self._evaluate_broadcast_snapshot(record)
+        now = datetime.utcnow()
+        wave_status = RequestWaveStatus.PENDING_REVIEW if evaluation["requires_review"] else RequestWaveStatus.ACTIVE
+        request_snapshot = self._request_snapshot(record)
+        request_snapshot["shift_replacement"] = {
+            "shift_instance_id": str(shift_instance_id),
+            "original_slot_id": str(original_slot_id),
+            "replacement_slot_id": str(replacement_slot_id),
+        }
+        wave = RequestBroadcastWaveRecord(
+            id=ObjectId(),
+            request_id=str(record.id),
+            client_tenant_id=record.client_tenant_id,
+            request_revision=record.request_revision,
+            wave_number=int(record.last_wave_number or 0) + 1,
+            trigger=RequestWaveTrigger.CAPACITY_REOPENED,
+            wave_status=wave_status,
+            request_snapshot=request_snapshot,
+            match_summary_snapshot=record.match_summary or {},
+            candidate_snapshots=evaluation["candidate_snapshots"],
+            review_reason_codes=evaluation["review_reason_codes"],
+            review_findings=evaluation["review_findings"],
+            review_requested_at=now if evaluation["requires_review"] else None,
+            wave_expires_at=self._compute_wave_expires_at(record, now=now),
+            open_slots_at_send=1,
+            created_at=now,
+            updated_at=now,
+        )
+        saved_wave = await self._engine.save(wave)
+        record.last_wave_number = saved_wave.wave_number
+        record.updated_at = now
+        await self._engine.save(record)
+        if saved_wave.wave_status == RequestWaveStatus.ACTIVE:
+            await self._activate_wave(saved_wave, record, current_user)
+        return saved_wave
 
     async def _create_wave_from_current_snapshot(
         self,
@@ -1406,6 +1522,7 @@ class RequestManager:
 
     async def update_request(self, request_id: str, payload: ClientRequestUpdatePayload, current_user) -> Dict[str, Any]:
         record = await self._get_request_or_404(request_id)
+        self._assert_not_soft_deleted(record)
         if not await self._can_view_request(record, current_user):
             raise HTTPException(status_code=403, detail="Access forbidden")
         await self._assert_request_write_access(record, current_user)
@@ -1472,6 +1589,9 @@ class RequestManager:
         await self._refresh_request_matching(record, max_results)
         record.updated_at = datetime.utcnow()
         await self._engine.save(record)
+        from orion.api.interactive.request_shift_manager.request_shift_manager import RequestShiftManager
+
+        await RequestShiftManager.get_instance().sync_shift_slots_for_request(record)
 
         await self._write_activity(
             action="request_updated",
@@ -1537,6 +1657,7 @@ class RequestManager:
 
     async def get_request_by_id(self, request_id: str, current_user) -> Dict[str, Any]:
         record = await self._get_request_or_404(request_id)
+        self._assert_not_soft_deleted(record)
         if not await self._can_view_request(record, current_user):
             raise HTTPException(status_code=403, detail="Access forbidden")
         await self._sync_request_runtime_state(record)
@@ -1573,6 +1694,7 @@ class RequestManager:
 
     async def publish_request(self, request_id: str, payload: RequestPublishPayload, current_user) -> Dict[str, Any]:
         record = await self._get_request_or_404(request_id)
+        self._assert_not_soft_deleted(record)
         if not await self._can_view_request(record, current_user):
             raise HTTPException(status_code=403, detail="Access forbidden")
         await self._assert_request_write_access(record, current_user)
@@ -1588,6 +1710,7 @@ class RequestManager:
 
     async def publish_request_update(self, request_id: str, payload: RequestPublishUpdatePayload, current_user) -> Dict[str, Any]:
         record = await self._get_request_or_404(request_id)
+        self._assert_not_soft_deleted(record)
         if not await self._can_view_request(record, current_user):
             raise HTTPException(status_code=403, detail="Access forbidden")
         await self._assert_request_write_access(record, current_user)
@@ -1647,6 +1770,7 @@ class RequestManager:
 
     async def request_additional_coverage(self, request_id: str, payload: RequestAdditionalCoveragePayload, current_user) -> Dict[str, Any]:
         record = await self._get_request_or_404(request_id)
+        self._assert_not_soft_deleted(record)
         if not await self._can_view_request(record, current_user):
             raise HTTPException(status_code=403, detail="Access forbidden")
         await self._assert_request_write_access(record, current_user)
@@ -1665,6 +1789,9 @@ class RequestManager:
         record.request_revision = max(int(record.request_revision or 0) + 1, 1)
         await self._refresh_request_matching(record, payload.max_match_results)
         await self._sync_request_runtime_state(record)
+        from orion.api.interactive.request_shift_manager.request_shift_manager import RequestShiftManager
+
+        await RequestShiftManager.get_instance().sync_shift_slots_for_request(record)
 
         wave = await self._create_wave_from_current_snapshot(
             record,
@@ -1776,13 +1903,15 @@ class RequestManager:
             raise HTTPException(status_code=400, detail="Only pending-review waves can be approved")
 
         record = await self._get_request_or_404(wave.request_id)
+        shift_replacement = self._wave_shift_replacement_context(wave)
         await self._sync_request_runtime_state(record)
         if record.staffing_status == RequestStaffingStatus.EXPIRED:
             raise HTTPException(status_code=400, detail="Expired requests cannot be approved for broadcast")
 
         await self._set_wave_status(wave, RequestWaveStatus.ACTIVE, current_user=current_user, note=payload.note)
-        record.active_wave_id = str(wave.id)
-        if record.lock_reason == RequestLockReason.REVIEW_PENDING:
+        if not shift_replacement:
+            record.active_wave_id = str(wave.id)
+        if not shift_replacement and record.lock_reason == RequestLockReason.REVIEW_PENDING:
             record.lock_reason = None
         await self._engine.save(record)
 
@@ -1791,8 +1920,12 @@ class RequestManager:
 
         await NotificationManager.get_instance().create_for_tenant_admin_users(
             tenant_id=record.client_tenant_id,
-            title="Broadcast approved",
-            message=f"{record.title}: platform review approved the broadcast wave.",
+            title="Replacement wave approved" if shift_replacement else "Broadcast approved",
+            message=(
+                f"{record.title}: platform review approved the shift replacement wave."
+                if shift_replacement
+                else f"{record.title}: platform review approved the broadcast wave."
+            ),
             category="success",
             source_module="requests",
             action_url=self._dashboard_requests_url(tab="requests", request_id=str(record.id)),
@@ -1811,17 +1944,23 @@ class RequestManager:
             raise HTTPException(status_code=400, detail="Only pending-review waves can be returned")
 
         record = await self._get_request_or_404(wave.request_id)
+        shift_replacement = self._wave_shift_replacement_context(wave)
         await self._set_wave_status(wave, RequestWaveStatus.RETURNED, current_user=current_user, note=payload.note)
-        record.staffing_status = RequestStaffingStatus.REVIEW_RETURNED
-        record.lock_reason = None
-        record.active_wave_id = None
+        if not shift_replacement:
+            record.staffing_status = RequestStaffingStatus.REVIEW_RETURNED
+            record.lock_reason = None
+            record.active_wave_id = None
         record.updated_at = datetime.utcnow()
         await self._engine.save(record)
 
         await NotificationManager.get_instance().create_for_tenant_admin_users(
             tenant_id=record.client_tenant_id,
-            title="Broadcast returned",
-            message=f"{record.title}: platform review returned the request for correction.",
+            title="Replacement wave returned" if shift_replacement else "Broadcast returned",
+            message=(
+                f"{record.title}: platform review returned the shift replacement wave."
+                if shift_replacement
+                else f"{record.title}: platform review returned the request for correction."
+            ),
             category="warning",
             source_module="requests",
             action_url=self._dashboard_requests_url(tab="requests", request_id=str(record.id)),
@@ -1836,6 +1975,7 @@ class RequestManager:
 
     async def update_request_status(self, request_id: str, payload: ClientRequestStatusUpdatePayload, current_user) -> Dict[str, Any]:
         record = await self._get_request_or_404(request_id)
+        self._assert_not_soft_deleted(record)
         if not await self._can_view_request(record, current_user):
             raise HTTPException(status_code=403, detail="Access forbidden")
         await self._assert_request_write_access(record, current_user)
@@ -1895,10 +2035,63 @@ class RequestManager:
             "item": self._serialize(record),
         }
 
+    async def soft_delete_request(self, request_id: str, payload: ClientRequestSoftDeletePayload, current_user) -> Dict[str, Any]:
+        record = await self._get_request_or_404(request_id)
+        role_value = self._role_value(current_user)
+        if not self._is_platform_write_role(role_value):
+            raise HTTPException(status_code=403, detail="Only platform admins can remove client requests from the dashboard")
+        if self._is_soft_deleted(record):
+            raise HTTPException(status_code=409, detail="Request has already been removed from the dashboard")
+        await self._sync_request_runtime_state(record)
+
+        if record.request_status not in {RequestStatus.DRAFT, RequestStatus.CANCELLED, RequestStatus.CLOSED}:
+            raise HTTPException(status_code=400, detail="Only draft, cancelled, or closed requests can be removed from the dashboard")
+
+        now = datetime.utcnow()
+        reason = str(payload.reason or "").strip()
+        if not reason:
+            raise HTTPException(status_code=400, detail="Reason is required")
+
+        record.deleted_at = now
+        record.deleted_by_user_id = str(getattr(current_user, "id", "") or "")
+        record.deleted_by_username = str(getattr(current_user, "username", "") or "")
+        record.deleted_reason = reason
+        record.updated_at = now
+        await self._engine.save(record)
+
+        await NotificationManager.get_instance().create_for_tenant_admin_users(
+            tenant_id=record.client_tenant_id,
+            title="Client request removed",
+            message=f"{record.title} was removed from the dashboard by a platform admin.",
+            category="warning",
+            source_module="requests",
+            action_url=self._dashboard_requests_url(tab="requests"),
+            action_label="Open requests",
+            metadata={"request_id": str(record.id), "deleted_at": now.isoformat()},
+        )
+
+        await self._write_activity(
+            action="request_soft_deleted",
+            entity_type="request",
+            entity_id=str(record.id),
+            current_user=current_user,
+            previous_status=record.request_status.value,
+            new_status="soft_deleted",
+            reason=reason,
+            metadata={"client_tenant_id": record.client_tenant_id},
+            severity="warning",
+        )
+
+        return {
+            "message": "Client request removed from the dashboard",
+            "item": self._serialize(record),
+        }
+
     async def create_assignment(self, request_id: str, payload: RequestAssignmentCreatePayload, current_user) -> Dict[str, Any]:
         record = await self._get_request_or_404(request_id)
-        session_tenant = await self._get_session_tenant(current_user)
+        self._assert_not_soft_deleted(record)
         role_value = self._role_value(current_user)
+        session_tenant = None if self._is_platform_write_role(role_value) else await self._get_session_tenant(current_user)
 
         if not self._is_platform_write_role(role_value):
             if role_value != "client_admin" or session_tenant.tenant_type != TenantType.CLIENT:
@@ -1994,16 +2187,19 @@ class RequestManager:
 
     async def list_jobs(self, current_user, page: int = 1, rows: int = 20, assignment_status: str = "", keyword: str = "") -> Dict[str, Any]:
         role_value = self._role_value(current_user)
-        session_tenant = await self._get_session_tenant(current_user)
         assignment_collection = self._engine.get_collection(RequestAssignmentRecord)
 
         if self._is_platform_role(role_value):
             query: Dict[str, Any] = {}
-        elif role_value == "client_admin" and session_tenant.tenant_type == TenantType.CLIENT:
-            query = {"client_tenant_id": str(session_tenant.id)}
-        elif role_value in {"guard_admin", "sp_admin"} and session_tenant.tenant_type in {TenantType.GUARD, TenantType.SERVICE_PROVIDER}:
-            query = {"assignee_tenant_id": str(session_tenant.id)}
+            session_tenant = None
         else:
+            session_tenant = await self._get_session_tenant(current_user)
+
+        if role_value == "client_admin" and session_tenant and session_tenant.tenant_type == TenantType.CLIENT:
+            query = {"client_tenant_id": str(session_tenant.id)}
+        elif role_value in {"guard_admin", "sp_admin"} and session_tenant and session_tenant.tenant_type in {TenantType.GUARD, TenantType.SERVICE_PROVIDER}:
+            query = {"assignee_tenant_id": str(session_tenant.id)}
+        elif not self._is_platform_role(role_value):
             raise HTTPException(status_code=403, detail="Access forbidden")
 
         normalized_status = self._normalize_text(assignment_status)
@@ -2069,10 +2265,11 @@ class RequestManager:
     async def update_job_status(self, assignment_id: str, payload: RequestAssignmentStatusUpdatePayload, current_user) -> Dict[str, Any]:
         assignment = await self._get_assignment_or_404(assignment_id)
         role_value = self._role_value(current_user)
-        session_tenant = await self._get_session_tenant(current_user)
+        assignment_scope = self._assignment_scope_value(assignment)
 
         is_platform = self._is_platform_write_role(role_value)
-        is_assignee = assignment.assignee_tenant_id == str(session_tenant.id)
+        session_tenant = None if is_platform else await self._get_session_tenant(current_user)
+        is_assignee = False if session_tenant is None else assignment.assignee_tenant_id == str(session_tenant.id)
         if not is_platform and not is_assignee:
             raise HTTPException(status_code=403, detail="Access forbidden")
         if not is_platform and role_value not in {"guard_admin", "sp_admin"}:
@@ -2098,7 +2295,12 @@ class RequestManager:
             raise HTTPException(status_code=409, detail="This offer is no longer actionable")
 
         reserved_slots = self._assignment_slots(assignment) if current_status in COMMITTED_SLOT_STATUSES else 0
-        if next_status == RequestAssignmentStatus.ACCEPTED:
+        if assignment_scope == RequestAssignmentScope.SHIFT_REPLACEMENT.value and next_status in {
+            RequestAssignmentStatus.IN_PROGRESS,
+            RequestAssignmentStatus.COMPLETED,
+        }:
+            raise HTTPException(status_code=409, detail="Shift replacement jobs must use shift attendance actions instead of job status actions")
+        if next_status == RequestAssignmentStatus.ACCEPTED and assignment_scope == RequestAssignmentScope.REQUEST.value:
             desired_slots = payload.slots_committed
             if assignment.assignee_tenant_type == RequestTargetType.GUARD:
                 desired_slots = 1
@@ -2111,6 +2313,8 @@ class RequestManager:
             if int(desired_slots or 0) > available_slots:
                 raise HTTPException(status_code=409, detail="All request slots have already been filled")
             assignment.slots_committed = int(desired_slots or 1)
+        elif next_status == RequestAssignmentStatus.ACCEPTED and assignment_scope == RequestAssignmentScope.SHIFT_REPLACEMENT.value:
+            assignment.slots_committed = 1
 
         previous_open_slots = int(record.open_slots or 0)
         now = datetime.utcnow()
@@ -2136,8 +2340,9 @@ class RequestManager:
             record.request_status = RequestStatus.IN_PROGRESS
             await self._engine.save(record)
 
-        await self._sync_request_runtime_state(record)
-        if previous_open_slots == 0 and record.open_slots > 0 and record.request_status in {RequestStatus.SUBMITTED, RequestStatus.ASSIGNED} and record.staffing_status != RequestStaffingStatus.EXPIRED:
+        if assignment_scope == RequestAssignmentScope.REQUEST.value:
+            await self._sync_request_runtime_state(record)
+        if assignment_scope == RequestAssignmentScope.REQUEST.value and previous_open_slots == 0 and record.open_slots > 0 and record.request_status in {RequestStatus.SUBMITTED, RequestStatus.ASSIGNED} and record.staffing_status != RequestStaffingStatus.EXPIRED:
             await self._create_wave_from_current_snapshot(
                 record,
                 trigger=RequestWaveTrigger.CAPACITY_REOPENED,
@@ -2145,6 +2350,62 @@ class RequestManager:
                 refresh_matches=False,
                 max_match_results=max(int(record.match_summary.get("returned_count") or 25), 25),
             )
+
+        if assignment_scope == RequestAssignmentScope.SHIFT_REPLACEMENT.value and next_status == RequestAssignmentStatus.ACCEPTED:
+            from orion.api.interactive.request_shift_manager.request_shift_manager import RequestShiftManager
+
+            shift_manager = RequestShiftManager.get_instance()
+            if not assignment.shift_slot_id:
+                raise HTTPException(status_code=400, detail="Shift replacement assignment is missing shift slot context")
+            slot_record = await shift_manager._get_shift_slot_or_404(assignment.shift_slot_id)
+            if slot_record.slot_status != ShiftSlotStatus.OPEN:
+                raise HTTPException(status_code=409, detail="This replacement shift slot is no longer open")
+            slot_record.parent_assignment_id = str(assignment.id)
+            slot_record.coverage_source_type = (
+                ShiftCoverageSourceType.SERVICE_PROVIDER
+                if assignment.assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER
+                else ShiftCoverageSourceType.DIRECT_GUARD
+            )
+            slot_record.coverage_tenant_id = assignment.assignee_tenant_id
+            slot_record.service_provider_tenant_id = (
+                assignment.assignee_tenant_id if assignment.assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER else None
+            )
+            slot_record.assigned_guard_tenant_id = (
+                assignment.assignee_tenant_id if assignment.assignee_tenant_type == RequestTargetType.GUARD else None
+            )
+            slot_record.slot_status = ShiftSlotStatus.RESERVED
+            slot_record.rostered_at = now if assignment.assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER else None
+            slot_record.guard_unavailable_reported_at = None
+            slot_record.arrived_at = None
+            slot_record.client_confirmed_at = None
+            slot_record.started_at = None
+            slot_record.checked_out_at = None
+            slot_record.completed_at = None
+            slot_record.no_show_confirmed_at = None
+            slot_record.geo_check_passed = None
+            slot_record.actual_start_at = None
+            slot_record.actual_end_at = None
+            slot_record.updated_at = now
+            await shift_manager._engine.save(slot_record)
+            shift_record = await shift_manager._get_shift_or_404(slot_record.shift_instance_id)
+            await shift_manager._record_slot_event(
+                slot_record,
+                shift_record,
+                record,
+                current_user,
+                ShiftAttendanceEventType.REPLACEMENT_ASSIGNED,
+                note=payload.reason,
+                metadata={"assignment_id": str(assignment.id), "assignee_tenant_id": assignment.assignee_tenant_id},
+            )
+            await shift_manager._refresh_shift_progress(shift_record)
+
+        if (
+            assignment_scope == RequestAssignmentScope.REQUEST.value
+            and (next_status in COMMITTED_SLOT_STATUSES or current_status in COMMITTED_SLOT_STATUSES)
+        ):
+            from orion.api.interactive.request_shift_manager.request_shift_manager import RequestShiftManager
+
+            await RequestShiftManager.get_instance().sync_shift_slots_for_request(record)
 
         request_title = record.title
         request_snapshot = self._request_snapshot(record)
