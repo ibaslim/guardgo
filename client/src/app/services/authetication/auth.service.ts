@@ -69,6 +69,7 @@ export class AuthService {
           }
 
           this.setToken(response.access_token);
+          this.appService.loadConfig();
           this.startTokenRefresh();
           this.appService.loadSession(true).then(() => {
             this.router.navigate(['/dashboard'], { replaceUrl: true }).then();
@@ -117,6 +118,7 @@ export class AuthService {
           }
 
           this.setToken(response.access_token);
+          this.appService.loadConfig();
           this.startTokenRefresh();
         },
         error: () => {

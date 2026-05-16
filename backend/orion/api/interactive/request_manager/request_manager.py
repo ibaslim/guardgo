@@ -1238,18 +1238,18 @@ class RequestManager:
             saved = await self._engine.save(assignment)
             created_count += 1
 
-        await NotificationManager.get_instance().create_for_tenant_admin_users(
-            tenant_id=assignee_tenant_id,
-            title="Shift replacement offer" if shift_replacement else "New request offer",
-            message=(
-                f"{record.title}: a shift replacement offer is available for review."
-                if shift_replacement
-                else f"{record.title} is available for review."
-            ),
-            category="info",
-            source_module="requests",
-            action_url=self._dashboard_requests_url(tab="jobs", assignment_id=str(saved.id)),
-            action_label="Review offer",
+            await NotificationManager.get_instance().create_for_tenant_admin_users(
+                tenant_id=assignee_tenant_id,
+                title="Shift replacement offer" if shift_replacement else "New request offer",
+                message=(
+                    f"{record.title}: a shift replacement offer is available for review."
+                    if shift_replacement
+                    else f"{record.title} is available for review."
+                ),
+                category="info",
+                source_module="requests",
+                action_url=self._dashboard_requests_url(tab="jobs", assignment_id=str(saved.id)),
+                action_label="Review offer",
                 metadata={
                     "request_id": str(record.id),
                     "assignment_id": str(saved.id),

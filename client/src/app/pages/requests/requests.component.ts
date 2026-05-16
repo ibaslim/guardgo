@@ -13,6 +13,7 @@ import { FilterActionBarComponent } from '../../components/filter-action-bar/fil
 import { BaseInputComponent } from '../../components/form/base-input/base-input.component';
 import { SelectInputComponent } from '../../components/form/select-input/select-input.component';
 import { TextareaComponent } from '../../components/form/textarea/textarea.component';
+import { GeoLocationPickerComponent } from '../../components/geo-location-picker/geo-location-picker.component';
 import { ListStatePanelComponent } from '../../components/list-state-panel/list-state-panel.component';
 import { ListToolbarComponent } from '../../components/list-toolbar/list-toolbar.component';
 import { PageComponent } from '../../components/page/page.component';
@@ -49,6 +50,7 @@ import {
 import { formatBackendDateTime } from '../../shared/helpers/format.helper';
 import { AppService } from '../../services/core/app/app.service';
 import { normalizeRole } from '../../shared/helpers/access-control.helper';
+import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import { LoadingFeedbackService } from '../../shared/services/loading-feedback.service';
 
 @Component({
@@ -70,6 +72,7 @@ import { LoadingFeedbackService } from '../../shared/services/loading-feedback.s
     BaseInputComponent,
     SelectInputComponent,
     TextareaComponent,
+    GeoLocationPickerComponent,
     SideDrawerComponent,
     ListStatePanelComponent,
     ListToolbarComponent,
@@ -307,7 +310,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
   reasonForm = {
     note: '',
   };
-
   reopenExceptionForm = {
     note: '',
     maxMatchResults: 25,
@@ -424,6 +426,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
     ...this.fulfillmentModeOptions,
   ];
 
+  countryOptions: { value: string; label: string }[] = [];
+  provinceOptions: { value: string; label: string }[] = [];
+  canadianCitiesByProvinceOptions: Record<string, { value: string; label: string }[]> = {};
+
   guardTypeOptions: { label: string; value: string }[] = [];
 
   constructor(
@@ -431,6 +437,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     private requestService: RequestService,
     private notification: MessageNotificationService,
     private appService: AppService,
+    private addressConsistencyService: GoogleMapsAddressConsistencyService,
     private route: ActivatedRoute,
     private router: Router,
   ) {}
@@ -689,6 +696,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.api.get<any>('public/client-metadata', { loadingScope: this.metadataScope }).subscribe({
       next: (response) => {
         this.guardTypeOptions = Array.isArray(response?.guardTypeOptions) ? response.guardTypeOptions : [];
+        this.countryOptions = Array.isArray(response?.countries) ? response.countries : [];
+        this.provinceOptions = Array.isArray(response?.canadianProvinces) ? response.canadianProvinces : [];
+        this.canadianCitiesByProvinceOptions = response?.canadianCitiesByProvince || {};
       }
     });
   }
@@ -1157,8 +1167,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
   validateRequestForm(requirePublishFields = false): boolean {
     this.requestErrors = {};
 
-    this.applyGoogleMapsCoordinates();
-
     if (!this.requestForm.title.trim()) {
       this.requestErrors['title'] = 'Request title is required.';
     }
@@ -1167,9 +1175,29 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
     if (!this.requestForm.siteCity.trim()) {
       this.requestErrors['siteCity'] = 'City is required.';
+    } else {
+      const cityOptions = this.getRequestSiteCityOptions();
+      if (cityOptions.length && !cityOptions.some((city) => city.value === this.requestForm.siteCity)) {
+        this.requestErrors['siteCity'] = 'Please select a valid city for the selected province.';
+      }
     }
     if (!this.requestForm.siteProvince.trim()) {
       this.requestErrors['siteProvince'] = 'Province/state is required.';
+    } else {
+      const validProvinces = this.provinceOptions.map((province) => province.value);
+      if (validProvinces.length && !validProvinces.includes(this.requestForm.siteProvince)) {
+        this.requestErrors['siteProvince'] = 'Please select a valid province from the list.';
+      }
+    }
+    if (!this.requestForm.siteCountry.trim()) {
+      this.requestErrors['siteCountry'] = 'Country is required.';
+    } else {
+      const validCountries = this.countryOptions.map((country) => country.value);
+      if (validCountries.length && !validCountries.includes(this.requestForm.siteCountry)) {
+        this.requestErrors['siteCountry'] = 'Please select a valid country from the list.';
+      } else if (this.requestForm.siteCountry !== 'CA') {
+        this.requestErrors['siteCountry'] = 'Only Canadian addresses are accepted.';
+      }
     }
     if (!this.requestForm.guardsRequired || this.requestForm.guardsRequired < 1) {
       this.requestErrors['guardsRequired'] = 'Guard count must be at least 1.';
@@ -1183,8 +1211,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
     const hasLatitude = this.requestForm.latitude.trim() !== '';
     const hasLongitude = this.requestForm.longitude.trim() !== '';
 
-    if (hasLatitude !== hasLongitude) {
-      this.requestErrors['coordinates'] = 'Provide both latitude and longitude or leave both empty.';
+    if (!hasLatitude && !hasLongitude) {
+      this.requestErrors['coordinates'] = 'Site coordinates are required. Select the site on Google Maps.';
+    } else if (hasLatitude !== hasLongitude) {
+      this.requestErrors['coordinates'] = 'Provide both latitude and longitude.';
     }
     if (hasLatitude && latitude === null) {
       this.requestErrors['latitude'] = 'Latitude must be a valid number.';
@@ -1226,12 +1256,18 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return Object.keys(this.requestErrors).length === 0;
   }
 
-  submitRequest(commit: boolean): void {
+  async submitRequest(commit: boolean): Promise<void> {
     if (!(this.isClientAdmin || this.isPlatformAdmin)) {
       return;
     }
     if (!this.validateRequestForm(commit)) {
       this.notification.show('Please fix the highlighted request fields.', 'fail', 4000);
+      return;
+    }
+
+    const addressConsistent = await this.validateRequestAddressConsistency();
+    if (!addressConsistent) {
+      this.notification.show('Please reconcile the site coordinates and manual address.', 'fail', 4500);
       return;
     }
 
@@ -1480,8 +1516,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
       fulfillmentMode: 'individual_only',
       siteName: picked.siteName,
       siteStreet: picked.siteStreet,
-      siteCity: picked.siteCity,
-      siteProvince: picked.siteProvince,
+      siteCity: this.resolveCityCodeForProvince(
+        this.resolveProvinceCode(picked.siteProvince),
+        picked.siteCity,
+      ) || picked.siteCity,
+      siteProvince: this.resolveProvinceCode(picked.siteProvince) || picked.siteProvince,
       sitePostalCode: picked.sitePostalCode,
       siteCountry: picked.siteCountry,
       latitude: picked.latitude,
@@ -1501,15 +1540,18 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   populateFormFromRequest(item: ClientRequestItem): void {
     const address = item.site_snapshot?.site_address || {};
+    const countryCode = String(address['country'] || 'CA').trim() || 'CA';
+    const provinceCode = this.resolveProvinceCode(String(address['province'] || ''));
+    const cityCode = this.resolveCityCodeForProvince(provinceCode, String(address['city'] || ''));
     this.requestForm = {
       title: item.title || '',
       fulfillmentMode: (item.fulfillment_mode || this.targetTypeToFulfillmentMode(item.target_type || 'guard')) as ClientRequestFulfillmentMode,
       siteName: item.site_snapshot?.site_name || '',
       siteStreet: String(address['street'] || ''),
-      siteCity: String(address['city'] || ''),
-      siteProvince: String(address['province'] || ''),
+      siteCity: cityCode || String(address['city'] || ''),
+      siteProvince: provinceCode || String(address['province'] || ''),
       sitePostalCode: String(address['postal_code'] || ''),
-      siteCountry: String(address['country'] || 'CA'),
+      siteCountry: countryCode,
       siteManagerContact: item.site_snapshot?.site_manager_contact || '',
       managerEmail: item.site_snapshot?.manager_email || '',
       googleMapsUrl: item.site_snapshot?.google_maps_url || '',
@@ -1539,9 +1581,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
         google_maps_url: this.requestForm.googleMapsUrl.trim() || null,
         site_address: {
           street: this.requestForm.siteStreet.trim() || null,
-          city: this.requestForm.siteCity.trim(),
+          city: this.getRequestSiteCityLabel(this.requestForm.siteProvince, this.requestForm.siteCity),
           country: this.requestForm.siteCountry.trim() || 'CA',
-          province: this.requestForm.siteProvince.trim(),
+          province: this.getRequestProvinceLabel(this.requestForm.siteProvince),
           postal_code: this.requestForm.sitePostalCode.trim() || null,
           latitude,
           longitude,
@@ -3735,6 +3777,82 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return String(item.site_snapshot?.site_address?.[key] || '');
   }
 
+  getRequestSiteCityOptions(): { value: string; label: string }[] {
+    const provinceCode = String(this.requestForm.siteProvince || '').trim().toUpperCase();
+    const canonical = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const current = String(this.requestForm.siteCity || '').trim();
+    if (!current) {
+      return canonical;
+    }
+
+    const exists = canonical.some((option) => option.value === current);
+    if (exists) {
+      return canonical;
+    }
+
+    return [...canonical, { value: current, label: current }];
+  }
+
+  onRequestSiteProvinceChange(nextProvinceCode: string): void {
+    this.requestForm.siteProvince = String(nextProvinceCode || '').trim().toUpperCase();
+    const options = this.getRequestSiteCityOptions();
+    const isCurrentValid = options.some((option) => option.value === this.requestForm.siteCity);
+    if (!isCurrentValid) {
+      this.requestForm.siteCity = '';
+    }
+  }
+
+  getRequestProvinceLabel(value: string): string {
+    const normalized = String(value || '').trim().toUpperCase();
+    if (!normalized) {
+      return '';
+    }
+    return this.provinceOptions.find((option) => option.value === normalized)?.label || String(value || '').trim();
+  }
+
+  getRequestSiteCityLabel(provinceCode: string, value: string): string {
+    const normalizedProvince = String(provinceCode || '').trim().toUpperCase();
+    const normalizedValue = String(value || '').trim().toUpperCase();
+    if (!normalizedValue) {
+      return '';
+    }
+
+    const options = this.canadianCitiesByProvinceOptions[normalizedProvince] || [];
+    return options.find((option) => option.value === normalizedValue)?.label || String(value || '').trim();
+  }
+
+  resolveProvinceCode(value: string): string {
+    const normalized = String(value || '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const byValue = this.provinceOptions.find((option) => option.value === normalized.toUpperCase());
+    if (byValue) {
+      return byValue.value;
+    }
+
+    const byLabel = this.provinceOptions.find((option) => option.label.toLowerCase() === normalized.toLowerCase());
+    return byLabel?.value || '';
+  }
+
+  resolveCityCodeForProvince(provinceCode: string, value: string): string {
+    const normalizedProvince = String(provinceCode || '').trim().toUpperCase();
+    const normalizedValue = String(value || '').trim();
+    if (!normalizedProvince || !normalizedValue) {
+      return '';
+    }
+
+    const options = this.canadianCitiesByProvinceOptions[normalizedProvince] || [];
+    const byValue = options.find((option) => option.value === normalizedValue.toUpperCase());
+    if (byValue) {
+      return byValue.value;
+    }
+
+    const byLabel = options.find((option) => option.label.toLowerCase() === normalizedValue.toLowerCase());
+    return byLabel?.value || '';
+  }
+
   parseCoordinate(value: string): number | null {
     const trimmed = String(value || '').trim();
     if (!trimmed) {
@@ -3745,47 +3863,23 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  applyGoogleMapsCoordinates(): void {
-    const coordinates = this.extractCoordinatesFromMapsUrl(this.requestForm.googleMapsUrl);
-    if (!coordinates) {
-      return;
+  private async validateRequestAddressConsistency(): Promise<boolean> {
+    const result = await this.addressConsistencyService.validate({
+      latitude: this.requestForm.latitude,
+      longitude: this.requestForm.longitude,
+      expectedCountryCode: this.requestForm.siteCountry,
+      expectedProvinceCode: this.requestForm.siteProvince,
+      expectedProvinceName: this.getRequestProvinceLabel(this.requestForm.siteProvince),
+      expectedCity: this.getRequestSiteCityLabel(this.requestForm.siteProvince, this.requestForm.siteCity),
+      expectedPostalCode: this.requestForm.sitePostalCode,
+    });
+
+    if (!result.ok) {
+      this.requestErrors['coordinates'] = result.message || 'Site coordinates do not match the manual address.';
+      return false;
     }
 
-    const [latitude, longitude] = coordinates;
-    if (!this.requestForm.latitude.trim()) {
-      this.requestForm.latitude = String(latitude);
-    }
-    if (!this.requestForm.longitude.trim()) {
-      this.requestForm.longitude = String(longitude);
-    }
-  }
-
-  extractCoordinatesFromMapsUrl(value: string): [number, number] | null {
-    const url = String(value || '').trim();
-    if (!url) {
-      return null;
-    }
-
-    const patterns = [
-      /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
-      /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/,
-      /[?&](?:q|ll)=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
-    ];
-
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (!match) {
-        continue;
-      }
-
-      const latitude = Number(match[1]);
-      const longitude = Number(match[2]);
-      if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-        return [latitude, longitude];
-      }
-    }
-
-    return null;
+    return true;
   }
 
   isValidEmail(value: string): boolean {

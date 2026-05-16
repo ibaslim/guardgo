@@ -321,6 +321,8 @@ class RequestMatchingManager:
 
         radius_km = self._as_float(region.get("coverage_radius_km"))
         city_entries = region.get("city_entries") if isinstance(region.get("city_entries"), list) else []
+        region_lat = self._as_float(region.get("latitude"))
+        region_lon = self._as_float(region.get("longitude"))
         if city_entries:
             matched_entry = None
             for entry in city_entries:
@@ -342,8 +344,8 @@ class RequestMatchingManager:
                     matched_entry.get("city_code"),
                     city,
                 ])
-        region_lat = self._as_float(region.get("latitude"))
-        region_lon = self._as_float(region.get("longitude"))
+                region_lat = self._as_float(matched_entry.get("latitude"))
+                region_lon = self._as_float(matched_entry.get("longitude"))
 
         if region_lat is None or region_lon is None:
             head_office = profile.get("head_office_address") if isinstance(profile.get("head_office_address"), dict) else {}

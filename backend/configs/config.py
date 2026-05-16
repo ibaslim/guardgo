@@ -23,5 +23,7 @@ ALLOWED_CORS_ORIGINS = CSRF_TRUSTED_ORIGINS if DEBUG else [f'https://{PRODUCTION
 
 # Google Maps integration toggles (used by request matching/geocoding features).
 GOOGLE_MAPS_API_KEY = env_handler.get_instance().env("GOOGLE_MAPS_API_KEY", "")
+GOOGLE_MAPS_MAP_ID = env_handler.get_instance().env("GOOGLE_MAPS_MAP_ID", "")
+GOOGLE_MAPS_COUNTRY_RESTRICTION = env_handler.get_instance().env("GOOGLE_MAPS_COUNTRY_RESTRICTION", "ca")
 GOOGLE_MAPS_GEOCODING_ENABLED = env_handler.get_instance().env("GOOGLE_MAPS_GEOCODING_ENABLED", "0") == "1"
 GOOGLE_MAPS_DISTANCE_MATRIX_ENABLED = env_handler.get_instance().env("GOOGLE_MAPS_DISTANCE_MATRIX_ENABLED", "0") == "1"

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import Response
+from configs import config as app_config
 
 from orion.api.server.config_manager.model.config_data import config_data
 from orion.services.log_manager.log_controller import log
@@ -57,6 +58,10 @@ class config_controller:
             fresh_config["ai_endpoint"] = "1"
             fresh_config["logo_url"] = (
                 f"/api/s/static/system/{logo_name}" if logo_name and logo_file.is_file() else "")
+            fresh_config["google_maps_api_key"] = app_config.GOOGLE_MAPS_API_KEY
+            fresh_config["google_maps_enabled"] = "1" if bool(app_config.GOOGLE_MAPS_API_KEY) else "0"
+            fresh_config["google_maps_map_id"] = app_config.GOOGLE_MAPS_MAP_ID
+            fresh_config["google_maps_country_restriction"] = app_config.GOOGLE_MAPS_COUNTRY_RESTRICTION
             return config_data(settings=fresh_config)
         except Exception as ex:
             log.g().e(f"Error fetching config: {ex}")

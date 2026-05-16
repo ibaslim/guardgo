@@ -20,6 +20,7 @@ export class AppService {
   public entities = signal<any[]>([]);
 
   private entitiesCache: any[] | null = null;
+  private configLoadPromise: Promise<ConfigSettings> | null = null;
 
   public userSessionData = signal<userSessionData>({
     user: {
@@ -80,6 +81,7 @@ export class AppService {
     });
 
     this.loadStaticConfig();
+    void this.loadConfig();
     this.appStorageService.setupWatcher(this.configData);
   }
 
@@ -127,13 +129,27 @@ export class AppService {
     }
   }
 
-  loadConfig(): void {
-    this.apiService.get<any>('public').subscribe(response => {
-      if (response?.settings) {
-        const current = this.configData();
-        this.configData.set(new ConfigSettings(response.settings, current.localSettings));
-      }
-    });
+  async loadConfig(force = false): Promise<ConfigSettings> {
+    if (!force && this.configLoadPromise) {
+      return this.configLoadPromise;
+    }
+
+    this.configLoadPromise = firstValueFrom(this.apiService.get<any>('public'))
+      .then((response) => {
+        if (response?.settings) {
+          const current = this.configData();
+          const updated = new ConfigSettings(response.settings, current.localSettings);
+          this.configData.set(updated);
+          return updated;
+        }
+        return this.configData();
+      })
+      .catch(() => this.configData())
+      .finally(() => {
+        this.configLoadPromise = null;
+      });
+
+    return this.configLoadPromise;
   }
 
   async loadRoleMetadata(force = false): Promise<void> {

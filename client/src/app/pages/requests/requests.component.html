@@ -476,155 +476,199 @@
     </app-drawer-title-block>
 
     <div drawer-body class="space-y-6">
-      <div class="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
-        <app-base-input
-          label="Request Title"
-          name="requestTitleDrawer"
-          [(ngModel)]="requestForm.title"
-          [required]="true"
-          [readonly]="requestFormMode === 'publish_update'"
-          [helperText]="requestFormMode === 'publish_update' ? 'Title edits are handled outside the publish-update flow.' : ''"
-        ></app-base-input>
+      <app-section
+        [title]="'Request Basics'"
+        [subtitle]="'Core staffing, request identity, and fulfillment mode for this job.'"
+      >
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div class="flex flex-col">
+            <app-base-input
+              label="Request Title"
+              name="requestTitleDrawer"
+              [(ngModel)]="requestForm.title"
+              [required]="true"
+              [readonly]="requestFormMode === 'publish_update'"
+              [helperText]="requestFormMode === 'publish_update' ? 'Title edits are handled outside the publish-update flow.' : ''"
+              [errorText]="requestErrors['title'] || ''"
+            ></app-base-input>
+          </div>
 
-        <app-select-input
-          label="Fulfillment Mode"
-          [name]="'fulfillmentModeDrawer'"
-          [(ngModel)]="requestForm.fulfillmentMode"
-          [options]="fulfillmentModeOptions"
-          [required]="true"
-        ></app-select-input>
-        <div class="md:col-span-2 -mt-2 text-xs text-gray-500 dark:text-gray-400">
-          {{ getFulfillmentModeHelperText() }}
-        </div>
+          <div class="flex flex-col">
+            <app-select-input
+              label="Fulfillment Mode"
+              [name]="'fulfillmentModeDrawer'"
+              [(ngModel)]="requestForm.fulfillmentMode"
+              [options]="fulfillmentModeOptions"
+              [required]="true"
+            ></app-select-input>
+            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ getFulfillmentModeHelperText() }}</p>
+          </div>
 
-        <div>
-          <app-base-input
-            label="Site Name"
-            name="siteNameDrawer"
-            [(ngModel)]="requestForm.siteName"
-            [required]="true"
-            [errorText]="requestErrors['siteName'] || ''"
-          ></app-base-input>
-        </div>
+          <div class="flex flex-col">
+            <app-base-input
+              label="Site Name"
+              name="siteNameDrawer"
+              [(ngModel)]="requestForm.siteName"
+              [required]="true"
+              [errorText]="requestErrors['siteName'] || ''"
+            ></app-base-input>
+          </div>
 
-        <app-select-input
-          label="Requested Guard Type"
-          [name]="'requestedGuardTypeDrawer'"
-          [(ngModel)]="requestForm.requestedGuardType"
-          [options]="guardTypeOptions"
-          placeholder="Optional"
-        ></app-select-input>
+          <div class="flex flex-col">
+            <app-select-input
+              label="Requested Guard Type"
+              [name]="'requestedGuardTypeDrawer'"
+              [(ngModel)]="requestForm.requestedGuardType"
+              [options]="guardTypeOptions"
+              placeholder="Optional"
+            ></app-select-input>
+          </div>
 
-        <div>
-          <app-base-input
-            label="Guards Required"
-            name="guardsRequiredDrawer"
-            type="number"
-            [(ngModel)]="requestForm.guardsRequired"
-            [min]="1"
-            [required]="true"
-            [readonly]="requestFormMode === 'publish_update'"
-            [helperText]="requestFormMode === 'publish_update' ? 'Use Additional Coverage to increase staffing on a live request.' : ''"
-            [errorText]="requestErrors['guardsRequired'] || ''"
-          ></app-base-input>
-        </div>
-
-        <app-base-input label="Site Manager Contact" name="siteManagerContactDrawer" [(ngModel)]="requestForm.siteManagerContact"></app-base-input>
-
-        <div>
-          <app-base-input
-            label="Manager Email"
-            name="managerEmailDrawer"
-            type="email"
-            [(ngModel)]="requestForm.managerEmail"
-            [errorText]="requestErrors['managerEmail'] || ''"
-          ></app-base-input>
-        </div>
-
-        <app-base-input label="Requested Start Date" name="requestedStartAtDrawer" type="date" [(ngModel)]="requestForm.requestedStartAt"></app-base-input>
-        <app-base-input label="Requested End Date" name="requestedEndAtDrawer" type="date" [(ngModel)]="requestForm.requestedEndAt"></app-base-input>
-        <app-validation-message [message]="requestErrors['requestedEndAt']" [className]="'md:col-span-2 -mt-2 text-xs text-red-500'"></app-validation-message>
-        <div>
-          <app-base-input
-            label="Request Expiry"
-            name="requestExpiresAtDrawer"
-            type="date"
-            [(ngModel)]="requestForm.requestExpiresAt"
-            [helperText]="'Required before publishing. Expired requests become read-only.'"
-            [errorText]="requestErrors['requestExpiresAt'] || ''"
-          ></app-base-input>
-        </div>
-
-        <div class="md:col-span-2 rounded-md border border-gray-200 bg-gray-50/60 p-5 dark:border-gray-800 dark:bg-gray-800/30">
-          <div class="flex flex-col gap-4">
-            <div class="flex flex-col gap-1">
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Site Location</h3>
-              <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">Paste a Google Maps share link to auto-fill coordinates, or provide latitude and longitude manually.</p>
-            </div>
-
-            <div class="grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
-              <app-base-input label="Google Maps Link" name="googleMapsUrlDrawer" [(ngModel)]="requestForm.googleMapsUrl" [helperText]="'Optional. Coordinates are extracted when available.'"></app-base-input>
-              <app-base-input label="Street" name="siteStreetDrawer" [(ngModel)]="requestForm.siteStreet"></app-base-input>
-
-              <div>
-                <app-base-input
-                  label="City"
-                  name="siteCityDrawer"
-                  [(ngModel)]="requestForm.siteCity"
-                  [required]="true"
-                  [errorText]="requestErrors['siteCity'] || ''"
-                ></app-base-input>
-              </div>
-
-              <div>
-                <app-base-input
-                  label="Province / State"
-                  name="siteProvinceDrawer"
-                  [(ngModel)]="requestForm.siteProvince"
-                  [required]="true"
-                  [errorText]="requestErrors['siteProvince'] || ''"
-                ></app-base-input>
-              </div>
-
-              <app-base-input label="Postal Code" name="sitePostalCodeDrawer" [(ngModel)]="requestForm.sitePostalCode"></app-base-input>
-              <app-base-input label="Country" name="siteCountryDrawer" [(ngModel)]="requestForm.siteCountry"></app-base-input>
-
-              <div>
-                <app-base-input
-                  label="Latitude"
-                  name="siteLatitudeDrawer"
-                  [(ngModel)]="requestForm.latitude"
-                  placeholder="43.6532"
-                  [errorText]="requestErrors['latitude'] || ''"
-                ></app-base-input>
-              </div>
-
-              <div>
-                <app-base-input
-                  label="Longitude"
-                  name="siteLongitudeDrawer"
-                  [(ngModel)]="requestForm.longitude"
-                  placeholder="-79.3832"
-                  [errorText]="requestErrors['longitude'] || ''"
-                ></app-base-input>
-              </div>
-            </div>
-
-            <app-validation-message [message]="requestErrors['coordinates']" [className]="'-mt-2 text-xs text-red-500'"></app-validation-message>
+          <div class="flex flex-col">
+            <app-base-input
+              label="Guards Required"
+              name="guardsRequiredDrawer"
+              type="number"
+              [(ngModel)]="requestForm.guardsRequired"
+              [min]="1"
+              [required]="true"
+              [readonly]="requestFormMode === 'publish_update'"
+              [helperText]="requestFormMode === 'publish_update' ? 'Use Additional Coverage to increase staffing on a live request.' : ''"
+              [errorText]="requestErrors['guardsRequired'] || ''"
+            ></app-base-input>
           </div>
         </div>
+      </app-section>
 
-        <div class="md:col-span-2">
-          <app-textarea
-            label="Special Instructions"
-            name="specialInstructionsDrawer"
-            [(ngModel)]="requestForm.specialInstructions"
-            placeholder="Shift details, site-specific notes, or access requirements"
-          ></app-textarea>
+      <app-section
+        [title]="'Contacts And Timing'"
+        [subtitle]="'Who will coordinate on site and when the requested coverage window should run.'"
+      >
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div class="flex flex-col">
+            <app-base-input label="Site Manager Contact" name="siteManagerContactDrawer" [(ngModel)]="requestForm.siteManagerContact"></app-base-input>
+          </div>
+
+          <div class="flex flex-col">
+            <app-base-input
+              label="Manager Email"
+              name="managerEmailDrawer"
+              type="email"
+              [(ngModel)]="requestForm.managerEmail"
+              [errorText]="requestErrors['managerEmail'] || ''"
+            ></app-base-input>
+          </div>
+
+          <div class="flex flex-col">
+            <app-base-input label="Requested Start Date" name="requestedStartAtDrawer" type="date" [(ngModel)]="requestForm.requestedStartAt"></app-base-input>
+          </div>
+
+          <div class="flex flex-col">
+            <app-base-input label="Requested End Date" name="requestedEndAtDrawer" type="date" [(ngModel)]="requestForm.requestedEndAt"></app-base-input>
+            <app-validation-message [message]="requestErrors['requestedEndAt']" [className]="'mt-2 text-xs text-red-500'"></app-validation-message>
+          </div>
+
+          <div class="flex flex-col md:col-span-2">
+            <app-base-input
+              label="Request Expiry"
+              name="requestExpiresAtDrawer"
+              type="date"
+              [(ngModel)]="requestForm.requestExpiresAt"
+              [helperText]="'Required before publishing. Expired requests become read-only.'"
+              [errorText]="requestErrors['requestExpiresAt'] || ''"
+            ></app-base-input>
+          </div>
         </div>
+      </app-section>
 
-        <app-validation-message [message]="requestErrors['title']" [className]="'md:col-span-2 -mt-2 text-xs text-red-500'"></app-validation-message>
-      </div>
+      <app-section
+        [title]="'Site Coordinates'"
+        [subtitle]="'Matching, travel checks, and geofence logic use these coordinates as the operational source of truth.'"
+      >
+        <app-geo-location-picker
+          title="Site Location"
+          helperText="Search the site in realtime with Google Maps, click the map, or capture the current device location. These coordinates are required and are the source of truth for matching."
+          [showMapUrl]="true"
+          [(mapUrl)]="requestForm.googleMapsUrl"
+          [(latitude)]="requestForm.latitude"
+          [(longitude)]="requestForm.longitude"
+          [latitudeError]="requestErrors['latitude'] || ''"
+          [longitudeError]="requestErrors['longitude'] || ''"
+          [coordinateError]="requestErrors['coordinates'] || ''"
+          [previewHeightPx]="340"
+          mapUrlName="googleMapsUrlDrawer"
+          latitudeName="siteLatitudeDrawer"
+          longitudeName="siteLongitudeDrawer"
+        ></app-geo-location-picker>
+      </app-section>
+
+      <app-section
+        [title]="'Manual Site Address'"
+        [subtitle]="'Readable address details for operations, audit trails, and downstream documents. Coordinates above drive matching.'"
+      >
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div class="flex flex-col">
+            <app-select-input
+              label="Country"
+              name="siteCountryDrawer"
+              [(ngModel)]="requestForm.siteCountry"
+              [options]="countryOptions"
+              placeholder="-- Select Country --"
+              [required]="true"
+              [searchable]="true"
+              [disabled]="true"
+            ></app-select-input>
+          </div>
+
+          <div class="flex flex-col">
+            <app-select-input
+              label="Province / State"
+              name="siteProvinceDrawer"
+              [(ngModel)]="requestForm.siteProvince"
+              [options]="provinceOptions"
+              placeholder="-- Select Province --"
+              [required]="true"
+              [searchable]="true"
+              (ngModelChange)="onRequestSiteProvinceChange($event)"
+            ></app-select-input>
+            <app-validation-message [message]="requestErrors['siteProvince']" [className]="'mt-2 text-xs text-red-500'"></app-validation-message>
+          </div>
+
+          <div class="flex flex-col">
+            <app-select-input
+              label="City"
+              name="siteCityDrawer"
+              [(ngModel)]="requestForm.siteCity"
+              [options]="getRequestSiteCityOptions()"
+              placeholder="-- Select City --"
+              [required]="true"
+              [searchable]="true"
+              [disabled]="!requestForm.siteProvince"
+            ></app-select-input>
+            <app-validation-message [message]="requestErrors['siteCity']" [className]="'mt-2 text-xs text-red-500'"></app-validation-message>
+          </div>
+
+          <div class="flex flex-col">
+            <app-base-input label="Postal Code" name="sitePostalCodeDrawer" [(ngModel)]="requestForm.sitePostalCode"></app-base-input>
+          </div>
+
+          <div class="flex flex-col md:col-span-2">
+            <app-base-input label="Street Address" name="siteStreetDrawer" [(ngModel)]="requestForm.siteStreet"></app-base-input>
+          </div>
+        </div>
+      </app-section>
+
+      <app-section
+        [title]="'Special Instructions'"
+        [subtitle]="'Optional access notes, post orders, or site-specific directions for coverage execution.'"
+      >
+        <app-textarea
+          label="Special Instructions"
+          name="specialInstructionsDrawer"
+          [(ngModel)]="requestForm.specialInstructions"
+          placeholder="Shift details, site-specific notes, or access requirements"
+        ></app-textarea>
+      </app-section>
     </div>
 
     <app-drawer-action-row drawer-footer>

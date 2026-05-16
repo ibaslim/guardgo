@@ -73,6 +73,25 @@
 
         <app-section title="Head Office Address" subtitle="Used for billing and compliance.">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="md:col-span-2">
+                    <app-geo-location-picker
+                        title="Head Office Location"
+                        helperText="Search the head office in realtime with Google Maps so provider coverage and travel checks use precise coordinates. This only manages coordinates."
+                        [showMapUrl]="true"
+                        [(mapUrl)]="headOfficeMapUrl"
+                        [(latitude)]="providerFormModel.headOfficeAddress.latitude"
+                        [(longitude)]="providerFormModel.headOfficeAddress.longitude"
+                        [latitudeError]="providerErrors.officeLatitude || ''"
+                        [longitudeError]="providerErrors.officeLongitude || ''"
+                        [coordinateError]="providerErrors.officeCoordinates || ''"
+                        [disabled]="readonly"
+                        [readonly]="readonly"
+                        [previewHeightPx]="320"
+                        latitudeName="providerHeadOfficeLatitude"
+                        longitudeName="providerHeadOfficeLongitude"
+                    ></app-geo-location-picker>
+                </div>
+
                 <div class="flex flex-col">
                     <app-base-input label="Street Address" name="officeStreet"
                         [(ngModel)]="providerFormModel.headOfficeAddress.street" [required]="true" [disabled]="readonly">
@@ -362,6 +381,9 @@
 
         <app-section title="Operating Regions" subtitle="Where you can deploy guards.">
             <ng-container *ngIf="!readonly" section-actions>
+                <app-button [label]="'Use head office as region'" type="secondary" [htmlType]="'button'"
+                    [customClass]="'hidden md:inline-flex rounded-lg'" (click)="useHeadOfficeAsOperatingRegion()">
+                </app-button>
                 <app-button [label]="'Add region'" type="outline" [htmlType]="'button'"
                     [customClass]="'hidden md:inline-flex rounded-lg'" (click)="addRegion()">
                 </app-button>
@@ -435,6 +457,7 @@
                                             [options]="getCityOptionsForRegion(providerFormModel.operatingRegions[i].regionCode)"
                                             placeholder="-- Select City --" [required]="cityIndex === 0"
                                             [searchable]="true"
+                                            (ngModelChange)="onRegionCityCodeChange(i, cityIndex, $event)"
                                             [disabled]="readonly || !providerFormModel.operatingRegions[i].regionCode">
                                         </app-select-input>
                                     </div>
@@ -459,6 +482,27 @@
                                     </div>
                                 </div>
 
+                                <div class="mt-4">
+                                    <app-geo-location-picker
+                                        title="Operating City Location"
+                                        helperText="Search and pinpoint the exact operating point for this city so provider matching uses the correct travel radius."
+                                        [showMapUrl]="true"
+                                        [(mapUrl)]="providerFormModel.operatingRegions[i].cityEntries[cityIndex].mapUrl"
+                                        [searchSummary]="getRegionCitySearchSummary(i, cityIndex)"
+                                        [(latitude)]="providerFormModel.operatingRegions[i].cityEntries[cityIndex].latitude"
+                                        [(longitude)]="providerFormModel.operatingRegions[i].cityEntries[cityIndex].longitude"
+                                        (locationChange)="onOperatingRegionLocationChange(i, cityIndex, $event)"
+                                        [latitudeError]="providerErrors['region_' + i + '_city_' + cityIndex + '_latitude'] || ''"
+                                        [longitudeError]="providerErrors['region_' + i + '_city_' + cityIndex + '_longitude'] || ''"
+                                        [coordinateError]="providerErrors['region_' + i + '_city_' + cityIndex + '_coordinates'] || ''"
+                                        [disabled]="readonly"
+                                        [readonly]="readonly"
+                                        [previewHeightPx]="260"
+                                        [latitudeName]="'regionCityLatitude' + i + '_' + cityIndex"
+                                        [longitudeName]="'regionCityLongitude' + i + '_' + cityIndex"
+                                    ></app-geo-location-picker>
+                                </div>
+
                                 <app-error-message
                                     [errorMessage]="providerErrors['region_' + i + '_city_' + cityIndex + '_radius'] || null"></app-error-message>
                             </div>
@@ -472,6 +516,9 @@
                 <app-error-message [errorMessage]="providerErrors.operatingRegions || null"></app-error-message>
 
                 <div class="flex justify-center pt-4 md:hidden" *ngIf="!readonly">
+                    <app-button [label]="'Use Head Office As Region'" type="secondary" [htmlType]="'button'"
+                        [customClass]="'rounded-lg'" (click)="useHeadOfficeAsOperatingRegion()">
+                    </app-button>
                     <app-button [label]="'+ Add Another Region'" type="secondary" [htmlType]="'button'"
                         [customClass]="'rounded-lg'" (click)="addRegion()">
                     </app-button>

@@ -320,3 +320,49 @@ async def test_list_jobs_platform_role_does_not_require_session_tenant():
 
     assert result["pagination"]["total_items"] == 1
     assert result["items"][0]["request"]["title"] == "Night Patrol"
+
+
+@pytest.mark.anyio
+async def test_activate_wave_with_no_created_assignments_does_not_crash(monkeypatch):
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+    manager._wave_shift_replacement_context = lambda _wave: None
+    manager._dashboard_requests_url = lambda **_kwargs: "/dashboard/requests"
+
+    async def _has_active_assignment_for_candidate(*_args, **_kwargs):
+        return False
+
+    manager._has_active_assignment_for_candidate = _has_active_assignment_for_candidate
+
+    notifications = []
+
+    class _FakeNotifications:
+        async def create_for_tenant_admin_users(self, **kwargs):
+            notifications.append(kwargs)
+            return None
+
+    monkeypatch.setattr(
+        "orion.api.interactive.request_manager.request_manager.NotificationManager.get_instance",
+        staticmethod(lambda: _FakeNotifications()),
+    )
+
+    wave = SimpleNamespace(
+        id=ObjectId(),
+        candidate_snapshots=[
+            {"candidate_id": "", "eligible": True, "broadcast_eligible": True, "target_type": "guard"},
+            {"candidate_id": "guard-2", "eligible": False, "broadcast_eligible": True, "target_type": "guard"},
+        ],
+        wave_expires_at=None,
+        wave_number=1,
+        request_snapshot={},
+        offer_count=None,
+        updated_at=None,
+    )
+    record = _make_request_record(open_slots=1, title="Night Patrol", request_revision=2)
+    current_user = SimpleNamespace(id="user-1", username="admin-user")
+
+    created_count = await manager._activate_wave(wave, record, current_user)
+
+    assert created_count == 0
+    assert wave.offer_count == 0
+    assert notifications == []
