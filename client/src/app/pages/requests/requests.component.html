@@ -4,7 +4,7 @@
   [containerClass]="'w-full px-4 py-8 sm:px-6 lg:px-8'"
   [contentClass]="'max-w-6xl mx-auto space-y-8'"
 >
-  <div page-actions *ngIf="isClientAdmin">
+  <div page-actions *ngIf="canCreateRequests">
     <app-button label="Add Request" type="primary" (pressed)="openCreateRequestDrawer()"></app-button>
   </div>
 
@@ -54,7 +54,7 @@
     <app-list-toolbar
       title="Request Pipeline"
       [subtitle]="getCountSummary(totalItems, 'request', 'in your role scope.')"
-      [controlsClass]="listToolbarControlsFourColumnClass"
+      [controlsClass]="requestListToolbarControlsClass"
       [showFooter]="!isScopeLoading(requestListScope) && items.length > 0"
       [footerClass]="requestToolbarSummaryFooterClass"
     >
@@ -62,6 +62,15 @@
         <app-base-input label="Search" name="keyword" [(ngModel)]="keyword" placeholder="Title or site"></app-base-input>
         <app-select-input label="Status" [name]="'requestStatusFilter'" [(ngModel)]="requestStatusFilter" [options]="requestStatusOptions"></app-select-input>
         <app-select-input label="Fulfillment" [name]="'fulfillmentModeFilter'" [(ngModel)]="fulfillmentModeFilter" [options]="fulfillmentModeFilterOptions"></app-select-input>
+        <app-select-input
+          *ngIf="hasPlatformRequestScope"
+          label="Client Tenant"
+          [name]="'requestClientTenantFilter'"
+          [(ngModel)]="requestClientTenantFilter"
+          [options]="requestClientTenantFilterOptions"
+          placeholder="All Client Tenants"
+          [searchable]="true"
+        ></app-select-input>
         <app-filter-action-bar (apply)="applyFilters()" (clear)="clearFilters()"></app-filter-action-bar>
       </div>
 
@@ -122,6 +131,11 @@
         [candidateOptions]="getEligibleCandidateOptions(item)"
         [requestStatusScope]="getRequestStatusScope(item.id)"
         [assignScope]="getAssignScope(item.id)"
+        [showClientTenant]="hasPlatformRequestScope"
+        [clientTenantLabel]="getRequestClientTenantLabel(item)"
+        [viewerAssignment]="getViewerAssignment(item)"
+        [viewerAssignmentActions]="getRequestViewerActions(item)"
+        [viewerAssignmentLoadingScope]="getJobUpdateScope(getViewerAssignment(item)?.id || '')"
         (selectedCandidateIdChange)="selectedCandidateByRequestId[item.id] = $event"
         (details)="openRequestDetails(item)"
         (edit)="openEditRequestDrawer(item)"
@@ -132,6 +146,7 @@
         (close)="updateStatus(item, 'closed')"
         (softDelete)="openRequestSoftDeleteDrawer(item)"
         (assign)="assignSelectedCandidate(item)"
+        (viewerAssignmentAction)="updateRequestViewerAssignmentStatus(item, $event)"
       ></app-request-list-card>
     </div>
 
@@ -401,7 +416,7 @@
     [bodyClass]="'p-0'"
   >
     <app-list-toolbar
-      title="Offers, Accepted & Ongoing Jobs"
+      title="Accepted, Ongoing & Completed Jobs"
       [subtitle]="getCountSummary(jobTotalItems, 'assignment', 'in your role scope.')"
       [controlsClass]="listToolbarControlsThreeColumnClass"
     >
@@ -419,7 +434,7 @@
       mode="empty"
       icon="file-text"
       title="No jobs found"
-      message="You will see offered, accepted, and in-progress jobs here."
+      message="Accepted, in-progress, and completed work will appear here."
     ></app-list-state-panel>
 
     <div *ngIf="!isScopeLoading(jobListScope) && jobs.length" class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -447,8 +462,17 @@
           {{ job.note }}
         </div>
 
-        <div record-actions>
+        <div record-actions class="flex flex-wrap items-center gap-3">
           <app-button label="Details" type="secondary" (pressed)="openJobDetails(job)"></app-button>
+          <ng-container *ngIf="canShowJobActions(job)">
+            <app-button
+              *ngFor="let action of getJobActions(job); trackBy: trackByJobActionStatus"
+              [label]="action.label"
+              [type]="action.type"
+              [loadingScope]="getJobUpdateScope(job.id)"
+              (pressed)="updateJobStatus(job, action.status)"
+            ></app-button>
+          </ng-container>
         </div>
       </app-record-list-item>
     </div>
@@ -481,6 +505,31 @@
         [subtitle]="'Core staffing, request identity, and fulfillment mode for this job.'"
       >
         <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div class="flex flex-col md:col-span-2" *ngIf="isPlatformAdmin && requestFormMode === 'create'">
+            <app-select-input
+              label="Client Tenant"
+              [name]="'requestClientTenantDrawer'"
+              [(ngModel)]="selectedRequestClientTenantId"
+              [options]="requestClientTenantOptions"
+              placeholder="-- Select Client Tenant --"
+              [required]="true"
+              [searchable]="true"
+              [helperText]="'Choose the client tenant first. Saved sites and request ownership will come from this client profile.'"
+              [errorText]="requestErrors['clientTenant'] || ''"
+              (ngModelChange)="onRequestClientTenantChange($event)"
+            ></app-select-input>
+          </div>
+
+          <div class="flex flex-col md:col-span-2" *ngIf="isPlatformAdmin && requestFormMode !== 'create'">
+            <app-base-input
+              label="Client Tenant"
+              name="requestClientTenantReadonlyDrawer"
+              [ngModel]="requestClientTenantDisplayValue"
+              [readonly]="true"
+              [helperText]="'This request remains attached to the original client tenant.'"
+            ></app-base-input>
+          </div>
+
           <div class="flex flex-col">
             <app-base-input
               label="Request Title"
@@ -510,6 +559,8 @@
               name="siteNameDrawer"
               [(ngModel)]="requestForm.siteName"
               [required]="true"
+              [readonly]="requestSiteSourceMode === 'saved'"
+              [helperText]="requestSiteSourceMode === 'saved' ? 'Pulled from the selected saved client site. Switch back to manual entry if you need a one-off site for this request.' : ''"
               [errorText]="requestErrors['siteName'] || ''"
             ></app-base-input>
           </div>
@@ -541,12 +592,80 @@
       </app-section>
 
       <app-section
+        [title]="'Site Source'"
+        [subtitle]="'Reuse a geo-ready client site or enter a one-off site manually for this request.'"
+      >
+        <div class="space-y-5">
+          <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div class="flex flex-col">
+              <app-select-input
+                label="Site Source"
+                [name]="'requestSiteSourceDrawer'"
+                [(ngModel)]="requestSiteSourceMode"
+                [options]="requestSiteSourceOptions"
+                [helperText]="requestFormMode === 'create'
+                  ? 'Saved sites reuse the tenant site profile with locked coordinates. Manual entry is best for one-off or temporary sites.'
+                  : 'This request keeps the captured site snapshot. You can still review whether it originated from a saved site or manual entry.'"
+                (ngModelChange)="onRequestSiteSourceModeChange($event)"
+              ></app-select-input>
+            </div>
+
+            <div class="flex flex-col" *ngIf="requestSiteSourceMode === 'saved'">
+              <app-select-input
+                label="Saved Client Site"
+                [name]="'savedClientSiteDrawer'"
+                [(ngModel)]="selectedSavedSiteIndex"
+                [options]="savedClientSiteOptions"
+                [disabled]="!savedClientSiteOptions.length"
+                [required]="requestFormMode === 'create'"
+                [helperText]="savedClientSiteOptions.length
+                  ? 'Only saved sites with valid coordinates are listed here.'
+                  : 'No geo-ready saved sites are currently available for reuse.'"
+                [errorText]="requestErrors['savedSite'] || ''"
+                (ngModelChange)="onSavedSiteSelectionChange($event)"
+              ></app-select-input>
+            </div>
+          </div>
+
+          <app-banner
+            *ngIf="requestFormMode === 'create' && isPlatformAdmin && !selectedRequestClientTenantId"
+            tone="neutral"
+            title="Choose A Client Tenant First"
+            message="Select the client that owns this request before trying to reuse any saved client sites."
+            [showIcon]="false"
+          ></app-banner>
+
+          <app-banner
+            *ngIf="requestFormMode === 'create' && (!isPlatformAdmin || selectedRequestClientTenantId) && !clientSavedSites.length"
+            tone="neutral"
+            title="No Reusable Saved Sites Yet"
+            message="Create or update client profile sites with valid coordinates first, then they will appear here for request reuse."
+            [showIcon]="false"
+          ></app-banner>
+
+          <app-banner
+            *ngIf="requestFormMode === 'create' && savedClientSitesMissingGeoCount > 0"
+            tone="warning"
+            title="Some Saved Sites Were Omitted"
+            [message]="savedClientSitesMissingGeoCount + ' saved site' + (savedClientSitesMissingGeoCount === 1 ? ' is' : 's are') + ' missing coordinates and cannot be reused until geo data is added.'"
+            [showIcon]="false"
+          ></app-banner>
+        </div>
+      </app-section>
+
+      <app-section
         [title]="'Contacts And Timing'"
         [subtitle]="'Who will coordinate on site and when the requested coverage window should run.'"
       >
         <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
           <div class="flex flex-col">
-            <app-base-input label="Site Manager Contact" name="siteManagerContactDrawer" [(ngModel)]="requestForm.siteManagerContact"></app-base-input>
+            <app-base-input
+              label="Site Manager Contact"
+              name="siteManagerContactDrawer"
+              [(ngModel)]="requestForm.siteManagerContact"
+              [readonly]="requestSiteSourceMode === 'saved'"
+              [helperText]="requestSiteSourceMode === 'saved' ? 'Pulled from the selected saved client site.' : ''"
+            ></app-base-input>
           </div>
 
           <div class="flex flex-col">
@@ -555,33 +674,258 @@
               name="managerEmailDrawer"
               type="email"
               [(ngModel)]="requestForm.managerEmail"
+              [readonly]="requestSiteSourceMode === 'saved'"
+              [helperText]="requestSiteSourceMode === 'saved' ? 'Pulled from the selected saved client site.' : ''"
               [errorText]="requestErrors['managerEmail'] || ''"
             ></app-base-input>
           </div>
 
-          <div class="flex flex-col">
-            <app-base-input label="Requested Start Date" name="requestedStartAtDrawer" type="date" [(ngModel)]="requestForm.requestedStartAt"></app-base-input>
+          <div class="flex flex-col gap-3">
+            <div class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ requestTimingStartLabel }}</div>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <app-base-input
+                label="Start Date"
+                name="requestedStartDateDrawer"
+                type="date"
+                [(ngModel)]="requestForm.requestedStartDate"
+              ></app-base-input>
+              <app-base-input
+                label="Start Time"
+                name="requestedStartTimeDrawer"
+                type="time"
+                [(ngModel)]="requestForm.requestedStartTime"
+                [helperText]="requestTimingStartHelperText"
+                [errorText]="requestErrors['requestedStartAt'] || ''"
+              ></app-base-input>
+            </div>
           </div>
 
-          <div class="flex flex-col">
-            <app-base-input label="Requested End Date" name="requestedEndAtDrawer" type="date" [(ngModel)]="requestForm.requestedEndAt"></app-base-input>
-            <app-validation-message [message]="requestErrors['requestedEndAt']" [className]="'mt-2 text-xs text-red-500'"></app-validation-message>
+          <div class="flex flex-col gap-3">
+            <div class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ requestTimingEndLabel }}</div>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <app-base-input
+                label="End Date"
+                name="requestedEndDateDrawer"
+                type="date"
+                [(ngModel)]="requestForm.requestedEndDate"
+              ></app-base-input>
+              <app-base-input
+                label="End Time"
+                name="requestedEndTimeDrawer"
+                type="time"
+                [(ngModel)]="requestForm.requestedEndTime"
+                [helperText]="requestTimingEndHelperText"
+                [errorText]="requestErrors['requestedEndAt'] || ''"
+              ></app-base-input>
+            </div>
           </div>
 
-          <div class="flex flex-col md:col-span-2">
-            <app-base-input
-              label="Request Expiry"
-              name="requestExpiresAtDrawer"
-              type="date"
-              [(ngModel)]="requestForm.requestExpiresAt"
-              [helperText]="'Required before publishing. Expired requests become read-only.'"
-              [errorText]="requestErrors['requestExpiresAt'] || ''"
-            ></app-base-input>
+          <div class="flex flex-col gap-3 md:col-span-2">
+            <div class="text-sm font-medium text-gray-700 dark:text-gray-200">Staffing Cutoff</div>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <app-base-input
+                label="Expiry Date"
+                name="requestExpiresDateDrawer"
+                type="date"
+                [(ngModel)]="requestForm.requestExpiresDate"
+              ></app-base-input>
+              <app-base-input
+                label="Expiry Time"
+                name="requestExpiresTimeDrawer"
+                type="time"
+                [(ngModel)]="requestForm.requestExpiresTime"
+                [helperText]="'This is the last time the request can stay open for matching and offers. It must be in the future and on or before the job start time.'"
+                [errorText]="requestErrors['requestExpiresAt'] || ''"
+              ></app-base-input>
+            </div>
           </div>
         </div>
       </app-section>
 
       <app-section
+        *ngIf="shouldShowInlineScheduleSetup"
+        [title]="'Coverage Pattern'"
+        [subtitle]="'Recommended for long-term work. Set the date range or weekly recurrence now instead of creating the request first and scheduling it later.'"
+      >
+        <app-button
+          section-actions
+          *ngIf="requestScheduleSetupEnabled"
+          label="Use First Shift Timing"
+          type="secondary"
+          size="sm"
+          (pressed)="useFirstShiftTimingForSchedule()"
+        ></app-button>
+
+        <div class="space-y-5">
+          <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 bg-gray-50/80 px-4 py-4 dark:border-gray-800 dark:bg-gray-900/60">
+            <input
+              type="checkbox"
+              class="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              [checked]="requestScheduleSetupEnabled"
+              (change)="onRequestScheduleSetupToggle($any($event.target).checked)"
+            />
+            <div class="min-w-0">
+              <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">Set up schedule now</div>
+              <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">
+                Leave this off for one-off jobs. Turn it on for date-range or recurring weekly coverage so long-term requests are ready before publish.
+              </p>
+              <p *ngIf="selectedRequestSchedule?.id" class="mt-1 text-xs leading-5 text-amber-600 dark:text-amber-400">
+                This request already has a saved schedule. Turning this off here will not delete it; it only skips schedule edits in this form.
+              </p>
+            </div>
+          </label>
+
+          <app-banner
+            *ngIf="!requestScheduleSetupEnabled"
+            tone="neutral"
+            title="One-Time Job By Default"
+            message="If you leave Coverage Pattern off, this request is treated as a one-time job only. Turn it on when the work should continue across a date range or recurring weekdays."
+            [showIcon]="false"
+          ></app-banner>
+
+          <div *ngIf="requestScheduleSetupEnabled" class="space-y-5">
+            <app-banner
+              tone="info"
+              title="First Shift Vs. Ongoing Pattern"
+              message="The job start and job end fields above define the first staffed window. The schedule below defines how coverage continues after that for long-term work."
+              [showIcon]="false"
+              [containerClass]="'rounded-md p-4'"
+              [bodyClass]="'mt-2 text-sm leading-6'"
+            ></app-banner>
+
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div class="flex flex-col">
+                <app-base-input
+                  label="Timezone"
+                  name="inlineScheduleTimezone"
+                  [(ngModel)]="scheduleForm.timezone"
+                  [required]="true"
+                  [helperText]="'Use an IANA timezone like America/Toronto.'"
+                  [errorText]="scheduleErrors['timezone'] || ''"
+                ></app-base-input>
+              </div>
+
+              <div class="flex flex-col">
+                <app-select-input
+                  label="Schedule Type"
+                  [name]="'inlineScheduleType'"
+                  [(ngModel)]="scheduleForm.scheduleType"
+                  [options]="scheduleTypeOptions"
+                  [required]="true"
+                  (ngModelChange)="onScheduleTypeChange()"
+                ></app-select-input>
+              </div>
+
+              <div class="flex flex-col">
+                <app-base-input
+                  label="Schedule Start Date"
+                  name="inlineScheduleStartDate"
+                  type="date"
+                  [(ngModel)]="scheduleForm.startDate"
+                  [required]="true"
+                  [errorText]="scheduleErrors['startDate'] || ''"
+                ></app-base-input>
+              </div>
+
+              <div class="flex flex-col" *ngIf="scheduleForm.scheduleType !== 'one_time'">
+                <app-base-input
+                  label="Schedule End Date"
+                  name="inlineScheduleEndDate"
+                  type="date"
+                  [(ngModel)]="scheduleForm.endDate"
+                  [required]="true"
+                  [errorText]="scheduleErrors['endDate'] || ''"
+                ></app-base-input>
+              </div>
+
+              <div class="flex flex-col">
+                <app-base-input
+                  label="Shift Start Time"
+                  name="inlineScheduleStartTime"
+                  type="time"
+                  [(ngModel)]="scheduleForm.startTimeLocal"
+                  [required]="true"
+                  [errorText]="scheduleErrors['startTimeLocal'] || ''"
+                ></app-base-input>
+              </div>
+
+              <div class="flex flex-col">
+                <app-base-input
+                  label="Shift End Time"
+                  name="inlineScheduleEndTime"
+                  type="time"
+                  [(ngModel)]="scheduleForm.endTimeLocal"
+                  [required]="true"
+                  [helperText]="'If the end time is earlier than the start time, the shift is treated as overnight.'"
+                  [errorText]="scheduleErrors['endTimeLocal'] || ''"
+                ></app-base-input>
+              </div>
+            </div>
+
+            <div *ngIf="scheduleForm.scheduleType === 'recurring_weekly'" class="rounded-xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-900/60">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Recurring Weekdays</h4>
+                  <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Choose the weekdays that should generate shifts inside the configured date range.</p>
+                </div>
+              </div>
+
+              <div class="mt-4 flex flex-wrap gap-3">
+                <label
+                  *ngFor="let option of scheduleWeekdayOptions"
+                  class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-blue-800 dark:hover:text-blue-300"
+                >
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    [checked]="isScheduleRecurrenceDaySelected(option.value)"
+                    (change)="toggleScheduleRecurrenceDay(option.value, $any($event.target).checked)"
+                  />
+                  <span>{{ option.label }}</span>
+                </label>
+              </div>
+
+              <p *ngIf="scheduleErrors['recurrenceDays']" class="mt-3 text-xs text-red-500">{{ scheduleErrors['recurrenceDays'] }}</p>
+            </div>
+
+            <app-banner
+              tone="neutral"
+              title="Advanced Schedule Controls Stay Available Later"
+              message="Roster deadlines, unavailable cutoffs, geofence distance, and no-show thresholds stay on the platform defaults for now. You can refine them later from Manage Schedule."
+              [showIcon]="false"
+            ></app-banner>
+          </div>
+        </div>
+      </app-section>
+
+      <app-section
+        *ngIf="requestSitePreview as preview"
+        [title]="'Saved Site Snapshot'"
+        [subtitle]="'This request will use the selected client site details and coordinates exactly as shown here.'"
+      >
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-900/50">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Site</p>
+            <p class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ preview.siteName }}</p>
+            <p class="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">{{ preview.addressLine || 'Address details unavailable' }}</p>
+          </div>
+
+          <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-900/50">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Site Contact</p>
+            <p class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ preview.contactLine }}</p>
+            <p class="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">Coordinates: {{ preview.coordinatesLine }}</p>
+          </div>
+
+          <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-800 dark:bg-gray-900/50">
+            <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Site Defaults</p>
+            <p class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Type: {{ preview.siteType }}</p>
+            <p class="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300">Saved guard recommendation: {{ preview.recommendedGuards }}</p>
+          </div>
+        </div>
+      </app-section>
+
+      <app-section
+        *ngIf="requestSiteSourceMode === 'manual'"
         [title]="'Site Coordinates'"
         [subtitle]="'Matching, travel checks, and geofence logic use these coordinates as the operational source of truth.'"
       >
@@ -603,6 +947,7 @@
       </app-section>
 
       <app-section
+        *ngIf="requestSiteSourceMode === 'manual'"
         [title]="'Manual Site Address'"
         [subtitle]="'Readable address details for operations, audit trails, and downstream documents. Coordinates above drive matching.'"
       >
@@ -688,6 +1033,11 @@
 
     <div drawer-body *ngIf="selectedRequest as request" class="space-y-5">
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <app-summary-metric-card
+          *ngIf="hasPlatformRequestScope && getRequestClientTenantLabel(request)"
+          label="Client Tenant"
+          [value]="getRequestClientTenantLabel(request)"
+        ></app-summary-metric-card>
         <app-summary-metric-card label="Status" [value]="request.request_status"></app-summary-metric-card>
         <app-summary-metric-card
           *ngIf="request.staffing_status"
@@ -717,6 +1067,23 @@
           {{ getSiteAddressField(request, 'city') }}
           {{ getSiteAddressField(request, 'province') }}
         </p>
+        <app-geo-location-picker
+          class="mt-4 block"
+          title="Site Location"
+          helperText="Read-only location snapshot saved with this request. Use the request form when the request is still editable to change the site coordinates."
+          [readonly]="true"
+          [showSearchInput]="false"
+          [showActionButtons]="false"
+          [showCoordinateInputs]="true"
+          [showMapUrl]="true"
+          [mapUrl]="request.site_snapshot.google_maps_url || ''"
+          [latitude]="getRequestSiteLatitude(request)"
+          [longitude]="getRequestSiteLongitude(request)"
+          [searchSummary]="request.site_snapshot.site_name || ''"
+          [previewHeightPx]="300"
+          latitudeLabel="Latitude"
+          longitudeLabel="Longitude"
+        ></app-geo-location-picker>
       </app-section>
 
       <app-section
@@ -867,6 +1234,13 @@
     </div>
 
     <app-drawer-action-row drawer-footer *ngIf="selectedRequest as request">
+      <app-button
+        *ngFor="let action of getRequestViewerActions(request); trackBy: trackByRequestViewerActionStatus"
+        [label]="action.label"
+        [type]="action.type"
+        [loadingScope]="getJobUpdateScope(getViewerAssignment(request)?.id || '')"
+        (pressed)="updateRequestViewerAssignmentStatus(request, action.status)"
+      ></app-button>
       <app-button *ngIf="canManageRequestSchedule(request)" label="Manage Schedule" type="secondary" (pressed)="openScheduleDrawer(request)"></app-button>
       <app-button *ngIf="canPublishUpdate(request)" label="Publish Update" type="secondary" (pressed)="openPublishUpdateDrawer(request)"></app-button>
       <app-button *ngIf="canRequestAdditionalCoverage(request)" label="Add Coverage" type="secondary" [loadingScope]="getRequestStatusScope(request.id)" (pressed)="requestAdditionalCoverage(request)"></app-button>
@@ -1806,6 +2180,29 @@
         </app-section>
 
         <app-section
+          [title]="'Site Map'"
+          [subtitle]="'Read-only geo snapshot for this job site.'"
+          [containerClass]="drawerSectionContainerClass"
+          [headerClass]="drawerSectionHeaderClass"
+          [titleClass]="drawerSectionTitleClass"
+          [subtitleClass]="drawerSectionSubtitleClass"
+        >
+          <div class="mt-3">
+            <app-geo-location-picker
+              title="Job Site Location"
+              helperText="The job site map is shown here for operational visibility only. Guards and service providers cannot edit this location from the job detail view."
+              [readonly]="true"
+              [showActionButtons]="false"
+              [mapUrl]="request.site_snapshot.google_maps_url || ''"
+              [latitude]="getRequestSiteLatitude(request)"
+              [longitude]="getRequestSiteLongitude(request)"
+              [searchSummary]="request.site_snapshot.site_name || ''"
+              [previewHeightPx]="300"
+            ></app-geo-location-picker>
+          </div>
+        </app-section>
+
+        <app-section
           *ngIf="request.special_instructions"
           [title]="'Client Instructions'"
           [containerClass]="drawerSectionContainerClass"
@@ -1911,14 +2308,14 @@
     </div>
 
     <app-drawer-action-row drawer-footer *ngIf="selectedJob as job">
-      <app-button label="Close" type="secondary" (pressed)="closeJobDrawer()"></app-button>
       <app-button
-        *ngFor="let action of getJobActions(job)"
+        *ngFor="let action of getJobActions(job); trackBy: trackByJobActionStatus"
         [label]="action.label"
         [type]="action.type"
         [loadingScope]="getJobUpdateScope(job.id)"
         (pressed)="updateJobStatus(job, action.status)"
       ></app-button>
+      <app-button label="Close" type="secondary" (pressed)="closeJobDrawer()"></app-button>
     </app-drawer-action-row>
   </app-side-drawer>
 
@@ -1950,11 +2347,11 @@
 
       <div>
         <app-base-input
-          label="Request Expiry"
+          label="Request Expiry Deadline"
           name="additionalCoverageExpiry"
-          type="date"
+          type="datetime-local"
           [(ngModel)]="coverageForm.requestExpiresAt"
-          [helperText]="'Optional. Leave unchanged to keep the current request expiry.'"
+          [helperText]="'Optional. Leave unchanged to keep the current request expiry. If provided, it must still be before the request start time.'"
           [errorText]="coverageErrors['requestExpiresAt'] || ''"
         ></app-base-input>
       </div>

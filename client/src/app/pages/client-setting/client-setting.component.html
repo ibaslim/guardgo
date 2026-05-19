@@ -197,6 +197,189 @@
             </div>
         </app-section>
 
+        <app-section
+            title="Operational Sites"
+            subtitle="Saved sites can be reused directly in client requests. Every site needs valid coordinates for matching and dispatch."
+        >
+            <app-button
+                section-actions
+                *ngIf="!readonly"
+                [label]="'Add Site'"
+                type="secondary"
+                [htmlType]="'button'"
+                (pressed)="addSite()"
+            ></app-button>
+
+            <div *ngIf="!clientFormModel.sites.length" class="mt-4 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300">
+                No client sites configured yet. Add at least one geo-ready site if you want faster request creation from saved locations.
+            </div>
+
+            <div *ngIf="clientFormModel.sites.length" class="mt-6 space-y-6">
+                <div *ngFor="let site of clientFormModel.sites; let i = index" class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950/40">
+                    <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Site {{ i + 1 }}</h3>
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">This location becomes available for saved-site reuse in client requests.</p>
+                        </div>
+                        <app-button
+                            *ngIf="!readonly"
+                            [label]="'Remove Site'"
+                            type="danger"
+                            [htmlType]="'button'"
+                            (pressed)="removeSite(i)"
+                        ></app-button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="flex flex-col">
+                            <app-base-input
+                                label="Site Name"
+                                [name]="'siteName' + i"
+                                [(ngModel)]="site.siteName"
+                                [required]="true"
+                                [disabled]="readonly"
+                            ></app-base-input>
+                            <app-error-message [errorMessage]="clientErrors['sites.' + i + '.siteName']"></app-error-message>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <app-select-input
+                                label="Site Type"
+                                [name]="'siteType' + i"
+                                [(ngModel)]="site.siteType"
+                                [options]="siteTypeOptions"
+                                placeholder="-- Select Site Type --"
+                                [required]="true"
+                                [searchable]="true"
+                                [disabled]="readonly"
+                            ></app-select-input>
+                            <app-error-message [errorMessage]="clientErrors['sites.' + i + '.siteType']"></app-error-message>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <app-base-input
+                                label="Site Manager Contact"
+                                [name]="'siteManagerContact' + i"
+                                [(ngModel)]="site.siteManagerContact"
+                                [disabled]="readonly"
+                            ></app-base-input>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <app-base-input
+                                label="Manager Email"
+                                [name]="'siteManagerEmail' + i"
+                                type="email"
+                                [(ngModel)]="site.managerEmail"
+                                [disabled]="readonly"
+                            ></app-base-input>
+                            <app-error-message [errorMessage]="clientErrors['sites.' + i + '.managerEmail']"></app-error-message>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <app-base-input
+                                label="Recommended Guards"
+                                [name]="'siteRecommendedGuards' + i"
+                                type="number"
+                                [(ngModel)]="site.numberOfGuardsRequired"
+                                [min]="1"
+                                [disabled]="readonly"
+                                [helperText]="'Optional baseline for quick request setup.'"
+                            ></app-base-input>
+                            <app-error-message [errorMessage]="clientErrors['sites.' + i + '.numberOfGuardsRequired']"></app-error-message>
+                        </div>
+                    </div>
+
+                    <div class="mt-6">
+                        <app-geo-location-picker
+                            title="Site Coordinates"
+                            helperText="Search the site in realtime with Google Maps, click the map, or capture the current device location. These coordinates are required for saved-site reuse and matching."
+                            [showMapUrl]="true"
+                            [(mapUrl)]="site.googleMapsUrl"
+                            [(latitude)]="site.siteAddress.latitude"
+                            [(longitude)]="site.siteAddress.longitude"
+                            [latitudeError]="clientErrors['sites.' + i + '.latitude'] || ''"
+                            [longitudeError]="clientErrors['sites.' + i + '.longitude'] || ''"
+                            [coordinateError]="clientErrors['sites.' + i + '.coordinates'] || ''"
+                            [disabled]="readonly"
+                            [readonly]="readonly"
+                            [previewHeightPx]="320"
+                            [mapUrlName]="'siteMapUrl' + i"
+                            [latitudeName]="'siteLatitude' + i"
+                            [longitudeName]="'siteLongitude' + i"
+                        ></app-geo-location-picker>
+                    </div>
+
+                    <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="flex flex-col">
+                            <app-select-input
+                                label="Country"
+                                [name]="'siteCountry' + i"
+                                [(ngModel)]="site.siteAddress.country"
+                                [options]="countryOptions"
+                                placeholder="-- Select Country --"
+                                [required]="true"
+                                [searchable]="true"
+                                [disabled]="true"
+                            ></app-select-input>
+                            <app-error-message [errorMessage]="clientErrors['sites.' + i + '.country']"></app-error-message>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <app-select-input
+                                label="Province"
+                                [name]="'siteProvince' + i"
+                                [(ngModel)]="site.siteAddress.province"
+                                [options]="provinceOptions"
+                                placeholder="-- Select Province --"
+                                [required]="true"
+                                [searchable]="true"
+                                [disabled]="readonly"
+                                (ngModelChange)="onSiteProvinceChange(i, $event)"
+                            ></app-select-input>
+                            <app-error-message [errorMessage]="clientErrors['sites.' + i + '.province']"></app-error-message>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <app-select-input
+                                label="City"
+                                [name]="'siteCity' + i"
+                                [(ngModel)]="site.siteAddress.city"
+                                [options]="getSiteCityOptions(i)"
+                                placeholder="-- Select City --"
+                                [required]="true"
+                                [searchable]="true"
+                                [disabled]="readonly || !site.siteAddress.province"
+                            ></app-select-input>
+                            <app-error-message [errorMessage]="clientErrors['sites.' + i + '.city']"></app-error-message>
+                        </div>
+
+                        <div class="flex flex-col">
+                            <app-base-input
+                                label="Postal Code"
+                                [name]="'sitePostalCode' + i"
+                                [(ngModel)]="site.siteAddress.postalCode"
+                                [required]="true"
+                                [disabled]="readonly"
+                            ></app-base-input>
+                            <app-error-message [errorMessage]="clientErrors['sites.' + i + '.postalCode']"></app-error-message>
+                        </div>
+
+                        <div class="flex flex-col md:col-span-2">
+                            <app-base-input
+                                label="Street Address"
+                                [name]="'siteStreet' + i"
+                                [(ngModel)]="site.siteAddress.street"
+                                [required]="true"
+                                [disabled]="readonly"
+                            ></app-base-input>
+                            <app-error-message [errorMessage]="clientErrors['sites.' + i + '.street']"></app-error-message>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </app-section>
+
 
         <div *ngIf="clientErrors.submit"
             class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/40 p-4">

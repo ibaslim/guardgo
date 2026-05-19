@@ -29,7 +29,7 @@ import { NG_VALUE_ACCESSOR, ControlValueAccessor, FormsModule } from '@angular/f
   ]
 })
 export class BaseInputComponent implements ControlValueAccessor {
-  @Input() type: 'text' | 'number' | 'email' | 'password' | 'tel' | 'date' | 'time' = 'text';
+  @Input() type: 'text' | 'number' | 'email' | 'password' | 'tel' | 'date' | 'time' | 'datetime-local' = 'text';
   @Input() label = '';
   @Input() placeholder?: string;
   @Input() disabled = false;

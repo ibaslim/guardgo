@@ -16,7 +16,7 @@
     </a>
   </div>
 
-  <div class="mt-4">
+  <div *ngIf="showSearchInput" class="mt-4">
     <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Search Location</label>
     <div class="relative">
       <input
@@ -68,7 +68,7 @@
     </div>
   </div>
 
-  <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+  <div *ngIf="showCoordinateInputs" class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
     <app-base-input
       [label]="latitudeLabel"
       [name]="latitudeName"
@@ -94,7 +94,7 @@
     ></app-base-input>
   </div>
 
-  <div class="mt-4 flex flex-wrap gap-3">
+  <div *ngIf="showActionButtons" class="mt-4 flex flex-wrap gap-3">
     <app-button
       label="Use Current Location"
       type="secondary"

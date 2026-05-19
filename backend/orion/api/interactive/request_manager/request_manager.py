@@ -1,5 +1,6 @@
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, cast
 from urllib.parse import urlencode
 
@@ -76,6 +77,22 @@ OPEN_OFFER_STATUSES = {
     RequestAssignmentStatus.OFFERED,
 }
 
+REQUEST_TAB_ASSIGNMENT_STATUSES = {
+    RequestAssignmentStatus.OFFERED,
+    RequestAssignmentStatus.RECONFIRMATION_REQUIRED,
+}
+
+DEFAULT_GUARD_PROVIDER_JOB_STATUSES = {
+    RequestAssignmentStatus.ACCEPTED,
+    RequestAssignmentStatus.IN_PROGRESS,
+    RequestAssignmentStatus.COMPLETED,
+}
+
+AUTO_COMPLETE_ELAPSED_ASSIGNMENT_STATUSES = {
+    RequestAssignmentStatus.ACCEPTED,
+    RequestAssignmentStatus.IN_PROGRESS,
+}
+
 
 class RequestManager:
     __instance = None
@@ -106,6 +123,28 @@ class RequestManager:
     @staticmethod
     def _normalize_text(value: Any) -> str:
         return str(value or "").strip().lower()
+
+    @staticmethod
+    def _as_datetime(value: Any) -> Optional[datetime]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            if value.tzinfo is not None:
+                return value.astimezone(timezone.utc).replace(tzinfo=None)
+            return value
+
+        text = str(value or "").strip()
+        if not text:
+            return None
+
+        normalized = text.replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        if parsed.tzinfo is not None:
+            return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
 
     @staticmethod
     def _as_float(value: Any) -> Optional[float]:
@@ -204,6 +243,60 @@ class RequestManager:
         raw_value = record.get("assignment_scope") if isinstance(record, dict) else getattr(record, "assignment_scope", None)
         return str(getattr(raw_value, "value", raw_value or RequestAssignmentScope.REQUEST.value))
 
+    @classmethod
+    def _should_auto_close_request(
+        cls,
+        record: ClientRequestRecord,
+        assignments: List[RequestAssignmentRecord | Dict[str, Any]],
+        *,
+        accepted_slots: int,
+        now: datetime,
+    ) -> bool:
+        if record.request_status in {RequestStatus.DRAFT, RequestStatus.CANCELLED, RequestStatus.CLOSED}:
+            return False
+
+        request_assignments = [
+            assignment
+            for assignment in assignments
+            if cls._assignment_scope_value(assignment) == RequestAssignmentScope.REQUEST.value
+        ]
+        if not request_assignments:
+            return False
+
+        pending_committed_statuses = {
+            RequestAssignmentStatus.ACCEPTED.value,
+            RequestAssignmentStatus.RECONFIRMATION_REQUIRED.value,
+            RequestAssignmentStatus.IN_PROGRESS.value,
+        }
+        active_request_statuses = pending_committed_statuses | {
+            RequestAssignmentStatus.OFFERED.value,
+        }
+        has_pending_committed_work = False
+        has_active_request_work = False
+        completed_slots = 0
+
+        for assignment in request_assignments:
+            status = cls._enum_value(
+                assignment.get("assignment_status") if isinstance(assignment, dict) else getattr(assignment, "assignment_status", None)
+            )
+            if status in pending_committed_statuses:
+                has_pending_committed_work = True
+            if status in active_request_statuses:
+                has_active_request_work = True
+            if status == RequestAssignmentStatus.COMPLETED.value:
+                completed_slots += cls._assignment_slots(assignment)
+
+        # If all filled request-level work is marked completed, the parent request
+        # should stop presenting itself as "in progress", even before the nominal
+        # requested end timestamp.
+        if accepted_slots > 0 and int(record.open_slots or 0) == 0 and completed_slots >= accepted_slots and not has_pending_committed_work:
+            return True
+
+        # If the requested window has elapsed and there is no remaining active
+        # request-level work or offer, the request can close itself cleanly.
+        requested_end_at = cls._as_datetime(record.requested_end_at)
+        return bool(requested_end_at and requested_end_at <= now and not has_active_request_work)
+
     @staticmethod
     def _wave_shift_replacement_context(record: RequestBroadcastWaveRecord | Dict[str, Any]) -> Optional[Dict[str, Any]]:
         request_snapshot = record.get("request_snapshot") if isinstance(record, dict) else getattr(record, "request_snapshot", {})
@@ -265,6 +358,7 @@ class RequestManager:
         if isinstance(record, dict):
             guards_required = int(record.get("guards_required") or 0)
             accepted_slots = int(record.get("accepted_slots") or 0)
+            viewer_assignment = record.get("viewer_assignment")
             return {
                 "id": str(record.get("_id") or record.get("id") or ""),
                 "client_tenant_id": record.get("client_tenant_id"),
@@ -302,8 +396,10 @@ class RequestManager:
                 "deleted_reason": record.get("deleted_reason"),
                 "created_at": record.get("created_at"),
                 "updated_at": record.get("updated_at"),
+                "viewer_assignment": viewer_assignment if isinstance(viewer_assignment, dict) else None,
             }
 
+        viewer_assignment = getattr(record, "viewer_assignment", None)
         return {
             "id": str(record.id),
             "client_tenant_id": record.client_tenant_id,
@@ -341,6 +437,7 @@ class RequestManager:
             "deleted_reason": record.deleted_reason,
             "created_at": record.created_at,
             "updated_at": record.updated_at,
+            "viewer_assignment": viewer_assignment if isinstance(viewer_assignment, dict) else None,
         }
 
     @classmethod
@@ -384,41 +481,105 @@ class RequestManager:
             }
 
         return {
-            "id": str(record.id),
-            "request_id": record.request_id,
-            "client_tenant_id": record.client_tenant_id,
-            "assignee_tenant_id": record.assignee_tenant_id,
-            "assignee_tenant_type": cls._enum_value(record.assignee_tenant_type),
-            "assignment_status": cls._enum_value(record.assignment_status),
-            "assignment_origin": cls._enum_value(record.assignment_origin),
+            "id": str(getattr(record, "id", "") or ""),
+            "request_id": getattr(record, "request_id", "") or "",
+            "client_tenant_id": getattr(record, "client_tenant_id", "") or "",
+            "assignee_tenant_id": getattr(record, "assignee_tenant_id", "") or "",
+            "assignee_tenant_type": cls._enum_value(getattr(record, "assignee_tenant_type", None)),
+            "assignment_status": cls._enum_value(getattr(record, "assignment_status", None)),
+            "assignment_origin": cls._enum_value(getattr(record, "assignment_origin", None)),
             "assignment_scope": cls._assignment_scope_value(record),
-            "broadcast_wave_id": record.broadcast_wave_id,
-            "shift_instance_id": record.shift_instance_id,
-            "shift_slot_id": record.shift_slot_id,
-            "request_revision_at_offer": record.request_revision_at_offer,
-            "slots_committed": record.slots_committed,
-            "response_due_at": record.response_due_at,
-            "reconfirmation_due_at": record.reconfirmation_due_at,
-            "lock_reason": cls._enum_value(record.lock_reason, default="") or None,
-            "candidate_snapshot": record.candidate_snapshot or {},
-            "assigned_by_user_id": record.assigned_by_user_id,
-            "assigned_by_username": record.assigned_by_username,
-            "note": record.note,
-            "offered_at": record.offered_at,
-            "accepted_at": record.accepted_at,
-            "declined_at": record.declined_at,
-            "expired_at": record.expired_at,
-            "reconfirmation_requested_at": record.reconfirmation_requested_at,
-            "reconfirmed_at": record.reconfirmed_at,
-            "closed_filled_at": record.closed_filled_at,
-            "superseded_at": record.superseded_at,
-            "started_at": record.started_at,
-            "completed_at": record.completed_at,
-            "cancelled_at": record.cancelled_at,
-            "created_at": record.created_at,
-            "updated_at": record.updated_at,
+            "broadcast_wave_id": getattr(record, "broadcast_wave_id", None),
+            "shift_instance_id": getattr(record, "shift_instance_id", None),
+            "shift_slot_id": getattr(record, "shift_slot_id", None),
+            "request_revision_at_offer": int(getattr(record, "request_revision_at_offer", 0) or 0),
+            "slots_committed": getattr(record, "slots_committed", None),
+            "response_due_at": getattr(record, "response_due_at", None),
+            "reconfirmation_due_at": getattr(record, "reconfirmation_due_at", None),
+            "lock_reason": cls._enum_value(getattr(record, "lock_reason", None), default="") or None,
+            "candidate_snapshot": getattr(record, "candidate_snapshot", None) or {},
+            "assigned_by_user_id": getattr(record, "assigned_by_user_id", "") or "",
+            "assigned_by_username": getattr(record, "assigned_by_username", "") or "",
+            "note": getattr(record, "note", None),
+            "offered_at": getattr(record, "offered_at", None),
+            "accepted_at": getattr(record, "accepted_at", None),
+            "declined_at": getattr(record, "declined_at", None),
+            "expired_at": getattr(record, "expired_at", None),
+            "reconfirmation_requested_at": getattr(record, "reconfirmation_requested_at", None),
+            "reconfirmed_at": getattr(record, "reconfirmed_at", None),
+            "closed_filled_at": getattr(record, "closed_filled_at", None),
+            "superseded_at": getattr(record, "superseded_at", None),
+            "started_at": getattr(record, "started_at", None),
+            "completed_at": getattr(record, "completed_at", None),
+            "cancelled_at": getattr(record, "cancelled_at", None),
+            "created_at": getattr(record, "created_at", None),
+            "updated_at": getattr(record, "updated_at", None),
             "request": request_snapshot or {},
         }
+
+    @staticmethod
+    def _assignment_sort_key(record: RequestAssignmentRecord | Dict[str, Any]) -> tuple[int, float]:
+        status_value = (
+            record.get("assignment_status") if isinstance(record, dict) else getattr(record, "assignment_status", None)
+        )
+        normalized_status = RequestManager._enum_value(status_value)
+        priority = {
+            RequestAssignmentStatus.RECONFIRMATION_REQUIRED.value: 0,
+            RequestAssignmentStatus.OFFERED.value: 1,
+            RequestAssignmentStatus.ACCEPTED.value: 2,
+            RequestAssignmentStatus.IN_PROGRESS.value: 3,
+            RequestAssignmentStatus.COMPLETED.value: 4,
+            RequestAssignmentStatus.CANCELLED.value: 5,
+            RequestAssignmentStatus.DECLINED.value: 6,
+            RequestAssignmentStatus.EXPIRED.value: 7,
+            RequestAssignmentStatus.CLOSED_FILLED.value: 8,
+            RequestAssignmentStatus.SUPERSEDED.value: 9,
+        }.get(normalized_status, 99)
+        updated_at = RequestManager._as_datetime(
+            record.get("updated_at") if isinstance(record, dict) else getattr(record, "updated_at", None)
+        ) or datetime.min
+        recency_rank = -(updated_at.timestamp()) if updated_at != datetime.min else float("inf")
+        return priority, recency_rank
+
+    def _best_assignment_doc_for_request(
+        self,
+        assignment_docs: List[Dict[str, Any]],
+        *,
+        statuses: Optional[set[RequestAssignmentStatus]] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        allowed_status_values = {status.value for status in statuses} if statuses else None
+        selected: Dict[str, Dict[str, Any]] = {}
+        for doc in assignment_docs:
+            request_id = str(doc.get("request_id") or "").strip()
+            status_value = self._enum_value(doc.get("assignment_status"))
+            if not request_id:
+                continue
+            if allowed_status_values is not None and status_value not in allowed_status_values:
+                continue
+
+            current = selected.get(request_id)
+            if current is None or self._assignment_sort_key(doc) < self._assignment_sort_key(current):
+                selected[request_id] = doc
+        return selected
+
+    async def _resolve_viewer_assignment_for_request(self, request_id: str, current_user) -> Optional[Dict[str, Any]]:
+        role_value = self._role_value(current_user)
+        if role_value not in {"guard_admin", "sp_admin"}:
+            return None
+
+        session_tenant = await self._get_session_tenant(current_user)
+        if session_tenant.tenant_type not in {TenantType.GUARD, TenantType.SERVICE_PROVIDER}:
+            return None
+
+        assignment_collection = self._engine.get_collection(RequestAssignmentRecord)
+        assignment_docs = await assignment_collection.find({
+            "request_id": str(request_id),
+            "assignee_tenant_id": str(session_tenant.id),
+        }).to_list(length=None)
+        best = self._best_assignment_doc_for_request(assignment_docs).get(str(request_id))
+        if not best:
+            return None
+        return self._serialize_assignment(best)
 
     @classmethod
     def _serialize_wave(cls, record: RequestBroadcastWaveRecord | Dict[str, Any]) -> Dict[str, Any]:
@@ -531,6 +692,13 @@ class RequestManager:
         if not tenant_id:
             raise HTTPException(status_code=400, detail="Invalid client tenant association")
 
+        return await self._get_active_client_tenant_by_id(tenant_id)
+
+    async def _get_active_client_tenant_by_id(self, tenant_id: str):
+        tenant_id = str(tenant_id or "").strip()
+        if not tenant_id:
+            raise HTTPException(status_code=400, detail="Client tenant is required")
+
         try:
             tenant = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(tenant_id))
         except Exception:
@@ -541,6 +709,123 @@ class RequestManager:
         if tenant.status != TenantStatus.ACTIVE:
             raise HTTPException(status_code=403, detail="Client tenant must be active before requests can be created")
         return tenant
+
+    async def _resolve_request_client_tenant(self, payload: ClientRequestCreatePayload, current_user):
+        role_value = self._role_value(current_user)
+        if self._is_platform_write_role(role_value):
+            return await self._get_active_client_tenant_by_id(str(payload.client_tenant_id or "").strip())
+        return await self._get_client_tenant(current_user)
+
+    @staticmethod
+    def _client_tenant_label(tenant: Any) -> str:
+        profile = tenant.profile if isinstance(getattr(tenant, "profile", None), dict) else {}
+        legal_entity_name = str(profile.get("legal_entity_name") or "").strip()
+        primary_contact = cast(Dict[str, Any], profile.get("primary_contact") or {})
+        primary_contact_name = str(primary_contact.get("name") or "").strip()
+        return (
+            legal_entity_name
+            or primary_contact_name
+            or str(getattr(tenant, "name", "") or "").strip()
+            or str(getattr(tenant, "id", "") or "").strip()
+        )
+
+    async def _build_client_tenant_label_lookup(self, tenant_ids: List[str]) -> Dict[str, str]:
+        normalized_ids: List[str] = []
+        object_ids: List[ObjectId] = []
+        label_lookup: Dict[str, str] = {}
+        seen_ids = set()
+
+        for raw_tenant_id in tenant_ids:
+            tenant_id = str(raw_tenant_id or "").strip()
+            if not tenant_id or tenant_id in seen_ids:
+                continue
+            seen_ids.add(tenant_id)
+            normalized_ids.append(tenant_id)
+            try:
+                object_ids.append(ObjectId(tenant_id))
+            except Exception:
+                label_lookup[tenant_id] = tenant_id
+
+        if object_ids:
+            collection = self._engine.get_collection(db_tenant_model)
+            docs = await collection.find({"_id": {"$in": object_ids}}).to_list(length=None)
+            for doc in docs:
+                tenant_id = str(doc.get("_id") or "")
+                profile = cast(Dict[str, Any], doc.get("profile") or {})
+                label_lookup[tenant_id] = self._client_tenant_label(SimpleNamespace(
+                    id=tenant_id,
+                    profile=profile,
+                    name=str(doc.get("name") or ""),
+                ))
+
+        for tenant_id in normalized_ids:
+            label_lookup.setdefault(tenant_id, tenant_id)
+
+        return label_lookup
+
+    async def _serialize_requests_with_client_tenant_labels(self, docs: List[ClientRequestRecord | Dict[str, Any]]) -> List[Dict[str, Any]]:
+        serialized = [self._serialize(doc) for doc in docs]
+        label_lookup = await self._build_client_tenant_label_lookup([
+            str(item.get("client_tenant_id") or "")
+            for item in serialized
+        ])
+
+        for item in serialized:
+            tenant_id = str(item.get("client_tenant_id") or "").strip()
+            item["client_tenant_label"] = label_lookup.get(tenant_id, tenant_id)
+
+        return serialized
+
+    async def list_request_client_tenants(self, current_user, keyword: str = "", rows: int = 100) -> Dict[str, Any]:
+        if not self._is_platform_role(self._role_value(current_user)):
+            raise HTTPException(status_code=403, detail="Access forbidden")
+
+        collection = self._engine.get_collection(db_tenant_model)
+        docs = await collection.find({
+            "tenant_type": TenantType.CLIENT.value,
+            "status": TenantStatus.ACTIVE.value,
+        }).to_list(length=None)
+
+        normalized_keyword = self._normalize_text(keyword)
+        items: List[Dict[str, Any]] = []
+        for doc in docs:
+            tenant_id = str(doc.get("_id") or "")
+            profile = cast(Dict[str, Any], doc.get("profile") or {})
+            label = self._client_tenant_label(SimpleNamespace(
+                id=tenant_id,
+                profile=profile,
+                name=str(doc.get("name") or ""),
+            ))
+            if normalized_keyword and normalized_keyword not in self._normalize_text(label):
+                continue
+            sites = profile.get("sites") if isinstance(profile.get("sites"), list) else []
+            items.append({
+                "id": tenant_id,
+                "label": label,
+                "site_count": len(sites),
+                "primary_contact_name": str(cast(Dict[str, Any], profile.get("primary_contact") or {}).get("name") or "").strip(),
+                "status": str(doc.get("status") or ""),
+            })
+
+        items.sort(key=lambda item: self._normalize_text(item.get("label")))
+        limited_rows = max(int(rows or 100), 1)
+        return {
+            "items": items[:limited_rows],
+            "total_items": len(items),
+        }
+
+    async def get_request_client_tenant_snapshot(self, tenant_id: str, current_user) -> Dict[str, Any]:
+        if not self._is_platform_write_role(self._role_value(current_user)):
+            raise HTTPException(status_code=403, detail="Access forbidden")
+
+        tenant = await self._get_active_client_tenant_by_id(tenant_id)
+        return {
+            "id": str(tenant.id),
+            "tenant_type": tenant.tenant_type,
+            "status": tenant.status,
+            "label": self._client_tenant_label(tenant),
+            "profile": tenant.profile if isinstance(tenant.profile, dict) else {},
+        }
 
     async def _get_session_tenant(self, current_user):
         tenant_id = str(getattr(current_user, "tenant_uuid", "") or "")
@@ -572,7 +857,11 @@ class RequestManager:
         if role_value in {"guard_admin", "sp_admin"} and session_tenant.tenant_type in {TenantType.GUARD, TenantType.SERVICE_PROVIDER}:
             assignment_collection = self._engine.get_collection(RequestAssignmentRecord)
             assignment_docs = await assignment_collection.find({"assignee_tenant_id": tenant_id}).to_list(length=None)
-            request_ids = [doc.get("request_id") for doc in assignment_docs if doc.get("request_id")]
+            relevant_assignments = self._best_assignment_doc_for_request(
+                assignment_docs,
+                statuses=REQUEST_TAB_ASSIGNMENT_STATUSES,
+            )
+            request_ids = [request_id for request_id in relevant_assignments.keys() if request_id]
             if not request_ids:
                 return []
 
@@ -584,7 +873,11 @@ class RequestManager:
                     continue
             if not object_ids:
                 return []
-            return await request_collection.find({"_id": {"$in": object_ids}, "deleted_at": None}).to_list(length=None)
+            request_docs = await request_collection.find({"_id": {"$in": object_ids}, "deleted_at": None}).to_list(length=None)
+            for request_doc in request_docs:
+                serialized_assignment = relevant_assignments.get(str(request_doc.get("_id") or ""))
+                request_doc["viewer_assignment"] = self._serialize_assignment(serialized_assignment) if serialized_assignment else None
+            return request_docs
 
         raise HTTPException(status_code=403, detail="Access forbidden")
 
@@ -661,6 +954,17 @@ class RequestManager:
         site: Dict[str, Any] = raw_sites[site_index] if isinstance(raw_sites[site_index], dict) else {}
         raw_site_address = site.get("site_address")
         site_address = cast(Dict[str, Any], raw_site_address) if isinstance(raw_site_address, dict) else {}
+        latitude = self._as_float(site_address.get("latitude"))
+        longitude = self._as_float(site_address.get("longitude"))
+        if latitude is None or longitude is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Selected client site must have latitude and longitude before it can be used for requests",
+            )
+        if not (-90 <= latitude <= 90):
+            raise HTTPException(status_code=400, detail="Selected client site latitude must be between -90 and 90")
+        if not (-180 <= longitude <= 180):
+            raise HTTPException(status_code=400, detail="Selected client site longitude must be between -180 and 180")
         return {
             "site_index": site_index,
             "site_source": "saved",
@@ -676,8 +980,8 @@ class RequestManager:
                 "country": str(site_address.get("country") or "CA").strip(),
                 "province": str(site_address.get("province") or "").strip(),
                 "postal_code": str(site_address.get("postal_code") or site_address.get("postalCode") or "").strip(),
-                "latitude": site_address.get("latitude"),
-                "longitude": site_address.get("longitude"),
+                "latitude": latitude,
+                "longitude": longitude,
             },
         }
 
@@ -700,11 +1004,11 @@ class RequestManager:
             raise HTTPException(status_code=400, detail="Site city is required")
         if not province:
             raise HTTPException(status_code=400, detail="Site province/state is required")
-        if (latitude is None) != (longitude is None):
-            raise HTTPException(status_code=400, detail="Provide both latitude and longitude or leave both empty")
-        if latitude is not None and not (-90 <= latitude <= 90):
+        if latitude is None or longitude is None:
+            raise HTTPException(status_code=400, detail="Site latitude and longitude are required")
+        if not (-90 <= latitude <= 90):
             raise HTTPException(status_code=400, detail="Latitude must be between -90 and 90")
-        if longitude is not None and not (-180 <= longitude <= 180):
+        if not (-180 <= longitude <= 180):
             raise HTTPException(status_code=400, detail="Longitude must be between -180 and 180")
 
         return {
@@ -728,6 +1032,23 @@ class RequestManager:
             },
         }
 
+    def _validated_site_snapshot_coordinates(
+        self,
+        site_snapshot: Dict[str, Any],
+        *,
+        detail_prefix: str = "Request site",
+    ) -> tuple[float, float]:
+        site_address = cast(Dict[str, Any], site_snapshot.get("site_address") or {})
+        latitude = self._as_float(site_address.get("latitude"))
+        longitude = self._as_float(site_address.get("longitude"))
+        if latitude is None or longitude is None:
+            raise HTTPException(status_code=400, detail=f"{detail_prefix} latitude and longitude are required")
+        if not (-90 <= latitude <= 90):
+            raise HTTPException(status_code=400, detail=f"{detail_prefix} latitude must be between -90 and 90")
+        if not (-180 <= longitude <= 180):
+            raise HTTPException(status_code=400, detail=f"{detail_prefix} longitude must be between -180 and 180")
+        return latitude, longitude
+
     def _resolve_site_snapshot(self, payload: ClientRequestCreatePayload, client_profile: Dict[str, Any]) -> Dict[str, Any]:
         if payload.site:
             return self._resolve_site_input_snapshot(payload.site)
@@ -740,23 +1061,26 @@ class RequestManager:
         target_type: TargetType,
         site_snapshot: Dict[str, Any],
         max_results: int,
+        requested_guard_type: Optional[str] = None,
         requested_start_at: Optional[datetime] = None,
         requested_end_at: Optional[datetime] = None,
     ) -> Dict[str, Any]:
         request_address = cast(Dict[str, Any], site_snapshot.get("site_address") or {})
+        latitude, longitude = self._validated_site_snapshot_coordinates(site_snapshot)
         match_payload = RequestMatchingPreviewPayload(
             target_type=target_type,
             site_address=MatchAddress(
                 country=str(request_address.get("country") or "CA"),
                 province=str(request_address.get("province") or ""),
                 city=str(request_address.get("city") or ""),
-                latitude=request_address.get("latitude"),
-                longitude=request_address.get("longitude"),
+                latitude=latitude,
+                longitude=longitude,
             ),
+            requested_guard_type=(requested_guard_type or "").strip() or None,
             requested_start_at=requested_start_at,
             requested_end_at=requested_end_at,
             max_results=max_results,
-            fallback_to_province_when_missing_geo=True,
+            fallback_to_province_when_missing_geo=False,
         )
         preview = await RequestMatchingManager.get_instance().preview_matches(match_payload)
         return {
@@ -775,6 +1099,9 @@ class RequestManager:
             "outside_availability_count": len([candidate for candidate in candidates if candidate.get("reason_code") == "outside_availability"]),
             "outside_radius_count": len([candidate for candidate in candidates if candidate.get("reason_code") == "outside_radius"]),
             "province_mismatch_count": len([candidate for candidate in candidates if candidate.get("reason_code") == "province_mismatch"]),
+            "city_mismatch_count": len([candidate for candidate in candidates if candidate.get("reason_code") == "city_mismatch"]),
+            "guard_type_mismatch_count": len([candidate for candidate in candidates if candidate.get("reason_code") == "guard_type_mismatch"]),
+            "insufficient_capacity_count": len([candidate for candidate in candidates if candidate.get("reason_code") == "insufficient_capacity"]),
             "missing_geo_count": len([candidate for candidate in candidates if candidate.get("reason_code") == "missing_geo"]),
             "returned_count": len(candidates),
         }
@@ -793,6 +1120,7 @@ class RequestManager:
         fulfillment_mode: RequestFulfillmentMode,
         site_snapshot: Dict[str, Any],
         max_results: int,
+        requested_guard_type: Optional[str] = None,
         requested_start_at: Optional[datetime] = None,
         requested_end_at: Optional[datetime] = None,
     ) -> Dict[str, Any]:
@@ -801,6 +1129,7 @@ class RequestManager:
                 cast(TargetType, "guard"),
                 site_snapshot,
                 max_results,
+                requested_guard_type,
                 requested_start_at,
                 requested_end_at,
             )
@@ -808,6 +1137,7 @@ class RequestManager:
                 cast(TargetType, "service_provider"),
                 site_snapshot,
                 max_results,
+                requested_guard_type,
                 requested_start_at,
                 requested_end_at,
             )
@@ -829,6 +1159,7 @@ class RequestManager:
             target_type,
             site_snapshot,
             max_results,
+            requested_guard_type,
             requested_start_at,
             requested_end_at,
         )
@@ -891,6 +1222,7 @@ class RequestManager:
             self._resolve_fulfillment_mode_from_record(record),
             record.site_snapshot or {},
             max_results,
+            record.requested_guard_type,
             record.requested_start_at,
             record.requested_end_at,
         )
@@ -925,7 +1257,8 @@ class RequestManager:
 
     async def _evaluate_broadcast_snapshot(self, record: ClientRequestRecord) -> Dict[str, Any]:
         site_address = cast(Dict[str, Any], (record.site_snapshot or {}).get("site_address") or {})
-        province = str(site_address.get("province") or "").strip().upper()
+        country = RequestMatchingManager._normalize_country_code(site_address.get("country") or "CA")
+        province = RequestMatchingManager._normalize_region_code(site_address.get("province"), country)
         city = str(site_address.get("city") or "").strip()
         latitude = site_address.get("latitude")
         longitude = site_address.get("longitude")
@@ -1106,6 +1439,21 @@ class RequestManager:
             assignment.reconfirmation_due_at = due_at
             assignment.updated_at = now
             await self._engine.save(assignment)
+            await NotificationManager.get_instance().create_for_tenant_admin_users(
+                tenant_id=assignment.assignee_tenant_id,
+                title="Request update requires reconfirmation",
+                message=f"{record.title} was updated. Please reconfirm this request assignment.",
+                category="warning",
+                source_module="requests",
+                action_url=self._dashboard_requests_url(tab="requests", request_id=str(record.id)),
+                action_label="Review request",
+                metadata={
+                    "request_id": str(record.id),
+                    "assignment_id": str(assignment.id),
+                    "assignment_status": RequestAssignmentStatus.RECONFIRMATION_REQUIRED.value,
+                    "request_revision": record.request_revision,
+                },
+            )
 
     async def _sync_request_runtime_state(self, record: ClientRequestRecord) -> ClientRequestRecord:
         now = datetime.utcnow()
@@ -1139,6 +1487,12 @@ class RequestManager:
         previous_open_slots = record.open_slots
         record.accepted_slots = accepted_slots
         record.open_slots = max(int(record.guards_required or 0) - accepted_slots, 0)
+        should_auto_close_request = self._should_auto_close_request(
+            record,
+            assignments,
+            accepted_slots=accepted_slots,
+            now=now,
+        )
 
         if record.request_status == RequestStatus.CANCELLED:
             record.lock_reason = RequestLockReason.REQUEST_CANCELLED
@@ -1165,6 +1519,11 @@ class RequestManager:
                 record.staffing_status = RequestStaffingStatus.OPEN
                 if record.lock_reason == RequestLockReason.FILLED:
                     record.lock_reason = None
+
+        if should_auto_close_request and record.request_status not in {RequestStatus.CANCELLED, RequestStatus.CLOSED}:
+            record.request_status = RequestStatus.CLOSED
+            record.closed_at = record.closed_at or now
+            record.lock_reason = RequestLockReason.REQUEST_CLOSED
 
         record.updated_at = now
         await self._engine.save(record)
@@ -1248,7 +1607,7 @@ class RequestManager:
                 ),
                 category="info",
                 source_module="requests",
-                action_url=self._dashboard_requests_url(tab="jobs", assignment_id=str(saved.id)),
+                action_url=self._dashboard_requests_url(tab="requests", request_id=str(record.id)),
                 action_label="Review offer",
                 metadata={
                     "request_id": str(record.id),
@@ -1379,7 +1738,10 @@ class RequestManager:
         increment_revision: bool,
     ) -> Dict[str, Any]:
         self._validate_request_expiry(record.request_expires_at, record.requested_start_at, require_value=True)
+        if record.requested_start_at is None or record.requested_end_at is None:
+            raise HTTPException(status_code=400, detail="Requested start and end times are required before publishing")
         self._validate_requested_window(record.requested_start_at, record.requested_end_at)
+        self._validated_site_snapshot_coordinates(record.site_snapshot or {})
 
         if increment_revision:
             record.request_revision = max(int(record.request_revision or 0) + 1, 1)
@@ -1443,7 +1805,7 @@ class RequestManager:
         }
 
     async def create_request(self, payload: ClientRequestCreatePayload, current_user) -> Dict[str, Any]:
-        client_tenant = await self._get_client_tenant(current_user)
+        client_tenant = await self._resolve_request_client_tenant(payload, current_user)
         client_profile = client_tenant.profile if isinstance(client_tenant.profile, dict) else {}
         site_snapshot = self._resolve_site_snapshot(payload, client_profile)
         title = self._validate_trimmed_title(payload.title)
@@ -1455,6 +1817,7 @@ class RequestManager:
             payload.fulfillment_mode,
             site_snapshot,
             payload.max_match_results,
+            payload.requested_guard_type,
             payload.requested_start_at,
             payload.requested_end_at,
         )
@@ -1608,11 +1971,21 @@ class RequestManager:
             "item": self._serialize(record),
         }
 
-    async def list_requests(self, current_user, page: int = 1, rows: int = 20, keyword: str = "", request_status: str = "", fulfillment_mode: str = "") -> Dict[str, Any]:
+    async def list_requests(
+        self,
+        current_user,
+        page: int = 1,
+        rows: int = 20,
+        keyword: str = "",
+        request_status: str = "",
+        fulfillment_mode: str = "",
+        client_tenant_id: str = "",
+    ) -> Dict[str, Any]:
         docs = await self._resolve_request_docs_for_role(current_user)
         normalized_keyword = self._normalize_text(keyword)
         normalized_status = self._normalize_text(request_status)
         normalized_fulfillment_mode = self._normalize_text(fulfillment_mode)
+        normalized_client_tenant_id = str(client_tenant_id or "").strip()
 
         filtered_docs: List[Dict[str, Any]] = []
         for doc in docs:
@@ -1625,6 +1998,8 @@ class RequestManager:
             if normalized_status and current_status != normalized_status:
                 continue
             if normalized_fulfillment_mode and current_mode != normalized_fulfillment_mode:
+                continue
+            if normalized_client_tenant_id and str(doc.get("client_tenant_id") or "") != normalized_client_tenant_id:
                 continue
             if normalized_keyword and normalized_keyword not in " ".join([title, site_name, guard_type]):
                 continue
@@ -1641,7 +2016,7 @@ class RequestManager:
         page_docs = filtered_docs[start:end]
 
         return {
-            "items": [self._serialize(doc) for doc in page_docs],
+            "items": await self._serialize_requests_with_client_tenant_labels(page_docs),
             "pagination": {
                 "page": safe_page,
                 "rows": safe_rows,
@@ -1652,6 +2027,7 @@ class RequestManager:
                 "keyword": keyword,
                 "request_status": request_status,
                 "fulfillment_mode": fulfillment_mode,
+                "client_tenant_id": client_tenant_id,
             },
         }
 
@@ -1661,7 +2037,14 @@ class RequestManager:
         if not await self._can_view_request(record, current_user):
             raise HTTPException(status_code=403, detail="Access forbidden")
         await self._sync_request_runtime_state(record)
-        return self._serialize(record)
+        serialized = self._serialize(record)
+        viewer_assignment = await self._resolve_viewer_assignment_for_request(str(record.id), current_user)
+        if viewer_assignment:
+            serialized["viewer_assignment"] = viewer_assignment
+        tenant_id = str(serialized.get("client_tenant_id") or "").strip()
+        label_lookup = await self._build_client_tenant_label_lookup([tenant_id])
+        serialized["client_tenant_label"] = label_lookup.get(tenant_id, tenant_id)
+        return serialized
 
     async def get_request_wave_by_id(self, wave_id: str, current_user) -> Dict[str, Any]:
         wave = await self._get_wave_or_404(wave_id)
@@ -1690,7 +2073,9 @@ class RequestManager:
 
         record = await self._get_request_or_404(assignment.request_id)
         await self._sync_request_runtime_state(record)
-        return self._serialize_assignment(assignment, request_snapshot=self._request_snapshot(record))
+        request_snapshot = self._request_snapshot(record)
+        assignment = await self._auto_complete_elapsed_assignment_record(assignment, request_snapshot)
+        return self._serialize_assignment(assignment, request_snapshot=request_snapshot)
 
     async def publish_request(self, request_id: str, payload: RequestPublishPayload, current_user) -> Dict[str, Any]:
         record = await self._get_request_or_404(request_id)
@@ -2156,7 +2541,7 @@ class RequestManager:
             message=f"{record.title} has been assigned to your tenant.",
             category="info",
             source_module="requests",
-            action_url=self._dashboard_requests_url(tab="jobs", assignment_id=str(saved.id)),
+            action_url=self._dashboard_requests_url(tab="requests", request_id=str(record.id)),
             action_label="Review offer",
             metadata={"request_id": str(record.id), "assignment_id": str(saved.id)},
         )
@@ -2184,6 +2569,66 @@ class RequestManager:
             "message": "Request assigned",
             "item": self._serialize_assignment(saved, request_snapshot=self._request_snapshot(record)),
         }
+
+    async def _auto_complete_elapsed_assignment_docs(
+        self,
+        assignment_docs: List[Dict[str, Any]],
+        request_lookup: Dict[str, Dict[str, Any]],
+        assignment_collection,
+    ) -> set[str]:
+        now = datetime.utcnow()
+        touched_request_ids: set[str] = set()
+        for doc in assignment_docs:
+            if self._assignment_scope_value(doc) != RequestAssignmentScope.REQUEST.value:
+                continue
+
+            current_status = self._enum_value(doc.get("assignment_status"))
+            if current_status not in {status.value for status in AUTO_COMPLETE_ELAPSED_ASSIGNMENT_STATUSES}:
+                continue
+
+            request_snapshot = request_lookup.get(str(doc.get("request_id") or ""), {})
+            requested_end_at = self._as_datetime(request_snapshot.get("requested_end_at"))
+            if requested_end_at is None or requested_end_at > now:
+                continue
+
+            completed_at = doc.get("completed_at") or now
+            doc["assignment_status"] = RequestAssignmentStatus.COMPLETED.value
+            doc["completed_at"] = completed_at
+            doc["updated_at"] = now
+            await assignment_collection.update_one(
+                {"_id": doc.get("_id")},
+                {"$set": {
+                    "assignment_status": RequestAssignmentStatus.COMPLETED.value,
+                    "completed_at": completed_at,
+                    "updated_at": now,
+                }},
+            )
+            request_id = str(doc.get("request_id") or "").strip()
+            if request_id:
+                touched_request_ids.add(request_id)
+        return touched_request_ids
+
+    async def _auto_complete_elapsed_assignment_record(
+        self,
+        assignment: RequestAssignmentRecord,
+        request_snapshot: Dict[str, Any],
+    ) -> RequestAssignmentRecord:
+        if self._assignment_scope_value(assignment) != RequestAssignmentScope.REQUEST.value:
+            return assignment
+
+        if assignment.assignment_status not in AUTO_COMPLETE_ELAPSED_ASSIGNMENT_STATUSES:
+            return assignment
+
+        requested_end_at = self._as_datetime(request_snapshot.get("requested_end_at"))
+        if requested_end_at is None or requested_end_at > datetime.utcnow():
+            return assignment
+
+        now = datetime.utcnow()
+        assignment.assignment_status = RequestAssignmentStatus.COMPLETED
+        assignment.completed_at = assignment.completed_at or now
+        assignment.updated_at = now
+        await self._engine.save(assignment)
+        return assignment
 
     async def list_jobs(self, current_user, page: int = 1, rows: int = 20, assignment_status: str = "", keyword: str = "") -> Dict[str, Any]:
         role_value = self._role_value(current_user)
@@ -2224,9 +2669,27 @@ class RequestManager:
             for request_doc in request_docs:
                 request_lookup[str(request_doc.get("_id"))] = self._request_snapshot(request_doc)
 
+        touched_request_ids = await self._auto_complete_elapsed_assignment_docs(docs, request_lookup, assignment_collection)
+        for request_id in touched_request_ids:
+            try:
+                request_record = await self._get_request_or_404(request_id)
+            except HTTPException:
+                continue
+            await self._sync_request_runtime_state(request_record)
+            request_lookup[request_id] = self._request_snapshot(request_record)
+
         normalized_keyword = self._normalize_text(keyword)
         filtered_docs: List[Dict[str, Any]] = []
+        default_visible_statuses = (
+            {status.value for status in DEFAULT_GUARD_PROVIDER_JOB_STATUSES}
+            if not normalized_status and role_value in {"client_admin", "guard_admin", "sp_admin"}
+            else None
+        )
         for doc in docs:
+            if normalized_status and self._enum_value(doc.get("assignment_status")) != normalized_status:
+                continue
+            if default_visible_statuses is not None and self._enum_value(doc.get("assignment_status")) not in default_visible_statuses:
+                continue
             request_snapshot = request_lookup.get(str(doc.get("request_id")), {})
             searchable_text = " ".join([
                 self._normalize_text(request_snapshot.get("title")),
@@ -2308,6 +2771,42 @@ class RequestManager:
                 desired_slots = assignment.slots_committed or 0
                 if desired_slots <= 0:
                     raise HTTPException(status_code=400, detail="Service provider acceptance requires committed slots")
+
+            if assignment.assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER:
+                request_address = cast(Dict[str, Any], record.site_snapshot.get("site_address") or {})
+                request_latitude, request_longitude = self._validated_site_snapshot_coordinates(record.site_snapshot or {})
+                provider_capacity = await RequestMatchingManager.get_instance().provider_available_guard_capacity(
+                    assignment.assignee_tenant_id,
+                    RequestMatchingPreviewPayload(
+                        target_type="guard",
+                        site_address=MatchAddress(
+                            country=str(request_address.get("country") or "CA"),
+                            province=str(request_address.get("province") or ""),
+                            city=str(request_address.get("city") or ""),
+                            latitude=request_latitude,
+                            longitude=request_longitude,
+                        ),
+                        requested_guard_type=(record.requested_guard_type or "").strip() or None,
+                        requested_start_at=record.requested_start_at,
+                        requested_end_at=record.requested_end_at,
+                        max_results=500,
+                        fallback_to_province_when_missing_geo=False,
+                    ),
+                )
+                available_provider_guards = int(provider_capacity.get("available_guard_count") or 0)
+                if available_provider_guards <= 0:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Service provider has no available linked guards for this request window",
+                    )
+                if int(desired_slots or 0) > available_provider_guards:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f"Service provider only has {available_provider_guards} available linked "
+                            "guard(s) for this request window"
+                        ),
+                    )
 
             available_slots = int(record.open_slots or 0) + reserved_slots
             if int(desired_slots or 0) > available_slots:

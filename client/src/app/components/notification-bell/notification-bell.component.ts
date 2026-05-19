@@ -28,7 +28,7 @@ export class NotificationBellComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     if (!this.canUseNotifications()) return;
     this.notificationsService.loadLatest(6).subscribe();
-    this.refreshSubscription = interval(30000).subscribe(() => {
+    this.refreshSubscription = interval(10000).subscribe(() => {
       if (document.visibilityState !== 'visible') {
         return;
       }

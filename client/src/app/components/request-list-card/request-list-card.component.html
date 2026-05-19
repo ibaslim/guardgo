@@ -20,6 +20,12 @@
             <span *ngIf="request.last_wave_number" class="text-xs text-gray-500 dark:text-gray-400">
               Wave {{ request.last_wave_number }}
             </span>
+            <span
+              *ngIf="viewerAssignment"
+              class="inline-flex rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-medium text-gray-700 shadow-sm dark:bg-slate-900/80 dark:text-gray-200"
+            >
+              {{ formatTokenLabel(viewerAssignment.assignment_status) }}
+            </span>
             <span class="text-xs text-gray-500 dark:text-gray-400">
               Created {{ formatBackendDateTime(request.created_at) }}
             </span>
@@ -32,6 +38,14 @@
                 {{ siteValue }}
                 <span *ngIf="titleSupportingLabel">• {{ titleSupportingLabel }}</span>
               </p>
+              <div *ngIf="showClientTenant && clientTenantLabel" class="mt-3 flex flex-wrap items-center gap-2">
+                <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                  Client Tenant
+                </span>
+                <span class="inline-flex rounded-full bg-white/85 px-2.5 py-1 text-xs font-medium text-gray-700 shadow-sm dark:bg-slate-900/80 dark:text-gray-200">
+                  {{ clientTenantLabel }}
+                </span>
+              </div>
             </div>
             <div class="rounded-full border border-white/80 bg-white/90 px-3 py-1 text-xs font-medium text-gray-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-gray-300">
               Revision {{ request.request_revision || 1 }}
@@ -48,7 +62,7 @@
             [valueClass]="statCardValueClass"
           ></app-summary-metric-card>
           <app-summary-metric-card
-            label="Requested Window"
+            label="Job Window"
             [value]="requestedWindowLabel"
             [helperText]="requestedWindowHelperText"
             [containerClass]="statCardContainerClass"
@@ -175,6 +189,15 @@
               [loadingScope]="requestStatusScope"
               [fullWidth]="true"
               (pressed)="emitPrimaryAction()"
+            ></app-button>
+            <app-button
+              *ngFor="let action of viewerAssignmentActions; trackBy: trackByViewerAssignmentActionStatus"
+              [label]="action.label"
+              [type]="action.type"
+              size="sm"
+              [fullWidth]="true"
+              [loadingScope]="viewerAssignmentLoadingScope"
+              (pressed)="onViewerAssignmentAction(action.status)"
             ></app-button>
           </div>
 

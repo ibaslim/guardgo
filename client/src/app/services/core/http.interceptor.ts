@@ -12,7 +12,11 @@ import { Observable, throwError, TimeoutError, Subject } from 'rxjs';
 import { catchError, finalize, timeout, takeUntil } from 'rxjs/operators';
 import { MessageNotificationService } from '../message_notification/message-notification.service';
 import { AuthService } from '../authetication/auth.service';
-import { HTTP_LOADING_MODE, HTTP_LOADING_SCOPE } from '../../shared/http/http-loading.tokens';
+import {
+  HTTP_LOADING_MODE,
+  HTTP_LOADING_SCOPE,
+  HTTP_SUPPRESSED_ERROR_STATUSES,
+} from '../../shared/http/http-loading.tokens';
 import { LoadingFeedbackService } from '../../shared/services/loading-feedback.service';
 
 const inFlightCancels = new Map<string, Subject<void>>();
@@ -49,6 +53,7 @@ export const httpInterceptor: HttpInterceptorFn = (
   const isAssetRequest = authReq.url.includes('/assets/') || authReq.url.startsWith('assets/');
   const loadingMode = isAssetRequest ? 'silent' : authReq.context.get(HTTP_LOADING_MODE);
   const loadingScope = authReq.context.get(HTTP_LOADING_SCOPE);
+  const suppressedErrorStatuses = authReq.context.get(HTTP_SUPPRESSED_ERROR_STATUSES);
 
   const key = authReq.url.startsWith('api/') ? authReq.url : null;
   let cancel$: Subject<void> | null = null;
@@ -104,7 +109,10 @@ export const httpInterceptor: HttpInterceptorFn = (
           router.navigate(['/login']).then();
         }
 
-        if (!isSilentLogout) {
+        const shouldSuppressMessage = error instanceof HttpErrorResponse
+          && suppressedErrorStatuses.includes(error.status);
+
+        if (!isSilentLogout && !shouldSuppressMessage) {
           msg.show(message);
         }
       }

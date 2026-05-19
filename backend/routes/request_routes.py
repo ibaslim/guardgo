@@ -37,7 +37,7 @@ request_routes = APIRouter(
 @request_routes.get(
     "/api/requests",
     summary="List client requests",
-    description="Return paginated requests for the current client tenant.",
+    description="Return paginated requests in the current role scope.",
     tags=["Client Requests"],
     operation_id="listClientRequests",
     response_description="Paginated client requests.",
@@ -58,6 +58,7 @@ async def list_client_requests(
     keyword: str = "",
     request_status: str = "",
     fulfillment_mode: str = "",
+    client_tenant_id: str = "",
     current_user=Depends(get_current_user),
 ):
     return await RequestManager.get_instance().list_requests(
@@ -67,6 +68,7 @@ async def list_client_requests(
         keyword=keyword,
         request_status=request_status,
         fulfillment_mode=fulfillment_mode,
+        client_tenant_id=client_tenant_id,
     )
 
 
@@ -78,10 +80,67 @@ async def list_client_requests(
     operation_id="createClientRequest",
     response_description="Created client request.",
     status_code=201,
-    dependencies=[Depends(role_required([user_role.CLIENT_ADMIN]))],
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
 )
 async def create_client_request(payload: ClientRequestCreatePayload, current_user=Depends(get_current_user)):
     return await RequestManager.get_instance().create_request(payload=payload, current_user=current_user)
+
+
+@request_routes.get(
+    "/api/request-client-tenants",
+    summary="List active client tenants for request operations",
+    description="Return active client tenants that platform users can target when creating or filtering requests.",
+    tags=["Client Requests"],
+    operation_id="listRequestClientTenants",
+    response_description="Active client tenants available for request creation.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+    ]))],
+)
+async def list_request_client_tenants(
+    keyword: str = "",
+    rows: int = 100,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().list_request_client_tenants(
+        current_user=current_user,
+        keyword=keyword,
+        rows=rows,
+    )
+
+
+@request_routes.get(
+    "/api/request-client-tenants/{tenant_id}",
+    summary="Get active client tenant snapshot for request creation",
+    description="Return the client profile snapshot, including saved sites, for a platform-targeted request.",
+    tags=["Client Requests"],
+    operation_id="getRequestClientTenantSnapshot",
+    response_description="Client tenant snapshot.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+    ]))],
+)
+async def get_request_client_tenant_snapshot(
+    tenant_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().get_request_client_tenant_snapshot(
+        tenant_id=tenant_id,
+        current_user=current_user,
+    )
 
 
 @request_routes.patch(

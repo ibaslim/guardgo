@@ -381,6 +381,7 @@ class ShiftAttendanceEventRecord(Model):
 class ClientRequestCreatePayload(BaseModel):
     title: str = PydanticField(min_length=3, max_length=140)
     fulfillment_mode: RequestFulfillmentMode = RequestFulfillmentMode.INDIVIDUAL_ONLY
+    client_tenant_id: Optional[str] = PydanticField(default=None, min_length=1, max_length=80)
     site_index: Optional[int] = PydanticField(default=None, ge=0)
     site: Optional[RequestSiteInput] = None
     requested_guard_type: Optional[str] = None

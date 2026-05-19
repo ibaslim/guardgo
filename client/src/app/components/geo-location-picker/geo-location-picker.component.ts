@@ -59,6 +59,9 @@ export class GeoLocationPickerComponent implements AfterViewInit, OnChanges, OnD
   @Input() disabled = false;
   @Input() readonly = false;
   @Input() showMapUrl = true;
+  @Input() showSearchInput = true;
+  @Input() showCoordinateInputs = true;
+  @Input() showActionButtons = true;
   @Input() mapUrl = '';
   @Output() mapUrlChange = new EventEmitter<string>();
   @Input() mapUrlLabel = 'Map Link';

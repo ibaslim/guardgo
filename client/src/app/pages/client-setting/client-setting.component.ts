@@ -13,10 +13,12 @@ import { SectionComponent } from '../../components/section/section.component';
 import { ButtonComponent } from '../../components/button/button.component';
 import { StickyActionBarComponent } from '../../components/sticky-action-bar/sticky-action-bar.component';
 import { ErrorMessageComponent } from "../../components/error-message/error-message.component";
+import { GeoLocationPickerComponent } from '../../components/geo-location-picker/geo-location-picker.component';
 import { ProfilePictureUploadComponent } from '../../components/profile-picture-upload/profile-picture-upload.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
+import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import {
   buildAlphabeticDummyTag,
   buildSeededCaPhone,
@@ -41,6 +43,8 @@ interface Address {
   country: string;
   province: string;
   postalCode: string;
+  latitude: string;
+  longitude: string;
 }
 
 interface ContactPerson {
@@ -57,6 +61,7 @@ interface Site {
   managerEmail: string;
   numberOfGuardsRequired: number | null;
   siteType: string;
+  googleMapsUrl: string;
 }
 
 interface Client {
@@ -88,6 +93,7 @@ interface Client {
     ButtonComponent,
     StickyActionBarComponent,
     ErrorMessageComponent,
+    GeoLocationPickerComponent,
     ProfilePictureUploadComponent
   ],
   templateUrl: './client-setting.component.html',
@@ -125,7 +131,9 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       city: '',
       country: 'CA',
       province: '',
-      postalCode: ''
+      postalCode: '',
+      latitude: '',
+      longitude: '',
     },
     preferredGuardTypes: [],
     sites: []
@@ -147,7 +155,8 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
   constructor(
     private apiService: ApiService,
     private router: Router,
-    private appService: AppService
+    private appService: AppService,
+    private addressConsistencyService: GoogleMapsAddressConsistencyService,
   ) { }
 
   ngOnInit(): void {
@@ -297,7 +306,9 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       city: resolvedCityCode || rawCity || fallbackDefaultCity,
       country: raw?.country || 'CA',
       province: provinceCode,
-      postalCode: raw?.postal_code || raw?.postalCode || ''
+      postalCode: raw?.postal_code || raw?.postalCode || '',
+      latitude: raw?.latitude != null ? String(raw.latitude) : '',
+      longitude: raw?.longitude != null ? String(raw.longitude) : '',
     };
   }
 
@@ -347,6 +358,77 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     }
   }
 
+  createEmptySite(): Site {
+    return {
+      siteName: '',
+      siteAddress: {
+        street: '',
+        city: '',
+        country: 'CA',
+        province: '',
+        postalCode: '',
+        latitude: '',
+        longitude: '',
+      },
+      siteManagerContact: '',
+      managerEmail: '',
+      numberOfGuardsRequired: null,
+      siteType: '',
+      googleMapsUrl: '',
+    };
+  }
+
+  addSite(): void {
+    this.clientFormModel.sites = [...this.clientFormModel.sites, this.createEmptySite()];
+  }
+
+  removeSite(index: number): void {
+    this.clientFormModel.sites = this.clientFormModel.sites.filter((_site, siteIndex) => siteIndex !== index);
+    Object.keys(this.clientErrors)
+      .filter((key) => key.startsWith('sites.'))
+      .forEach((key) => delete this.clientErrors[key]);
+  }
+
+  getSiteCityOptions(siteIndex: number): { value: string; label: string }[] {
+    const site = this.clientFormModel.sites[siteIndex];
+    const provinceCode = site?.siteAddress.province || '';
+    const canonical: { value: string; label: string }[] = this.canadianCitiesByProvinceOptions[provinceCode] || [];
+    const current = String(site?.siteAddress.city || '').trim();
+    if (!current) {
+      return canonical;
+    }
+
+    const exists = canonical.some((option) => option.value === current);
+    if (exists) {
+      return canonical;
+    }
+
+    return [...canonical, { value: current, label: current }];
+  }
+
+  onSiteProvinceChange(siteIndex: number, nextProvinceCode: string): void {
+    const site = this.clientFormModel.sites[siteIndex];
+    if (!site) {
+      return;
+    }
+
+    site.siteAddress.province = nextProvinceCode;
+    const options = this.getSiteCityOptions(siteIndex);
+    const isCurrentValid = options.some((city) => city.value === site.siteAddress.city);
+    if (!isCurrentValid) {
+      site.siteAddress.city = this.getDefaultCityCodeForProvince(nextProvinceCode);
+    }
+  }
+
+  getSiteAddressCityLabel(siteIndex: number): string {
+    const site = this.clientFormModel.sites[siteIndex];
+    if (!site) {
+      return '';
+    }
+
+    return this.getCityLabelForProvince(site.siteAddress.province || '', site.siteAddress.city || '');
+  }
+
   private getCityLabelForProvince(provinceCode: string, cityCode: string): string {
     const options = this.canadianCitiesByProvinceOptions[provinceCode] || [];
     const raw = String(cityCode || '').trim();
@@ -378,7 +460,8 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
           siteManagerContact: site.site_manager_contact || site.siteManagerContact || '',
           managerEmail: site.manager_email || site.managerEmail || '',
           numberOfGuardsRequired: site.number_of_guards_required ?? site.numberOfGuardsRequired ?? null,
-          siteType: this.normalizeOptionValue(site.site_type || site.siteType || '', this.siteTypeOptions)
+          siteType: this.normalizeOptionValue(site.site_type || site.siteType || '', this.siteTypeOptions),
+          googleMapsUrl: site.google_maps_url || site.googleMapsUrl || '',
         };
       })
       : [];
@@ -587,15 +670,100 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       }
     }
 
+    this.clientFormModel.sites.forEach((site, index) => {
+      const errorPrefix = `sites.${index}.`;
+
+      if (!site.siteName.trim()) {
+        this.clientErrors[`${errorPrefix}siteName`] = 'Site name is required.';
+      }
+
+      if (!site.siteType.trim()) {
+        this.clientErrors[`${errorPrefix}siteType`] = 'Site type is required.';
+      }
+
+      if (!site.siteAddress.street.trim()) {
+        this.clientErrors[`${errorPrefix}street`] = 'Site street is required.';
+      }
+
+      if (!site.siteAddress.country.trim()) {
+        this.clientErrors[`${errorPrefix}country`] = 'Site country is required.';
+      }
+
+      if (site.siteAddress.country === 'CA' && !site.siteAddress.province.trim()) {
+        this.clientErrors[`${errorPrefix}province`] = 'Site province is required for Canada.';
+      } else if (site.siteAddress.province.trim()) {
+        const validProvinces = this.provinceOptions.map((p) => p.value);
+        if (validProvinces.length && !validProvinces.includes(site.siteAddress.province)) {
+          this.clientErrors[`${errorPrefix}province`] = 'Please select a valid province from the list.';
+        }
+      }
+
+      if (!site.siteAddress.city.trim()) {
+        this.clientErrors[`${errorPrefix}city`] = 'Site city is required.';
+      } else {
+        const cityOptions = this.getSiteCityOptions(index);
+        if (cityOptions.length && !cityOptions.some((city) => city.value === site.siteAddress.city)) {
+          this.clientErrors[`${errorPrefix}city`] = 'Please select a valid city for the selected province.';
+        }
+      }
+
+      if (!site.siteAddress.postalCode.trim()) {
+        this.clientErrors[`${errorPrefix}postalCode`] = 'Site postal code is required.';
+      } else if (site.siteAddress.country === 'CA') {
+        const postalCodePattern = /^[A-Z]\d[A-Z]\s?\d[A-Z]\d$/i;
+        if (!postalCodePattern.test(site.siteAddress.postalCode.trim())) {
+          this.clientErrors[`${errorPrefix}postalCode`] = 'Invalid Canadian postal code format (e.g., A1A 1A1).';
+        }
+      }
+
+      if (site.managerEmail.trim() && !/^[\w.-]+@[\w.-]+\.\w+$/.test(site.managerEmail.trim())) {
+        this.clientErrors[`${errorPrefix}managerEmail`] = 'Invalid email format.';
+      }
+
+      const latitude = Number(site.siteAddress.latitude);
+      const longitude = Number(site.siteAddress.longitude);
+
+      if (!String(site.siteAddress.latitude || '').trim()) {
+        this.clientErrors[`${errorPrefix}latitude`] = 'Latitude is required.';
+      } else if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+        this.clientErrors[`${errorPrefix}latitude`] = 'Latitude must be between -90 and 90.';
+      }
+
+      if (!String(site.siteAddress.longitude || '').trim()) {
+        this.clientErrors[`${errorPrefix}longitude`] = 'Longitude is required.';
+      } else if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+        this.clientErrors[`${errorPrefix}longitude`] = 'Longitude must be between -180 and 180.';
+      }
+
+      if (
+        this.clientErrors[`${errorPrefix}latitude`]
+        || this.clientErrors[`${errorPrefix}longitude`]
+      ) {
+        this.clientErrors[`${errorPrefix}coordinates`] = 'Valid coordinates are required for every saved client site.';
+      }
+
+      const recommendedGuardsRaw = String(site.numberOfGuardsRequired ?? '').trim();
+      if (recommendedGuardsRaw) {
+        const recommendedGuards = Number(recommendedGuardsRaw);
+        if (!Number.isFinite(recommendedGuards) || recommendedGuards < 1) {
+          this.clientErrors[`${errorPrefix}numberOfGuardsRequired`] = 'Recommended guards must be at least 1 when provided.';
+        }
+      }
+    });
+
     return Object.keys(this.clientErrors).length === 0;
   }
 
-  submitClientForm() {
+  async submitClientForm() {
     if (this.readonly) {
       return;
     }
 
     if (!this.validateClientForm()) {
+      return;
+    }
+
+    if (!(await this.validateSiteAddressConsistency())) {
       return;
     }
 
@@ -635,7 +803,26 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
           country: this.clientFormModel.billingAddress.country,
           province: this.clientFormModel.billingAddress.province || '',
           postal_code: this.clientFormModel.billingAddress.postalCode
-        }
+        },
+        sites: this.clientFormModel.sites.map((site) => ({
+          site_name: site.siteName.trim(),
+          site_manager_contact: site.siteManagerContact.trim() || undefined,
+          manager_email: site.managerEmail.trim() || undefined,
+          number_of_guards_required: String(site.numberOfGuardsRequired ?? '').trim()
+            ? Number(site.numberOfGuardsRequired)
+            : undefined,
+          site_type: site.siteType || undefined,
+          google_maps_url: site.googleMapsUrl.trim() || undefined,
+          site_address: {
+            street: site.siteAddress.street.trim(),
+            city: this.getCityLabelForProvince(site.siteAddress.province || '', site.siteAddress.city),
+            country: site.siteAddress.country,
+            province: site.siteAddress.province || '',
+            postal_code: site.siteAddress.postalCode.trim(),
+            latitude: Number(site.siteAddress.latitude),
+            longitude: Number(site.siteAddress.longitude),
+          }
+        }))
       },
       status: 'active'
     };
@@ -688,7 +875,49 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       country: 'CA',
       province,
       postalCode: 'M5H 2N2',
+      latitude: '',
+      longitude: '',
     };
+    this.clientFormModel.sites = [{
+      siteName: `Primary Operations Site ${nameTag}`,
+      siteAddress: {
+        street: `${100 + seed.sequence} Front Street W`,
+        city,
+        country: 'CA',
+        province,
+        postalCode: 'M5V 2T6',
+        latitude: '43.644865',
+        longitude: '-79.394820',
+      },
+      siteManagerContact: `Site Manager ${nameTag}`,
+      managerEmail: `site.manager+${seed.suffix}@example.com`,
+      numberOfGuardsRequired: 2,
+      siteType: this.siteTypeOptions[0]?.value || '',
+      googleMapsUrl: 'https://maps.google.com/?q=43.644865,-79.394820',
+    }];
     this.clientErrors = {};
+  }
+
+  private async validateSiteAddressConsistency(): Promise<boolean> {
+    for (let index = 0; index < this.clientFormModel.sites.length; index += 1) {
+      const site = this.clientFormModel.sites[index];
+      const result = await this.addressConsistencyService.validate({
+        latitude: site.siteAddress.latitude,
+        longitude: site.siteAddress.longitude,
+        expectedCountryCode: site.siteAddress.country,
+        expectedCountryName: this.countryOptions.find((option) => option.value === site.siteAddress.country)?.label || site.siteAddress.country,
+        expectedProvinceCode: site.siteAddress.province,
+        expectedProvinceName: this.provinceOptions.find((option) => option.value === site.siteAddress.province)?.label || site.siteAddress.province,
+        expectedCity: this.getSiteAddressCityLabel(index),
+        expectedPostalCode: site.siteAddress.postalCode,
+      });
+
+      if (!result.ok) {
+        this.clientErrors[`sites.${index}.coordinates`] = result.message || 'The selected coordinates do not match the site address.';
+        return false;
+      }
+    }
+
+    return true;
   }
 }

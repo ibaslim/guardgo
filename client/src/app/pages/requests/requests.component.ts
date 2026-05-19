@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
+import { HttpParams } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, forkJoin, interval } from 'rxjs';
@@ -52,6 +53,35 @@ import { AppService } from '../../services/core/app/app.service';
 import { normalizeRole } from '../../shared/helpers/access-control.helper';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import { LoadingFeedbackService } from '../../shared/services/loading-feedback.service';
+
+type RequestSiteSourceMode = 'manual' | 'saved';
+
+interface SavedClientSiteRecord {
+  index: number;
+  siteId: string;
+  siteName: string;
+  siteManagerContact: string;
+  managerEmail: string;
+  numberOfGuardsRequired: number | null;
+  siteType: string;
+  googleMapsUrl: string;
+  siteAddress: {
+    street: string;
+    city: string;
+    country: string;
+    province: string;
+    postalCode: string;
+    latitude: string;
+    longitude: string;
+  };
+  hasCoordinates: boolean;
+}
+
+interface RequestClientTenantOption {
+  value: string;
+  label: string;
+  siteCount: number;
+}
 
 @Component({
   selector: 'app-requests',
@@ -120,6 +150,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
     'grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-3 xl:items-end dark:bg-gray-800/50';
   readonly listToolbarControlsFourColumnClass =
     'grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-4 xl:items-end dark:bg-gray-800/50';
+  readonly listToolbarControlsFiveColumnClass =
+    'grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-5 xl:items-end dark:bg-gray-800/50';
   readonly listToolbarFooterClass = 'mt-4 flex flex-wrap items-center justify-between gap-3';
   readonly requestToolbarSummaryFooterClass = 'mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4';
   loading = false;
@@ -176,6 +208,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   keyword = '';
   requestStatusFilter = '';
   fulfillmentModeFilter = '';
+  requestClientTenantFilter = '';
 
   jobKeyword = '';
   jobStatusFilter = '';
@@ -227,6 +260,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   showBulkConfirmDrawer = false;
   requestFormMode: 'create' | 'edit' | 'publish_update' = 'create';
   editingRequestId = '';
+  requestScheduleSetupEnabled = false;
 
   selectedCandidateByRequestId: Record<string, string> = {};
   assigningRequestId = '';
@@ -331,11 +365,21 @@ export class RequestsComponent implements OnInit, OnDestroy {
     longitude: '',
     requestedGuardType: '',
     guardsRequired: 1,
-    requestedStartAt: '',
-    requestedEndAt: '',
-    requestExpiresAt: '',
+    requestedStartDate: '',
+    requestedStartTime: '',
+    requestedEndDate: '',
+    requestedEndTime: '',
+    requestExpiresDate: '',
+    requestExpiresTime: '',
     specialInstructions: '',
   };
+  requestSiteSourceMode: RequestSiteSourceMode = 'manual';
+  selectedSavedSiteIndex = '';
+  clientSavedSites: SavedClientSiteRecord[] = [];
+  savedClientSitesMissingGeoCount = 0;
+  requestClientTenantOptions: RequestClientTenantOption[] = [];
+  selectedRequestClientTenantId = '';
+  selectedRequestClientTenantLabel = '';
 
   fulfillmentModeOptions = [
     { label: 'Individual Guards', value: 'individual_only' },
@@ -464,6 +508,31 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return ['admin', 'ops_admin', 'support_admin', 'compliance_admin'].includes(this.role);
   }
 
+  get hasPlatformRequestScope(): boolean {
+    return this.isPlatformAdmin || this.role === 'read_only_admin';
+  }
+
+  get requestListToolbarControlsClass(): string {
+    return this.hasPlatformRequestScope ? this.listToolbarControlsFiveColumnClass : this.listToolbarControlsFourColumnClass;
+  }
+
+  get requestClientTenantFilterOptions(): Array<{ value: string; label: string }> {
+    const options = [
+      { value: '', label: 'All Client Tenants' },
+      ...this.requestClientTenantOptions.map((option) => ({
+        value: option.value,
+        label: option.label,
+      })),
+    ];
+
+    const currentFilter = String(this.requestClientTenantFilter || '').trim();
+    if (currentFilter && !options.some((option) => option.value === currentFilter)) {
+      options.push({ value: currentFilter, label: currentFilter });
+    }
+
+    return options;
+  }
+
   getCountSummary(count: number, singularLabel: string, scopeLabel: string): string {
     return `${count} ${singularLabel}${count === 1 ? '' : 's'} ${scopeLabel}`;
   }
@@ -533,15 +602,41 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return this.isPlatformAdmin || this.isClientAdmin;
   }
 
+  get canCreateRequests(): boolean {
+    return this.isPlatformAdmin || this.isClientAdmin;
+  }
+
+  get requestTimingStartLabel(): string {
+    return this.requestScheduleSetupEnabled ? 'First Shift Start' : 'Job Start';
+  }
+
+  get requestTimingEndLabel(): string {
+    return this.requestScheduleSetupEnabled ? 'First Shift End' : 'Job End';
+  }
+
+  get requestTimingStartHelperText(): string {
+    return this.requestScheduleSetupEnabled
+      ? 'Use the exact local start time for the first shift in this longer-term coverage pattern.'
+      : 'Same-day and short-duration jobs are supported. Use the exact local start time.';
+  }
+
+  get requestTimingEndHelperText(): string {
+    return this.requestScheduleSetupEnabled
+      ? 'Use the exact local end time for the first shift, even if later shifts repeat under the coverage pattern below.'
+      : 'Use the exact local end time, even if the job ends on the same day.';
+  }
+
   ngOnInit(): void {
     const session = this.appService.userSessionData();
     this.role = normalizeRole(session?.user?.role);
     this.tenantType = String(session?.tenant?.tenant_type || '').trim().toLowerCase();
     this.scheduleForm.timezone = this.getDefaultScheduleTimezone();
 
-    this.activeTab = this.isGuardOrProvider ? 'jobs' : 'requests';
+    this.activeTab = 'requests';
 
     this.loadMetadata();
+    this.loadRequestClientTenants({ silent: true });
+    this.loadClientSites({ silent: true });
 
     this.loadRequests(1);
     this.loadJobs(1);
@@ -648,6 +743,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
     if (!requestId && !jobId && !waveId && !shiftId && !slotId) {
       this.lastHandledRouteFocus = '';
+      if (!tab) {
+        this.activeTab = 'requests';
+      }
       return;
     }
 
@@ -703,14 +801,143 @@ export class RequestsComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadRequestClientTenants(options?: { silent?: boolean }): void {
+    if (!this.hasPlatformRequestScope) {
+      this.requestClientTenantOptions = [];
+      return;
+    }
+
+    const params = new HttpParams().set('rows', '200');
+    this.api.get<any>('request-client-tenants', {
+      params,
+      loadingMode: options?.silent ? 'silent' : undefined,
+    }).subscribe({
+      next: (response) => {
+        const items = Array.isArray(response?.items) ? response.items : [];
+        this.requestClientTenantOptions = items.map((item: any) => ({
+          value: String(item?.id || '').trim(),
+          label: String(item?.label || item?.id || '').trim(),
+          siteCount: Number(item?.site_count || 0),
+        })).filter((item: RequestClientTenantOption) => item.value && item.label);
+
+        if (this.requestFormMode === 'create' && this.isPlatformAdmin) {
+          const selectedExists = this.requestClientTenantOptions.some((option) => option.value === this.selectedRequestClientTenantId);
+          if (!selectedExists) {
+            if (this.requestClientTenantOptions.length === 1) {
+              this.onRequestClientTenantChange(this.requestClientTenantOptions[0].value);
+            } else if (!this.selectedRequestClientTenantId) {
+              this.selectedRequestClientTenantLabel = '';
+              this.clientSavedSites = [];
+              this.savedClientSitesMissingGeoCount = 0;
+            }
+          } else {
+            this.selectedRequestClientTenantLabel = this.requestClientTenantOptions.find((option) => option.value === this.selectedRequestClientTenantId)?.label || this.selectedRequestClientTenantLabel;
+          }
+        }
+      },
+      error: () => {
+        this.requestClientTenantOptions = [];
+      },
+    });
+  }
+
+  loadClientSites(options?: { silent?: boolean; tenantId?: string }): void {
+    if (!this.isClientAdmin && !this.isPlatformAdmin) {
+      this.clientSavedSites = [];
+      this.savedClientSitesMissingGeoCount = 0;
+      return;
+    }
+
+    const targetTenantId = String(options?.tenantId || this.selectedRequestClientTenantId || '').trim();
+    if (this.isPlatformAdmin && !targetTenantId) {
+      this.clientSavedSites = [];
+      this.savedClientSitesMissingGeoCount = 0;
+      return;
+    }
+
+    const endpoint = this.isPlatformAdmin ? `request-client-tenants/${targetTenantId}` : 'tenant';
+    this.api.get<any>(endpoint, {
+      loadingMode: options?.silent ? 'silent' : undefined,
+    }).subscribe({
+      next: (response) => {
+        if (this.isPlatformAdmin) {
+          this.selectedRequestClientTenantLabel = String(response?.label || this.requestClientTenantOptions.find((option) => option.value === targetTenantId)?.label || targetTenantId).trim();
+        }
+        const profile = response?.profile || response || {};
+        const rawSites = Array.isArray(profile?.sites) ? profile.sites : [];
+        let missingGeoCount = 0;
+        const reusableSites: SavedClientSiteRecord[] = rawSites.reduce((acc: SavedClientSiteRecord[], rawSite: any, index: number) => {
+          const siteAddress = rawSite?.site_address || rawSite?.siteAddress || {};
+          const latitudeText = siteAddress?.latitude != null ? String(siteAddress.latitude) : '';
+          const longitudeText = siteAddress?.longitude != null ? String(siteAddress.longitude) : '';
+          const hasCoordinates = this.parseCoordinate(latitudeText) !== null && this.parseCoordinate(longitudeText) !== null;
+          if (!hasCoordinates) {
+            missingGeoCount += 1;
+            return acc;
+          }
+
+          acc.push({
+            index,
+            siteId: String(rawSite?.site_id || rawSite?.siteId || '').trim(),
+            siteName: String(rawSite?.site_name || rawSite?.siteName || '').trim(),
+            siteManagerContact: String(rawSite?.site_manager_contact || rawSite?.siteManagerContact || '').trim(),
+            managerEmail: String(rawSite?.manager_email || rawSite?.managerEmail || '').trim(),
+            numberOfGuardsRequired: rawSite?.number_of_guards_required ?? rawSite?.numberOfGuardsRequired ?? null,
+            siteType: String(rawSite?.site_type || rawSite?.siteType || '').trim(),
+            googleMapsUrl: String(rawSite?.google_maps_url || rawSite?.googleMapsUrl || '').trim(),
+            siteAddress: {
+              street: String(siteAddress?.street || '').trim(),
+              city: String(siteAddress?.city || '').trim(),
+              country: String(siteAddress?.country || 'CA').trim() || 'CA',
+              province: String(siteAddress?.province || '').trim(),
+              postalCode: String(siteAddress?.postal_code || siteAddress?.postalCode || '').trim(),
+              latitude: latitudeText,
+              longitude: longitudeText,
+            },
+            hasCoordinates,
+          });
+          return acc;
+        }, []);
+
+        this.clientSavedSites = reusableSites;
+        this.savedClientSitesMissingGeoCount = missingGeoCount;
+
+        if (this.requestFormMode === 'create' && this.requestSiteSourceMode === 'saved') {
+          if (!this.selectedSavedSiteIndex && this.clientSavedSites.length) {
+            this.selectedSavedSiteIndex = String(this.clientSavedSites[0].index);
+          }
+          const selectedSite = this.selectedSavedClientSite;
+          if (selectedSite) {
+            this.applySavedSiteToRequestForm(selectedSite);
+          }
+        }
+      },
+      error: () => {
+        this.clientSavedSites = [];
+        this.savedClientSitesMissingGeoCount = 0;
+        if (this.isPlatformAdmin) {
+          this.selectedRequestClientTenantLabel = this.requestClientTenantOptions.find((option) => option.value === targetTenantId)?.label || '';
+        }
+      }
+    });
+  }
+
   loadRequests(page: number, options?: { silent?: boolean; suppressError?: boolean }): void {
     const silent = Boolean(options?.silent);
     const suppressError = Boolean(options?.suppressError);
     this.loading = true;
-    this.requestService.listRequests(page, this.rows, this.keyword, this.requestStatusFilter, this.fulfillmentModeFilter, {
-      loadingScope: this.requestListScope,
-      loadingMode: silent ? 'silent' : undefined,
-    }).subscribe({
+    this.requestService.listRequests(
+      page,
+      this.rows,
+      this.keyword,
+      this.requestStatusFilter,
+      this.fulfillmentModeFilter,
+      this.hasPlatformRequestScope ? this.requestClientTenantFilter : '',
+      {
+        loadingScope: this.requestListScope,
+        loadingMode: silent ? 'silent' : undefined,
+      },
+    ).subscribe({
       next: (response) => {
         this.items = response.items || [];
         this.page = response.pagination?.page || page;
@@ -972,6 +1199,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.requestService.getRequestSchedule(requestId, {
       loadingScope: this.requestScheduleScope,
       loadingMode: silent ? 'silent' : undefined,
+      suppressErrorStatuses: [404],
     }).subscribe({
       next: (response) => {
         this.selectedRequestSchedule = response.schedule || null;
@@ -1034,15 +1262,17 @@ export class RequestsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const requestStartDate = request.requested_start_at ? String(request.requested_start_at).slice(0, 10) : '';
-    const requestEndDate = request.requested_end_at ? String(request.requested_end_at).slice(0, 10) : requestStartDate;
+    const requestStartAt = this.formatDateTimeLocalInput(request.requested_start_at);
+    const requestEndAt = this.formatDateTimeLocalInput(request.requested_end_at);
+    const [requestStartDate = '', requestStartTime = ''] = requestStartAt.split('T');
+    const [, requestEndTime = ''] = requestEndAt.split('T');
     this.scheduleForm = {
       timezone: this.getDefaultScheduleTimezone(),
       scheduleType: 'one_time',
       startDate: requestStartDate,
-      endDate: requestEndDate,
-      startTimeLocal: '08:00',
-      endTimeLocal: '17:00',
+      endDate: requestStartDate,
+      startTimeLocal: requestStartTime || '08:00',
+      endTimeLocal: requestEndTime || '17:00',
       recurrenceDays: [],
       generationHorizonDays: 30,
       rosterDueOffsetMinutes: 120,
@@ -1164,11 +1394,75 @@ export class RequestsComponent implements OnInit, OnDestroy {
     };
   }
 
+  shouldPersistInlineSchedule(): boolean {
+    return this.shouldShowInlineScheduleSetup && this.requestScheduleSetupEnabled;
+  }
+
+  loadRequestScheduleIntoForm(request: ClientRequestItem): void {
+    this.selectedRequestSchedule = null;
+    this.requestScheduleSetupEnabled = false;
+    this.resetScheduleForm();
+    this.scheduleErrors = {};
+
+    this.requestService.getRequestSchedule(request.id, {
+      loadingMode: 'silent',
+      suppressErrorStatuses: [404],
+    }).subscribe({
+      next: (response) => {
+        const schedule = response.schedule || null;
+        if (!schedule) {
+          this.seedInlineScheduleFromRequestForm();
+          return;
+        }
+        this.selectedRequestSchedule = schedule;
+        this.requestScheduleSetupEnabled = true;
+        this.populateScheduleForm(request, schedule);
+      },
+      error: (error) => {
+        const status = Number(error?.status || error?.statusCode || 0);
+        if (status === 404) {
+          this.seedInlineScheduleFromRequestForm();
+          return;
+        }
+        this.notification.show(error?.error?.detail || 'Failed to load request schedule into the request form', 'fail', 5000);
+      }
+    });
+  }
+
+  persistInlineSchedule(
+    requestId: string,
+    callbacks: {
+      onSuccess: () => void;
+      onError: (error: any) => void;
+    },
+  ): void {
+    const payload = this.buildSchedulePayload();
+    const action = this.selectedRequestSchedule?.id
+      ? this.requestService.updateRequestSchedule(requestId, payload, { loadingScope: this.saveRequestScope })
+      : this.requestService.createRequestSchedule(requestId, payload, { loadingScope: this.saveRequestScope });
+
+    action.subscribe({
+      next: (response) => {
+        this.selectedRequestSchedule = response.schedule || null;
+        callbacks.onSuccess();
+      },
+      error: (error) => {
+        callbacks.onError(error);
+      },
+    });
+  }
+
   validateRequestForm(requirePublishFields = false): boolean {
     this.requestErrors = {};
 
     if (!this.requestForm.title.trim()) {
       this.requestErrors['title'] = 'Request title is required.';
+    }
+    if (this.isPlatformAdmin && this.requestFormMode === 'create' && !this.selectedRequestClientTenantId) {
+      this.requestErrors['clientTenant'] = 'Select the client tenant that owns this request.';
+    }
+    if (this.requestSiteSourceMode === 'saved' && !this.selectedSavedSiteIndex) {
+      this.requestErrors['savedSite'] = 'Select a saved client site.';
     }
     if (!this.requestForm.siteName.trim()) {
       this.requestErrors['siteName'] = 'Site name is required.';
@@ -1229,25 +1523,69 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.requestErrors['longitude'] = 'Longitude must be between -180 and 180.';
     }
 
-    if (this.requestForm.requestedEndAt && this.requestForm.requestedStartAt) {
-      const start = new Date(this.requestForm.requestedStartAt);
-      const end = new Date(this.requestForm.requestedEndAt);
-      if (end <= start) {
+    const requestedStartAt = this.combineDateAndTime(this.requestForm.requestedStartDate, this.requestForm.requestedStartTime);
+    const requestedEndAt = this.combineDateAndTime(this.requestForm.requestedEndDate, this.requestForm.requestedEndTime);
+    const requestExpiresAt = this.combineDateAndTime(this.requestForm.requestExpiresDate, this.requestForm.requestExpiresTime);
+
+    const hasRequestedStartDate = this.requestForm.requestedStartDate.trim() !== '';
+    const hasRequestedStartTime = this.requestForm.requestedStartTime.trim() !== '';
+    const hasRequestedEndDate = this.requestForm.requestedEndDate.trim() !== '';
+    const hasRequestedEndTime = this.requestForm.requestedEndTime.trim() !== '';
+    const hasRequestExpiryDate = this.requestForm.requestExpiresDate.trim() !== '';
+    const hasRequestExpiryTime = this.requestForm.requestExpiresTime.trim() !== '';
+
+    const hasRequestedStartAt = hasRequestedStartDate || hasRequestedStartTime;
+    const hasRequestedEndAt = hasRequestedEndDate || hasRequestedEndTime;
+
+    if (hasRequestedStartAt !== hasRequestedEndAt) {
+      if (!hasRequestedStartAt) {
+        this.requestErrors['requestedStartAt'] = 'Start date and time is required when an end date and time is provided.';
+      }
+      if (!hasRequestedEndAt) {
+        this.requestErrors['requestedEndAt'] = 'End date and time is required when a start date and time is provided.';
+      }
+    }
+
+    if (hasRequestedStartAt && hasRequestedStartDate !== hasRequestedStartTime) {
+      this.requestErrors['requestedStartAt'] = 'Provide both a requested start date and time.';
+    }
+    if (hasRequestedEndAt && hasRequestedEndDate !== hasRequestedEndTime) {
+      this.requestErrors['requestedEndAt'] = 'Provide both a requested end date and time.';
+    }
+    if ((hasRequestExpiryDate || hasRequestExpiryTime) && hasRequestExpiryDate !== hasRequestExpiryTime) {
+      this.requestErrors['requestExpiresAt'] = 'Provide both an expiry date and time.';
+    }
+
+    if (requestedEndAt && requestedStartAt) {
+      const start = new Date(requestedStartAt);
+      const end = new Date(requestedEndAt);
+      if (Number.isNaN(start.getTime())) {
+        this.requestErrors['requestedStartAt'] = 'Start date and time is invalid.';
+      }
+      if (Number.isNaN(end.getTime())) {
+        this.requestErrors['requestedEndAt'] = 'End date and time is invalid.';
+      } else if (!Number.isNaN(start.getTime()) && end <= start) {
         this.requestErrors['requestedEndAt'] = 'End time must be after start time.';
       }
     }
 
     if (requirePublishFields) {
-      if (!this.requestForm.requestExpiresAt) {
+      if (!requestedStartAt) {
+        this.requestErrors['requestedStartAt'] = 'Requested start date and time is required before publishing.';
+      }
+      if (!requestedEndAt) {
+        this.requestErrors['requestedEndAt'] = 'Requested end date and time is required before publishing.';
+      }
+      if (!requestExpiresAt) {
         this.requestErrors['requestExpiresAt'] = 'Request expiry is required before publishing.';
       } else {
-        const expiry = new Date(this.requestForm.requestExpiresAt);
+        const expiry = new Date(requestExpiresAt);
         if (Number.isNaN(expiry.getTime()) || expiry <= new Date()) {
           this.requestErrors['requestExpiresAt'] = 'Request expiry must be in the future.';
-        } else if (this.requestForm.requestedStartAt) {
-          const requestedStartAt = new Date(this.requestForm.requestedStartAt);
-          if (expiry > requestedStartAt) {
-            this.requestErrors['requestExpiresAt'] = 'Request expiry cannot be after the requested start date.';
+        } else if (requestedStartAt) {
+          const requestedStartDateTime = new Date(requestedStartAt);
+          if (expiry > requestedStartDateTime) {
+            this.requestErrors['requestExpiresAt'] = 'Request expiry cannot be after the requested start date and time.';
           }
         }
       }
@@ -1265,6 +1603,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.shouldPersistInlineSchedule() && !this.validateScheduleForm()) {
+      this.notification.show('Please fix the coverage pattern fields before saving the request.', 'fail', 4000);
+      return;
+    }
+
     const addressConsistent = await this.validateRequestAddressConsistency();
     if (!addressConsistent) {
       this.notification.show('Please reconcile the site coordinates and manual address.', 'fail', 4500);
@@ -1275,12 +1618,57 @@ export class RequestsComponent implements OnInit, OnDestroy {
     const payload = this.buildRequestPayload();
 
     if (this.requestFormMode === 'create') {
-      this.requestService.createRequest({ ...payload, commit }, { loadingScope: this.saveRequestScope }).subscribe({
+      const shouldPersistSchedule = this.shouldPersistInlineSchedule();
+      const createAsDraftFirst = commit && shouldPersistSchedule;
+      this.requestService.createRequest({ ...payload, commit: createAsDraftFirst ? false : commit }, { loadingScope: this.saveRequestScope }).subscribe({
         next: (response) => {
-          this.saving = false;
-          this.notification.show(response.message || (commit ? 'Request created' : 'Request draft saved'), 'success', 4000);
-          this.closeRequestFormDrawer();
-          this.loadRequests(1);
+          const createdRequest = response.item;
+          if (!createdRequest?.id) {
+            this.saving = false;
+            this.notification.show('Request was created but no request id was returned.', 'fail', 5000);
+            this.loadRequests(1);
+            return;
+          }
+
+          const finishCreate = (message: string, tone: 'success' | 'fail' = 'success') => {
+            this.saving = false;
+            this.notification.show(message, tone, 4000);
+            this.closeRequestFormDrawer();
+            this.loadRequests(1);
+          };
+
+          const publishCreatedRequest = () => {
+            this.requestService.publishRequest(createdRequest.id, { max_match_results: 25 }, { loadingScope: this.saveRequestScope }).subscribe({
+              next: (publishResponse) => {
+                finishCreate(publishResponse.message || 'Request published', 'success');
+              },
+              error: (publishError) => {
+                finishCreate(publishError?.error?.detail || 'Request draft saved and schedule saved, but publish failed', 'fail');
+              }
+            });
+          };
+
+          if (!shouldPersistSchedule) {
+            finishCreate(response.message || (commit ? 'Request created' : 'Request draft saved'), 'success');
+            return;
+          }
+
+          this.persistInlineSchedule(createdRequest.id, {
+            onSuccess: () => {
+              if (commit) {
+                publishCreatedRequest();
+                return;
+              }
+              finishCreate('Request draft and coverage pattern saved', 'success');
+            },
+            onError: (scheduleError) => {
+              if (commit) {
+                finishCreate(scheduleError?.error?.detail || 'Request draft saved, but coverage pattern failed to save so it was not published', 'fail');
+                return;
+              }
+              finishCreate(scheduleError?.error?.detail || 'Request draft saved, but coverage pattern failed to save', 'fail');
+            },
+          });
         },
         error: (error) => {
           this.saving = false;
@@ -1321,26 +1709,45 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
     this.requestService.updateRequest(this.editingRequestId, payload, { loadingScope: this.saveRequestScope }).subscribe({
       next: () => {
-        if (!commit) {
+        const finishUpdate = (message: string, tone: 'success' | 'fail' = 'success') => {
           this.saving = false;
-          this.notification.show('Request draft updated', 'success', 3500);
+          this.notification.show(message, tone, 3500);
           this.closeRequestFormDrawer();
           this.loadRequests(this.page);
+        };
+
+        const publishUpdatedRequest = () => {
+          this.requestService.publishRequest(this.editingRequestId, { max_match_results: 25 }, { loadingScope: this.saveRequestScope }).subscribe({
+            next: (response) => {
+              finishUpdate(response.message || 'Request published', 'success');
+            },
+            error: (error) => {
+              finishUpdate(error?.error?.detail || 'Draft updated but failed to publish request', 'fail');
+            }
+          });
+        };
+
+        const continueAfterSchedule = () => {
+          if (!commit) {
+            this.saving = false;
+            this.notification.show('Request draft updated', 'success', 3500);
+            this.closeRequestFormDrawer();
+            this.loadRequests(this.page);
+            return;
+          }
+          publishUpdatedRequest();
+        };
+
+        if (!this.shouldPersistInlineSchedule()) {
+          continueAfterSchedule();
           return;
         }
 
-        this.requestService.publishRequest(this.editingRequestId, { max_match_results: 25 }, { loadingScope: this.saveRequestScope }).subscribe({
-          next: (response) => {
-            this.saving = false;
-            this.notification.show(response.message || 'Request published', 'success', 3500);
-            this.closeRequestFormDrawer();
-            this.loadRequests(this.page);
+        this.persistInlineSchedule(this.editingRequestId, {
+          onSuccess: continueAfterSchedule,
+          onError: (scheduleError) => {
+            finishUpdate(scheduleError?.error?.detail || 'Request draft updated, but coverage pattern failed to save', 'fail');
           },
-          error: (error) => {
-            this.saving = false;
-            this.notification.show(error?.error?.detail || 'Draft updated but failed to publish request', 'fail', 5000);
-            this.loadRequests(this.page);
-          }
         });
       },
       error: (error) => {
@@ -1351,6 +1758,12 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   resetForm(): void {
+    const preservedClientTenantId = this.isPlatformAdmin && this.requestFormMode === 'create'
+      ? this.selectedRequestClientTenantId
+      : '';
+    const preservedClientTenantLabel = this.isPlatformAdmin && this.requestFormMode === 'create'
+      ? this.requestClientTenantDisplayValue
+      : '';
     this.requestForm = {
       title: '',
       fulfillmentMode: 'individual_only',
@@ -1367,11 +1780,27 @@ export class RequestsComponent implements OnInit, OnDestroy {
       longitude: '',
       requestedGuardType: '',
       guardsRequired: 1,
-      requestedStartAt: '',
-      requestedEndAt: '',
-      requestExpiresAt: '',
+      requestedStartDate: '',
+      requestedStartTime: '',
+      requestedEndDate: '',
+      requestedEndTime: '',
+      requestExpiresDate: '',
+      requestExpiresTime: '',
       specialInstructions: '',
     };
+    this.requestSiteSourceMode = 'manual';
+    this.selectedSavedSiteIndex = '';
+    this.requestScheduleSetupEnabled = false;
+    this.selectedRequestSchedule = null;
+    this.resetScheduleForm();
+    this.scheduleErrors = {};
+    if (preservedClientTenantId) {
+      this.selectedRequestClientTenantId = preservedClientTenantId;
+      this.selectedRequestClientTenantLabel = preservedClientTenantLabel;
+    } else if (!this.isPlatformAdmin || this.requestFormMode !== 'create') {
+      this.selectedRequestClientTenantId = '';
+      this.selectedRequestClientTenantLabel = '';
+    }
     this.requestErrors = {};
   }
 
@@ -1379,6 +1808,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.requestFormMode = 'create';
     this.editingRequestId = '';
     this.resetForm();
+    this.loadRequestClientTenants({ silent: true });
+    this.loadClientSites({ silent: true });
     this.showRequestFormDrawer = true;
   }
 
@@ -1391,6 +1822,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.requestFormMode = 'edit';
     this.editingRequestId = item.id;
     this.populateFormFromRequest(item);
+    this.loadRequestScheduleIntoForm(item);
     this.showRequestFormDrawer = true;
   }
 
@@ -1406,6 +1838,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.requestFormMode = 'publish_update';
     this.editingRequestId = item.id;
     this.populateFormFromRequest(item);
+    this.requestScheduleSetupEnabled = false;
+    this.selectedRequestSchedule = null;
     this.showRequestFormDrawer = true;
   }
 
@@ -1417,6 +1851,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   fillDummyData(): void {
+    this.requestSiteSourceMode = 'manual';
+    this.selectedSavedSiteIndex = '';
     const samples = [
       {
         title: 'Overnight Warehouse Security – Toronto',
@@ -1505,10 +1941,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
     const today = new Date();
     const startDate = new Date(today);
     startDate.setDate(today.getDate() + 7);
+    startDate.setHours(18, 0, 0, 0);
     const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + 30);
-
-    const toDateInput = (d: Date) => d.toISOString().slice(0, 10);
+    endDate.setHours(startDate.getHours() + 2, 0, 0, 0);
+    const expiryDate = new Date(startDate);
+    expiryDate.setHours(startDate.getHours() - 2, 0, 0, 0);
 
     this.requestForm = {
       ...this.requestForm,
@@ -1528,13 +1965,19 @@ export class RequestsComponent implements OnInit, OnDestroy {
       googleMapsUrl: '',
       siteManagerContact: picked.siteManagerContact,
       managerEmail: picked.managerEmail,
-        requestedGuardType: picked.requestedGuardType,
-        guardsRequired: picked.guardsRequired,
-        requestedStartAt: toDateInput(startDate),
-        requestedEndAt: toDateInput(endDate),
-        requestExpiresAt: toDateInput(startDate),
-        specialInstructions: picked.specialInstructions,
-      };
+      requestedGuardType: picked.requestedGuardType,
+      guardsRequired: picked.guardsRequired,
+      requestedStartDate: this.formatDateInput(startDate),
+      requestedStartTime: this.formatTimeInput(startDate),
+      requestedEndDate: this.formatDateInput(endDate),
+      requestedEndTime: this.formatTimeInput(endDate),
+      requestExpiresDate: this.formatDateInput(expiryDate),
+      requestExpiresTime: this.formatTimeInput(expiryDate),
+      specialInstructions: picked.specialInstructions,
+    };
+    if (this.requestScheduleSetupEnabled && !this.selectedRequestSchedule?.id) {
+      this.seedInlineScheduleFromRequestForm();
+    }
     this.requestErrors = {};
   }
 
@@ -1559,22 +2002,46 @@ export class RequestsComponent implements OnInit, OnDestroy {
       longitude: address['longitude'] != null ? String(address['longitude']) : '',
       requestedGuardType: item.requested_guard_type || '',
       guardsRequired: Number(item.guards_required || 1),
-      requestedStartAt: item.requested_start_at ? String(item.requested_start_at).slice(0, 10) : '',
-      requestedEndAt: item.requested_end_at ? String(item.requested_end_at).slice(0, 10) : '',
-      requestExpiresAt: item.request_expires_at ? String(item.request_expires_at).slice(0, 10) : '',
+      requestedStartDate: this.formatDateInput(item.requested_start_at),
+      requestedStartTime: this.formatTimeInput(item.requested_start_at),
+      requestedEndDate: this.formatDateInput(item.requested_end_at),
+      requestedEndTime: this.formatTimeInput(item.requested_end_at),
+      requestExpiresDate: this.formatDateInput(item.request_expires_at),
+      requestExpiresTime: this.formatTimeInput(item.request_expires_at),
       specialInstructions: item.special_instructions || '',
     };
+    this.requestSiteSourceMode = item.site_snapshot?.site_source === 'saved' ? 'saved' : 'manual';
+    this.selectedSavedSiteIndex = Number.isInteger(item.site_snapshot?.site_index) && Number(item.site_snapshot?.site_index) >= 0
+      ? String(item.site_snapshot?.site_index)
+      : '';
+    if (this.isPlatformAdmin) {
+      this.selectedRequestClientTenantId = String(item.client_tenant_id || '').trim();
+      this.selectedRequestClientTenantLabel = this.requestClientTenantOptions.find((option) => option.value === this.selectedRequestClientTenantId)?.label || this.selectedRequestClientTenantId;
+      if (this.selectedRequestClientTenantId) {
+        this.loadClientSites({ silent: true, tenantId: this.selectedRequestClientTenantId });
+      }
+    }
     this.requestErrors = {};
   }
 
   buildRequestPayload() {
+    const useSavedSiteIndex = this.requestSiteSourceMode === 'saved'
+      && this.requestFormMode === 'create'
+      && this.selectedSavedSiteIndex !== '';
     const latitude = this.parseCoordinate(this.requestForm.latitude);
     const longitude = this.parseCoordinate(this.requestForm.longitude);
+    const requestedStartAt = this.combineDateAndTime(this.requestForm.requestedStartDate, this.requestForm.requestedStartTime);
+    const requestedEndAt = this.combineDateAndTime(this.requestForm.requestedEndDate, this.requestForm.requestedEndTime);
+    const requestExpiresAt = this.combineDateAndTime(this.requestForm.requestExpiresDate, this.requestForm.requestExpiresTime);
 
     return {
       title: this.requestForm.title.trim(),
       fulfillment_mode: this.requestForm.fulfillmentMode,
-      site: {
+      client_tenant_id: this.isPlatformAdmin && this.requestFormMode === 'create'
+        ? (this.selectedRequestClientTenantId || null)
+        : null,
+      site_index: useSavedSiteIndex ? Number(this.selectedSavedSiteIndex) : null,
+      site: useSavedSiteIndex ? null : {
         site_name: this.requestForm.siteName.trim(),
         site_manager_contact: this.requestForm.siteManagerContact.trim() || null,
         manager_email: this.requestForm.managerEmail.trim() || null,
@@ -1591,9 +2058,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
       },
       requested_guard_type: this.requestForm.requestedGuardType || null,
       guards_required: Number(this.requestForm.guardsRequired || 1),
-      requested_start_at: this.requestForm.requestedStartAt || null,
-      requested_end_at: this.requestForm.requestedEndAt || null,
-      request_expires_at: this.requestForm.requestExpiresAt || null,
+      requested_start_at: requestedStartAt || null,
+      requested_end_at: requestedEndAt || null,
+      request_expires_at: requestExpiresAt || null,
       special_instructions: this.requestForm.specialInstructions.trim() || null,
       max_match_results: 25,
     };
@@ -1705,6 +2172,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.requestService.getRequestSchedule(targetRequest.id, {
       loadingScope: this.requestScheduleScope,
       loadingMode: 'silent',
+      suppressErrorStatuses: [404],
     }).subscribe({
       next: (response) => {
         openDrawer(response.schedule || null);
@@ -2015,7 +2483,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.coverageErrors = {};
     this.coverageForm = {
       additionalSlots: 1,
-      requestExpiresAt: item.request_expires_at ? String(item.request_expires_at).slice(0, 10) : '',
+      requestExpiresAt: this.formatDateTimeLocalInput(item.request_expires_at),
     };
     this.showCoverageDrawer = true;
   }
@@ -2274,6 +2742,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.keyword = '';
     this.requestStatusFilter = '';
     this.fulfillmentModeFilter = '';
+    this.requestClientTenantFilter = '';
     this.loadRequests(1);
   }
 
@@ -2390,7 +2859,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       } else if (item.requested_start_at) {
         const requestedStartAt = new Date(item.requested_start_at);
         if (expiry > requestedStartAt) {
-          this.coverageErrors['requestExpiresAt'] = 'Request expiry cannot be after the requested start date.';
+          this.coverageErrors['requestExpiresAt'] = 'Request expiry cannot be after the requested start date and time.';
         }
       }
     }
@@ -2799,8 +3268,15 @@ export class RequestsComponent implements OnInit, OnDestroy {
       next: (response) => {
         this.updatingJobId = '';
         this.notification.show(response.message || 'Job updated', 'success', 3500);
+        if (status === 'accepted' && this.isGuardOrProvider) {
+          this.activeTab = 'jobs';
+          this.jobStatusFilter = '';
+        }
         if (this.selectedJob?.id === job.id) {
           this.closeJobDrawer();
+        }
+        if (this.selectedRequest?.viewer_assignment?.id === job.id) {
+          this.closeRequestDrawer();
         }
         this.loadJobs(this.jobPage);
         this.loadRequests(this.page);
@@ -2871,6 +3347,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
           if (this.selectedJob?.id === job.id) {
             this.closeJobDrawer();
           }
+          if (this.selectedRequest?.viewer_assignment?.id === job.id) {
+            this.closeRequestDrawer();
+          }
           this.closeReasonDrawer();
           this.loadJobs(this.jobPage);
           this.loadRequests(this.page);
@@ -2902,8 +3381,15 @@ export class RequestsComponent implements OnInit, OnDestroy {
       next: (response) => {
         this.updatingJobId = '';
         this.notification.show(response.message || 'Job accepted', 'success', 3500);
+        if (this.isGuardOrProvider) {
+          this.activeTab = 'jobs';
+          this.jobStatusFilter = '';
+        }
         if (this.selectedJob?.id === job.id) {
           this.closeJobDrawer();
+        }
+        if (this.selectedRequest?.viewer_assignment?.id === job.id) {
+          this.closeRequestDrawer();
         }
         this.closeAcceptJobDrawer();
         this.loadJobs(this.jobPage);
@@ -2947,6 +3433,42 @@ export class RequestsComponent implements OnInit, OnDestroy {
       && ['submitted', 'assigned'].includes(item.request_status)
       && Number(item.open_slots ?? item.guards_required ?? 0) > 0
       && this.getEligibleCandidates(item).length > 0;
+  }
+
+  getViewerAssignment(item: ClientRequestItem | null): RequestAssignmentItem | null {
+    return item?.viewer_assignment || null;
+  }
+
+  getRequestViewerActions(item: ClientRequestItem | null): Array<{ label: string; status: RequestAssignmentStatus; type: 'primary' | 'secondary' | 'danger' }> {
+    const assignment = this.getViewerAssignment(item);
+    return assignment ? this.getJobActions(assignment) : [];
+  }
+
+  trackByJobActionStatus(
+    _index: number,
+    action: { label: string; status: RequestAssignmentStatus; type: 'primary' | 'secondary' | 'danger' },
+  ): string {
+    return action.status;
+  }
+
+  trackByRequestViewerActionStatus(
+    _index: number,
+    action: { label: string; status: RequestAssignmentStatus; type: 'primary' | 'secondary' | 'danger' },
+  ): string {
+    return action.status;
+  }
+
+  hasRequestViewerActions(item: ClientRequestItem | null): boolean {
+    return this.getRequestViewerActions(item).length > 0;
+  }
+
+  updateRequestViewerAssignmentStatus(item: ClientRequestItem, status: RequestAssignmentStatus): void {
+    const assignment = this.getViewerAssignment(item);
+    if (!assignment) {
+      this.notification.show('No active offer is available for this request.', 'fail', 4000);
+      return;
+    }
+    this.updateJobStatus(assignment, status);
   }
 
   canPublishUpdate(item: ClientRequestItem): boolean {
@@ -3511,11 +4033,23 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return new Date(value.getFullYear(), value.getMonth() + delta, 1);
   }
 
-  formatDateInput(value: Date): string {
-    const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, '0');
-    const day = String(value.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  formatDateInput(value: string | Date | null | undefined): string {
+    if (!value) {
+      return '';
+    }
+
+    if (value instanceof Date) {
+      const year = value.getFullYear();
+      const month = String(value.getMonth() + 1).padStart(2, '0');
+      const day = String(value.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    const normalized = this.formatDateTimeLocalInput(value);
+    if (!normalized) {
+      return '';
+    }
+    return normalized.slice(0, 10);
   }
 
   handleShiftSlotActionSuccess(slotId: string, response: ShiftSlotDetailResponse): void {
@@ -3777,6 +4311,193 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return String(item.site_snapshot?.site_address?.[key] || '');
   }
 
+  getRequestSiteLatitude(item: ClientRequestItem): string {
+    const value = item.site_snapshot?.site_address?.latitude;
+    return value === null || value === undefined ? '' : String(value);
+  }
+
+  getRequestSiteLongitude(item: ClientRequestItem): string {
+    const value = item.site_snapshot?.site_address?.longitude;
+    return value === null || value === undefined ? '' : String(value);
+  }
+
+  getRequestClientTenantLabel(item: Pick<ClientRequestItem, 'client_tenant_id' | 'client_tenant_label'> | null | undefined): string {
+    const explicitLabel = String(item?.client_tenant_label || '').trim();
+    if (explicitLabel) {
+      return explicitLabel;
+    }
+
+    const tenantId = String(item?.client_tenant_id || '').trim();
+    if (!tenantId) {
+      return '';
+    }
+
+    return this.requestClientTenantOptions.find((option) => option.value === tenantId)?.label || tenantId;
+  }
+
+  get canUseSavedSiteMode(): boolean {
+    return this.clientSavedSites.length > 0 || this.requestSiteSourceMode === 'saved';
+  }
+
+  get requestClientTenantDisplayValue(): string {
+    return this.getRequestClientTenantLabel({
+      client_tenant_id: this.selectedRequestClientTenantId,
+      client_tenant_label: this.selectedRequestClientTenantLabel,
+    });
+  }
+
+  get shouldShowInlineScheduleSetup(): boolean {
+    return this.requestFormMode !== 'publish_update';
+  }
+
+  get requestSiteSourceOptions(): Array<{ value: RequestSiteSourceMode; label: string }> {
+    const options: Array<{ value: RequestSiteSourceMode; label: string }> = [
+      { value: 'manual', label: 'Manual Site Entry' },
+    ];
+    if (this.canUseSavedSiteMode) {
+      options.unshift({ value: 'saved', label: 'Saved Client Site' });
+    }
+    return options;
+  }
+
+  get savedClientSiteOptions(): Array<{ value: string; label: string }> {
+    return this.clientSavedSites.map((site) => {
+      const locality = [site.siteAddress.city, site.siteAddress.province].filter(Boolean).join(', ');
+      return {
+        value: String(site.index),
+        label: locality ? `${site.siteName} • ${locality}` : site.siteName,
+      };
+    });
+  }
+
+  get selectedSavedClientSite(): SavedClientSiteRecord | null {
+    return this.clientSavedSites.find((site) => String(site.index) === String(this.selectedSavedSiteIndex || '')) || null;
+  }
+
+  get requestSitePreview(): {
+    siteName: string;
+    addressLine: string;
+    contactLine: string;
+    coordinatesLine: string;
+    siteType: string;
+    recommendedGuards: string;
+  } | null {
+    if (this.requestSiteSourceMode !== 'saved') {
+      return null;
+    }
+
+    const site = this.selectedSavedClientSite;
+    const siteName = site?.siteName || this.requestForm.siteName.trim();
+    if (!siteName) {
+      return null;
+    }
+
+    const street = site?.siteAddress.street || this.requestForm.siteStreet.trim();
+    const city = site?.siteAddress.city || this.getRequestSiteCityLabel(this.requestForm.siteProvince, this.requestForm.siteCity);
+    const province = site?.siteAddress.province || this.getRequestProvinceLabel(this.requestForm.siteProvince);
+    const postalCode = site?.siteAddress.postalCode || this.requestForm.sitePostalCode.trim();
+    const latitude = site?.siteAddress.latitude || this.requestForm.latitude.trim();
+    const longitude = site?.siteAddress.longitude || this.requestForm.longitude.trim();
+    const contact = site?.siteManagerContact || this.requestForm.siteManagerContact.trim();
+    const email = site?.managerEmail || this.requestForm.managerEmail.trim();
+    const siteType = site?.siteType || '';
+    const recommendedCount = site?.numberOfGuardsRequired != null ? String(site.numberOfGuardsRequired) : '';
+
+    return {
+      siteName,
+      addressLine: [street, city, province, postalCode].filter(Boolean).join(' • '),
+      contactLine: [contact || 'No site manager contact', email].filter(Boolean).join(' • '),
+      coordinatesLine: latitude && longitude ? `${latitude}, ${longitude}` : 'Coordinates unavailable',
+      siteType: siteType || 'Not specified',
+      recommendedGuards: recommendedCount || 'Not specified',
+    };
+  }
+
+  onRequestSiteSourceModeChange(nextMode: RequestSiteSourceMode | string): void {
+    const normalizedMode = String(nextMode || '').trim().toLowerCase() === 'saved' && this.canUseSavedSiteMode
+      ? 'saved'
+      : 'manual';
+    this.requestSiteSourceMode = normalizedMode;
+    delete this.requestErrors['savedSite'];
+    delete this.requestErrors['coordinates'];
+    delete this.requestErrors['latitude'];
+    delete this.requestErrors['longitude'];
+
+    if (normalizedMode === 'saved') {
+      if (!this.selectedSavedSiteIndex && this.clientSavedSites.length) {
+        this.selectedSavedSiteIndex = String(this.clientSavedSites[0].index);
+      }
+      const selectedSite = this.selectedSavedClientSite;
+      if (selectedSite) {
+        this.applySavedSiteToRequestForm(selectedSite);
+      }
+    }
+  }
+
+  onRequestClientTenantChange(nextTenantId: string): void {
+    this.selectedRequestClientTenantId = String(nextTenantId || '').trim();
+    this.selectedRequestClientTenantLabel = this.requestClientTenantOptions.find((option) => option.value === this.selectedRequestClientTenantId)?.label || '';
+    this.requestSiteSourceMode = 'manual';
+    this.selectedSavedSiteIndex = '';
+    this.clientSavedSites = [];
+    this.savedClientSitesMissingGeoCount = 0;
+    this.requestForm = {
+      ...this.requestForm,
+      siteName: '',
+      siteStreet: '',
+      siteCity: '',
+      siteProvince: '',
+      sitePostalCode: '',
+      siteCountry: 'CA',
+      siteManagerContact: '',
+      managerEmail: '',
+      googleMapsUrl: '',
+      latitude: '',
+      longitude: '',
+    };
+    delete this.requestErrors['clientTenant'];
+    delete this.requestErrors['savedSite'];
+    delete this.requestErrors['siteName'];
+    delete this.requestErrors['siteProvince'];
+    delete this.requestErrors['siteCity'];
+    delete this.requestErrors['managerEmail'];
+    delete this.requestErrors['coordinates'];
+    delete this.requestErrors['latitude'];
+    delete this.requestErrors['longitude'];
+
+    if (!this.selectedRequestClientTenantId) {
+      return;
+    }
+
+    this.loadClientSites({ silent: true, tenantId: this.selectedRequestClientTenantId });
+  }
+
+  onSavedSiteSelectionChange(nextIndex: string): void {
+    this.selectedSavedSiteIndex = String(nextIndex || '').trim();
+    delete this.requestErrors['savedSite'];
+    const selectedSite = this.selectedSavedClientSite;
+    if (selectedSite) {
+      this.applySavedSiteToRequestForm(selectedSite);
+    }
+  }
+
+  onRequestScheduleSetupToggle(checked: boolean): void {
+    this.requestScheduleSetupEnabled = Boolean(checked);
+    this.scheduleErrors = {};
+    if (!this.requestScheduleSetupEnabled) {
+      return;
+    }
+
+    if (!this.selectedRequestSchedule?.id) {
+      this.seedInlineScheduleFromRequestForm();
+    }
+  }
+
+  useFirstShiftTimingForSchedule(): void {
+    this.seedInlineScheduleFromRequestForm();
+    this.scheduleErrors = {};
+  }
+
   getRequestSiteCityOptions(): { value: string; label: string }[] {
     const provinceCode = String(this.requestForm.siteProvince || '').trim().toUpperCase();
     const canonical = this.canadianCitiesByProvinceOptions[provinceCode] || [];
@@ -3861,6 +4582,92 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
     const parsed = Number(trimmed);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private applySavedSiteToRequestForm(site: SavedClientSiteRecord): void {
+    const provinceCode = this.resolveProvinceCode(site.siteAddress.province) || site.siteAddress.province;
+    const cityCode = this.resolveCityCodeForProvince(provinceCode, site.siteAddress.city) || site.siteAddress.city;
+    this.requestForm = {
+      ...this.requestForm,
+      siteName: site.siteName,
+      siteStreet: site.siteAddress.street,
+      siteCity: cityCode,
+      siteProvince: provinceCode,
+      sitePostalCode: site.siteAddress.postalCode,
+      siteCountry: site.siteAddress.country || 'CA',
+      siteManagerContact: site.siteManagerContact,
+      managerEmail: site.managerEmail,
+      googleMapsUrl: site.googleMapsUrl,
+      latitude: site.siteAddress.latitude,
+      longitude: site.siteAddress.longitude,
+    };
+  }
+
+  private seedInlineScheduleFromRequestForm(): void {
+    const requestedStartAt = this.combineDateAndTime(this.requestForm.requestedStartDate, this.requestForm.requestedStartTime);
+    const requestedEndAt = this.combineDateAndTime(this.requestForm.requestedEndDate, this.requestForm.requestedEndTime);
+    const startDate = this.formatDateInput(requestedStartAt);
+    const startTime = this.formatTimeInput(requestedStartAt);
+    const endTime = this.formatTimeInput(requestedEndAt);
+
+    this.scheduleForm = {
+      ...this.scheduleForm,
+      timezone: this.scheduleForm.timezone || this.getDefaultScheduleTimezone(),
+      startDate: startDate || this.scheduleForm.startDate,
+      endDate: startDate || this.scheduleForm.endDate,
+      startTimeLocal: startTime || this.scheduleForm.startTimeLocal,
+      endTimeLocal: endTime || this.scheduleForm.endTimeLocal,
+    };
+  }
+
+  private combineDateAndTime(dateValue: string | null | undefined, timeValue: string | null | undefined): string {
+    const normalizedDate = String(dateValue || '').trim();
+    const normalizedTime = String(timeValue || '').trim();
+    if (!normalizedDate || !normalizedTime) {
+      return '';
+    }
+    return `${normalizedDate}T${normalizedTime}`;
+  }
+
+  private formatTimeInput(value: string | Date | null | undefined): string {
+    const normalized = this.formatDateTimeLocalInput(value);
+    if (!normalized || normalized.length < 16) {
+      return '';
+    }
+    return normalized.slice(11, 16);
+  }
+
+  private formatDateTimeLocalInput(value: string | Date | null | undefined): string {
+    if (!value) {
+      return '';
+    }
+
+    if (value instanceof Date) {
+      const year = value.getFullYear();
+      const month = String(value.getMonth() + 1).padStart(2, '0');
+      const day = String(value.getDate()).padStart(2, '0');
+      const hours = String(value.getHours()).padStart(2, '0');
+      const minutes = String(value.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    const text = String(value || '').trim();
+    if (!text) {
+      return '';
+    }
+
+    const normalized = text.replace(' ', 'T');
+    const match = normalized.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
+    if (match) {
+      return `${match[1]}T${match[2]}:${match[3]}`;
+    }
+
+    const parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+
+    return this.formatDateTimeLocalInput(parsed);
   }
 
   private async validateRequestAddressConsistency(): Promise<boolean> {

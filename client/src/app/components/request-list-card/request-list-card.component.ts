@@ -2,8 +2,8 @@ import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { formatBackendDateTime, formatDate, readableTitle } from '../../shared/helpers/format.helper';
-import { ClientRequestItem } from '../../shared/model/request/client-request.model';
+import { formatBackendDateTime, readableTitle } from '../../shared/helpers/format.helper';
+import { ClientRequestItem, RequestAssignmentItem, RequestAssignmentStatus } from '../../shared/model/request/client-request.model';
 import { BannerComponent } from '../banner/banner.component';
 import { ButtonComponent } from '../button/button.component';
 import { CardComponent } from '../card/card.component';
@@ -46,6 +46,11 @@ export class RequestListCardComponent {
   @Input() candidateOptions: Array<{ label: string; value: string }> = [];
   @Input() requestStatusScope = '';
   @Input() assignScope = '';
+  @Input() showClientTenant = false;
+  @Input() clientTenantLabel = '';
+  @Input() viewerAssignment: RequestAssignmentItem | null = null;
+  @Input() viewerAssignmentActions: Array<{ label: string; status: RequestAssignmentStatus; type: 'primary' | 'secondary' | 'danger' }> = [];
+  @Input() viewerAssignmentLoadingScope = '';
 
   @Output() selectedCandidateIdChange = new EventEmitter<string>();
   @Output() details = new EventEmitter<void>();
@@ -57,6 +62,7 @@ export class RequestListCardComponent {
   @Output() close = new EventEmitter<void>();
   @Output() softDelete = new EventEmitter<void>();
   @Output() assign = new EventEmitter<void>();
+  @Output() viewerAssignmentAction = new EventEmitter<RequestAssignmentStatus>();
 
   readonly statCardContainerClass =
     'rounded-xl border border-slate-200/80 bg-slate-50/95 px-4 py-3 shadow-sm dark:border-slate-700/80 dark:bg-slate-900/70';
@@ -196,6 +202,9 @@ export class RequestListCardComponent {
     const start = this.request?.requested_start_at;
     const end = this.request?.requested_end_at;
     if (start && end) {
+      if (this.isSameCalendarDate(start, end)) {
+        return `${this.formatDisplayDate(start)} to ${this.formatDisplayTime(end)}`;
+      }
       return `${this.formatDisplayDate(start)} to ${this.formatDisplayDate(end)}`;
     }
     if (start) {
@@ -344,6 +353,10 @@ export class RequestListCardComponent {
     return this.canRequestAdditionalCoverage && !this.showCoverageAsPrimary;
   }
 
+  get hasViewerAssignmentActions(): boolean {
+    return Array.isArray(this.viewerAssignmentActions) && this.viewerAssignmentActions.length > 0;
+  }
+
   get showCoverageAsPrimary(): boolean {
     return !this.canPublish && !this.canPublishUpdate && this.canRequestAdditionalCoverage;
   }
@@ -382,12 +395,51 @@ export class RequestListCardComponent {
     this.selectedCandidateIdChange.emit(value);
   }
 
+  onViewerAssignmentAction(status: RequestAssignmentStatus): void {
+    this.viewerAssignmentAction.emit(status);
+  }
+
+  trackByViewerAssignmentActionStatus(
+    _index: number,
+    action: { label: string; status: RequestAssignmentStatus; type: 'primary' | 'secondary' | 'danger' },
+  ): string {
+    return action.status;
+  }
+
   formatTokenLabel(value: string): string {
     return readableTitle(String(value || '').trim());
   }
 
   formatDisplayDate(value?: string | null): string {
-    return value ? formatDate(value) : '-';
+    return value ? formatBackendDateTime(value) : '-';
+  }
+
+  formatDisplayTime(value?: string | null): string {
+    if (!value) {
+      return '-';
+    }
+
+    const dateObj = new Date(value);
+    if (Number.isNaN(dateObj.getTime())) {
+      return '-';
+    }
+
+    return new Intl.DateTimeFormat('en-CA', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(dateObj);
+  }
+
+  private isSameCalendarDate(startValue: string, endValue: string): boolean {
+    const start = new Date(startValue);
+    const end = new Date(endValue);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return false;
+    }
+
+    return start.getFullYear() === end.getFullYear()
+      && start.getMonth() === end.getMonth()
+      && start.getDate() === end.getDate();
   }
 
   getStatusClasses(status: string): string {

@@ -60,6 +60,7 @@ export type ShiftAttendanceEventType =
 export interface ClientRequestItem {
   id: string;
   client_tenant_id: string;
+  client_tenant_label?: string | null;
   created_by_user_id: string;
   created_by_username: string;
   title: string;
@@ -114,6 +115,7 @@ export interface ClientRequestItem {
   deleted_reason?: string | null;
   created_at: string;
   updated_at: string;
+  viewer_assignment?: RequestAssignmentItem | null;
 }
 
 export interface RequestAssignmentItem {
@@ -445,12 +447,14 @@ export interface ClientRequestListResponse {
     keyword: string;
     request_status: string;
     fulfillment_mode: string;
+    client_tenant_id?: string;
   };
 }
 
 export interface ClientRequestCreatePayload {
   title: string;
   fulfillment_mode: ClientRequestFulfillmentMode;
+  client_tenant_id?: string | null;
   site_index?: number | null;
   site?: {
     site_name: string;

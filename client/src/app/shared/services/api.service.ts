@@ -1,13 +1,19 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpContext, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { HTTP_LOADING_MODE, HTTP_LOADING_SCOPE, HttpLoadingMode } from '../http/http-loading.tokens';
+import {
+  HTTP_LOADING_MODE,
+  HTTP_LOADING_SCOPE,
+  HTTP_SUPPRESSED_ERROR_STATUSES,
+  HttpLoadingMode,
+} from '../http/http-loading.tokens';
 
 export interface ApiRequestOptions {
   params?: HttpParams;
   headers?: HttpHeaders;
   loadingMode?: HttpLoadingMode;
   loadingScope?: string;
+  suppressErrorStatuses?: number[];
 }
 
 @Injectable({providedIn: 'root'})
@@ -44,6 +50,9 @@ export class ApiService {
     }
     if (options?.loadingScope) {
       context = context.set(HTTP_LOADING_SCOPE, options.loadingScope);
+    }
+    if (options?.suppressErrorStatuses?.length) {
+      context = context.set(HTTP_SUPPRESSED_ERROR_STATUSES, options.suppressErrorStatuses);
     }
 
     return {

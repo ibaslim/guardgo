@@ -43,7 +43,7 @@ async def test_list_client_requests_forwards_filters(monkeypatch):
     monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
 
     async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as client:
-        response = await client.get("/api/requests?page=2&rows=5&keyword=night&request_status=draft&fulfillment_mode=individual_only")
+        response = await client.get("/api/requests?page=2&rows=5&keyword=night&request_status=draft&fulfillment_mode=individual_only&client_tenant_id=tenant-77")
 
     assert response.status_code == 200
     assert captured["page"] == 2
@@ -51,6 +51,7 @@ async def test_list_client_requests_forwards_filters(monkeypatch):
     assert captured["keyword"] == "night"
     assert captured["request_status"] == "draft"
     assert captured["fulfillment_mode"] == "individual_only"
+    assert captured["client_tenant_id"] == "tenant-77"
     assert captured["current_user"].username == "tester"
 
 
@@ -78,6 +79,39 @@ async def test_create_client_request_calls_manager(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_create_client_request_allows_platform_admin_with_target_client_tenant(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def create_request(self, payload, current_user):
+            captured["title"] = payload.title
+            captured["client_tenant_id"] = payload.client_tenant_id
+            captured["user"] = current_user.username
+            return {"id": "req-1", "title": payload.title}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/requests",
+            json={
+                "title": "Ops-created request",
+                "fulfillment_mode": "individual_only",
+                "client_tenant_id": "507f1f77bcf86cd799439099",
+                "guards_required": 2,
+                "commit": True,
+            },
+        )
+
+    assert response.status_code == 201
+    assert captured == {
+        "title": "Ops-created request",
+        "client_tenant_id": "507f1f77bcf86cd799439099",
+        "user": "tester",
+    }
+
+
+@pytest.mark.anyio
 async def test_create_client_request_forbidden_for_guard_admin(monkeypatch):
     class FakeManager:
         async def create_request(self, payload, current_user):
@@ -92,6 +126,48 @@ async def test_create_client_request_forbidden_for_guard_admin(monkeypatch):
         )
 
     assert response.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_list_request_client_tenants_forwards_filters(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def list_request_client_tenants(self, **kwargs):
+            captured.update(kwargs)
+            return {"items": [], "total_items": 0}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.OPS_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/request-client-tenants?keyword=vancouver&rows=55")
+
+    assert response.status_code == 200
+    assert captured["keyword"] == "vancouver"
+    assert captured["rows"] == 55
+    assert captured["current_user"].username == "tester"
+
+
+@pytest.mark.anyio
+async def test_get_request_client_tenant_snapshot_forwards_tenant_id(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def get_request_client_tenant_snapshot(self, tenant_id, current_user):
+            captured["tenant_id"] = tenant_id
+            captured["user"] = current_user.username
+            return {"id": tenant_id, "profile": {}}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.SUPPORT_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/request-client-tenants/507f1f77bcf86cd799439099")
+
+    assert response.status_code == 200
+    assert captured == {
+        "tenant_id": "507f1f77bcf86cd799439099",
+        "user": "tester",
+    }
 
 
 @pytest.mark.anyio

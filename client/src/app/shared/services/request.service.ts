@@ -50,13 +50,22 @@ export class RequestService {
     return params.set(key, value);
   }
 
-  listRequests(page = 1, rows = 20, keyword = '', requestStatus = '', fulfillmentMode = '', options?: ApiRequestOptions) {
-    const params = new HttpParams()
+  listRequests(
+    page = 1,
+    rows = 20,
+    keyword = '',
+    requestStatus = '',
+    fulfillmentMode = '',
+    clientTenantId = '',
+    options?: ApiRequestOptions,
+  ) {
+    let params = new HttpParams()
       .set('page', page)
       .set('rows', rows)
       .set('keyword', keyword)
       .set('request_status', requestStatus)
       .set('fulfillment_mode', fulfillmentMode);
+    params = this.withOptionalParam(params, 'client_tenant_id', clientTenantId);
     return this.api.get<ClientRequestListResponse>('requests', { ...options, params });
   }
 

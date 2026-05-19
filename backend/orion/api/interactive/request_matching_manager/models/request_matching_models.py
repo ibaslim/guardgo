@@ -9,9 +9,12 @@ ReasonCode = Literal[
     "within_radius",
     "outside_radius",
     "province_mismatch",
+    "city_mismatch",
     "missing_geo",
     "ownership_excluded",
     "outside_availability",
+    "guard_type_mismatch",
+    "insufficient_capacity",
 ]
 TargetType = Literal["guard", "service_provider"]
 
@@ -27,10 +30,11 @@ class MatchAddress(BaseModel):
 class RequestMatchingPreviewPayload(BaseModel):
     target_type: TargetType = "guard"
     site_address: MatchAddress
+    requested_guard_type: Optional[str] = None
     requested_start_at: Optional[datetime] = None
     requested_end_at: Optional[datetime] = None
     max_results: int = Field(default=50, ge=1, le=500)
-    fallback_to_province_when_missing_geo: bool = True
+    fallback_to_province_when_missing_geo: bool = False
 
 
 class RequestMatchCandidate(BaseModel):
@@ -46,6 +50,10 @@ class RequestMatchCandidate(BaseModel):
     distance_mi: Optional[float] = None
     radius_km: Optional[float] = None
     radius_mi: Optional[float] = None
+    linked_guard_count: Optional[int] = None
+    eligible_guard_count: Optional[int] = None
+    reserved_guard_count: Optional[int] = None
+    available_guard_count: Optional[int] = None
 
 
 class RequestMatchingPreviewResult(BaseModel):

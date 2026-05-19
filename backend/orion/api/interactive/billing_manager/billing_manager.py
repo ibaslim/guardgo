@@ -114,14 +114,14 @@ class BillingManager:
                 "included_radius_km": 15.0,
                 "rate_per_km": 0.55,
                 "max_auto_match_radius_km": 75.0,
-                "manual_review_over_km": 100.0,
+                "manual_review_over_km": 60.0,
             }
 
         return {
             "included_radius_km": 10.0,
             "rate_per_km": 0.45,
             "max_auto_match_radius_km": 50.0,
-            "manual_review_over_km": 70.0,
+            "manual_review_over_km": 40.0,
         }
 
     @staticmethod
