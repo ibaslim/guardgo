@@ -37,6 +37,8 @@
           *ngFor="let day of week"
           class="min-h-[9.5rem] rounded-lg border p-3 transition"
           [class]="getDayClasses(day)"
+          [class.cursor-pointer]="day.shifts.length === 1"
+          (click)="openDayCell($event, day)"
         >
           <div class="flex items-start justify-between gap-2">
             <div class="text-sm font-semibold">{{ day.dateNumber }}</div>
@@ -53,25 +55,29 @@
           </div>
 
           <div *ngIf="day.shifts.length" class="mt-3 space-y-2">
-            <button
+            <app-button
               *ngFor="let shift of day.shifts | slice:0:2; trackBy: trackByShiftId"
-              type="button"
-              class="w-full rounded-md border border-gray-200 bg-white/80 px-2.5 py-2 text-left text-xs text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900/80 dark:text-gray-200 dark:hover:border-blue-800 dark:hover:text-blue-300"
-              (click)="openShift.emit(shift)"
+              type="secondary"
+              [fullWidth]="true"
+              [customClass]="'!justify-start rounded-md border border-gray-200 bg-white/80 px-2.5 py-2 text-left text-xs text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900/80 dark:text-gray-200 dark:hover:border-blue-800 dark:hover:text-blue-300'"
+              (pressed)="requestShiftDetails(shift)"
             >
               <div class="font-semibold">{{ getShiftTitle(shift) }}</div>
               <div class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
                 {{ formatBackendDateTime(shift.shift_start_at_utc) }}
               </div>
-            </button>
+              <div class="mt-2 text-[11px] font-medium text-blue-700 dark:text-blue-300">
+                Open shift details
+              </div>
+            </app-button>
 
             <button
-              *ngIf="day.shifts.length > 2"
+              *ngIf="day.shifts.length > 1"
               type="button"
               class="text-left text-[11px] font-medium text-blue-700 transition hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200"
-              (click)="selectDate.emit(day.isoDate)"
+              (click)="runDayPrimaryAction(day)"
             >
-              View all {{ day.shifts.length }} shifts
+              {{ getDayPrimaryActionLabel(day) }}
             </button>
           </div>
 

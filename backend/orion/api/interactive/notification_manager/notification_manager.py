@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_notification_model import NotificationRecord
 from orion.services.mongo_manager.shared_model.db_auth_models import (
+    PLATFORM_ADMIN_ROLES,
     TENANT_ADMIN_ROLES,
     UserStatus,
     db_user_account,
@@ -69,6 +70,22 @@ class NotificationManager:
 
     async def _active_tenant_admin_user_ids(self, tenant_id: str) -> List[str]:
         return await self._active_tenant_user_ids(tenant_id, admin_only=True)
+
+    async def _active_platform_admin_user_ids(self) -> List[str]:
+        users = await self._engine.find(db_user_account, {})
+        user_ids: List[str] = []
+        for user in users:
+            user_id = getattr(user, "id", None)
+            if user_id is None:
+                continue
+            role_value = normalize_role_value(getattr(user, "role", ""))
+            status_value = self._normalized_status_value(getattr(user, "status", ""))
+            if role_value not in PLATFORM_ADMIN_ROLES:
+                continue
+            if status_value != UserStatus.ACTIVE.value:
+                continue
+            user_ids.append(str(user_id))
+        return user_ids
 
     async def _ensure_active_tenant_for_current_user(self, current_user) -> None:
         role_value = normalize_role_value(getattr(current_user, "role", ""))
@@ -242,6 +259,29 @@ class NotificationManager:
         return await self.create_for_users(
             recipient_user_ids=user_ids,
             recipient_tenant_id=str(tenant_id),
+            title=title,
+            message=message,
+            category=category,
+            source_module=source_module,
+            action_url=action_url,
+            action_label=action_label,
+            metadata=metadata,
+        )
+
+    async def create_for_platform_admin_users(
+        self,
+        title: str,
+        message: str,
+        category: str = "info",
+        source_module: Optional[str] = None,
+        action_url: Optional[str] = None,
+        action_label: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        user_ids = await self._active_platform_admin_user_ids()
+        return await self.create_for_users(
+            recipient_user_ids=user_ids,
+            recipient_tenant_id=None,
             title=title,
             message=message,
             category=category,

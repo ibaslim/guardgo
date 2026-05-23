@@ -44,6 +44,9 @@ export type ShiftSlotStatus =
   | 'cancelled';
 export type ShiftAttendanceEventType =
   | 'unavailable_reported'
+  | 'leave_reported'
+  | 'leave_returned'
+  | 'late_arrival'
   | 'checkin_attempted'
   | 'arrived'
   | 'geo_failed'
@@ -167,6 +170,7 @@ export interface RequestAssignmentItem {
     request_expires_at?: string | null;
     accepted_slots?: number;
     open_slots?: number;
+    has_schedule?: boolean;
   };
 }
 
@@ -279,6 +283,8 @@ export interface ShiftAttendanceEventItem {
 export interface ShiftInstanceItem {
   id: string;
   request_id: string;
+  request_title?: string | null;
+  site_name?: string | null;
   client_tenant_id: string;
   schedule_template_id: string;
   shift_date_local: string;
@@ -393,6 +399,7 @@ export interface ShiftSlotCheckInPayload {
   latitude: number;
   longitude: number;
   note?: string | null;
+  timezone?: string | null;
 }
 
 export interface ShiftSlotClientConfirmPayload {
@@ -401,6 +408,7 @@ export interface ShiftSlotClientConfirmPayload {
 
 export interface ShiftSlotStartPayload {
   note?: string | null;
+  timezone?: string | null;
 }
 
 export interface ShiftSlotCheckOutPayload {
@@ -409,6 +417,101 @@ export interface ShiftSlotCheckOutPayload {
 
 export interface ShiftSlotUnavailablePayload {
   note?: string | null;
+}
+
+export type ShiftGuardLeaveStatus = 'active' | 'returned_early' | 'completed' | 'cancelled';
+
+export interface ShiftGuardLeaveItem {
+  id: string;
+  guard_tenant_id: string;
+  service_provider_tenant_id?: string | null;
+  leave_status: ShiftGuardLeaveStatus | string;
+  start_at_utc: string;
+  end_at_utc: string;
+  effective_end_at_utc?: string | null;
+  reason?: string | null;
+  affected_slot_ids: string[];
+  replacement_slot_ids: string[];
+  requested_by_user_id?: string | null;
+  requested_by_username?: string | null;
+  requested_by_role?: string | null;
+  returned_early_at?: string | null;
+  returned_early_by_user_id?: string | null;
+  returned_early_by_username?: string | null;
+  return_note?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ShiftGuardLeaveListResponse {
+  items: ShiftGuardLeaveItem[];
+  pagination: {
+    page: number;
+    rows: number;
+    total_items: number;
+    total_pages: number;
+  };
+  filters: {
+    guard_tenant_id?: string;
+    leave_status?: string;
+  };
+}
+
+export interface ShiftGuardLeaveCreatePayload {
+  guard_tenant_id?: string | null;
+  start_at_utc: string;
+  end_at_utc: string;
+  reason?: string | null;
+}
+
+export interface ShiftGuardLeaveReturnPayload {
+  note?: string | null;
+}
+
+export type ShiftGuardLeaveReturnDecisionAction = 'restore_original' | 'keep_replacement';
+export type ShiftGuardLeaveReturnReviewMode = 'auto_restore' | 'manual_review' | 'keep_history';
+
+export interface ShiftGuardLeaveReturnReviewItem {
+  original_slot_id: string;
+  original_slot_status: ShiftSlotStatus | string;
+  shift_id: string;
+  request_id: string;
+  request_title: string;
+  shift_date_local: string;
+  shift_start_at_utc: string;
+  shift_end_at_utc: string;
+  replacement_slot_id?: string | null;
+  replacement_slot_status?: ShiftSlotStatus | string | null;
+  replacement_assignment_id?: string | null;
+  replacement_assignment_status?: RequestAssignmentStatus | string | null;
+  replacement_assignee_tenant_id?: string | null;
+  replacement_assignee_tenant_type?: ClientRequestTargetType | string | null;
+  replacement_assigned_guard_tenant_id?: string | null;
+  review_mode: ShiftGuardLeaveReturnReviewMode | string;
+  recommended_action: ShiftGuardLeaveReturnDecisionAction | string;
+  can_restore_original: boolean;
+  can_keep_replacement: boolean;
+}
+
+export interface ShiftGuardLeaveReturnReviewResponse {
+  leave: ShiftGuardLeaveItem;
+  items: ShiftGuardLeaveReturnReviewItem[];
+  summary: {
+    total_items: number;
+    auto_restore_count: number;
+    decision_required_count: number;
+    locked_history_count: number;
+  };
+}
+
+export interface ShiftGuardLeaveReturnDecisionPayload {
+  original_slot_id: string;
+  action: ShiftGuardLeaveReturnDecisionAction;
+}
+
+export interface ShiftGuardLeaveReconcilePayload {
+  note?: string | null;
+  decisions: ShiftGuardLeaveReturnDecisionPayload[];
 }
 
 export interface ServiceProviderGuardSummaryItem {
@@ -453,6 +556,7 @@ export interface ClientRequestListResponse {
 
 export interface ClientRequestCreatePayload {
   title: string;
+  timezone?: string | null;
   fulfillment_mode: ClientRequestFulfillmentMode;
   client_tenant_id?: string | null;
   site_index?: number | null;
@@ -484,6 +588,7 @@ export interface ClientRequestCreatePayload {
 
 export interface ClientRequestUpdatePayload {
   title?: string | null;
+  timezone?: string | null;
   fulfillment_mode?: ClientRequestFulfillmentMode;
   site?: {
     site_name: string;
@@ -548,6 +653,7 @@ export interface RequestPublishPayload {
 }
 
 export interface RequestPublishUpdatePayload {
+  timezone?: string | null;
   fulfillment_mode?: ClientRequestFulfillmentMode;
   site?: ClientRequestUpdatePayload['site'];
   requested_guard_type?: string | null;

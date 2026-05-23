@@ -12,11 +12,16 @@ It is intended for:
 - client demos
 - sign-off before moving to invoicing and reporting
 
+For exact attendance timing checks and strict expected status values, use the companion runbook:
+
+- `docs/attendance-flow-strict-uat-script.md`
+
 Related documents:
 
 - `docs/client-request-broadcast-lifecycle.md`
 - `docs/request-broadcast-backend-contract.md`
 - `docs/request-shift-operations-backend-contract.md`
+- `docs/attendance-flow-strict-uat-script.md`
 
 ## Scope
 
@@ -36,7 +41,7 @@ This plan covers the full implemented lifecycle from request creation through sh
 - guard attendance actions
 - client arrival confirmation
 - no-show and exception handling
-- replacement reopen workflow
+- manual replacement reopen workflow
 - notification visibility and deep links
 
 It does not cover the future finance phase:
@@ -224,9 +229,9 @@ Recommended spreadsheet columns if you export this later:
 | C10 | C | Check out shift | `guard_admin` | Shift is in progress | Slot completes with actual end time | High |
 | D1 | D | Report unavailable before cutoff | `guard_admin` | Future assigned shift before cutoff | Slot becomes unavailable only for that shift | High |
 | D2 | D | Late-risk unavailable case | `guard_admin` | Near-start shift after cutoff | Slot reflects late-risk behavior | Medium |
-| D3 | D | Auto no-show suspected and confirmed | System / `admin` | Rostered shift left without check-in | Exception progresses to no-show states | High |
+| D3 | D | Grace-period late arrival and later no-show confirmation | System / `admin` | Rostered shift left without check-in | Late-risk escalation occurs after grace, then no-show can confirm later | High |
 | D4 | D | View exception queue and detail | `admin` or `ops_admin` | Exception exists | Full request/shift/slot context visible | High |
-| D5 | D | Reopen exception for replacement | `admin` or `ops_admin` | Exception slot exists | Replacement slot and wave are created | High |
+| D5 | D | Reopen exception for replacement | `admin` or `ops_admin` | Exception slot exists | Manual replacement slot and wave are created when ops reopens it | High |
 | D6 | D | Accept replacement offer | `guard_admin` or `sp_admin` | Replacement offer exists | Replacement slot fills correctly | High |
 | D7 | D | Filled request visibility rule | Any matched candidate | Request already fully filled | Offer stays visible but non-actionable | Medium |
 | D8 | D | Expired request visibility rule | `client_admin` | Request already expired | Request stays visible but non-editable | Medium |
@@ -894,6 +899,7 @@ These are lighter but still required:
 - accepted request does not generate shifts
 - guard can start shift without required confirmation path
 - no-show never enters exception queue
+- grace-period miss does not notify guard, client, and platform admins
 - replacement reopen does not create a replacement offer
 - expired request is still editable
 

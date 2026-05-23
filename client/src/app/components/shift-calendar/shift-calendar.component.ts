@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { ButtonComponent } from '../button/button.component';
 import { formatBackendDateTime } from '../../shared/helpers/format.helper';
@@ -17,7 +18,7 @@ interface ShiftCalendarDay {
 @Component({
   selector: 'app-shift-calendar',
   standalone: true,
-  imports: [CommonModule, ButtonComponent],
+  imports: [CommonModule, ButtonComponent, RouterLink],
   templateUrl: './shift-calendar.component.html',
 })
 export class ShiftCalendarComponent {
@@ -26,12 +27,12 @@ export class ShiftCalendarComponent {
   @Input() loading = false;
   @Input() filteredIsoDate = '';
   @Input() requestSummaries: Record<string, { title: string; siteName: string }> = {};
+  @Input() openShiftHandler: ((shift: ShiftInstanceItem) => void) | null = null;
 
   @Output() previousMonth = new EventEmitter<void>();
   @Output() nextMonth = new EventEmitter<void>();
   @Output() currentMonth = new EventEmitter<void>();
   @Output() selectDate = new EventEmitter<string>();
-  @Output() openShift = new EventEmitter<ShiftInstanceItem>();
 
   formatBackendDateTime = formatBackendDateTime;
 
@@ -119,6 +120,28 @@ export class ShiftCalendarComponent {
     return this.requestSummaries[shift.request_id]?.title || `Request ${shift.request_id.slice(0, 8)}`;
   }
 
+  getDayPrimaryActionLabel(day: ShiftCalendarDay): string {
+    if (day.shifts.length > 1) {
+      return `View all ${day.shifts.length} shifts`;
+    }
+    return 'Filter list to this day';
+  }
+
+  runDayPrimaryAction(day: ShiftCalendarDay): void {
+    this.selectDate.emit(day.isoDate);
+  }
+
+  openDayCell(event: Event, day: ShiftCalendarDay): void {
+    if (day.shifts.length === 1) {
+      event.stopPropagation();
+      this.requestShiftDetails(day.shifts[0]);
+    }
+  }
+
+  requestShiftDetails(shift: ShiftInstanceItem): void {
+    this.openShiftHandler?.(shift);
+  }
+
   trackByShiftId(_index: number, item: ShiftInstanceItem): string {
     return item.id;
   }
@@ -133,4 +156,5 @@ export class ShiftCalendarComponent {
     const day = String(value.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
+
 }

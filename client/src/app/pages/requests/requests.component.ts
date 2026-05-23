@@ -3,7 +3,7 @@ import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { HttpParams } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription, forkJoin, interval } from 'rxjs';
+import { Subscription, forkJoin } from 'rxjs';
 
 import { ButtonComponent } from '../../components/button/button.component';
 import { CardComponent } from '../../components/card/card.component';
@@ -24,7 +24,6 @@ import { RequestListCardComponent } from '../../components/request-list-card/req
 import { SectionComponent } from '../../components/section/section.component';
 import { ShiftSlotCardComponent } from '../../components/shift-slot-card/shift-slot-card.component';
 import { SideDrawerComponent } from '../../components/side-drawer/side-drawer.component';
-import { ShiftCalendarComponent } from '../../components/shift-calendar/shift-calendar.component';
 import { SummaryMetricCardComponent } from '../../components/summary-metric-card/summary-metric-card.component';
 import { ValidationMessageComponent } from '../../components/validation-message/validation-message.component';
 import { BannerComponent } from '../../components/banner/banner.component';
@@ -43,6 +42,10 @@ import {
   RequestScheduleType,
   ServiceProviderGuardSummaryItem,
   ShiftExceptionItem,
+  ShiftGuardLeaveItem,
+  ShiftGuardLeaveReturnDecisionAction,
+  ShiftGuardLeaveReturnReviewItem,
+  ShiftGuardLeaveReturnReviewResponse,
   ShiftInstanceItem,
   ShiftSlotDetailResponse,
   ShiftSlotItem,
@@ -83,6 +86,31 @@ interface RequestClientTenantOption {
   siteCount: number;
 }
 
+interface ShiftCalendarDayCell {
+  isoDate: string;
+  dateNumber: number;
+  inCurrentMonth: boolean;
+  isToday: boolean;
+  isFilteredDate: boolean;
+  shifts: ShiftInstanceItem[];
+}
+
+interface GuardShiftFocusContext {
+  shift: ShiftInstanceItem;
+  slot: ShiftSlotItem;
+}
+
+interface ProviderRosterFocusContext {
+  shift: ShiftInstanceItem;
+  slots: ShiftSlotItem[];
+  nextSlot: ShiftSlotItem;
+}
+
+interface ClientArrivalFocusContext {
+  shift: ShiftInstanceItem;
+  slot: ShiftSlotItem;
+}
+
 @Component({
   selector: 'app-requests',
   standalone: true,
@@ -107,7 +135,6 @@ interface RequestClientTenantOption {
     ListStatePanelComponent,
     ListToolbarComponent,
     PaginationFooterComponent,
-    ShiftCalendarComponent,
     ShiftSlotCardComponent,
     SummaryMetricCardComponent,
     ValidationMessageComponent,
@@ -127,6 +154,12 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly shiftCalendarScope = 'requests:shifts:calendar';
   readonly shiftDetailScope = 'requests:shifts:detail';
   readonly shiftSlotDetailScope = 'requests:shifts:slot:detail';
+  readonly guardShiftFocusScope = 'requests:shifts:focus';
+  readonly providerRosterFocusScope = 'requests:shifts:provider-focus';
+  readonly clientArrivalFocusScope = 'requests:shifts:client-focus';
+  readonly jobShiftLookupScope = 'requests:jobs:shift-lookup';
+  readonly shiftGuardLeaveListScope = 'requests:shifts:leave:list';
+  readonly shiftGuardLeaveReviewScope = 'requests:shifts:leave:review';
   readonly shiftProviderGuardsScope = 'requests:shifts:provider-guards';
   readonly shiftRosterPatternScope = 'requests:shifts:roster-pattern';
   readonly exceptionListScope = 'requests:exceptions:list';
@@ -160,7 +193,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
   reviewLoading = false;
   requestWavesLoading = false;
   private readonly loadingFeedback = inject(LoadingFeedbackService);
-  private autoRefreshSubscription: Subscription | null = null;
   private routeQuerySubscription: Subscription | null = null;
   private lastHandledRouteFocus = '';
 
@@ -175,9 +207,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
   reviewWaves: RequestBroadcastWaveItem[] = [];
   shifts: ShiftInstanceItem[] = [];
   shiftCalendarItems: ShiftInstanceItem[] = [];
+  shiftCalendarWeeks: ShiftCalendarDayCell[][] = [];
   shiftExceptions: ShiftExceptionItem[] = [];
   selectedRequestWaves: RequestBroadcastWaveItem[] = [];
   shiftRequestSummaries: Record<string, { title: string; siteName: string }> = {};
+  pendingShiftRequestSummaryIds = new Set<string>();
 
   page = 1;
   rows = 10;
@@ -237,6 +271,13 @@ export class RequestsComponent implements OnInit, OnDestroy {
   selectedShiftSlotSummary: ShiftSlotSummary | null = null;
   selectedShiftSlot: ShiftSlotItem | null = null;
   selectedShiftSlotDetail: ShiftSlotDetailResponse | null = null;
+  guardShiftFocus: GuardShiftFocusContext | null = null;
+  providerRosterFocus: ProviderRosterFocusContext | null = null;
+  clientArrivalFocus: ClientArrivalFocusContext | null = null;
+  selectedShiftLeaveTarget: ShiftSlotItem | null = null;
+  selectedShiftGuardLeaves: ShiftGuardLeaveItem[] = [];
+  selectedShiftGuardLeaveReviewTarget: ShiftGuardLeaveItem | null = null;
+  selectedShiftGuardLeaveReturnReview: ShiftGuardLeaveReturnReviewResponse | null = null;
   selectedException: ShiftExceptionItem | null = null;
   selectedExceptionDetail: ShiftSlotDetailResponse | null = null;
   selectedScheduleRequest: ClientRequestItem | null = null;
@@ -256,6 +297,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
   showRosterDrawer = false;
   showReasonDrawer = false;
   showShiftActionDrawer = false;
+  showShiftGuardLeaveDrawer = false;
+  showShiftGuardLeaveReviewDrawer = false;
   showReopenExceptionDrawer = false;
   showBulkConfirmDrawer = false;
   requestFormMode: 'create' | 'edit' | 'publish_update' = 'create';
@@ -286,6 +329,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
   rosterErrors: Record<string, string> = {};
   reasonErrors: Record<string, string> = {};
   shiftActionErrors: Record<string, string> = {};
+  shiftGuardLeaveErrors: Record<string, string> = {};
+  shiftGuardLeaveReviewErrors: Record<string, string> = {};
   reopenExceptionErrors: Record<string, string> = {};
   scheduleErrors: Record<string, string> = {};
   bulkConfirmErrors: Record<string, string> = {};
@@ -319,6 +364,17 @@ export class RequestsComponent implements OnInit, OnDestroy {
     longitude: '',
     note: '',
   };
+
+  shiftGuardLeaveForm = {
+    startAt: '',
+    endAt: '',
+    reason: '',
+  };
+
+  shiftGuardLeaveReviewForm = {
+    note: '',
+  };
+  shiftGuardLeaveReturnSelections: Record<string, ShiftGuardLeaveReturnDecisionAction> = {};
 
   scheduleForm = {
     timezone: 'UTC',
@@ -382,9 +438,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   selectedRequestClientTenantLabel = '';
 
   fulfillmentModeOptions = [
-    { label: 'Individual Guards', value: 'individual_only' },
-    { label: 'Service Providers', value: 'service_provider_only' },
-    { label: 'Hybrid Coverage', value: 'hybrid' },
+    { label: 'Direct Guards Only', value: 'individual_only' },
+    { label: 'Service Provider Team Only', value: 'service_provider_only' },
+    { label: 'Guards Or Providers', value: 'hybrid' },
   ];
 
   requestStatusOptions = [
@@ -401,32 +457,32 @@ export class RequestsComponent implements OnInit, OnDestroy {
     { label: 'All Jobs', value: '' },
     { label: 'Offered', value: 'offered' },
     { label: 'Accepted', value: 'accepted' },
-    { label: 'Reconfirmation Required', value: 'reconfirmation_required' },
+    { label: 'Needs Re-Approval', value: 'reconfirmation_required' },
     { label: 'In Progress', value: 'in_progress' },
     { label: 'Completed', value: 'completed' },
     { label: 'Declined', value: 'declined' },
     { label: 'Expired', value: 'expired' },
-    { label: 'Closed Filled', value: 'closed_filled' },
+    { label: 'Filled Elsewhere', value: 'closed_filled' },
     { label: 'Cancelled', value: 'cancelled' },
   ];
 
   reviewStatusOptions = [
-    { label: 'All Review States', value: '' },
-    { label: 'Pending Review', value: 'pending_review' },
-    { label: 'Active', value: 'active' },
-    { label: 'Returned', value: 'returned' },
+    { label: 'All Offer Rounds', value: '' },
+    { label: 'Waiting For Approval', value: 'pending_review' },
+    { label: 'Sent', value: 'active' },
+    { label: 'Sent Back', value: 'returned' },
     { label: 'Filled', value: 'filled' },
-    { label: 'Expired', value: 'expired' },
-    { label: 'Superseded', value: 'superseded' },
+    { label: 'Closed By Time', value: 'expired' },
+    { label: 'Replaced By Newer Round', value: 'superseded' },
     { label: 'Cancelled', value: 'cancelled' },
   ];
 
   reviewTriggerOptions = [
-    { label: 'All Triggers', value: '' },
-    { label: 'Initial Publish', value: 'initial_publish' },
-    { label: 'Publish Update', value: 'publish_update' },
-    { label: 'Additional Coverage', value: 'additional_coverage' },
-    { label: 'Capacity Reopened', value: 'capacity_reopened' },
+    { label: 'All Reasons', value: '' },
+    { label: 'First Send', value: 'initial_publish' },
+    { label: 'Updated Details', value: 'publish_update' },
+    { label: 'Asked For More Coverage', value: 'additional_coverage' },
+    { label: 'Coverage Reopened', value: 'capacity_reopened' },
   ];
 
   shiftStatusOptions = [
@@ -441,9 +497,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   ];
 
   scheduleTypeOptions = [
-    { label: 'One-Time Shift', value: 'one_time' },
-    { label: 'Date Range', value: 'date_range' },
-    { label: 'Recurring Weekly', value: 'recurring_weekly' },
+    { label: 'One Day Only', value: 'one_time' },
+    { label: 'Every Day In A Date Range', value: 'date_range' },
+    { label: 'Selected Weekdays', value: 'recurring_weekly' },
   ];
 
   scheduleWeekdayOptions = [
@@ -457,12 +513,12 @@ export class RequestsComponent implements OnInit, OnDestroy {
   ];
 
   exceptionStatusOptions = [
-    { label: 'All Exceptions', value: '' },
-    { label: 'Unavailable', value: 'unavailable' },
-    { label: 'Late Risk', value: 'late_risk' },
-    { label: 'No-Show Suspected', value: 'no_show_suspected' },
-    { label: 'No-Show Confirmed', value: 'no_show_confirmed' },
-    { label: 'Replacement Required', value: 'replacement_required' },
+    { label: 'All Issues', value: '' },
+    { label: 'Guard Reported Leave', value: 'unavailable' },
+    { label: 'Late Arrival Risk', value: 'late_risk' },
+    { label: 'Possible No-Show', value: 'no_show_suspected' },
+    { label: 'Confirmed No-Show', value: 'no_show_confirmed' },
+    { label: 'Needs Replacement', value: 'replacement_required' },
   ];
 
   fulfillmentModeFilterOptions = [
@@ -488,6 +544,59 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   formatBackendDateTime = formatBackendDateTime;
 
+  get shiftCalendarMonthLabel(): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      month: 'long',
+      year: 'numeric',
+    }).format(this.shiftCalendarMonthAnchor);
+  }
+
+  get shiftCalendarWeekdayLabels(): string[] {
+    return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  }
+
+  private rebuildShiftCalendarWeeks(): void {
+    const monthStart = this.getStartOfMonth(this.shiftCalendarMonthAnchor);
+    const gridStart = new Date(monthStart);
+    const weekday = gridStart.getDay();
+    const offset = weekday === 0 ? 6 : weekday - 1;
+    gridStart.setDate(gridStart.getDate() - offset);
+
+    const todayIso = this.formatDateInput(new Date());
+    const shiftsByDate = this.shiftCalendarItems.reduce<Record<string, ShiftInstanceItem[]>>((accumulator, shift) => {
+      const key = String(shift.shift_date_local || '').trim();
+      if (!key) {
+        return accumulator;
+      }
+      if (!accumulator[key]) {
+        accumulator[key] = [];
+      }
+      accumulator[key].push(shift);
+      accumulator[key].sort((left, right) => String(left.shift_start_at_utc || '').localeCompare(String(right.shift_start_at_utc || '')));
+      return accumulator;
+    }, {});
+
+    const weeks: ShiftCalendarDayCell[][] = [];
+    for (let weekIndex = 0; weekIndex < 6; weekIndex += 1) {
+      const week: ShiftCalendarDayCell[] = [];
+      for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+        const currentDate = new Date(gridStart);
+        currentDate.setDate(gridStart.getDate() + (weekIndex * 7) + dayIndex);
+        const isoDate = this.formatDateInput(currentDate);
+        week.push({
+          isoDate,
+          dateNumber: currentDate.getDate(),
+          inCurrentMonth: currentDate.getMonth() === this.shiftCalendarMonthAnchor.getMonth(),
+          isToday: isoDate === todayIso,
+          isFilteredDate: isoDate === this.shiftDateFrom && isoDate === this.shiftDateTo,
+          shifts: shiftsByDate[isoDate] || [],
+        });
+      }
+      weeks.push(week);
+    }
+    this.shiftCalendarWeeks = weeks;
+  }
+
   isScopeLoading(scope: string): boolean {
     return this.loadingFeedback.isScopeLoading(scope);
   }
@@ -508,6 +617,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return ['admin', 'ops_admin', 'support_admin', 'compliance_admin'].includes(this.role);
   }
 
+  get isGuardAdmin(): boolean {
+    return this.role === 'guard_admin' && this.tenantType === 'guard';
+  }
+
   get hasPlatformRequestScope(): boolean {
     return this.isPlatformAdmin || this.role === 'read_only_admin';
   }
@@ -518,7 +631,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   get requestClientTenantFilterOptions(): Array<{ value: string; label: string }> {
     const options = [
-      { value: '', label: 'All Client Tenants' },
+      { value: '', label: 'All Client Accounts' },
       ...this.requestClientTenantOptions.map((option) => ({
         value: option.value,
         label: option.label,
@@ -583,7 +696,119 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   get isGuardOrProvider(): boolean {
-    return (this.role === 'guard_admin' && this.tenantType === 'guard') || (this.role === 'sp_admin' && this.tenantType === 'service_provider');
+    return this.isGuardAdmin || (this.role === 'sp_admin' && this.tenantType === 'service_provider');
+  }
+
+  get currentTenantId(): string {
+    return String(this.appService.userSessionData()?.tenant?.id || '').trim();
+  }
+
+  get showWorkflowGuide(): boolean {
+    return this.canViewShifts || this.canReviewBroadcastWaves || this.isClientAdmin;
+  }
+
+  get pageTitle(): string {
+    if (this.isGuardAdmin) {
+      return 'Offers, Work, And Attendance';
+    }
+    if (this.role === 'sp_admin' && this.tenantType === 'service_provider') {
+      return 'Offers, Work, And Guard Rostering';
+    }
+    if (this.isClientAdmin) {
+      return 'Staffing And Daily Coverage';
+    }
+    return 'Staffing Operations';
+  }
+
+  get pageSubtitle(): string {
+    if (this.isGuardAdmin) {
+      return 'Review offers, track accepted work, and handle arrival steps without hunting through the system.';
+    }
+    if (this.role === 'sp_admin' && this.tenantType === 'service_provider') {
+      return 'Review offers, roster provider guards, and keep daily coverage moving from one place.';
+    }
+    if (this.isClientAdmin) {
+      return 'Create staffing requests, follow accepted work, and confirm arrivals in one clear workflow.';
+    }
+    return 'Review client staffing, approvals, coverage issues, and daily execution in one place.';
+  }
+
+  get workflowGuideTitle(): string {
+    if (this.isGuardAdmin) {
+      return 'How To Use This Page As A Guard';
+    }
+    if (this.role === 'sp_admin' && this.tenantType === 'service_provider') {
+      return 'How To Use This Page As A Service Provider';
+    }
+    if (this.isClientAdmin) {
+      return 'How To Use This Page As A Client';
+    }
+    return 'How To Use This Page';
+  }
+
+  get workflowGuideMessage(): string {
+    if (this.isGuardAdmin) {
+      return 'Use Offers to respond to new work, Jobs to review accepted or completed work, and Attendance for the real on-site flow: check in, wait for client confirmation, start, and check out.';
+    }
+    if (this.role === 'sp_admin' && this.tenantType === 'service_provider') {
+      return 'Use Offers for new work and coverage changes, Jobs for accepted or completed provider work, and Attendance to roster named guards and monitor daily shift activity.';
+    }
+    if (this.isClientAdmin) {
+      return 'Use Requests to create, send, and manage staffing, Jobs to review accepted or completed coverage, and Attendance for daily execution such as arrival confirmation and on-site progress.';
+    }
+    return 'Requests handles staffing, Jobs shows committed work, and Attendance is where daily check-in and execution happen.';
+  }
+
+  get requestsTabLabel(): string {
+    return this.isGuardOrProvider ? 'Offers' : 'Requests';
+  }
+
+  get jobsTabLabel(): string {
+    return 'Jobs';
+  }
+
+  get shiftsTabLabel(): string {
+    return 'Attendance';
+  }
+
+  get reviewTabLabel(): string {
+    return 'Approvals';
+  }
+
+  get exceptionsTabLabel(): string {
+    return 'Coverage Issues';
+  }
+
+  get requestsListTitle(): string {
+    if (this.isGuardOrProvider) {
+      return 'Offers And Coverage Updates';
+    }
+    if (this.isClientAdmin) {
+      return 'Requests You Created';
+    }
+    return 'Client Requests';
+  }
+
+  get requestsListSubtitle(): string {
+    if (this.isGuardOrProvider) {
+      return this.getCountSummary(this.totalItems, 'offer', 'that still need attention or tracking.');
+    }
+    if (this.isClientAdmin) {
+      return this.getCountSummary(this.totalItems, 'request', 'that you can still review, update, or close.');
+    }
+    return this.getCountSummary(this.totalItems, 'request', 'visible in your current role scope.');
+  }
+
+  get jobsListTitle(): string {
+    return 'Accepted, Active, And Completed Work';
+  }
+
+  get jobsListSubtitle(): string {
+    return this.getCountSummary(this.jobTotalItems, 'job', 'that already moved past the offer stage.');
+  }
+
+  get shiftsListTitle(): string {
+    return 'Daily Attendance And Shift Work';
   }
 
   get canManageProviderRoster(): boolean {
@@ -592,6 +817,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   get canManageShiftAttendance(): boolean {
     return this.isPlatformAdmin || (this.role === 'guard_admin' && this.tenantType === 'guard');
+  }
+
+  get canViewGuardLeaveRecords(): boolean {
+    return this.isPlatformAdmin || this.role === 'guard_admin' || this.role === 'sp_admin';
   }
 
   get canConfirmShiftArrivals(): boolean {
@@ -653,73 +882,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.routeQuerySubscription = this.route.queryParams.subscribe((params) => {
       this.handleRouteFocusParams(params || {});
     });
-    this.startAutoRefresh();
   }
 
   ngOnDestroy(): void {
-    this.autoRefreshSubscription?.unsubscribe();
-    this.autoRefreshSubscription = null;
     this.routeQuerySubscription?.unsubscribe();
     this.routeQuerySubscription = null;
-  }
-
-  startAutoRefresh(): void {
-    this.autoRefreshSubscription?.unsubscribe();
-    this.autoRefreshSubscription = interval(30000).subscribe(() => {
-      if (document.visibilityState !== 'visible') {
-        return;
-      }
-      this.refreshVisibleDataSilently();
-    });
-  }
-
-  refreshVisibleDataSilently(): void {
-    if (this.activeTab === 'requests') {
-      this.loadRequests(this.page, { silent: true, suppressError: true });
-      if (this.showRequestDrawer && this.selectedRequest?.id) {
-        this.openRequestById(this.selectedRequest.id, { silent: true, suppressError: true });
-      } else if (this.selectedRequest?.id) {
-        this.loadRequestWaves(this.selectedRequest.id, { silent: true, suppressError: true });
-      }
-      return;
-    }
-
-    if (this.activeTab === 'jobs') {
-      this.loadJobs(this.jobPage, { silent: true, suppressError: true });
-      if (this.showJobDrawer && this.selectedJob?.id) {
-        this.openJobById(this.selectedJob.id, { silent: true, suppressError: true });
-      } else if (this.selectedJob) {
-        this.loadJobDetails(this.selectedJob, { silent: true, suppressError: true });
-      }
-      return;
-    }
-
-    if (this.activeTab === 'review' && this.canReviewBroadcastWaves) {
-      this.loadReviewWaves(this.reviewPage, { silent: true, suppressError: true });
-      if (this.showWaveDrawer && this.selectedWave?.id) {
-        this.openWaveById(this.selectedWave.id, { silent: true, suppressError: true });
-      }
-      return;
-    }
-
-    if (this.activeTab === 'shifts' && this.canViewShifts) {
-      this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
-      this.loadShiftCalendar(this.shiftCalendarMonthAnchor, { silent: true, suppressError: true });
-      if (this.showShiftDrawer && this.selectedShift?.id) {
-        this.openShiftById(this.selectedShift.id, { silent: true, suppressError: true });
-      }
-      if (this.showShiftSlotDrawer && this.selectedShiftSlot?.id) {
-        this.openShiftSlotById(this.selectedShiftSlot.id, { silent: true, suppressError: true });
-      }
-      return;
-    }
-
-    if (this.activeTab === 'exceptions' && this.canViewShiftExceptions) {
-      this.loadShiftExceptions(this.exceptionPage, { silent: true, suppressError: true });
-      if (this.showExceptionDrawer && this.selectedException?.slot?.id) {
-        this.openExceptionBySlotId(this.selectedException.slot.id, { silent: true, suppressError: true });
-      }
-    }
   }
 
   handleRouteFocusParams(params: Record<string, any>): void {
@@ -1063,6 +1230,15 @@ export class RequestsComponent implements OnInit, OnDestroy {
           }
         }
         this.ensureShiftRequestSummaries(this.shifts);
+        if (this.isGuardAdmin) {
+          this.refreshGuardShiftFocus({ silent: true, suppressError: true });
+        }
+        if (this.canManageProviderRoster) {
+          this.refreshProviderRosterFocus({ silent: true, suppressError: true });
+        }
+        if (this.isClientAdmin) {
+          this.refreshClientArrivalFocus({ silent: true, suppressError: true });
+        }
       },
       error: (error) => {
         if (!suppressError) {
@@ -1099,9 +1275,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
       next: (response) => {
         this.shiftCalendarItems = response.items || [];
         this.ensureShiftRequestSummaries(this.shiftCalendarItems);
+        this.rebuildShiftCalendarWeeks();
       },
       error: (error) => {
         this.shiftCalendarItems = [];
+        this.rebuildShiftCalendarWeeks();
         if (!suppressError) {
           this.notification.show(error?.error?.detail || 'Failed to load shift calendar', 'fail', 5000);
         }
@@ -1149,25 +1327,109 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   ensureShiftRequestSummaries(items: ShiftInstanceItem[]): void {
-    const missingRequestIds = items
-      .map((item) => String(item.request_id || '').trim())
-      .filter((requestId) => requestId && !this.shiftRequestSummaries[requestId]);
+    const missingRequestIds: string[] = [];
+
+    for (const item of items) {
+      const requestId = String(item.request_id || '').trim();
+      if (!requestId || this.shiftRequestSummaries[requestId] || this.pendingShiftRequestSummaryIds.has(requestId)) {
+        continue;
+      }
+
+      const requestTitle = String(item.request_title || '').trim();
+      const siteName = String(item.site_name || '').trim();
+      if (requestTitle || siteName) {
+        this.shiftRequestSummaries[requestId] = {
+          title: requestTitle || 'Client request',
+          siteName: siteName || 'Unknown site',
+        };
+        continue;
+      }
+
+      this.pendingShiftRequestSummaryIds.add(requestId);
+      missingRequestIds.push(requestId);
+    }
 
     for (const requestId of missingRequestIds) {
       this.requestService.getRequest(requestId, { loadingMode: 'silent' }).subscribe({
         next: (response) => {
+          this.pendingShiftRequestSummaryIds.delete(requestId);
           this.shiftRequestSummaries[requestId] = {
             title: String(response.title || 'Client request'),
             siteName: String(response.site_snapshot?.site_name || 'Unknown site'),
           };
         },
-        error: () => {
+        error: (error) => {
+          this.pendingShiftRequestSummaryIds.delete(requestId);
+          const status = Number(error?.status || error?.statusCode || 0);
+          if (status === 404) {
+            this.purgeDeletedRequestReferences(requestId, {
+              reloadJobs: true,
+              reloadShifts: true,
+              reloadCalendar: true,
+            });
+            return;
+          }
           this.shiftRequestSummaries[requestId] = {
             title: `Request ${requestId.slice(0, 8)}`,
             siteName: 'Unknown site',
           };
         }
       });
+    }
+  }
+
+  private purgeDeletedRequestReferences(
+    requestId: string,
+    options?: {
+      reloadRequests?: boolean;
+      reloadJobs?: boolean;
+      reloadShifts?: boolean;
+      reloadCalendar?: boolean;
+    },
+  ): void {
+    const normalizedRequestId = String(requestId || '').trim();
+    if (!normalizedRequestId) {
+      return;
+    }
+
+    this.items = this.items.filter((item) => String(item.id || '').trim() !== normalizedRequestId);
+    this.jobs = this.jobs.filter((job) => String(job.request_id || '').trim() !== normalizedRequestId);
+    this.shifts = this.shifts.filter((shift) => String(shift.request_id || '').trim() !== normalizedRequestId);
+    this.shiftCalendarItems = this.shiftCalendarItems.filter((shift) => String(shift.request_id || '').trim() !== normalizedRequestId);
+    this.shiftExceptions = this.shiftExceptions.filter((item) => String(item.request?.id || '').trim() !== normalizedRequestId);
+    delete this.shiftRequestSummaries[normalizedRequestId];
+    this.rebuildShiftCalendarWeeks();
+
+    if (this.selectedRequest?.id === normalizedRequestId) {
+      this.closeRequestDrawer();
+    }
+    if (this.selectedJob?.request_id === normalizedRequestId) {
+      this.closeJobDrawer();
+    }
+    if (this.selectedShift?.request_id === normalizedRequestId) {
+      this.closeShiftDrawer();
+    }
+    if (this.selectedShiftSlot?.request_id === normalizedRequestId) {
+      this.closeShiftSlotDrawer();
+    }
+    if (this.selectedException?.request?.id === normalizedRequestId) {
+      this.closeExceptionDrawer();
+    }
+    if (this.selectedWave?.request_id === normalizedRequestId) {
+      this.closeWaveDrawer();
+    }
+
+    if (options?.reloadRequests) {
+      this.loadRequests(this.page, { silent: true, suppressError: true });
+    }
+    if (options?.reloadJobs) {
+      this.loadJobs(this.jobPage, { silent: true, suppressError: true });
+    }
+    if (options?.reloadShifts) {
+      this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+    }
+    if (options?.reloadCalendar) {
+      this.loadShiftCalendar(this.shiftCalendarMonthAnchor, { silent: true, suppressError: true });
     }
   }
 
@@ -1187,7 +1449,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
         this.selectedRequestWaves = [];
         this.requestWavesLoading = false;
         if (!suppressError) {
-          this.notification.show(error?.error?.detail || 'Failed to load request waves', 'fail', 5000);
+          this.notification.show(error?.error?.detail || 'Failed to load offer history', 'fail', 5000);
         }
       }
     });
@@ -1459,7 +1721,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.requestErrors['title'] = 'Request title is required.';
     }
     if (this.isPlatformAdmin && this.requestFormMode === 'create' && !this.selectedRequestClientTenantId) {
-      this.requestErrors['clientTenant'] = 'Select the client tenant that owns this request.';
+      this.requestErrors['clientTenant'] = 'Select the client account that owns this request.';
     }
     if (this.requestSiteSourceMode === 'saved' && !this.selectedSavedSiteIndex) {
       this.requestErrors['savedSite'] = 'Select a saved client site.';
@@ -2033,9 +2295,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
     const requestedStartAt = this.combineDateAndTime(this.requestForm.requestedStartDate, this.requestForm.requestedStartTime);
     const requestedEndAt = this.combineDateAndTime(this.requestForm.requestedEndDate, this.requestForm.requestedEndTime);
     const requestExpiresAt = this.combineDateAndTime(this.requestForm.requestExpiresDate, this.requestForm.requestExpiresTime);
+    const timezone = String(this.scheduleForm.timezone || this.getDefaultScheduleTimezone()).trim() || this.getDefaultScheduleTimezone();
 
     return {
       title: this.requestForm.title.trim(),
+      timezone,
       fulfillment_mode: this.requestForm.fulfillmentMode,
       client_tenant_id: this.isPlatformAdmin && this.requestFormMode === 'create'
         ? (this.selectedRequestClientTenantId || null)
@@ -2069,6 +2333,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   buildPublishUpdatePayload() {
     const payload = this.buildRequestPayload();
     return {
+      timezone: payload.timezone,
       fulfillment_mode: payload.fulfillment_mode,
       site: payload.site,
       requested_guard_type: payload.requested_guard_type,
@@ -2115,6 +2380,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.requestService.getRequest(requestId, {
       loadingScope: this.requestWavesScope,
       loadingMode: silent ? 'silent' : undefined,
+      suppressErrorStatuses: [404],
     }).subscribe({
       next: (response) => {
         if (this.selectedWave) {
@@ -2131,6 +2397,23 @@ export class RequestsComponent implements OnInit, OnDestroy {
         this.loadRequestWaves(requestId, options);
       },
       error: (error) => {
+        const status = Number(error?.status || error?.statusCode || 0);
+        if (status === 404) {
+          this.purgeDeletedRequestReferences(requestId, {
+            reloadRequests: true,
+            reloadJobs: true,
+            reloadShifts: true,
+            reloadCalendar: true,
+          });
+          this.clearRouteFocusParams(['request']);
+          if (this.selectedRequest?.id === requestId) {
+            this.showRequestDrawer = false;
+            this.selectedRequest = null;
+            this.selectedRequestSchedule = null;
+            this.selectedRequestWaves = [];
+          }
+          return;
+        }
         if (!suppressError) {
           this.notification.show(error?.error?.detail || 'Failed to open request details', 'fail', 5000);
         }
@@ -2209,6 +2492,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.requestService.getRequestWave(waveId, {
       loadingScope: this.reviewListScope,
       loadingMode: silent ? 'silent' : undefined,
+      suppressErrorStatuses: [404],
     }).subscribe({
       next: (response) => {
         if (this.selectedRequest) {
@@ -2221,8 +2505,17 @@ export class RequestsComponent implements OnInit, OnDestroy {
         this.showWaveDrawer = true;
       },
       error: (error) => {
+        const status = Number(error?.status || error?.statusCode || 0);
+        if (status === 404) {
+          this.clearRouteFocusParams(['wave']);
+          if (this.selectedWave?.id === waveId) {
+            this.showWaveDrawer = false;
+            this.selectedWave = null;
+          }
+          return;
+        }
         if (!suppressError) {
-          this.notification.show(error?.error?.detail || 'Failed to open request wave', 'fail', 5000);
+          this.notification.show(error?.error?.detail || 'Failed to open offer round details', 'fail', 5000);
         }
       }
     });
@@ -2235,15 +2528,33 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   openShiftDetails(item: ShiftInstanceItem): void {
+    this.selectedShift = item;
+    this.selectedShiftSlots = [];
+    this.selectedShiftSlotSummary = null;
+    this.ensureShiftRequestSummaries([item]);
+    this.showShiftDrawer = true;
     this.openShiftById(item.id);
   }
 
   openShiftById(shiftId: string, options?: { silent?: boolean; suppressError?: boolean }): void {
     const silent = Boolean(options?.silent);
     const suppressError = Boolean(options?.suppressError);
+    this.activeTab = 'shifts';
+    this.closeBlockingDrawersForShiftDetail();
+
+    const cachedShift = this.findCachedShiftById(shiftId);
+    if (cachedShift) {
+      this.selectedShift = cachedShift;
+      this.selectedShiftSlots = [];
+      this.selectedShiftSlotSummary = null;
+      this.ensureShiftRequestSummaries([cachedShift]);
+      this.showShiftDrawer = true;
+    }
+
     this.requestService.getShift(shiftId, {
       loadingScope: this.shiftDetailScope,
       loadingMode: silent ? 'silent' : undefined,
+      suppressErrorStatuses: [404],
     }).subscribe({
       next: (response) => {
         this.selectedShift = response.shift;
@@ -2253,6 +2564,19 @@ export class RequestsComponent implements OnInit, OnDestroy {
         this.showShiftDrawer = true;
       },
       error: (error) => {
+        const status = Number(error?.status || error?.statusCode || 0);
+        if (status === 404) {
+          this.clearRouteFocusParams(['shift']);
+          this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+          this.loadShiftCalendar(this.shiftCalendarMonthAnchor, { silent: true, suppressError: true });
+          if (this.selectedShift?.id === shiftId) {
+            this.showShiftDrawer = false;
+            this.selectedShift = null;
+            this.selectedShiftSlots = [];
+            this.selectedShiftSlotSummary = null;
+          }
+          return;
+        }
         if (!suppressError) {
           this.notification.show(error?.error?.detail || 'Failed to open shift details', 'fail', 5000);
         }
@@ -2306,6 +2630,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   openShiftSlotDetails(slot: ShiftSlotItem): void {
+    this.activeTab = 'shifts';
     if (this.selectedShift?.id === slot.shift_instance_id) {
       this.closeShiftDrawer();
     }
@@ -2318,10 +2643,19 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.requestService.getShiftSlot(slotId, {
       loadingScope: this.shiftSlotDetailScope,
       loadingMode: silent ? 'silent' : undefined,
+      suppressErrorStatuses: [404],
     }).subscribe({
       next: (response) => {
         this.selectedShiftSlot = response.slot;
         this.selectedShiftSlotDetail = response;
+        if (this.canViewGuardLeaveRecords && response.slot.assigned_guard_tenant_id) {
+          this.loadShiftGuardLeavesForGuard(response.slot.assigned_guard_tenant_id, {
+            silent: true,
+            suppressError: true,
+          });
+        } else {
+          this.selectedShiftGuardLeaves = [];
+        }
         this.showShiftSlotDrawer = true;
         if (this.selectedShift?.id !== response.slot.shift_instance_id) {
           this.selectedShift = null;
@@ -2342,6 +2676,18 @@ export class RequestsComponent implements OnInit, OnDestroy {
         }
       },
       error: (error) => {
+        const status = Number(error?.status || error?.statusCode || 0);
+        if (status === 404) {
+          this.clearRouteFocusParams(['slot']);
+          this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+          this.loadShiftCalendar(this.shiftCalendarMonthAnchor, { silent: true, suppressError: true });
+          if (this.selectedShiftSlot?.id === slotId) {
+            this.showShiftSlotDrawer = false;
+            this.selectedShiftSlot = null;
+            this.selectedShiftSlotDetail = null;
+          }
+          return;
+        }
         if (!suppressError) {
           this.notification.show(error?.error?.detail || 'Failed to open shift slot', 'fail', 5000);
         }
@@ -2353,6 +2699,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.showShiftSlotDrawer = false;
     this.selectedShiftSlot = null;
     this.selectedShiftSlotDetail = null;
+    this.selectedShiftGuardLeaves = [];
     this.clearRouteFocusParams(['slot']);
   }
 
@@ -2393,11 +2740,57 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   openJobDetails(job: RequestAssignmentItem): void {
-    this.selectedJob = job;
-    this.selectedJobRequest = null;
-    this.selectedJobWaves = [];
-    this.showJobDrawer = true;
-    this.loadJobDetails(job);
+    this.openJobById(job.id);
+  }
+
+  openJobShiftOperations(job: RequestAssignmentItem): void {
+    if (!this.canOpenJobShiftOperations(job)) {
+      if (job.assignment_scope === 'request' && !job.request?.has_schedule) {
+        this.notification.show(
+          'Shift attendance is still being prepared for this job. Reopen the job details in a moment if the shift shortcut is not visible yet.',
+          'fail',
+          4500,
+        );
+      }
+      return;
+    }
+
+    this.activeTab = 'shifts';
+
+    if (job.shift_slot_id) {
+      this.closeJobDrawer();
+      this.openShiftSlotById(job.shift_slot_id);
+      return;
+    }
+
+    const shiftInstanceId = String(job.shift_instance_id || '').trim();
+    if (shiftInstanceId) {
+      this.openResolvedJobShiftOperations(job, shiftInstanceId);
+      return;
+    }
+
+    const requestId = String(job.request_id || job.request?.id || '').trim();
+    if (!requestId) {
+      this.notification.show('Shift operations are not linked to this job yet.', 'fail', 4000);
+      return;
+    }
+
+    this.requestService.listShifts(1, 100, requestId, '', '', '', {
+      loadingScope: this.jobShiftLookupScope,
+      loadingMode: 'silent',
+    }).subscribe({
+      next: (response) => {
+        const candidate = this.pickBestShiftForJob(response.items || []);
+        if (!candidate) {
+          this.notification.show('No generated shift was found for this accepted job yet.', 'fail', 4500);
+          return;
+        }
+        this.openResolvedJobShiftOperations(job, candidate.id);
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to locate shift operations for this job', 'fail', 5000);
+      },
+    });
   }
 
   openJobById(jobId: string, options?: { silent?: boolean; suppressError?: boolean }): void {
@@ -2406,6 +2799,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.requestService.getJob(jobId, {
       loadingScope: this.jobListScope,
       loadingMode: silent ? 'silent' : undefined,
+      suppressErrorStatuses: [404],
     }).subscribe({
       next: (response) => {
         if (this.selectedRequest) {
@@ -2421,6 +2815,17 @@ export class RequestsComponent implements OnInit, OnDestroy {
         this.loadJobDetails(response, options);
       },
       error: (error) => {
+        const status = Number(error?.status || error?.statusCode || 0);
+        if (status === 404) {
+          this.clearRouteFocusParams(['job']);
+          if (this.selectedJob?.id === jobId) {
+            this.showJobDrawer = false;
+            this.selectedJob = null;
+            this.selectedJobRequest = null;
+            this.selectedJobWaves = [];
+          }
+          return;
+        }
         if (!suppressError) {
           this.notification.show(error?.error?.detail || 'Failed to open job details', 'fail', 5000);
         }
@@ -2442,12 +2847,23 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.requestService.getRequest(job.request_id, {
       loadingScope: this.jobDetailRequestScope,
       loadingMode: silent ? 'silent' : undefined,
+      suppressErrorStatuses: [404],
     }).subscribe({
       next: (response) => {
         this.selectedJobRequest = response;
       },
       error: (error) => {
         this.selectedJobRequest = null;
+        const status = Number(error?.status || error?.statusCode || 0);
+        if (status === 404) {
+          this.purgeDeletedRequestReferences(job.request_id, {
+            reloadRequests: true,
+            reloadJobs: true,
+            reloadShifts: true,
+            reloadCalendar: true,
+          });
+          return;
+        }
         if (!suppressError) {
           this.notification.show(error?.error?.detail || 'Failed to load request details', 'fail', 5000);
         }
@@ -2464,7 +2880,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       error: (error) => {
         this.selectedJobWaves = [];
         if (!suppressError) {
-          this.notification.show(error?.error?.detail || 'Failed to load broadcast waves', 'fail', 5000);
+          this.notification.show(error?.error?.detail || 'Failed to load offer rounds', 'fail', 5000);
         }
       }
     });
@@ -2679,6 +3095,247 @@ export class RequestsComponent implements OnInit, OnDestroy {
       longitude: '',
       note: '',
     };
+  }
+
+  openShiftGuardLeaveDrawer(slot: ShiftSlotItem): void {
+    if (!this.canOpenShiftGuardLeaveDrawer(slot)) {
+      this.notification.show('Leave can only be reported by the assigned guard within the final 2 hours before shift start.', 'fail', 4000);
+      return;
+    }
+
+    if (this.selectedShiftSlot?.id === slot.id) {
+      this.closeShiftSlotDrawer();
+    }
+
+    const shiftStartAt = this.selectedShift?.id === slot.shift_instance_id ? this.selectedShift.shift_start_at_utc : '';
+    const shiftEndAt = this.selectedShift?.id === slot.shift_instance_id ? this.selectedShift.shift_end_at_utc : '';
+    this.selectedShiftLeaveTarget = slot;
+    this.selectedShiftGuardLeaves = [];
+    this.shiftGuardLeaveErrors = {};
+    this.shiftGuardLeaveForm = {
+      startAt: this.formatDateTimeLocalInput(shiftStartAt),
+      endAt: this.formatDateTimeLocalInput(shiftEndAt),
+      reason: '',
+    };
+    this.showShiftGuardLeaveDrawer = true;
+    this.loadShiftGuardLeavesForGuard(String(slot.assigned_guard_tenant_id || ''), { silent: true, suppressError: true });
+  }
+
+  closeShiftGuardLeaveDrawer(): void {
+    this.showShiftGuardLeaveDrawer = false;
+    this.selectedShiftLeaveTarget = null;
+    this.selectedShiftGuardLeaves = [];
+    this.shiftGuardLeaveErrors = {};
+    this.shiftGuardLeaveForm = {
+      startAt: '',
+      endAt: '',
+      reason: '',
+    };
+  }
+
+  loadShiftGuardLeavesForGuard(
+    guardTenantId: string,
+    options?: { silent?: boolean; suppressError?: boolean },
+  ): void {
+    if (!this.canViewGuardLeaveRecords || !guardTenantId.trim()) {
+      this.selectedShiftGuardLeaves = [];
+      return;
+    }
+
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    this.requestService.listShiftGuardLeaves(1, 10, guardTenantId, 'active', {
+      loadingScope: this.getShiftGuardLeaveListScope(guardTenantId),
+      loadingMode: silent ? 'silent' : undefined,
+    }).subscribe({
+      next: (response) => {
+        this.selectedShiftGuardLeaves = response.items || [];
+      },
+      error: (error) => {
+        this.selectedShiftGuardLeaves = [];
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to load guard leave records', 'fail', 5000);
+        }
+      },
+    });
+  }
+
+  openShiftGuardLeaveReturnReviewDrawer(leave: ShiftGuardLeaveItem): void {
+    this.showShiftGuardLeaveDrawer = false;
+    this.selectedShiftGuardLeaveReviewTarget = leave;
+    this.selectedShiftGuardLeaveReturnReview = null;
+    this.shiftGuardLeaveReviewErrors = {};
+    this.shiftGuardLeaveReviewForm = { note: '' };
+    this.shiftGuardLeaveReturnSelections = {};
+    this.showShiftGuardLeaveReviewDrawer = true;
+    this.loadShiftGuardLeaveReturnReview(leave.id);
+  }
+
+  closeShiftGuardLeaveReturnReviewDrawer(): void {
+    this.showShiftGuardLeaveReviewDrawer = false;
+    this.selectedShiftGuardLeaveReviewTarget = null;
+    this.selectedShiftGuardLeaveReturnReview = null;
+    this.shiftGuardLeaveReviewErrors = {};
+    this.shiftGuardLeaveReviewForm = { note: '' };
+    this.shiftGuardLeaveReturnSelections = {};
+    if (this.selectedShiftLeaveTarget) {
+      this.showShiftGuardLeaveDrawer = true;
+    }
+  }
+
+  loadShiftGuardLeaveReturnReview(
+    leaveId: string,
+    options?: { silent?: boolean; suppressError?: boolean },
+  ): void {
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    this.requestService.getShiftGuardLeaveReturnReview(leaveId, {
+      loadingScope: this.getShiftGuardLeaveReviewScope(leaveId),
+      loadingMode: silent ? 'silent' : undefined,
+    }).subscribe({
+      next: (response) => {
+        this.selectedShiftGuardLeaveReturnReview = response;
+        this.shiftGuardLeaveReturnSelections = {};
+        for (const item of response.items || []) {
+          if (item.review_mode === 'manual_review') {
+            this.shiftGuardLeaveReturnSelections[item.original_slot_id] =
+              (item.recommended_action as ShiftGuardLeaveReturnDecisionAction) || 'keep_replacement';
+          }
+        }
+      },
+      error: (error) => {
+        this.selectedShiftGuardLeaveReturnReview = null;
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to load the leave return review', 'fail', 5000);
+        }
+      },
+    });
+  }
+
+  submitShiftGuardLeaveReturnReview(): void {
+    const leave = this.selectedShiftGuardLeaveReviewTarget;
+    const review = this.selectedShiftGuardLeaveReturnReview;
+    const slot = this.selectedShiftLeaveTarget;
+    if (!leave || !review) {
+      return;
+    }
+
+    this.shiftGuardLeaveReviewErrors = {};
+    const decisions = (review.items || [])
+      .filter((item) => item.review_mode === 'manual_review')
+      .map((item) => {
+        const action = this.shiftGuardLeaveReturnSelections[item.original_slot_id];
+        if (!action) {
+          this.shiftGuardLeaveReviewErrors[item.original_slot_id] = 'Choose whether to keep the replacement or restore the original guard.';
+        }
+        return {
+          original_slot_id: item.original_slot_id,
+          action,
+        };
+      });
+
+    if (Object.keys(this.shiftGuardLeaveReviewErrors).length) {
+      this.notification.show('Choose an action for each future committed replacement shift.', 'fail', 4000);
+      return;
+    }
+
+    this.requestService.reconcileShiftGuardLeaveReturn(
+      leave.id,
+      {
+        note: this.shiftGuardLeaveReviewForm.note.trim() || null,
+        decisions: decisions as Array<{ original_slot_id: string; action: ShiftGuardLeaveReturnDecisionAction }>,
+      },
+      { loadingScope: this.getShiftGuardLeaveReconcileScope(leave.id) },
+    ).subscribe({
+      next: (response) => {
+        const summary = response.summary || {};
+        const restored = Number(summary['restored_slot_count'] || 0);
+        const cancelledAssignments = Number(summary['cancelled_assignment_count'] || 0);
+        const kept = Number(summary['kept_replacement_count'] || 0);
+        const summaryParts = [
+          restored ? `${restored} future slot${restored === 1 ? '' : 's'} restored` : '',
+          cancelledAssignments ? `${cancelledAssignments} replacement assignment${cancelledAssignments === 1 ? '' : 's'} cancelled` : '',
+          kept ? `${kept} future replacement${kept === 1 ? '' : 's'} kept` : '',
+        ].filter(Boolean);
+        this.notification.show(
+          summaryParts.length
+            ? `${response.message || 'Guard return reconciled'} • ${summaryParts.join(' • ')}`
+            : response.message || 'Guard return reconciled',
+          'success',
+          4500,
+        );
+        this.closeShiftGuardLeaveReturnReviewDrawer();
+        if (slot?.assigned_guard_tenant_id) {
+          this.loadShiftGuardLeavesForGuard(slot.assigned_guard_tenant_id, { silent: true, suppressError: true });
+        }
+        if (slot) {
+          this.refreshShiftCoverageAfterLeaveMutation(slot);
+        }
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to reconcile the leave return', 'fail', 5000);
+      },
+    });
+  }
+
+  submitShiftGuardLeave(): void {
+    const slot = this.selectedShiftLeaveTarget;
+    if (!slot || !slot.assigned_guard_tenant_id) {
+      return;
+    }
+
+    this.shiftGuardLeaveErrors = {};
+    const startAt = this.shiftGuardLeaveForm.startAt.trim();
+    const endAt = this.shiftGuardLeaveForm.endAt.trim();
+    const reason = this.shiftGuardLeaveForm.reason.trim() || null;
+
+    if (!startAt) {
+      this.shiftGuardLeaveErrors['startAt'] = 'Leave start is required.';
+    }
+    if (!endAt) {
+      this.shiftGuardLeaveErrors['endAt'] = 'Leave end is required.';
+    }
+
+    const startDate = startAt ? new Date(startAt) : null;
+    const endDate = endAt ? new Date(endAt) : null;
+    if (startDate && Number.isNaN(startDate.getTime())) {
+      this.shiftGuardLeaveErrors['startAt'] = 'Provide a valid leave start date and time.';
+    }
+    if (endDate && Number.isNaN(endDate.getTime())) {
+      this.shiftGuardLeaveErrors['endAt'] = 'Provide a valid leave end date and time.';
+    }
+    if (startDate && endDate && !Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate <= startDate) {
+      this.shiftGuardLeaveErrors['endAt'] = 'Leave end must be after the leave start.';
+    }
+
+    if (Object.keys(this.shiftGuardLeaveErrors).length) {
+      this.notification.show('Please fix the leave window fields.', 'fail', 4000);
+      return;
+    }
+
+    this.requestService.reportShiftGuardLeave(
+      {
+        guard_tenant_id: slot.assigned_guard_tenant_id,
+        start_at_utc: startDate!.toISOString(),
+        end_at_utc: endDate!.toISOString(),
+        reason,
+      },
+      { loadingScope: this.getShiftGuardLeaveActionScope(slot.id) },
+    ).subscribe({
+      next: (response) => {
+        const guardTenantId = slot.assigned_guard_tenant_id;
+        this.notification.show(response.message || 'Guard leave recorded', 'success', 4500);
+        this.shiftGuardLeaveErrors = {};
+        this.shiftGuardLeaveForm.reason = '';
+        if (guardTenantId) {
+          this.loadShiftGuardLeavesForGuard(guardTenantId, { silent: true, suppressError: true });
+        }
+        this.refreshShiftCoverageAfterLeaveMutation(slot);
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to record guard leave', 'fail', 5000);
+      },
+    });
   }
 
   openRequestReasonDrawer(item: ClientRequestItem, status: ClientRequestStatus): void {
@@ -2897,7 +3554,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.requestService.approveRequestWave(wave.id, { note: null }, { loadingScope: this.getReviewActionScope(wave.id) }).subscribe({
       next: (response) => {
         this.reviewingWaveId = '';
-        this.notification.show(response.message || 'Broadcast approved', 'success', 3500);
+        this.notification.show(response.message || 'Offer round approved and sent.', 'success', 3500);
         if (this.selectedWave?.id === wave.id) {
           this.closeWaveDrawer();
         }
@@ -2906,7 +3563,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.reviewingWaveId = '';
-        this.notification.show(error?.error?.detail || 'Failed to approve broadcast wave', 'fail', 5000);
+        this.notification.show(error?.error?.detail || 'Failed to approve the offer round', 'fail', 5000);
       }
     });
   }
@@ -2933,14 +3590,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.requestService.returnRequestWave(wave.id, { note }, { loadingScope: this.getReviewActionScope(wave.id) }).subscribe({
       next: (response) => {
         this.reviewingWaveId = '';
-        this.notification.show(response.message || 'Broadcast returned to client', 'success', 3500);
+        this.notification.show(response.message || 'Offer round sent back to the client.', 'success', 3500);
         this.closeReturnWaveDrawer();
         this.loadReviewWaves(this.reviewPage);
         this.loadRequests(this.page);
       },
       error: (error) => {
         this.reviewingWaveId = '';
-        this.notification.show(error?.error?.detail || 'Failed to return broadcast wave', 'fail', 5000);
+        this.notification.show(error?.error?.detail || 'Failed to send the offer round back to the client', 'fail', 5000);
       }
     });
   }
@@ -3177,6 +3834,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
     this.shiftActionErrors = {};
     const note = this.shiftActionForm.note.trim() || null;
+    const actorTimezone = this.getDefaultScheduleTimezone();
 
     if (action === 'check_in') {
       const latitude = Number(this.shiftActionForm.latitude);
@@ -3193,7 +3851,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       }
       this.requestService.checkInShiftSlot(
         slot.id,
-        { latitude, longitude, note },
+        { latitude, longitude, note, timezone: actorTimezone },
         { loadingScope: this.getShiftSlotActionScope(slot.id) },
       ).subscribe({
         next: (response) => {
@@ -3214,7 +3872,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
         : action === 'client_confirm'
           ? this.requestService.confirmShiftSlotArrival(slot.id, { note }, { loadingScope: this.getShiftSlotActionScope(slot.id) })
           : action === 'start'
-            ? this.requestService.startShiftSlot(slot.id, { note }, { loadingScope: this.getShiftSlotActionScope(slot.id) })
+            ? this.requestService.startShiftSlot(slot.id, { note, timezone: actorTimezone }, { loadingScope: this.getShiftSlotActionScope(slot.id) })
             : this.requestService.checkOutShiftSlot(slot.id, { note }, { loadingScope: this.getShiftSlotActionScope(slot.id) });
 
     actionCall.subscribe({
@@ -3280,6 +3938,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
         }
         this.loadJobs(this.jobPage);
         this.loadRequests(this.page);
+        if (this.canViewShifts) {
+          this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+          this.loadShiftCalendar(this.shiftCalendarMonthAnchor, { silent: true, suppressError: true });
+        }
       },
       error: (error) => {
         this.updatingJobId = '';
@@ -3324,10 +3986,12 @@ export class RequestsComponent implements OnInit, OnDestroy {
         next: (response) => {
           this.notification.show(response.message || 'Request removed from dashboard', 'success', 3500);
           this.closeReasonDrawer();
-          if (this.selectedRequest?.id === item.id) {
-            this.closeRequestDrawer();
-          }
-          this.loadRequests(this.page);
+          this.purgeDeletedRequestReferences(item.id, {
+            reloadRequests: true,
+            reloadJobs: true,
+            reloadShifts: true,
+            reloadCalendar: true,
+          });
         },
         error: (error) => {
           this.notification.show(error?.error?.detail || 'Failed to remove request from dashboard', 'fail', 5000);
@@ -3487,11 +4151,42 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (this.isPlatformAdmin) {
       return true;
     }
-    return this.isGuardOrProvider && ['offered', 'accepted', 'reconfirmation_required', 'in_progress'].includes(job.assignment_status);
+    return this.isGuardOrProvider
+      && ['offered', 'accepted', 'reconfirmation_required', 'in_progress'].includes(job.assignment_status)
+      && this.getJobActions(job).length > 0;
+  }
+
+  isScheduleBackedRequestJob(job: RequestAssignmentItem | null): boolean {
+    return Boolean(job && job.assignment_scope === 'request' && job.request?.has_schedule);
+  }
+
+  canOpenJobShiftOperations(job: RequestAssignmentItem | null): boolean {
+    if (!job || !this.canViewShifts) {
+      return false;
+    }
+    if (job.assignment_scope === 'shift_replacement') {
+      return Boolean(job.shift_slot_id || job.shift_instance_id)
+        || ['accepted', 'reconfirmation_required', 'in_progress', 'completed'].includes(job.assignment_status);
+    }
+    return this.isScheduleBackedRequestJob(job)
+      && ['accepted', 'reconfirmation_required', 'in_progress', 'completed'].includes(job.assignment_status);
+  }
+
+  requiresAttendanceOperations(job: RequestAssignmentItem | null): boolean {
+    if (!job) {
+      return false;
+    }
+    if (!['accepted', 'reconfirmation_required'].includes(job.assignment_status)) {
+      return false;
+    }
+    return this.canOpenJobShiftOperations(job);
   }
 
   getJobActions(job: RequestAssignmentItem): Array<{ label: string; status: RequestAssignmentStatus; type: 'primary' | 'secondary' | 'danger' }> {
     if (job.assignment_scope === 'shift_replacement' && ['accepted', 'in_progress', 'completed', 'cancelled'].includes(job.assignment_status)) {
+      return [];
+    }
+    if (this.isScheduleBackedRequestJob(job) && ['accepted', 'in_progress', 'completed', 'cancelled'].includes(job.assignment_status)) {
       return [];
     }
     switch (job.assignment_status) {
@@ -3559,36 +4254,36 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   getTargetTypeLabel(targetType: string): string {
-    return targetType === 'service_provider' ? 'Service Provider' : 'Guard';
+    return targetType === 'service_provider' ? 'Provider Team' : 'Guard';
   }
 
   getRequestFormHeading(): string {
     if (this.requestFormMode === 'publish_update') {
-      return 'Publish Request Update';
+      return 'Send Updated Request Details';
     }
-    return this.requestFormMode === 'create' ? 'Add Request' : 'Edit Request Draft';
+    return this.requestFormMode === 'create' ? 'Create Job Request' : 'Edit Draft Request';
   }
 
   getRequestFormSubtitle(): string {
     if (this.requestFormMode === 'publish_update') {
-      return 'Update the live request details and issue a fresh broadcast wave.';
+      return 'Update the live request details and send a fresh offer round to matching coverage.';
     }
-    return 'Capture site details, staffing needs, and publish when ready.';
+    return 'Enter the site, timing, and coverage details, then send the request when you are ready.';
   }
 
   getFulfillmentModeHelperText(): string {
     switch (this.requestForm.fulfillmentMode) {
       case 'hybrid':
-        return 'Hybrid broadcasts the request to both matching individual guards and service providers in the same staffing flow.';
+        return 'The system can offer this job to both matching direct guards and matching service providers.';
       case 'service_provider_only':
-        return 'Only matching service providers will receive this request.';
+        return 'Only matching service providers will see this job request.';
       default:
-        return 'Only matching individual guards will receive this request.';
+        return 'Only matching direct guards will see this job request.';
     }
   }
 
   getRequestFormPrimaryActionLabel(): string {
-    return this.requestFormMode === 'publish_update' ? 'Publish Update' : 'Publish Request';
+    return this.requestFormMode === 'publish_update' ? 'Send Updated Details' : 'Send Request';
   }
 
   getReviewActionScope(waveId: string): string {
@@ -3597,6 +4292,22 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   getShiftRosterScope(shiftId: string): string {
     return `requests:shift:roster:${shiftId}`;
+  }
+
+  getShiftGuardLeaveListScope(guardTenantId: string): string {
+    return `requests:shift-leave:list:${guardTenantId}`;
+  }
+
+  getShiftGuardLeaveReviewScope(leaveId: string): string {
+    return `requests:shift-leave:review:${leaveId}`;
+  }
+
+  getShiftGuardLeaveReconcileScope(leaveId: string): string {
+    return `requests:shift-leave:reconcile:${leaveId}`;
+  }
+
+  getShiftGuardLeaveActionScope(slotId: string): string {
+    return `requests:shift-leave:create:${slotId}`;
   }
 
   getShiftSlotActionScope(slotId: string): string {
@@ -3611,6 +4322,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (!shift) {
       return 'Shift';
     }
+    const directTitle = String(shift.request_title || '').trim();
+    if (directTitle) {
+      return directTitle;
+    }
     return this.shiftRequestSummaries[shift.request_id]?.title || `Request ${shift.request_id.slice(0, 8)}`;
   }
 
@@ -3618,11 +4333,194 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (!shift) {
       return 'Unknown site';
     }
+    const directSiteName = String(shift.site_name || '').trim();
+    if (directSiteName) {
+      return directSiteName;
+    }
     return this.shiftRequestSummaries[shift.request_id]?.siteName || 'Unknown site';
   }
 
   getShiftStatusSummary(shift: ShiftInstanceItem): string {
     return `${shift.slots_staffed}/${shift.slots_required} staffed • ${shift.slots_checked_in} checked in • ${shift.slots_completed} completed`;
+  }
+
+  getGuardShiftFocusTitle(): string {
+    if (!this.guardShiftFocus) {
+      return 'Next Shift Action';
+    }
+    const slot = this.guardShiftFocus.slot;
+    if (this.canCheckOutShiftSlot(slot)) {
+      return 'Check Out Your Active Shift';
+    }
+    if (this.canStartShiftSlot(slot)) {
+      return 'Start Your Confirmed Shift';
+    }
+    if (this.canCheckInShiftSlot(slot)) {
+      return 'Check In Before Shift Start';
+    }
+    if (slot.arrived_at && !slot.client_confirmed_at) {
+      return 'Waiting For Client Arrival Confirmation';
+    }
+    if (String(slot.slot_status || '') === 'late_risk') {
+      return 'Arrival Window Missed';
+    }
+    return 'Upcoming Assigned Shift';
+  }
+
+  getGuardShiftFocusMessage(): string {
+    if (!this.guardShiftFocus) {
+      return 'No current or upcoming shift action needs your attention.';
+    }
+    const slot = this.guardShiftFocus.slot;
+    if (this.canCheckOutShiftSlot(slot)) {
+      return 'Your shift is in progress. Use this shortcut to finish the active slot when the work ends.';
+    }
+    if (this.canStartShiftSlot(slot)) {
+      return 'The client arrival confirmation is complete. Start the shift from here instead of searching through tabs.';
+    }
+    if (this.canCheckInShiftSlot(slot)) {
+      return 'Your next shift is ready for check-in. Open the slot directly from here for location capture and arrival logging.';
+    }
+    if (slot.arrived_at && !slot.client_confirmed_at) {
+      return 'You have already checked in. Wait for the client to confirm arrival before the normal shift start action becomes available.';
+    }
+    if (String(slot.slot_status || '') === 'late_risk') {
+      return 'The grace period has passed for this slot. Review the shift status here instead of continuing with normal attendance actions.';
+    }
+    return 'Attendance and shift execution happen through the shift slot, not from the raw request or job record.';
+  }
+
+  getGuardShiftFocusPrimaryActionLabel(): string {
+    const slot = this.guardShiftFocus?.slot || null;
+    const action = slot ? this.getShiftSlotPrimaryAction(slot) : null;
+    return action?.label || '';
+  }
+
+  getProviderRosterFocusTitle(): string {
+    if (!this.providerRosterFocus) {
+      return 'Next Roster Task';
+    }
+    return 'Assign A Guard To The Next Provider Shift';
+  }
+
+  getProviderRosterFocusMessage(): string {
+    if (!this.providerRosterFocus) {
+      return 'No upcoming provider-backed shift is waiting for a named guard right now.';
+    }
+    return 'This provider-backed shift is still waiting for a named guard. Open rostering here instead of searching through the shift list.';
+  }
+
+  getProviderRosterFocusOpenSlotCount(): number {
+    const focus = this.providerRosterFocus;
+    if (!focus) {
+      return 0;
+    }
+    return focus.slots.filter((item) =>
+      item.coverage_source_type === 'service_provider'
+      && String(item.coverage_tenant_id || '') === this.currentTenantId
+      && !item.assigned_guard_tenant_id,
+    ).length;
+  }
+
+  openProviderRosterFocus(): void {
+    const focus = this.providerRosterFocus;
+    if (!focus) {
+      return;
+    }
+    this.activeTab = 'shifts';
+    this.selectedShift = focus.shift;
+    this.selectedShiftSlots = focus.slots;
+    this.selectedShiftSlotSummary = null;
+    this.openRosterDrawer(focus.shift);
+  }
+
+  getClientArrivalFocusTitle(): string {
+    if (!this.clientArrivalFocus) {
+      return 'Arrival Confirmations Waiting';
+    }
+    return 'A Guard Is Waiting For Your Arrival Confirmation';
+  }
+
+  getClientArrivalFocusMessage(): string {
+    if (!this.clientArrivalFocus) {
+      return 'No checked-in guard is currently waiting for your confirmation.';
+    }
+    return 'A guard has already checked in on site. Confirm the arrival here so the shift can move forward without delay.';
+  }
+
+  openClientArrivalFocusDetails(): void {
+    const focus = this.clientArrivalFocus;
+    if (!focus) {
+      return;
+    }
+    this.activeTab = 'shifts';
+    this.openShiftSlotById(focus.slot.id);
+  }
+
+  openClientArrivalFocusConfirm(): void {
+    const focus = this.clientArrivalFocus;
+    if (!focus) {
+      return;
+    }
+    this.activeTab = 'shifts';
+    this.selectedShift = focus.shift;
+    this.openShiftActionDrawer(focus.slot, 'client_confirm');
+  }
+
+  openGuardShiftFocusDetails(): void {
+    const focus = this.guardShiftFocus;
+    if (!focus) {
+      return;
+    }
+    this.activeTab = 'shifts';
+    this.openShiftSlotById(focus.slot.id);
+  }
+
+  openGuardShiftFocusPrimaryAction(): void {
+    const focus = this.guardShiftFocus;
+    if (!focus) {
+      return;
+    }
+    const action = this.getShiftSlotPrimaryAction(focus.slot);
+    if (!action) {
+      this.openGuardShiftFocusDetails();
+      return;
+    }
+    this.activeTab = 'shifts';
+    this.selectedShift = focus.shift;
+    this.openShiftActionDrawer(focus.slot, action.action);
+  }
+
+  getShiftCalendarDayClasses(day: ShiftCalendarDayCell): string {
+    if (!day.inCurrentMonth) {
+      return 'border-gray-100 bg-gray-50/60 text-gray-400 dark:border-gray-800 dark:bg-gray-900/30 dark:text-gray-600';
+    }
+    if (day.isFilteredDate) {
+      return 'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-100';
+    }
+    if (day.isToday) {
+      return 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100';
+    }
+    if (day.shifts.length) {
+      return 'border-gray-200 bg-white text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+    }
+    return 'border-gray-100 bg-white text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100';
+  }
+
+  getShiftCalendarCountLabel(day: ShiftCalendarDayCell): string {
+    if (!day.shifts.length) {
+      return 'No shifts';
+    }
+    if (day.shifts.length === 1) {
+      return '1 shift';
+    }
+    return `${day.shifts.length} shifts`;
+  }
+
+  onShiftCalendarDayClick(day: ShiftCalendarDayCell): void {
+    if (day.shifts.length === 1) {
+      this.openShiftDetails(day.shifts[0]);
+    }
   }
 
   getShiftSlotLabel(slot: ShiftSlotItem): string {
@@ -3669,6 +4567,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   getShiftSlotDetailItems(slot: ShiftSlotItem): string[] {
     const items: string[] = [];
+    if (slot.guard_unavailable_reported_at) {
+      items.push(`Unavailable ${this.formatBackendDateTime(slot.guard_unavailable_reported_at)}`);
+    }
     if (slot.arrived_at) {
       items.push(`Arrived ${this.formatBackendDateTime(slot.arrived_at)}`);
     }
@@ -3681,11 +4582,199 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (slot.completed_at) {
       items.push(`Completed ${this.formatBackendDateTime(slot.completed_at)}`);
     }
+    if (slot.no_show_confirmed_at) {
+      items.push(`No-show ${this.formatBackendDateTime(slot.no_show_confirmed_at)}`);
+    }
     return items;
+  }
+
+  getShiftSlotActivitySummary(slot: ShiftSlotItem): string {
+    const status = String(slot.slot_status || '').trim();
+
+    if (status === 'no_show_confirmed') {
+      return 'Guard did not make it to site. This shift is now marked as a confirmed no-show.';
+    }
+    if (status === 'late_risk') {
+      return 'Guard did not make it to site within the grace period. Normal check-in is no longer allowed for this shift.';
+    }
+    if (status === 'unavailable') {
+      return 'Guard reported leave or unavailability for this shift before start.';
+    }
+    if (status === 'replacement_required') {
+      return 'This shift now needs replacement coverage because the original guard could not continue.';
+    }
+    if (slot.completed_at || status === 'completed') {
+      return 'Guard checked out and completed this shift.';
+    }
+    if (slot.started_at || status === 'in_progress') {
+      return 'Guard started the shift and is currently in progress.';
+    }
+    if (slot.client_confirmed_at) {
+      return 'Guard checked in and the client confirmed arrival. The shift is ready to start.';
+    }
+    if (slot.arrived_at) {
+      return 'Guard checked in on site and is waiting for client arrival confirmation.';
+    }
+    if (status === 'rostered') {
+      return 'A named guard is assigned to this slot. No check-in has been recorded yet.';
+    }
+    if (status === 'reserved') {
+      return slot.assigned_guard_tenant_id
+        ? 'An assigned guard is linked to this slot. No check-in has been recorded yet.'
+        : 'Coverage is reserved for this slot. No named guard activity has been recorded yet.';
+    }
+    if (status === 'open') {
+      return 'This slot is still waiting for coverage.';
+    }
+    if (status === 'cancelled') {
+      return 'This shift slot has been cancelled.';
+    }
+    return 'No guard activity has been recorded for this slot yet.';
+  }
+
+  getShiftSlotActivityTimestampLabel(slot: ShiftSlotItem): string {
+    const status = String(slot.slot_status || '').trim();
+    if (slot.no_show_confirmed_at || status === 'no_show_confirmed') {
+      return slot.no_show_confirmed_at
+        ? `Confirmed no-show at ${this.formatBackendDateTime(slot.no_show_confirmed_at)}`
+        : 'Confirmed as a no-show.';
+    }
+    if (slot.guard_unavailable_reported_at || status === 'unavailable' || status === 'late_risk') {
+      return slot.guard_unavailable_reported_at
+        ? `Reported at ${this.formatBackendDateTime(slot.guard_unavailable_reported_at)}`
+        : '';
+    }
+    if (slot.completed_at || status === 'completed') {
+      return slot.completed_at
+        ? `Checked out at ${this.formatBackendDateTime(slot.completed_at)}`
+        : '';
+    }
+    if (slot.started_at || status === 'in_progress') {
+      return slot.started_at
+        ? `Started at ${this.formatBackendDateTime(slot.started_at)}`
+        : '';
+    }
+    if (slot.client_confirmed_at) {
+      return `Client confirmed arrival at ${this.formatBackendDateTime(slot.client_confirmed_at)}`;
+    }
+    if (slot.arrived_at) {
+      return `Checked in at ${this.formatBackendDateTime(slot.arrived_at)}`;
+    }
+    if (slot.rostered_at) {
+      return `Named guard assigned at ${this.formatBackendDateTime(slot.rostered_at)}`;
+    }
+    if (slot.roster_due_at && !slot.assigned_guard_tenant_id) {
+      return `Roster due ${this.formatBackendDateTime(slot.roster_due_at)}`;
+    }
+    return '';
+  }
+
+  getShiftSlotActivityClasses(slot: ShiftSlotItem): string {
+    const status = String(slot.slot_status || '').trim();
+    if (status === 'no_show_confirmed' || status === 'replacement_required') {
+      return 'rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-800 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200';
+    }
+    if (status === 'late_risk' || status === 'unavailable') {
+      return 'rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200';
+    }
+    if (slot.completed_at || status === 'completed') {
+      return 'rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200';
+    }
+    if (slot.started_at || slot.client_confirmed_at || slot.arrived_at || status === 'in_progress') {
+      return 'rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200';
+    }
+    return 'rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700 dark:border-gray-700 dark:bg-gray-800/70 dark:text-gray-200';
   }
 
   getRosterSlotMetaItems(slot: ShiftSlotItem): string[] {
     return [`Coverage owner: ${this.getShiftSlotTenantLabel(slot)}`];
+  }
+
+  getShiftGuardLeaveDrawerSubtitle(): string {
+    const slot = this.selectedShiftLeaveTarget;
+    const shift = this.selectedShift;
+    if (!slot) {
+      return 'Report a pre-start leave window for the selected shift.';
+    }
+    const requestLabel = shift ? this.getShiftRequestTitle(shift) : 'Shift slot';
+    return `${this.getShiftSlotLabel(slot)} • ${requestLabel}`;
+  }
+
+  getShiftGuardLeaveCoverageMessage(slot: ShiftSlotItem | null): string {
+    if (!slot) {
+      return 'Leave can only be reported by the assigned guard within the final 2 hours before shift start.';
+    }
+    return 'Reporting leave now only marks this selected shift unavailable. It does not auto-open replacement coverage. Client and platform ops are notified to review replacement action manually.';
+  }
+
+  getShiftGuardLeaveWindowLabel(item: ShiftGuardLeaveItem): string {
+    const start = this.formatBackendDateTime(item.start_at_utc);
+    const end = this.formatBackendDateTime(item.effective_end_at_utc || item.end_at_utc);
+    return `${start} to ${end}`;
+  }
+
+  getShiftGuardLeaveMetaItems(item: ShiftGuardLeaveItem): string[] {
+    const items = [`Requested by ${item.requested_by_username || item.requested_by_role || 'Unknown user'}`];
+    if (item.reason) {
+      items.push(`Reason: ${item.reason}`);
+    }
+    if (item.returned_early_at) {
+      items.push(`Returned early ${this.formatBackendDateTime(item.returned_early_at)}`);
+    }
+    return items;
+  }
+
+  getShiftGuardLeaveReturnReviewTitle(): string {
+    if (!this.selectedShiftGuardLeaveReviewTarget) {
+      return 'Review Guard Return';
+    }
+    return 'Review Return To Duty';
+  }
+
+  getShiftGuardLeaveReturnReviewSubtitle(): string {
+    const slot = this.selectedShiftLeaveTarget;
+    const leave = this.selectedShiftGuardLeaveReviewTarget;
+    if (!slot || !leave) {
+      return 'Review future replacement ownership before ending the leave early.';
+    }
+    return `${this.getShiftSlotLabel(slot)} • ${this.getShiftGuardLeaveWindowLabel(leave)}`;
+  }
+
+  getShiftGuardLeaveReturnActionOptions(item: ShiftGuardLeaveReturnReviewItem): Array<{ value: ShiftGuardLeaveReturnDecisionAction; label: string }> {
+    const options: Array<{ value: ShiftGuardLeaveReturnDecisionAction; label: string }> = [];
+    if (item.can_restore_original) {
+      options.push({ value: 'restore_original', label: 'Return To Original Guard' });
+    }
+    if (item.can_keep_replacement) {
+      options.push({ value: 'keep_replacement', label: 'Keep Replacement' });
+    }
+    return options;
+  }
+
+  getShiftGuardLeaveReturnReviewMetaItems(item: ShiftGuardLeaveReturnReviewItem): string[] {
+    const items = [
+      `Original slot: ${this.formatTokenLabel(item.original_slot_status)}`,
+      `Shift starts ${this.formatBackendDateTime(item.shift_start_at_utc)}`,
+    ];
+    if (item.replacement_slot_status) {
+      items.push(`Replacement slot: ${this.formatTokenLabel(item.replacement_slot_status)}`);
+    }
+    if (item.replacement_assignment_status) {
+      items.push(`Replacement job: ${this.formatTokenLabel(item.replacement_assignment_status)}`);
+    }
+    return items;
+  }
+
+  getShiftGuardLeaveReturnReviewSummaryLine(): string {
+    const summary = this.selectedShiftGuardLeaveReturnReview?.summary;
+    if (!summary) {
+      return '';
+    }
+    return [
+      `${summary.auto_restore_count || 0} auto-restored`,
+      `${summary.decision_required_count || 0} need review`,
+      `${summary.locked_history_count || 0} locked to history`,
+    ].join(' • ');
   }
 
   getBulkConfirmSlotMetaItems(slot: ShiftSlotItem): string[] {
@@ -3714,8 +4803,42 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return this.selectedShiftSlots.some((slot) => this.canConfirmShiftSlotArrival(slot));
   }
 
+  isWithinSelectedShiftLeaveWindow(slot: ShiftSlotItem | null): boolean {
+    const shift = this.getShiftContextForSlot(slot);
+    if (!slot || !shift?.shift_start_at_utc) {
+      return true;
+    }
+    const shiftStart = new Date(shift.shift_start_at_utc);
+    if (Number.isNaN(shiftStart.getTime())) {
+      return true;
+    }
+    const now = new Date();
+    const windowOpensAt = new Date(shiftStart.getTime() - 2 * 60 * 60 * 1000);
+    return now >= windowOpensAt && now < shiftStart;
+  }
+
+  canOpenShiftGuardLeaveDrawer(slot: ShiftSlotItem | null): boolean {
+    if (!slot?.assigned_guard_tenant_id) {
+      return false;
+    }
+    if (!(this.role === 'guard_admin' && this.tenantType === 'guard')) {
+      return false;
+    }
+    if (String(slot.assigned_guard_tenant_id || '') !== this.currentTenantId) {
+      return false;
+    }
+    if (!['reserved', 'rostered'].includes(String(slot.slot_status || '')) || !!slot.started_at) {
+      return false;
+    }
+    return this.isWithinSelectedShiftLeaveWindow(slot);
+  }
+
+  canReturnShiftGuardLeaveEarly(item: ShiftGuardLeaveItem): boolean {
+    return this.canViewGuardLeaveRecords && String(item.leave_status || '') === 'active';
+  }
+
   canReportShiftSlotUnavailable(slot: ShiftSlotItem | null): boolean {
-    return this.canManageShiftAttendance
+    return this.isPlatformAdmin
       && Boolean(slot?.assigned_guard_tenant_id)
       && ['reserved', 'rostered'].includes(String(slot?.slot_status || ''))
       && !slot?.started_at;
@@ -3726,7 +4849,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
       && Boolean(slot?.assigned_guard_tenant_id)
       && ['reserved', 'rostered'].includes(String(slot?.slot_status || ''))
       && !slot?.arrived_at
-      && !slot?.started_at;
+      && !slot?.started_at
+      && this.isWithinShiftCheckInWindow(slot);
   }
 
   canConfirmShiftSlotArrival(slot: ShiftSlotItem | null): boolean {
@@ -4056,6 +5180,12 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.selectedShiftSlot = response.slot;
     this.selectedShiftSlotDetail = response;
     this.showShiftSlotDrawer = true;
+    if (this.canViewGuardLeaveRecords && response.slot.assigned_guard_tenant_id) {
+      this.loadShiftGuardLeavesForGuard(response.slot.assigned_guard_tenant_id, {
+        silent: true,
+        suppressError: true,
+      });
+    }
     if (this.selectedShift?.id === response.slot.shift_instance_id) {
       this.requestService.getShift(response.slot.shift_instance_id, {
         loadingScope: this.shiftDetailScope,
@@ -4073,10 +5203,109 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.openShiftById(response.slot.shift_instance_id, { silent: true, suppressError: true });
     }
     this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+    this.loadJobs(this.jobPage, { silent: true, suppressError: true });
+    if (this.isGuardAdmin) {
+      this.refreshGuardShiftFocus({ silent: true, suppressError: true });
+    }
+    if (this.canManageProviderRoster) {
+      this.refreshProviderRosterFocus({ silent: true, suppressError: true });
+    }
+    if (this.isClientAdmin) {
+      this.refreshClientArrivalFocus({ silent: true, suppressError: true });
+    }
+  }
+
+  refreshShiftCoverageAfterLeaveMutation(slot: ShiftSlotItem): void {
+    if (this.selectedShift?.id === slot.shift_instance_id) {
+      this.requestService.getShift(slot.shift_instance_id, {
+        loadingScope: this.shiftDetailScope,
+        loadingMode: 'silent',
+      }).subscribe({
+        next: (shiftResponse) => {
+          this.selectedShift = shiftResponse.shift;
+          this.selectedShiftSlots = shiftResponse.slots || [];
+          this.selectedShiftSlotSummary = shiftResponse.slot_summary || null;
+          this.ensureShiftRequestSummaries([shiftResponse.shift]);
+        },
+        error: () => {},
+      });
+    }
+    this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+    if (this.canViewShiftExceptions) {
+      this.loadShiftExceptions(this.exceptionPage, { silent: true, suppressError: true });
+    }
+    this.loadJobs(this.jobPage, { silent: true, suppressError: true });
+    if (this.canReviewBroadcastWaves) {
+      this.loadReviewWaves(this.reviewPage, { silent: true, suppressError: true });
+    }
+    if (this.isGuardAdmin) {
+      this.refreshGuardShiftFocus({ silent: true, suppressError: true });
+    }
+    if (this.canManageProviderRoster) {
+      this.refreshProviderRosterFocus({ silent: true, suppressError: true });
+    }
+    if (this.isClientAdmin) {
+      this.refreshClientArrivalFocus({ silent: true, suppressError: true });
+    }
   }
 
   getWaveTitle(item: RequestBroadcastWaveItem): string {
     return String(item.request_snapshot?.['title'] || 'Request');
+  }
+
+  getWaveRoundLabel(item: RequestBroadcastWaveItem): string {
+    return `Offer round ${item.wave_number}`;
+  }
+
+  getWaveRevisionLabel(item: RequestBroadcastWaveItem): string {
+    return `Update ${item.request_revision}`;
+  }
+
+  getWaveStatusLabel(status: string): string {
+    switch (status) {
+      case 'pending_review':
+        return 'Waiting For Approval';
+      case 'active':
+        return 'Sent';
+      case 'returned':
+        return 'Sent Back';
+      case 'filled':
+        return 'Filled';
+      case 'expired':
+        return 'Closed By Time';
+      case 'superseded':
+        return 'Replaced By Newer Round';
+      default:
+        return this.formatTokenLabel(status);
+    }
+  }
+
+  getWaveTriggerLabel(trigger: string): string {
+    switch (trigger) {
+      case 'initial_publish':
+        return 'First Send';
+      case 'publish_update':
+        return 'Updated Details';
+      case 'additional_coverage':
+        return 'Asked For More Coverage';
+      case 'capacity_reopened':
+        return 'Coverage Reopened';
+      default:
+        return this.formatTokenLabel(trigger);
+    }
+  }
+
+  getWaveOutcomeLabel(outcome: string): string {
+    switch (outcome) {
+      case 'auto_broadcast':
+        return 'Sent Immediately';
+      case 'pending_review':
+        return 'Needed Approval';
+      case 'outside_policy':
+        return 'Held Back';
+      default:
+        return this.formatTokenLabel(outcome);
+    }
   }
 
   getWaveSiteName(item: RequestBroadcastWaveItem): string {
@@ -4104,29 +5333,30 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   getWaveFindingLabel(finding: Record<string, any>): string {
+    const candidateName = String(finding?.['candidate_name'] || '').trim();
     const candidateId = String(finding?.['candidate_id'] || '').trim();
-    const prefix = candidateId ? `Candidate ${candidateId}` : 'Request';
+    const prefix = candidateName || (candidateId ? `Candidate ${candidateId}` : 'Request');
     return `${prefix}: ${this.formatTokenLabel(String(finding?.['reason_code'] || 'review_required'))}`;
   }
 
   getWaveReviewSummary(item: RequestBroadcastWaveItem): string {
     const codes = this.getWaveReasonCodes(item);
     if (!codes.length) {
-      return 'Auto-broadcasted without review blockers.';
+      return 'Sent right away with no approval blockers.';
     }
     return codes.map((code) => this.formatTokenLabel(code)).join(', ');
   }
 
   getAcceptJobDrawerTitle(): string {
     if (!this.selectedAcceptJob) {
-      return 'Accept Job Offer';
+      return 'Accept Coverage Offer';
     }
-    return this.selectedAcceptJob.assignment_status === 'reconfirmation_required' ? 'Reconfirm Coverage' : 'Accept Job Offer';
+    return this.selectedAcceptJob.assignment_status === 'reconfirmation_required' ? 'Reconfirm Coverage' : 'Accept Coverage Offer';
   }
 
   getAcceptJobDrawerSubtitle(): string {
     const requestTitle = this.selectedAcceptJob?.request?.title || 'Request';
-    return `${requestTitle} • Service provider coverage response`;
+    return `${requestTitle} • Service provider response`;
   }
 
   getSelectedJobWave(): RequestBroadcastWaveItem | null {
@@ -4149,7 +5379,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (job.assignment_scope === 'shift_replacement') {
       switch (job.assignment_status) {
         case 'accepted':
-          return 'This is a shift replacement assignment. Slot execution now moves to shift attendance actions rather than generic job status updates.';
+          return 'This is a shift replacement assignment. Use Open Attendance Steps for check-in, client confirmation, start, and check-out.';
         case 'offered':
           return job.response_due_at
             ? `This is a shift replacement offer for a specific uncovered slot. Review the replacement context before responding. Offer closes at ${this.formatBackendDateTime(job.response_due_at)}.`
@@ -4160,6 +5390,17 @@ export class RequestsComponent implements OnInit, OnDestroy {
           break;
       }
     }
+    if (this.isScheduleBackedRequestJob(job) && ['accepted', 'in_progress', 'completed'].includes(job.assignment_status)) {
+      return 'This request uses a schedule. Use Open Attendance Steps for check-in, client confirmation, start, and check-out.';
+    }
+    if (
+      this.isGuardOrProvider
+      && job.assignment_scope === 'request'
+      && !job.request?.has_schedule
+      && ['accepted', 'in_progress', 'completed'].includes(job.assignment_status)
+    ) {
+      return 'Shift attendance context is still being prepared for this accepted job. Reopen the job details shortly if the shift operations shortcut is not visible yet.';
+    }
     switch (job.assignment_status) {
       case 'reconfirmation_required':
         return 'This request changed after your earlier acceptance. Review the updated request details and reconfirm only if you can still cover the assignment.';
@@ -4168,7 +5409,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       case 'expired':
         return 'This offer expired before a response was received.';
       case 'superseded':
-        return 'This offer was replaced by a newer broadcast wave after the request changed.';
+        return 'This offer was replaced by a newer offer round after the request changed.';
       case 'cancelled':
         return 'This assignment was cancelled and is no longer actionable.';
       case 'accepted':
@@ -4260,11 +5501,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
   getFulfillmentModeLabel(fulfillmentMode: string): string {
     switch (fulfillmentMode) {
       case 'service_provider_only':
-        return 'Service Providers';
+        return 'Service Provider Team Only';
       case 'hybrid':
-        return 'Hybrid Coverage';
+        return 'Guards Or Providers';
       default:
-        return 'Individual Guards';
+        return 'Direct Guards Only';
     }
   }
 
@@ -4732,6 +5973,379 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   trackByShiftSlotId(_index: number, item: ShiftSlotItem): string {
     return item.id;
+  }
+
+  trackByShiftGuardLeaveId(_index: number, item: ShiftGuardLeaveItem): string {
+    return item.id;
+  }
+
+  trackByShiftGuardLeaveReturnReviewItem(_index: number, item: ShiftGuardLeaveReturnReviewItem): string {
+    return item.original_slot_id;
+  }
+
+  private openResolvedJobShiftOperations(job: RequestAssignmentItem, shiftId: string): void {
+    this.requestService.getShift(shiftId, {
+      loadingScope: this.jobShiftLookupScope,
+      loadingMode: 'silent',
+    }).subscribe({
+      next: (response) => {
+        const slot = this.findShiftSlotForJob(job, response.slots || []);
+        this.closeJobDrawer();
+        if (slot) {
+          this.openShiftSlotById(slot.id, { silent: true });
+          return;
+        }
+        this.openShiftById(shiftId, { silent: true });
+        this.notification.show('Opened the related shift. Select your slot to continue attendance actions.', 'success', 3500);
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to open shift operations for this job', 'fail', 5000);
+      },
+    });
+  }
+
+  private findShiftSlotForJob(job: RequestAssignmentItem, slots: ShiftSlotItem[]): ShiftSlotItem | null {
+    if (!slots.length) {
+      return null;
+    }
+
+    const directSlotId = String(job.shift_slot_id || '').trim();
+    if (directSlotId) {
+      return slots.find((slot) => slot.id === directSlotId) || null;
+    }
+
+    const viewerTenantId = this.currentTenantId;
+    const assignmentId = String(job.id || '').trim();
+
+    const exactAssignmentAndGuard = slots.find((slot) =>
+      String(slot.parent_assignment_id || '').trim() === assignmentId
+      && String(slot.assigned_guard_tenant_id || '').trim() === viewerTenantId,
+    );
+    if (exactAssignmentAndGuard) {
+      return exactAssignmentAndGuard;
+    }
+
+    const exactAssignment = slots.find((slot) => String(slot.parent_assignment_id || '').trim() === assignmentId);
+    if (exactAssignment) {
+      return exactAssignment;
+    }
+
+    const actionableGuardSlot = slots.find((slot) =>
+      String(slot.assigned_guard_tenant_id || '').trim() === viewerTenantId
+      && ['reserved', 'rostered', 'client_confirmation_pending', 'in_progress'].includes(String(slot.slot_status || '')),
+    );
+    if (actionableGuardSlot) {
+      return actionableGuardSlot;
+    }
+
+    return slots.find((slot) => String(slot.assigned_guard_tenant_id || '').trim() === viewerTenantId) || null;
+  }
+
+  private pickBestShiftForJob(shifts: ShiftInstanceItem[]): ShiftInstanceItem | null {
+    if (!shifts.length) {
+      return null;
+    }
+
+    const now = Date.now();
+    return shifts
+      .slice()
+      .sort((left, right) => this.rankShiftForJob(left, now) - this.rankShiftForJob(right, now))[0] || null;
+  }
+
+  private rankShiftForJob(shift: ShiftInstanceItem, now: number): number {
+    const startMs = new Date(shift.shift_start_at_utc).getTime();
+    const endMs = new Date(shift.shift_end_at_utc).getTime();
+
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+      return Number.MAX_SAFE_INTEGER;
+    }
+
+    if (startMs <= now && endMs >= now) {
+      return 0;
+    }
+    if (startMs > now) {
+      return 1_000_000_000_000 + (startMs - now);
+    }
+    return 2_000_000_000_000 + (now - endMs);
+  }
+
+  private closeBlockingDrawersForShiftDetail(): void {
+    if (this.showRequestDrawer) {
+      this.closeRequestDrawer();
+    }
+    if (this.showJobDrawer) {
+      this.closeJobDrawer();
+    }
+    if (this.showWaveDrawer) {
+      this.closeWaveDrawer();
+    }
+    if (this.showExceptionDrawer) {
+      this.closeExceptionDrawer();
+    }
+  }
+
+  private getShiftContextForSlot(slot: ShiftSlotItem | null): ShiftInstanceItem | null {
+    if (!slot) {
+      return null;
+    }
+    if (this.selectedShift?.id === slot.shift_instance_id) {
+      return this.selectedShift;
+    }
+    if (this.guardShiftFocus?.slot.id === slot.id) {
+      return this.guardShiftFocus.shift;
+    }
+    return this.findCachedShiftById(slot.shift_instance_id);
+  }
+
+  private isWithinShiftCheckInWindow(slot: ShiftSlotItem | null): boolean {
+    const shift = this.getShiftContextForSlot(slot);
+    if (!slot || !shift?.shift_start_at_utc || !shift.shift_end_at_utc) {
+      return true;
+    }
+    const shiftStart = new Date(shift.shift_start_at_utc);
+    const shiftEnd = new Date(shift.shift_end_at_utc);
+    if (Number.isNaN(shiftStart.getTime()) || Number.isNaN(shiftEnd.getTime())) {
+      return true;
+    }
+    const now = new Date();
+    const windowOpensAt = new Date(shiftStart.getTime() - (2 * 60 * 60 * 1000));
+    return now >= windowOpensAt && now < shiftEnd;
+  }
+
+  private refreshGuardShiftFocus(options?: { silent?: boolean; suppressError?: boolean }): void {
+    if (!this.isGuardAdmin || !this.canViewShifts) {
+      this.guardShiftFocus = null;
+      return;
+    }
+
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    const dateFrom = new Date();
+    dateFrom.setDate(dateFrom.getDate() - 1);
+
+    this.requestService.listShifts(
+      1,
+      12,
+      '',
+      '',
+      this.formatDateInput(dateFrom),
+      '',
+      {
+        loadingScope: this.providerRosterFocusScope,
+        loadingMode: silent ? 'silent' : undefined,
+      },
+    ).subscribe({
+      next: (response) => {
+        const now = Date.now();
+        const candidates = (response.items || [])
+          .filter((item) => !['completed', 'cancelled', 'expired'].includes(String(item.instance_status || '')))
+          .sort((left, right) => this.rankShiftForJob(left, now) - this.rankShiftForJob(right, now));
+        this.resolveGuardShiftFocusFromCandidates(candidates, 0);
+      },
+      error: (error) => {
+        this.guardShiftFocus = null;
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to load the next guard shift action', 'fail', 5000);
+        }
+      },
+    });
+  }
+
+  private resolveGuardShiftFocusFromCandidates(candidates: ShiftInstanceItem[], index: number): void {
+    if (!this.isGuardAdmin) {
+      this.guardShiftFocus = null;
+      return;
+    }
+    if (index >= candidates.length) {
+      this.guardShiftFocus = null;
+      return;
+    }
+
+    const candidate = candidates[index];
+    this.requestService.getShift(candidate.id, { loadingMode: 'silent' }).subscribe({
+      next: (response) => {
+        const slot = (response.slots || []).find((item) => {
+          if (String(item.assigned_guard_tenant_id || '') !== this.currentTenantId) {
+            return false;
+          }
+          return !['completed', 'cancelled', 'unavailable', 'no_show_confirmed'].includes(String(item.slot_status || ''));
+        });
+        if (slot) {
+          this.ensureShiftRequestSummaries([response.shift]);
+          this.guardShiftFocus = {
+            shift: response.shift,
+            slot,
+          };
+          return;
+        }
+        this.resolveGuardShiftFocusFromCandidates(candidates, index + 1);
+      },
+      error: () => {
+        this.resolveGuardShiftFocusFromCandidates(candidates, index + 1);
+      },
+    });
+  }
+
+  private refreshProviderRosterFocus(options?: { silent?: boolean; suppressError?: boolean }): void {
+    if (!this.canManageProviderRoster || !this.canViewShifts) {
+      this.providerRosterFocus = null;
+      return;
+    }
+
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    const dateFrom = new Date();
+    dateFrom.setDate(dateFrom.getDate() - 1);
+
+    this.requestService.listShifts(
+      1,
+      12,
+      '',
+      '',
+      this.formatDateInput(dateFrom),
+      '',
+      {
+        loadingScope: this.clientArrivalFocusScope,
+        loadingMode: silent ? 'silent' : undefined,
+      },
+    ).subscribe({
+      next: (response) => {
+        const now = Date.now();
+        const candidates = (response.items || [])
+          .filter((item) => !['completed', 'cancelled', 'expired'].includes(String(item.instance_status || '')))
+          .sort((left, right) => this.rankShiftForJob(left, now) - this.rankShiftForJob(right, now));
+        this.resolveProviderRosterFocusFromCandidates(candidates, 0);
+      },
+      error: (error) => {
+        this.providerRosterFocus = null;
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to load the next roster task', 'fail', 5000);
+        }
+      },
+    });
+  }
+
+  private resolveProviderRosterFocusFromCandidates(candidates: ShiftInstanceItem[], index: number): void {
+    if (!this.canManageProviderRoster) {
+      this.providerRosterFocus = null;
+      return;
+    }
+    if (index >= candidates.length) {
+      this.providerRosterFocus = null;
+      return;
+    }
+
+    const candidate = candidates[index];
+    this.requestService.getShift(candidate.id, { loadingMode: 'silent' }).subscribe({
+      next: (response) => {
+        const rosterableSlots = (response.slots || []).filter((item) =>
+          item.coverage_source_type === 'service_provider'
+          && String(item.coverage_tenant_id || '') === this.currentTenantId
+          && ['reserved', 'rostered'].includes(String(item.slot_status || ''))
+          && !item.assigned_guard_tenant_id,
+        );
+        if (rosterableSlots.length) {
+          this.ensureShiftRequestSummaries([response.shift]);
+          this.providerRosterFocus = {
+            shift: response.shift,
+            slots: response.slots || [],
+            nextSlot: rosterableSlots[0],
+          };
+          return;
+        }
+        this.resolveProviderRosterFocusFromCandidates(candidates, index + 1);
+      },
+      error: () => {
+        this.resolveProviderRosterFocusFromCandidates(candidates, index + 1);
+      },
+    });
+  }
+
+  private refreshClientArrivalFocus(options?: { silent?: boolean; suppressError?: boolean }): void {
+    if (!this.isClientAdmin || !this.canViewShifts) {
+      this.clientArrivalFocus = null;
+      return;
+    }
+
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    const dateFrom = new Date();
+    dateFrom.setDate(dateFrom.getDate() - 1);
+
+    this.requestService.listShifts(
+      1,
+      12,
+      '',
+      '',
+      this.formatDateInput(dateFrom),
+      '',
+      {
+        loadingScope: this.guardShiftFocusScope,
+        loadingMode: silent ? 'silent' : undefined,
+      },
+    ).subscribe({
+      next: (response) => {
+        const now = Date.now();
+        const candidates = (response.items || [])
+          .filter((item) => !['completed', 'cancelled', 'expired'].includes(String(item.instance_status || '')))
+          .sort((left, right) => this.rankShiftForJob(left, now) - this.rankShiftForJob(right, now));
+        this.resolveClientArrivalFocusFromCandidates(candidates, 0);
+      },
+      error: (error) => {
+        this.clientArrivalFocus = null;
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to load waiting arrival confirmations', 'fail', 5000);
+        }
+      },
+    });
+  }
+
+  private resolveClientArrivalFocusFromCandidates(candidates: ShiftInstanceItem[], index: number): void {
+    if (!this.isClientAdmin) {
+      this.clientArrivalFocus = null;
+      return;
+    }
+    if (index >= candidates.length) {
+      this.clientArrivalFocus = null;
+      return;
+    }
+
+    const candidate = candidates[index];
+    this.requestService.getShift(candidate.id, { loadingMode: 'silent' }).subscribe({
+      next: (response) => {
+        const waitingSlot = (response.slots || []).find((item) =>
+          String(item.slot_status || '') === 'client_confirmation_pending'
+          || (Boolean(item.arrived_at) && !item.client_confirmed_at && !item.started_at),
+        );
+        if (waitingSlot) {
+          this.ensureShiftRequestSummaries([response.shift]);
+          this.clientArrivalFocus = {
+            shift: response.shift,
+            slot: waitingSlot,
+          };
+          return;
+        }
+        this.resolveClientArrivalFocusFromCandidates(candidates, index + 1);
+      },
+      error: () => {
+        this.resolveClientArrivalFocusFromCandidates(candidates, index + 1);
+      },
+    });
+  }
+
+  private findCachedShiftById(shiftId: string): ShiftInstanceItem | null {
+    const normalizedShiftId = String(shiftId || '').trim();
+    if (!normalizedShiftId) {
+      return null;
+    }
+
+    if (this.selectedShift?.id === normalizedShiftId) {
+      return this.selectedShift;
+    }
+
+    return this.shiftCalendarItems.find((item) => item.id === normalizedShiftId)
+      || this.shifts.find((item) => item.id === normalizedShiftId)
+      || null;
   }
 
   trackByProviderGuardId(_index: number, item: ServiceProviderGuardSummaryItem): string {

@@ -150,11 +150,11 @@ export class RequestListCardComponent {
   get fulfillmentLabel(): string {
     switch (this.request?.fulfillment_mode) {
       case 'service_provider_only':
-        return 'Service Providers';
+        return 'Provider Team Only';
       case 'hybrid':
-        return 'Hybrid Coverage';
+        return 'Guards Or Providers';
       default:
-        return 'Individual Guards';
+        return 'Direct Guards Only';
     }
   }
 
@@ -191,11 +191,11 @@ export class RequestListCardComponent {
   }
 
   get coverageSummaryValue(): string {
-    return `${this.coverageAccepted}/${this.coverageRequired} accepted`;
+    return `${this.coverageAccepted} of ${this.coverageRequired} filled`;
   }
 
   get coverageHelperText(): string {
-    return `${this.coverageOpen} open slot${this.coverageOpen === 1 ? '' : 's'} remaining`;
+    return `${this.coverageOpen} position${this.coverageOpen === 1 ? '' : 's'} still open`;
   }
 
   get requestedWindowLabel(): string {
@@ -217,11 +217,12 @@ export class RequestListCardComponent {
   }
 
   get requestedWindowHelperText(): string {
-    return this.request?.requested_guard_type || 'Guard type not specified';
+    const guardType = this.formatTokenLabel(String(this.request?.requested_guard_type || '').trim());
+    return guardType || 'Guard type not specified';
   }
 
   get titleSupportingLabel(): string {
-    return this.request?.requested_guard_type || '';
+    return this.formatTokenLabel(String(this.request?.requested_guard_type || '').trim());
   }
 
   get expiryLabel(): string {
@@ -230,12 +231,12 @@ export class RequestListCardComponent {
 
   get expiryHelperText(): string {
     if (this.request?.staffing_status === 'expired') {
-      return 'Request is read-only';
+      return 'No new offers can be sent';
     }
     if (this.request?.lock_reason === 'filled') {
-      return 'All vacancies are currently covered';
+      return 'All positions are currently filled';
     }
-    return this.request?.published_at ? `Published ${formatBackendDateTime(this.request.published_at)}` : 'Not published yet';
+    return this.request?.published_at ? `Last sent ${formatBackendDateTime(this.request.published_at)}` : 'Not sent yet';
   }
 
   get siteValue(): string {
@@ -264,21 +265,21 @@ export class RequestListCardComponent {
       return {
         tone: 'info',
         title: 'Awaiting Platform Review',
-        message: 'This request is published, but the broadcast is being held until a platform admin approves it.',
+        message: 'This request is ready, but sending offers is paused until a platform admin approves it.',
       };
     }
     if (this.request.staffing_status === 'review_returned') {
       return {
         tone: 'warning',
         title: 'Client Update Required',
-        message: 'The last broadcast wave was returned for changes. Update the request details and publish again.',
+        message: 'The last offer round was sent back for changes. Update the request details and send it again.',
       };
     }
     if (this.request.staffing_status === 'expired') {
       return {
         tone: 'danger',
         title: 'Request Expired',
-        message: 'The request deadline has passed. Existing accepted work can continue, but no new waves can be issued.',
+        message: 'The response cutoff has passed. Existing accepted work can continue, but no new offers can be sent.',
       };
     }
     if (this.request.staffing_status === 'filled') {
@@ -292,7 +293,7 @@ export class RequestListCardComponent {
       return {
         tone: 'info',
         title: 'Still Staffing',
-        message: `${this.coverageOpen} slot${this.coverageOpen === 1 ? '' : 's'} remain open. You can issue additional coverage without disrupting accepted work.`,
+        message: `${this.coverageOpen} position${this.coverageOpen === 1 ? '' : 's'} remain open. You can ask for more coverage without disrupting accepted work.`,
       };
     }
     if (this.request.request_status === 'in_progress') {
@@ -314,13 +315,13 @@ export class RequestListCardComponent {
 
   get primaryActionLabel(): string {
     if (this.canPublish) {
-      return 'Publish';
+      return 'Send Request';
     }
     if (this.canPublishUpdate) {
-      return 'Publish Update';
+      return 'Send Updated Details';
     }
     if (this.canRequestAdditionalCoverage) {
-      return 'Add Coverage';
+      return 'Ask For More Coverage';
     }
     return '';
   }

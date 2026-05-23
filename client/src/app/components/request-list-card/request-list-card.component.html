@@ -18,7 +18,7 @@
               {{ fulfillmentLabel }}
             </span>
             <span *ngIf="request.last_wave_number" class="text-xs text-gray-500 dark:text-gray-400">
-              Wave {{ request.last_wave_number }}
+              Offer round {{ request.last_wave_number }}
             </span>
             <span
               *ngIf="viewerAssignment"
@@ -40,7 +40,7 @@
               </p>
               <div *ngIf="showClientTenant && clientTenantLabel" class="mt-3 flex flex-wrap items-center gap-2">
                 <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-                  Client Tenant
+                  Client Account
                 </span>
                 <span class="inline-flex rounded-full bg-white/85 px-2.5 py-1 text-xs font-medium text-gray-700 shadow-sm dark:bg-slate-900/80 dark:text-gray-200">
                   {{ clientTenantLabel }}
@@ -48,7 +48,7 @@
               </div>
             </div>
             <div class="rounded-full border border-white/80 bg-white/90 px-3 py-1 text-xs font-medium text-gray-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-gray-300">
-              Revision {{ request.request_revision || 1 }}
+              Update {{ request.request_revision || 1 }}
             </div>
           </div>
         </div>
@@ -69,14 +69,14 @@
             [valueClass]="statCardValueClass"
           ></app-summary-metric-card>
           <app-summary-metric-card
-            label="Request Expiry"
+            label="Response Cutoff"
             [value]="expiryLabel"
             [helperText]="expiryHelperText"
             [containerClass]="statCardContainerClass"
             [valueClass]="statCardValueClass"
           ></app-summary-metric-card>
           <app-summary-metric-card
-            label="Coverage"
+            label="Filled Positions"
             [value]="coverageSummaryValue"
             [helperText]="coverageHelperText"
             [containerClass]="statCardContainerClass"
@@ -87,9 +87,9 @@
         <div [class]="progressSurfaceClass">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div class="min-w-0">
-              <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">Staffing Progress</div>
+              <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">Coverage Progress</div>
               <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Accepted coverage vs. requested headcount for this client request.
+                Filled positions compared with the number of guards requested.
               </p>
             </div>
             <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -106,21 +106,21 @@
 
           <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
             <app-summary-metric-card
-              label="Eligible Matches"
+              label="Good Matches"
               [value]="eligibleMatchCount"
               [containerClass]="miniMetricContainerClass"
               [labelClass]="miniMetricLabelClass"
               [valueClass]="miniMetricValueClass"
             ></app-summary-metric-card>
             <app-summary-metric-card
-              label="Missing Geo"
+              label="Missing Map Data"
               [value]="missingGeoCount"
               [containerClass]="miniMetricContainerClass"
               [labelClass]="miniMetricLabelClass"
               [valueClass]="miniMetricValueClass"
             ></app-summary-metric-card>
             <app-summary-metric-card
-              label="Outside Radius"
+              label="Too Far Away"
               [value]="outsideRadiusCount"
               [containerClass]="miniMetricContainerClass"
               [labelClass]="miniMetricLabelClass"
@@ -145,13 +145,13 @@
         >
           <div class="flex flex-col gap-3 xl:flex-row xl:items-end">
             <div class="min-w-0 flex-1">
-              <div class="text-sm font-semibold text-blue-900 dark:text-blue-100">Assign Eligible Candidate</div>
+              <div class="text-sm font-semibold text-blue-900 dark:text-blue-100">Pick A Matching Candidate</div>
               <p class="mt-1 text-xs text-blue-700 dark:text-blue-200">
-                Manual assignment stays available as an operational fallback when you want to pick from the saved match set.
+                Use this only if you want to hand-pick someone from the saved match list.
               </p>
               <div class="mt-3">
                 <app-select-input
-                  label="Candidate"
+                  label="Matching Candidate"
                   [name]="'candidate-' + request.id"
                   [ngModel]="selectedCandidateId"
                   (ngModelChange)="onCandidateSelectionChange($event)"
@@ -162,7 +162,7 @@
             </div>
             <div class="xl:pb-0.5">
               <app-button
-                label="Assign Candidate"
+                label="Assign This Candidate"
                 type="primary"
                 size="sm"
                 [loadingScope]="assignScope"
@@ -176,11 +176,11 @@
       <div class="xl:w-72 xl:pl-3">
         <div [class]="actionSurfaceClass">
           <div class="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
-            Quick Actions
+            What To Do Next
           </div>
 
           <div class="mt-3 grid grid-cols-1 gap-2">
-            <app-button label="Open Details" type="secondary" size="sm" [fullWidth]="true" (pressed)="details.emit()"></app-button>
+            <app-button label="Open Request" type="secondary" size="sm" [fullWidth]="true" (pressed)="details.emit()"></app-button>
             <app-button
               *ngIf="showPrimaryAction"
               [label]="primaryActionLabel"
@@ -202,10 +202,10 @@
           </div>
 
           <div class="mt-4 flex flex-wrap gap-2">
-            <app-button *ngIf="canEdit" label="Edit Draft" type="secondary" size="sm" (pressed)="edit.emit()"></app-button>
+            <app-button *ngIf="canEdit" label="Edit Unsent Request" type="secondary" size="sm" (pressed)="edit.emit()"></app-button>
             <app-button
               *ngIf="showSecondaryCoverageAction"
-              label="Add Coverage"
+              label="Ask For More Coverage"
               type="secondary"
               size="sm"
               [loadingScope]="requestStatusScope"

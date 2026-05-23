@@ -510,6 +510,139 @@ async def test_roster_request_shift_forwards_payload(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_list_shift_guard_leaves_forwards_filters(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def list_guard_leaves(self, **kwargs):
+            captured.update(kwargs)
+            return {"items": [], "pagination": {"page": kwargs["page"], "rows": kwargs["rows"]}}
+
+    monkeypatch.setattr(RequestShiftManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.SP_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/shift-guard-leaves?page=2&rows=5&guard_tenant_id=guard-7&leave_status=active")
+
+    assert response.status_code == 200
+    assert captured["page"] == 2
+    assert captured["rows"] == 5
+    assert captured["guard_tenant_id"] == "guard-7"
+    assert captured["leave_status"] == "active"
+    assert captured["current_user"].username == "tester"
+
+
+@pytest.mark.anyio
+async def test_report_shift_guard_leave_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def report_guard_leave(self, payload, current_user):
+            captured["guard_tenant_id"] = payload.guard_tenant_id
+            captured["reason"] = payload.reason
+            captured["user"] = current_user.username
+            return {"item": {"id": "leave-1"}}
+
+    monkeypatch.setattr(RequestShiftManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.SP_ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/shift-guard-leaves",
+            json={
+                "guard_tenant_id": "guard-1",
+                "start_at_utc": "2026-05-21T08:00:00",
+                "end_at_utc": "2026-05-23T18:00:00",
+                "reason": "vacation",
+            },
+        )
+
+    assert response.status_code == 201
+    assert captured == {"guard_tenant_id": "guard-1", "reason": "vacation", "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_return_shift_guard_leave_early_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def return_guard_leave_early(self, leave_id, payload, current_user):
+            captured["leave_id"] = leave_id
+            captured["note"] = payload.note
+            captured["user"] = current_user.username
+            return {"item": {"id": leave_id}}
+
+    monkeypatch.setattr(RequestShiftManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.GUARD_ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/shift-guard-leaves/leave-1/return-early",
+            json={"note": "returning today"},
+        )
+
+    assert response.status_code == 200
+    assert captured == {"leave_id": "leave-1", "note": "returning today", "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_get_shift_guard_leave_return_review_forwards_leave_id(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def get_guard_leave_return_review(self, leave_id, current_user):
+            captured["leave_id"] = leave_id
+            captured["user"] = current_user.username
+            return {"leave": {"id": leave_id}, "items": [], "summary": {}}
+
+    monkeypatch.setattr(RequestShiftManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.GUARD_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/shift-guard-leaves/leave-7/return-review")
+
+    assert response.status_code == 200
+    assert captured == {"leave_id": "leave-7", "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_reconcile_shift_guard_leave_return_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def reconcile_guard_leave_return(self, leave_id, payload, current_user):
+            captured["leave_id"] = leave_id
+            captured["note"] = payload.note
+            captured["decision_count"] = len(payload.decisions)
+            captured["first_slot"] = payload.decisions[0].original_slot_id
+            captured["first_action"] = payload.decisions[0].action.value
+            captured["user"] = current_user.username
+            return {"item": {"id": leave_id}, "summary": {}}
+
+    monkeypatch.setattr(RequestShiftManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.GUARD_ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/shift-guard-leaves/leave-9/reconcile-return",
+            json={
+                "note": "original guard is back",
+                "decisions": [
+                    {
+                        "original_slot_id": "slot-42",
+                        "action": "restore_original",
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 200
+    assert captured == {
+        "leave_id": "leave-9",
+        "note": "original guard is back",
+        "decision_count": 1,
+        "first_slot": "slot-42",
+        "first_action": "restore_original",
+        "user": "tester",
+    }
+
+
+@pytest.mark.anyio
 async def test_check_in_request_shift_slot_forwards_payload(monkeypatch):
     captured = {}
 

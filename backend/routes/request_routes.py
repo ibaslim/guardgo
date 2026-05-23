@@ -21,6 +21,9 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     ShiftSlotCheckInPayload,
     ShiftSlotCheckOutPayload,
     ShiftSlotClientConfirmPayload,
+    ShiftGuardLeaveCreatePayload,
+    ShiftGuardLeaveReconcilePayload,
+    ShiftGuardLeaveReturnPayload,
     ShiftSlotReopenPayload,
     ShiftSlotStartPayload,
     ShiftSlotUnavailablePayload,
@@ -399,6 +402,148 @@ async def roster_request_shift(
 ):
     return await RequestShiftManager.get_instance().roster_shift(
         shift_id=shift_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/shift-guard-leaves",
+    summary="List shift guard leave records",
+    description="Return guard leave records visible to the current platform, provider, or guard role.",
+    tags=["Client Requests"],
+    operation_id="listShiftGuardLeaves",
+    response_description="Paginated shift guard leave records.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def list_shift_guard_leaves(
+    page: int = 1,
+    rows: int = 20,
+    guard_tenant_id: str = "",
+    leave_status: str = "",
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().list_guard_leaves(
+        current_user=current_user,
+        page=page,
+        rows=rows,
+        guard_tenant_id=guard_tenant_id,
+        leave_status=leave_status,
+    )
+
+
+@request_routes.post(
+    "/api/shift-guard-leaves",
+    summary="Report guard leave range",
+    description="Record a future guard leave window and apply it across scheduled shift slots.",
+    tags=["Client Requests"],
+    operation_id="reportShiftGuardLeave",
+    response_description="Created shift guard leave record.",
+    status_code=201,
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def report_shift_guard_leave(
+    payload: ShiftGuardLeaveCreatePayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().report_guard_leave(
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/shift-guard-leaves/{leave_id}/return-early",
+    summary="Return guard from leave early",
+    description="End an active guard leave early and reconcile future unstaffed replacements.",
+    tags=["Client Requests"],
+    operation_id="returnShiftGuardLeaveEarly",
+    response_description="Updated shift guard leave record.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def return_shift_guard_leave_early(
+    leave_id: str,
+    payload: ShiftGuardLeaveReturnPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().return_guard_leave_early(
+        leave_id=leave_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/shift-guard-leaves/{leave_id}/return-review",
+    summary="Preview guard leave return reconciliation",
+    description="Return future shift replacements that must be reviewed before handing work back to the original guard.",
+    tags=["Client Requests"],
+    operation_id="getShiftGuardLeaveReturnReview",
+    response_description="Preview of future shift replacements affected by the leave return.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def get_shift_guard_leave_return_review(
+    leave_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().get_guard_leave_return_review(
+        leave_id=leave_id,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/shift-guard-leaves/{leave_id}/reconcile-return",
+    summary="Reconcile guard leave return",
+    description="Resolve future replacement ownership when the original guard returns from leave.",
+    tags=["Client Requests"],
+    operation_id="reconcileShiftGuardLeaveReturn",
+    response_description="Updated guard leave record after return reconciliation.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def reconcile_shift_guard_leave_return(
+    leave_id: str,
+    payload: ShiftGuardLeaveReconcilePayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().reconcile_guard_leave_return(
+        leave_id=leave_id,
         payload=payload,
         current_user=current_user,
     )

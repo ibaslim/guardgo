@@ -38,6 +38,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestLockReason,
     RequestPublishPayload,
     RequestPublishUpdatePayload,
+    RequestScheduleTemplateRecord,
     RequestSiteInput,
     RequestStaffingStatus,
     RequestStatus,
@@ -177,6 +178,30 @@ class RequestManager:
     def _validate_requested_window(requested_start_at: Optional[datetime], requested_end_at: Optional[datetime]) -> None:
         if requested_start_at and requested_end_at and requested_end_at <= requested_start_at:
             raise HTTPException(status_code=400, detail="Requested end time must be after start time")
+
+    @classmethod
+    def _assert_request_job_status_action_window(
+        cls,
+        record: ClientRequestRecord,
+        next_status: RequestAssignmentStatus,
+    ) -> datetime:
+        now = datetime.utcnow()
+        if next_status not in {RequestAssignmentStatus.IN_PROGRESS, RequestAssignmentStatus.COMPLETED}:
+            return now
+
+        requested_start_at = cls._as_datetime(getattr(record, "requested_start_at", None))
+        requested_end_at = cls._as_datetime(getattr(record, "requested_end_at", None))
+
+        if next_status == RequestAssignmentStatus.IN_PROGRESS:
+            if requested_start_at and now < requested_start_at:
+                raise HTTPException(status_code=409, detail="Cannot start this job before its scheduled start time")
+            if requested_end_at and requested_end_at <= now:
+                raise HTTPException(status_code=409, detail="Cannot start this job after its scheduled end time")
+        elif next_status == RequestAssignmentStatus.COMPLETED:
+            if requested_start_at and now < requested_start_at:
+                raise HTTPException(status_code=409, detail="Cannot complete this job before its scheduled start time")
+
+        return now
 
     @staticmethod
     def _default_target_type_for_mode(fulfillment_mode: RequestFulfillmentMode) -> RequestTargetType:
@@ -330,6 +355,7 @@ class RequestManager:
         return {
             "id": str(record.get("_id") if isinstance(record, dict) else record.id),
             "title": record.get("title") if isinstance(record, dict) else record.title,
+            "timezone": record.get("timezone") if isinstance(record, dict) else getattr(record, "timezone", None),
             "request_status": cls._enum_value(record.get("request_status") if isinstance(record, dict) else record.request_status),
             "staffing_status": cls._enum_value(record.get("staffing_status") if isinstance(record, dict) else record.staffing_status),
             "fulfillment_mode": cls._resolve_fulfillment_mode_from_record(record).value,
@@ -341,6 +367,7 @@ class RequestManager:
             "request_expires_at": record.get("request_expires_at") if isinstance(record, dict) else record.request_expires_at,
             "accepted_slots": int(record.get("accepted_slots") or 0) if isinstance(record, dict) else record.accepted_slots,
             "open_slots": int(record.get("open_slots") or 0) if isinstance(record, dict) else record.open_slots,
+            "has_schedule": bool(record.get("has_schedule") if isinstance(record, dict) else getattr(record, "has_schedule", False)),
         }
 
     @staticmethod
@@ -365,6 +392,7 @@ class RequestManager:
                 "created_by_user_id": record.get("created_by_user_id"),
                 "created_by_username": record.get("created_by_username"),
                 "title": record.get("title") or "",
+                "timezone": record.get("timezone"),
                 "fulfillment_mode": cls._resolve_fulfillment_mode_from_record(record).value,
                 "target_type": cls._enum_value(record.get("target_type")),
                 "requested_guard_type": record.get("requested_guard_type"),
@@ -406,6 +434,7 @@ class RequestManager:
             "created_by_user_id": record.created_by_user_id,
             "created_by_username": record.created_by_username,
             "title": record.title,
+            "timezone": getattr(record, "timezone", None),
             "fulfillment_mode": cls._resolve_fulfillment_mode_from_record(record).value,
             "target_type": cls._enum_value(record.target_type),
             "requested_guard_type": record.requested_guard_type,
@@ -880,6 +909,24 @@ class RequestManager:
             return request_docs
 
         raise HTTPException(status_code=403, detail="Access forbidden")
+
+    async def _request_ids_with_active_schedules(self, request_ids: List[str]) -> set[str]:
+        normalized_ids = [str(request_id).strip() for request_id in request_ids if str(request_id or "").strip()]
+        if not normalized_ids:
+            return set()
+        schedule_collection = self._engine.get_collection(RequestScheduleTemplateRecord)
+        schedule_docs = await schedule_collection.find({
+            "request_id": {"$in": normalized_ids},
+            "active": True,
+        }).to_list(length=None)
+        return {
+            str(schedule_doc.get("request_id") or "").strip()
+            for schedule_doc in schedule_docs
+            if str(schedule_doc.get("request_id") or "").strip()
+        }
+
+    async def _request_has_active_schedule(self, request_id: str) -> bool:
+        return request_id in await self._request_ids_with_active_schedules([request_id])
 
     async def _can_view_request(self, record: ClientRequestRecord, current_user) -> bool:
         role_value = self._role_value(current_user)
@@ -1425,6 +1472,35 @@ class RequestManager:
             await self._set_wave_status(wave, RequestWaveStatus.SUPERSEDED)
         record.active_wave_id = None
 
+    async def _sync_request_assignments_for_manual_close(self, record: ClientRequestRecord) -> None:
+        now = datetime.utcnow()
+        assignments = await self._get_assignments_for_request(str(record.id))
+        for assignment in assignments:
+            if self._assignment_scope_value(assignment) != RequestAssignmentScope.REQUEST.value:
+                continue
+
+            current_status = getattr(assignment, "assignment_status", None)
+            if current_status == RequestAssignmentStatus.IN_PROGRESS:
+                assignment.assignment_status = RequestAssignmentStatus.COMPLETED
+                assignment.completed_at = getattr(assignment, "completed_at", None) or now
+                assignment.started_at = getattr(assignment, "started_at", None) or now
+                assignment.updated_at = now
+                await self._engine.save(assignment)
+                continue
+
+            if current_status in {
+                RequestAssignmentStatus.ACCEPTED,
+                RequestAssignmentStatus.RECONFIRMATION_REQUIRED,
+            }:
+                if getattr(assignment, "started_at", None) is not None:
+                    assignment.assignment_status = RequestAssignmentStatus.COMPLETED
+                    assignment.completed_at = getattr(assignment, "completed_at", None) or now
+                else:
+                    assignment.assignment_status = RequestAssignmentStatus.CANCELLED
+                    assignment.cancelled_at = getattr(assignment, "cancelled_at", None) or now
+                assignment.updated_at = now
+                await self._engine.save(assignment)
+
     async def _mark_assignments_reconfirmation_required(self, record: ClientRequestRecord) -> None:
         now = datetime.utcnow()
         due_at = self._compute_reconfirmation_due_at(record, now=now)
@@ -1633,17 +1709,28 @@ class RequestManager:
         shift_instance_id: str,
         original_slot_id: str,
         replacement_slot_id: str,
+        original_coverage_source_type: Optional[str] = None,
+        original_coverage_tenant_id: Optional[str] = None,
         current_user,
         max_match_results: int,
     ) -> Optional[RequestBroadcastWaveRecord]:
         evaluation = await self._evaluate_broadcast_snapshot(record)
         now = datetime.utcnow()
-        wave_status = RequestWaveStatus.PENDING_REVIEW if evaluation["requires_review"] else RequestWaveStatus.ACTIVE
+        normalized_original_source = str(original_coverage_source_type or "").strip().lower()
+        platform_review_required = normalized_original_source == ShiftCoverageSourceType.DIRECT_GUARD.value
+        wave_status = (
+            RequestWaveStatus.PENDING_REVIEW
+            if evaluation["requires_review"] or platform_review_required
+            else RequestWaveStatus.ACTIVE
+        )
         request_snapshot = self._request_snapshot(record)
         request_snapshot["shift_replacement"] = {
             "shift_instance_id": str(shift_instance_id),
             "original_slot_id": str(original_slot_id),
             "replacement_slot_id": str(replacement_slot_id),
+            "original_coverage_source_type": normalized_original_source or None,
+            "original_coverage_tenant_id": str(original_coverage_tenant_id or "").strip() or None,
+            "platform_review_required": platform_review_required,
         }
         wave = RequestBroadcastWaveRecord(
             id=ObjectId(),
@@ -1658,7 +1745,7 @@ class RequestManager:
             candidate_snapshots=evaluation["candidate_snapshots"],
             review_reason_codes=evaluation["review_reason_codes"],
             review_findings=evaluation["review_findings"],
-            review_requested_at=now if evaluation["requires_review"] else None,
+            review_requested_at=now if evaluation["requires_review"] or platform_review_required else None,
             wave_expires_at=self._compute_wave_expires_at(record, now=now),
             open_slots_at_send=1,
             created_at=now,
@@ -1829,6 +1916,7 @@ class RequestManager:
             created_by_user_id=str(getattr(current_user, "id", "") or ""),
             created_by_username=str(getattr(current_user, "username", "") or ""),
             title=title,
+            timezone=(payload.timezone or "").strip() or None,
             fulfillment_mode=payload.fulfillment_mode,
             target_type=self._default_target_type_for_mode(payload.fulfillment_mode),
             requested_guard_type=(payload.requested_guard_type or "").strip() or None,
@@ -1936,6 +2024,8 @@ class RequestManager:
             record.open_slots = max(record.guards_required - int(record.accepted_slots or 0), 0)
         if "special_instructions" in provided:
             record.special_instructions = (payload.special_instructions or "").strip() or None
+        if "timezone" in provided:
+            record.timezone = (payload.timezone or "").strip() or None
         if "requested_start_at" in provided:
             record.requested_start_at = payload.requested_start_at
         if "requested_end_at" in provided:
@@ -2072,8 +2162,19 @@ class RequestManager:
                 raise HTTPException(status_code=403, detail="Access forbidden")
 
         record = await self._get_request_or_404(assignment.request_id)
+        self._assert_not_soft_deleted(record)
         await self._sync_request_runtime_state(record)
+        if (
+            self._assignment_scope_value(assignment) == RequestAssignmentScope.REQUEST.value
+            and assignment.assignment_status in COMMITTED_SLOT_STATUSES
+            and not await self._request_has_active_schedule(str(record.id))
+        ):
+            from orion.api.interactive.request_shift_manager.request_shift_manager import RequestShiftManager
+
+            await RequestShiftManager.get_instance().sync_shift_slots_for_request(record)
+            assignment = await self._get_assignment_or_404(assignment_id)
         request_snapshot = self._request_snapshot(record)
+        request_snapshot["has_schedule"] = await self._request_has_active_schedule(str(record.id))
         assignment = await self._auto_complete_elapsed_assignment_record(assignment, request_snapshot)
         return self._serialize_assignment(assignment, request_snapshot=request_snapshot)
 
@@ -2120,6 +2221,9 @@ class RequestManager:
             changed = True
         if "requested_guard_type" in provided and (payload.requested_guard_type or "").strip() != (record.requested_guard_type or ""):
             record.requested_guard_type = (payload.requested_guard_type or "").strip() or None
+            changed = True
+        if "timezone" in provided and (payload.timezone or "").strip() != (record.timezone or ""):
+            record.timezone = (payload.timezone or "").strip() or None
             changed = True
         if "requested_start_at" in provided and payload.requested_start_at != record.requested_start_at:
             record.requested_start_at = payload.requested_start_at
@@ -2390,6 +2494,8 @@ class RequestManager:
             record.closed_at = datetime.utcnow()
             record.lock_reason = RequestLockReason.REQUEST_CLOSED
         await self._engine.save(record)
+        if payload.request_status == RequestStatus.CLOSED:
+            await self._sync_request_assignments_for_manual_close(record)
         await self._sync_request_runtime_state(record)
 
         await NotificationManager.get_instance().create_for_tenant_admin_users(
@@ -2587,6 +2693,8 @@ class RequestManager:
                 continue
 
             request_snapshot = request_lookup.get(str(doc.get("request_id") or ""), {})
+            if bool(request_snapshot.get("has_schedule")):
+                continue
             requested_end_at = self._as_datetime(request_snapshot.get("requested_end_at"))
             if requested_end_at is None or requested_end_at > now:
                 continue
@@ -2617,6 +2725,9 @@ class RequestManager:
             return assignment
 
         if assignment.assignment_status not in AUTO_COMPLETE_ELAPSED_ASSIGNMENT_STATUSES:
+            return assignment
+
+        if bool(request_snapshot.get("has_schedule")):
             return assignment
 
         requested_end_at = self._as_datetime(request_snapshot.get("requested_end_at"))
@@ -2664,18 +2775,29 @@ class RequestManager:
                 continue
 
         request_lookup: Dict[str, Dict[str, Any]] = {}
+        active_schedule_request_ids: set[str] = set()
         if request_ids:
-            request_docs = await request_collection.find({"_id": {"$in": request_ids}}).to_list(length=None)
+            request_docs = await request_collection.find({"_id": {"$in": request_ids}, "deleted_at": None}).to_list(length=None)
+            active_schedule_request_ids = await self._request_ids_with_active_schedules([
+                str(request_doc.get("_id") or "")
+                for request_doc in request_docs
+            ])
             for request_doc in request_docs:
+                request_doc["has_schedule"] = str(request_doc.get("_id") or "") in active_schedule_request_ids
                 request_lookup[str(request_doc.get("_id"))] = self._request_snapshot(request_doc)
 
         touched_request_ids = await self._auto_complete_elapsed_assignment_docs(docs, request_lookup, assignment_collection)
         for request_id in touched_request_ids:
+            if request_id not in request_lookup:
+                continue
             try:
                 request_record = await self._get_request_or_404(request_id)
             except HTTPException:
                 continue
+            if self._is_soft_deleted(request_record):
+                continue
             await self._sync_request_runtime_state(request_record)
+            setattr(request_record, "has_schedule", request_id in active_schedule_request_ids)
             request_lookup[request_id] = self._request_snapshot(request_record)
 
         normalized_keyword = self._normalize_text(keyword)
@@ -2689,6 +2811,8 @@ class RequestManager:
             if normalized_status and self._enum_value(doc.get("assignment_status")) != normalized_status:
                 continue
             if default_visible_statuses is not None and self._enum_value(doc.get("assignment_status")) not in default_visible_statuses:
+                continue
+            if str(doc.get("request_id") or "") not in request_lookup:
                 continue
             request_snapshot = request_lookup.get(str(doc.get("request_id")), {})
             searchable_text = " ".join([
@@ -2763,6 +2887,15 @@ class RequestManager:
             RequestAssignmentStatus.COMPLETED,
         }:
             raise HTTPException(status_code=409, detail="Shift replacement jobs must use shift attendance actions instead of job status actions")
+        if (
+            assignment_scope == RequestAssignmentScope.REQUEST.value
+            and next_status in {RequestAssignmentStatus.IN_PROGRESS, RequestAssignmentStatus.COMPLETED}
+            and await self._request_has_active_schedule(str(record.id))
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Scheduled request jobs must use shift attendance actions instead of generic job status actions",
+            )
         if next_status == RequestAssignmentStatus.ACCEPTED and assignment_scope == RequestAssignmentScope.REQUEST.value:
             desired_slots = payload.slots_committed
             if assignment.assignee_tenant_type == RequestTargetType.GUARD:
@@ -2816,7 +2949,7 @@ class RequestManager:
             assignment.slots_committed = 1
 
         previous_open_slots = int(record.open_slots or 0)
-        now = datetime.utcnow()
+        now = self._assert_request_job_status_action_window(record, next_status)
         assignment.assignment_status = next_status
         assignment.updated_at = now
         if next_status == RequestAssignmentStatus.ACCEPTED:
@@ -2905,9 +3038,11 @@ class RequestManager:
             from orion.api.interactive.request_shift_manager.request_shift_manager import RequestShiftManager
 
             await RequestShiftManager.get_instance().sync_shift_slots_for_request(record)
+            assignment = await self._get_assignment_or_404(str(assignment.id))
 
         request_title = record.title
         request_snapshot = self._request_snapshot(record)
+        request_snapshot["has_schedule"] = await self._request_has_active_schedule(str(record.id))
 
         await NotificationManager.get_instance().create_for_tenant_admin_users(
             tenant_id=assignment.client_tenant_id,

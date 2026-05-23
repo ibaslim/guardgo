@@ -31,6 +31,12 @@ import {
   ShiftSlotUnavailablePayload,
   ShiftSlotReopenPayload,
   ShiftSlotReopenResponse,
+  ShiftGuardLeaveCreatePayload,
+  ShiftGuardLeaveItem,
+  ShiftGuardLeaveListResponse,
+  ShiftGuardLeaveReconcilePayload,
+  ShiftGuardLeaveReturnReviewResponse,
+  ShiftGuardLeaveReturnPayload,
   RequestWaveListResponse,
   RequestWaveReviewPayload,
 } from '../model/request/client-request.model';
@@ -213,6 +219,49 @@ export class RequestService {
 
   checkOutShiftSlot(slotId: string, payload: ShiftSlotCheckOutPayload, options?: ApiRequestOptions) {
     return this.api.post<ShiftSlotDetailResponse>(`shift-slots/${slotId}/check-out`, payload, options);
+  }
+
+  listShiftGuardLeaves(
+    page = 1,
+    rows = 20,
+    guardTenantId = '',
+    leaveStatus = '',
+    options?: ApiRequestOptions,
+  ) {
+    let params = new HttpParams()
+      .set('page', page)
+      .set('rows', rows);
+    params = this.withOptionalParam(params, 'guard_tenant_id', guardTenantId);
+    params = this.withOptionalParam(params, 'leave_status', leaveStatus);
+    return this.api.get<ShiftGuardLeaveListResponse>('shift-guard-leaves', { ...options, params });
+  }
+
+  reportShiftGuardLeave(payload: ShiftGuardLeaveCreatePayload, options?: ApiRequestOptions) {
+    return this.api.post<{ message: string; item: ShiftGuardLeaveItem; summary?: Record<string, number> }>(
+      'shift-guard-leaves',
+      payload,
+      options,
+    );
+  }
+
+  returnShiftGuardLeaveEarly(leaveId: string, payload: ShiftGuardLeaveReturnPayload, options?: ApiRequestOptions) {
+    return this.api.post<{ message: string; item: ShiftGuardLeaveItem; summary?: Record<string, number> }>(
+      `shift-guard-leaves/${leaveId}/return-early`,
+      payload,
+      options,
+    );
+  }
+
+  getShiftGuardLeaveReturnReview(leaveId: string, options?: ApiRequestOptions) {
+    return this.api.get<ShiftGuardLeaveReturnReviewResponse>(`shift-guard-leaves/${leaveId}/return-review`, options);
+  }
+
+  reconcileShiftGuardLeaveReturn(leaveId: string, payload: ShiftGuardLeaveReconcilePayload, options?: ApiRequestOptions) {
+    return this.api.post<{ message: string; item: ShiftGuardLeaveItem; summary?: Record<string, number> }>(
+      `shift-guard-leaves/${leaveId}/reconcile-return`,
+      payload,
+      options,
+    );
   }
 
   listServiceProviderGuards(page = 1, rows = 100, options?: ApiRequestOptions) {

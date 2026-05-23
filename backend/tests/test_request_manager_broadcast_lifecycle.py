@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -10,15 +10,19 @@ from orion.api.interactive.request_manager.request_manager import RequestManager
 from orion.services.mongo_manager.shared_model.db_request_model import (
     ClientRequestCreatePayload,
     ClientRequestRecord,
+    ClientRequestStatusUpdatePayload,
     ClientRequestSoftDeletePayload,
     RequestAssignmentRecord,
     RequestAssignmentStatus,
     RequestAssignmentStatusUpdatePayload,
     RequestAssignmentScope,
     RequestLockReason,
+    RequestScheduleTemplateRecord,
     RequestStaffingStatus,
     RequestStatus,
     RequestTargetType,
+    RequestWaveStatus,
+    ShiftCoverageSourceType,
 )
 from orion.services.mongo_manager.shared_model.db_tenant_model import TenantType
 
@@ -74,16 +78,19 @@ class _FakeCollection:
 
 
 class _FakeListJobsEngine(FakeEngine):
-    def __init__(self, assignment_docs, request_docs):
+    def __init__(self, assignment_docs, request_docs, schedule_docs=None):
         super().__init__()
         self._assignment_docs = assignment_docs
         self._request_docs = request_docs
+        self._schedule_docs = schedule_docs or []
 
     def get_collection(self, model):
         if model is RequestAssignmentRecord:
             return _FakeCollection(self._assignment_docs)
         if model is ClientRequestRecord:
             return _FakeCollection(self._request_docs)
+        if model is RequestScheduleTemplateRecord:
+            return _FakeCollection(self._schedule_docs)
         raise AssertionError(f"Unexpected collection request: {model}")
 
 
@@ -116,6 +123,10 @@ def _make_request_record(**overrides):
         "matched_candidates": [],
         "cancelled_at": None,
         "closed_at": None,
+        "deleted_at": None,
+        "deleted_by_user_id": None,
+        "deleted_by_username": None,
+        "deleted_reason": None,
         "guards_required": 2,
         "accepted_slots": 0,
         "open_slots": 2,
@@ -124,6 +135,10 @@ def _make_request_record(**overrides):
     }
     base.update(overrides)
     return SimpleNamespace(**base)
+
+
+async def _async_return(value):
+    return value
 
 
 @pytest.mark.anyio
@@ -312,6 +327,82 @@ async def test_sync_request_runtime_state_closes_request_once_committed_work_is_
 
 
 @pytest.mark.anyio
+async def test_update_request_status_closed_completes_started_request_scope_job(monkeypatch):
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+    manager._role_value = lambda current_user: str(getattr(current_user, "role", "") or "")
+    manager._is_platform_write_role = lambda role_value: role_value in {"admin", "ops_admin", "support_admin", "compliance_admin"}
+    manager._allowed_request_status_transition = lambda _current, _next: True
+    manager._dashboard_requests_url = lambda **_kwargs: "/dashboard/requests?tab=requests"
+
+    record = _make_request_record(
+        id="req-closed-1",
+        request_status=RequestStatus.IN_PROGRESS,
+        staffing_status=RequestStaffingStatus.FILLED,
+    )
+    assignment = SimpleNamespace(
+        id=ObjectId(),
+        request_id="req-closed-1",
+        assignment_scope=RequestAssignmentScope.REQUEST,
+        assignment_status=RequestAssignmentStatus.IN_PROGRESS,
+        started_at=datetime(2026, 5, 23, 17, 0),
+        completed_at=None,
+        cancelled_at=None,
+        updated_at=None,
+    )
+
+    async def _get_request(_request_id):
+        return record
+
+    async def _can_view_request(_record, _current_user):
+        return True
+
+    async def _assert_write_access(_record, _current_user):
+        return None
+
+    async def _get_assignments(_request_id):
+        return [assignment]
+
+    async def _sync_request_runtime_state(request_record):
+        return request_record
+
+    async def _write_activity(**_kwargs):
+        return None
+
+    manager._get_request_or_404 = _get_request
+    manager._can_view_request = _can_view_request
+    manager._assert_request_write_access = _assert_write_access
+    manager._get_assignments_for_request = _get_assignments
+    manager._sync_request_runtime_state = _sync_request_runtime_state
+    manager._write_activity = _write_activity
+
+    notifications = []
+
+    class _FakeNotifications:
+        async def create_for_tenant_admin_users(self, **kwargs):
+            notifications.append(kwargs)
+            return 1
+
+    monkeypatch.setattr(
+        "orion.api.interactive.request_manager.request_manager.NotificationManager.get_instance",
+        staticmethod(lambda: _FakeNotifications()),
+    )
+
+    response = await manager.update_request_status(
+        "req-closed-1",
+        ClientRequestStatusUpdatePayload(request_status=RequestStatus.CLOSED),
+        current_user=SimpleNamespace(role="client_admin"),
+    )
+
+    assert record.request_status == RequestStatus.CLOSED
+    assert record.closed_at is not None
+    assert assignment.assignment_status == RequestAssignmentStatus.COMPLETED
+    assert assignment.completed_at is not None
+    assert response["item"]["request_status"] == "closed"
+    assert len(notifications) == 1
+
+
+@pytest.mark.anyio
 async def test_publish_existing_request_requires_requested_window():
     manager = object.__new__(RequestManager)
 
@@ -376,6 +467,51 @@ async def test_publish_existing_request_requires_site_coordinates():
 
 
 @pytest.mark.anyio
+async def test_create_shift_replacement_wave_for_direct_guard_requires_platform_review():
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+    manager._request_snapshot = lambda record: {"id": str(record.id), "title": record.title}
+    manager._compute_wave_expires_at = lambda _record, now=None: (now or datetime.utcnow()) + timedelta(hours=2)
+
+    async def _evaluate_broadcast_snapshot(_record):
+        return {
+            "requires_review": False,
+            "candidate_snapshots": [],
+            "review_reason_codes": [],
+            "review_findings": [],
+        }
+
+    manager._evaluate_broadcast_snapshot = _evaluate_broadcast_snapshot
+
+    record = _make_request_record(
+        id="req-1",
+        title="Direct Guard Replacement",
+        request_revision=3,
+        last_wave_number=1,
+        client_tenant_id="client-1",
+        match_summary={"returned_count": 12},
+    )
+
+    wave = await manager.create_shift_replacement_wave(
+        record,
+        shift_instance_id="shift-1",
+        original_slot_id="slot-1",
+        replacement_slot_id="slot-2",
+        original_coverage_source_type=ShiftCoverageSourceType.DIRECT_GUARD.value,
+        original_coverage_tenant_id="guard-1",
+        current_user=SimpleNamespace(id="ops-1", username="ops"),
+        max_match_results=25,
+    )
+
+    assert wave.wave_status == RequestWaveStatus.PENDING_REVIEW
+    assert wave.review_requested_at is not None
+    context = wave.request_snapshot["shift_replacement"]
+    assert context["platform_review_required"] is True
+    assert context["original_coverage_source_type"] == ShiftCoverageSourceType.DIRECT_GUARD.value
+    assert context["original_coverage_tenant_id"] == "guard-1"
+
+
+@pytest.mark.anyio
 async def test_create_request_uses_target_client_tenant_for_platform_user(monkeypatch):
     manager = object.__new__(RequestManager)
     engine = FakeEngine()
@@ -430,6 +566,9 @@ async def test_create_request_uses_target_client_tenant_for_platform_user(monkey
 
     class _FakeNotificationManager:
         async def create_for_tenant_admin_users(self, **_kwargs):
+            return None
+
+        async def create_for_platform_admin_users(self, **_kwargs):
             return None
 
     monkeypatch.setattr(NotificationManager, "get_instance", staticmethod(lambda: _FakeNotificationManager()))
@@ -600,7 +739,59 @@ async def test_list_jobs_platform_role_does_not_require_session_tenant():
 
 
 @pytest.mark.anyio
-async def test_list_jobs_guard_defaults_to_committed_work_and_auto_completes_elapsed_assignments():
+async def test_list_jobs_excludes_soft_deleted_requests():
+    deleted_request_id = ObjectId()
+    manager = object.__new__(RequestManager)
+    manager._engine = _FakeListJobsEngine(
+        assignment_docs=[
+            {
+                "_id": ObjectId(),
+                "request_id": str(deleted_request_id),
+                "client_tenant_id": "client-1",
+                "assignee_tenant_id": "guard-1",
+                "assignee_tenant_type": "guard",
+                "assignment_status": "accepted",
+                "candidate_snapshot": {"candidate_name": "Guard One"},
+                "assigned_by_user_id": "user-1",
+                "assigned_by_username": "admin",
+                "created_at": None,
+                "updated_at": datetime(2026, 5, 19, 9, 30),
+            },
+        ],
+        request_docs=[
+            {
+                "_id": deleted_request_id,
+                "title": "Deleted Request",
+                "site_snapshot": {"site_name": "Campus"},
+                "fulfillment_mode": "individual_only",
+                "target_type": "guard",
+                "request_status": "closed",
+                "staffing_status": "filled",
+                "accepted_slots": 1,
+                "open_slots": 0,
+                "request_revision": 1,
+                "requested_end_at": datetime(2026, 5, 18, 18, 0),
+                "deleted_at": datetime(2026, 5, 20, 10, 0),
+            },
+        ],
+        schedule_docs=[],
+    )
+    manager._role_value = lambda _user: "guard_admin"
+    manager._is_platform_role = lambda _role: False
+
+    async def _get_session_tenant(_current_user):
+        return SimpleNamespace(id="guard-1", tenant_type="guard")
+
+    manager._get_session_tenant = _get_session_tenant
+
+    result = await manager.list_jobs(SimpleNamespace(role="guard_admin"), page=1, rows=10)
+
+    assert result["pagination"]["total_items"] == 0
+    assert result["items"] == []
+
+
+@pytest.mark.anyio
+async def test_list_jobs_guard_defaults_to_committed_work_without_auto_completing_shift_backed_jobs():
     offered_assignment_id = ObjectId()
     accepted_assignment_id = ObjectId()
     request_offer_id = ObjectId()
@@ -662,7 +853,17 @@ async def test_list_jobs_guard_defaults_to_committed_work_and_auto_completes_ela
             "requested_end_at": datetime(2026, 5, 18, 18, 0),
         },
     ]
-    manager._engine = _FakeListJobsEngine(assignment_docs=assignment_docs, request_docs=request_docs)
+    manager._engine = _FakeListJobsEngine(
+        assignment_docs=assignment_docs,
+        request_docs=request_docs,
+        schedule_docs=[
+            {
+                "_id": ObjectId(),
+                "request_id": str(request_job_id),
+                "active": True,
+            },
+        ],
+    )
     manager._role_value = lambda _user: "guard_admin"
     manager._is_platform_role = lambda _role: False
     synced_request_ids = []
@@ -699,9 +900,89 @@ async def test_list_jobs_guard_defaults_to_committed_work_and_auto_completes_ela
 
     assert result["pagination"]["total_items"] == 1
     assert result["items"][0]["request"]["title"] == "Elapsed Patrol"
-    assert result["items"][0]["request"]["request_status"] == "closed"
+    assert result["items"][0]["request"]["has_schedule"] is True
+    assert result["items"][0]["request"]["request_status"] == "submitted"
+    assert result["items"][0]["assignment_status"] == "accepted"
+    assert assignment_docs[1]["assignment_status"] == "accepted"
+    assert synced_request_ids == []
+
+
+@pytest.mark.anyio
+async def test_list_jobs_guard_auto_completes_elapsed_non_scheduled_jobs():
+    accepted_assignment_id = ObjectId()
+    request_job_id = ObjectId()
+    manager = object.__new__(RequestManager)
+    assignment_docs = [
+        {
+            "_id": accepted_assignment_id,
+            "request_id": str(request_job_id),
+            "client_tenant_id": "client-1",
+            "assignee_tenant_id": "guard-1",
+            "assignee_tenant_type": "guard",
+            "assignment_status": "accepted",
+            "candidate_snapshot": {"candidate_name": "Guard One"},
+            "assigned_by_user_id": "user-1",
+            "assigned_by_username": "admin",
+            "created_at": None,
+            "updated_at": datetime(2026, 5, 19, 9, 30),
+        },
+    ]
+    manager._engine = _FakeListJobsEngine(
+        assignment_docs=assignment_docs,
+        request_docs=[
+            {
+                "_id": request_job_id,
+                "title": "Elapsed Patrol",
+                "site_snapshot": {"site_name": "Campus"},
+                "fulfillment_mode": "individual_only",
+                "target_type": "guard",
+                "request_status": "submitted",
+                "staffing_status": "open",
+                "accepted_slots": 1,
+                "open_slots": 0,
+                "request_revision": 1,
+                "requested_end_at": datetime(2026, 5, 18, 18, 0),
+            },
+        ],
+        schedule_docs=[],
+    )
+    manager._role_value = lambda _user: "guard_admin"
+    manager._is_platform_role = lambda _role: False
+    synced_request_ids = []
+
+    async def _get_session_tenant(_current_user):
+        return SimpleNamespace(id="guard-1", tenant_type="guard")
+
+    request_record = _make_request_record(
+        id=str(request_job_id),
+        title="Elapsed Patrol",
+        request_status=RequestStatus.IN_PROGRESS,
+        staffing_status=RequestStaffingStatus.FILLED,
+        guards_required=1,
+        accepted_slots=1,
+        open_slots=0,
+        requested_end_at=datetime(2026, 5, 18, 18, 0),
+    )
+
+    async def _get_request(_request_id):
+        assert _request_id == str(request_job_id)
+        return request_record
+
+    async def _sync_request_runtime_state(record):
+        synced_request_ids.append(str(record.id))
+        record.request_status = RequestStatus.CLOSED
+        return record
+
+    manager._get_session_tenant = _get_session_tenant
+    manager._get_request_or_404 = _get_request
+    manager._sync_request_runtime_state = _sync_request_runtime_state
+
+    result = await manager.list_jobs(SimpleNamespace(role="guard_admin"), page=1, rows=10)
+
+    assert result["pagination"]["total_items"] == 1
+    assert result["items"][0]["request"]["has_schedule"] is False
     assert result["items"][0]["assignment_status"] == "completed"
-    assert assignment_docs[1]["assignment_status"] == "completed"
+    assert assignment_docs[0]["assignment_status"] == "completed"
     assert synced_request_ids == [str(request_job_id)]
 
 
@@ -761,15 +1042,15 @@ async def test_list_jobs_client_defaults_to_committed_work_only():
                 "site_snapshot": {"site_name": "Campus"},
                 "fulfillment_mode": "individual_only",
                 "target_type": "guard",
-                "request_status": "submitted",
-                "staffing_status": "open",
-                "accepted_slots": 1,
-                "open_slots": 0,
-                "request_revision": 1,
-                "requested_end_at": datetime(2026, 5, 20, 18, 0),
-            },
-        ],
-    )
+                    "request_status": "submitted",
+                    "staffing_status": "open",
+                    "accepted_slots": 1,
+                    "open_slots": 0,
+                    "request_revision": 1,
+                    "requested_end_at": datetime(2026, 5, 30, 18, 0),
+                },
+            ],
+        )
     manager._role_value = lambda _user: "client_admin"
     manager._is_platform_role = lambda _role: False
 
@@ -1060,6 +1341,276 @@ async def test_update_job_status_rejects_provider_acceptance_beyond_linked_guard
 
 
 @pytest.mark.anyio
+async def test_update_job_status_rejects_scheduled_request_start():
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+    manager._role_value = lambda current_user: str(getattr(current_user, "role", "") or "")
+    manager._is_platform_write_role = lambda _role: False
+    manager._allowed_assignment_transition = lambda current, nxt: (
+        current == RequestAssignmentStatus.ACCEPTED and nxt == RequestAssignmentStatus.IN_PROGRESS
+    )
+    manager._assignment_scope_value = lambda _assignment: RequestAssignmentScope.REQUEST.value
+    manager._assignment_slots = lambda assignment: int(getattr(assignment, "slots_committed", None) or 1)
+
+    assignment = SimpleNamespace(
+        id=ObjectId(),
+        request_id="req-1",
+        client_tenant_id="client-1",
+        assignee_tenant_id="guard-1",
+        assignee_tenant_type=RequestTargetType.GUARD,
+        assignment_status=RequestAssignmentStatus.ACCEPTED,
+        assignment_scope=RequestAssignmentScope.REQUEST,
+        slots_committed=1,
+        lock_reason=None,
+    )
+    record = _make_request_record(
+        id="req-1",
+        title="Scheduled Night Patrol",
+        request_status=RequestStatus.SUBMITTED,
+        staffing_status=RequestStaffingStatus.FILLED,
+        open_slots=0,
+    )
+    session_tenant = SimpleNamespace(id="guard-1", tenant_type=TenantType.GUARD)
+
+    async def _get_assignment(_assignment_id):
+        return assignment
+
+    async def _get_session_tenant(_current_user):
+        return session_tenant
+
+    async def _get_request(_request_id):
+        return record
+
+    async def _sync_request_runtime_state(request_record):
+        return request_record
+
+    async def _request_has_active_schedule(_request_id):
+        return True
+
+    manager._get_assignment_or_404 = _get_assignment
+    manager._get_session_tenant = _get_session_tenant
+    manager._get_request_or_404 = _get_request
+    manager._sync_request_runtime_state = _sync_request_runtime_state
+    manager._request_has_active_schedule = _request_has_active_schedule
+
+    payload = RequestAssignmentStatusUpdatePayload(assignment_status=RequestAssignmentStatus.IN_PROGRESS)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await manager.update_job_status(
+            str(assignment.id),
+            payload,
+            current_user=SimpleNamespace(role="guard_admin", tenant_uuid="guard-1"),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Scheduled request jobs must use shift attendance actions instead of generic job status actions"
+
+
+@pytest.mark.anyio
+async def test_update_job_status_rejects_one_time_request_start_before_scheduled_start():
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+    manager._role_value = lambda current_user: str(getattr(current_user, "role", "") or "")
+    manager._is_platform_write_role = lambda _role: False
+    manager._allowed_assignment_transition = lambda current, nxt: (
+        current == RequestAssignmentStatus.ACCEPTED and nxt == RequestAssignmentStatus.IN_PROGRESS
+    )
+    manager._assignment_scope_value = lambda _assignment: RequestAssignmentScope.REQUEST.value
+    manager._assignment_slots = lambda assignment: int(getattr(assignment, "slots_committed", None) or 1)
+
+    assignment = SimpleNamespace(
+        id=ObjectId(),
+        request_id="req-1",
+        client_tenant_id="client-1",
+        assignee_tenant_id="guard-1",
+        assignee_tenant_type=RequestTargetType.GUARD,
+        assignment_status=RequestAssignmentStatus.ACCEPTED,
+        assignment_scope=RequestAssignmentScope.REQUEST,
+        slots_committed=1,
+        lock_reason=None,
+    )
+    record = _make_request_record(
+        id="req-1",
+        title="One-Time Patrol",
+        request_status=RequestStatus.SUBMITTED,
+        staffing_status=RequestStaffingStatus.FILLED,
+        open_slots=0,
+        requested_start_at=datetime.utcnow() + timedelta(hours=2),
+        requested_end_at=datetime.utcnow() + timedelta(hours=6),
+    )
+    session_tenant = SimpleNamespace(id="guard-1", tenant_type=TenantType.GUARD)
+
+    async def _get_assignment(_assignment_id):
+        return assignment
+
+    async def _get_session_tenant(_current_user):
+        return session_tenant
+
+    async def _get_request(_request_id):
+        return record
+
+    async def _sync_request_runtime_state(request_record):
+        return request_record
+
+    async def _request_has_active_schedule(_request_id):
+        return False
+
+    manager._get_assignment_or_404 = _get_assignment
+    manager._get_session_tenant = _get_session_tenant
+    manager._get_request_or_404 = _get_request
+    manager._sync_request_runtime_state = _sync_request_runtime_state
+    manager._request_has_active_schedule = _request_has_active_schedule
+
+    payload = RequestAssignmentStatusUpdatePayload(assignment_status=RequestAssignmentStatus.IN_PROGRESS)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await manager.update_job_status(
+            str(assignment.id),
+            payload,
+            current_user=SimpleNamespace(role="guard_admin", tenant_uuid="guard-1"),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Cannot start this job before its scheduled start time"
+
+
+@pytest.mark.anyio
+async def test_update_job_status_rejects_one_time_request_start_after_scheduled_end():
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+    manager._role_value = lambda current_user: str(getattr(current_user, "role", "") or "")
+    manager._is_platform_write_role = lambda _role: False
+    manager._allowed_assignment_transition = lambda current, nxt: (
+        current == RequestAssignmentStatus.ACCEPTED and nxt == RequestAssignmentStatus.IN_PROGRESS
+    )
+    manager._assignment_scope_value = lambda _assignment: RequestAssignmentScope.REQUEST.value
+    manager._assignment_slots = lambda assignment: int(getattr(assignment, "slots_committed", None) or 1)
+
+    assignment = SimpleNamespace(
+        id=ObjectId(),
+        request_id="req-1",
+        client_tenant_id="client-1",
+        assignee_tenant_id="guard-1",
+        assignee_tenant_type=RequestTargetType.GUARD,
+        assignment_status=RequestAssignmentStatus.ACCEPTED,
+        assignment_scope=RequestAssignmentScope.REQUEST,
+        slots_committed=1,
+        lock_reason=None,
+    )
+    record = _make_request_record(
+        id="req-1",
+        title="Expired Patrol Window",
+        request_status=RequestStatus.SUBMITTED,
+        staffing_status=RequestStaffingStatus.FILLED,
+        open_slots=0,
+        requested_start_at=datetime.utcnow() - timedelta(hours=6),
+        requested_end_at=datetime.utcnow() - timedelta(hours=1),
+    )
+    session_tenant = SimpleNamespace(id="guard-1", tenant_type=TenantType.GUARD)
+
+    async def _get_assignment(_assignment_id):
+        return assignment
+
+    async def _get_session_tenant(_current_user):
+        return session_tenant
+
+    async def _get_request(_request_id):
+        return record
+
+    async def _sync_request_runtime_state(request_record):
+        return request_record
+
+    async def _request_has_active_schedule(_request_id):
+        return False
+
+    manager._get_assignment_or_404 = _get_assignment
+    manager._get_session_tenant = _get_session_tenant
+    manager._get_request_or_404 = _get_request
+    manager._sync_request_runtime_state = _sync_request_runtime_state
+    manager._request_has_active_schedule = _request_has_active_schedule
+
+    payload = RequestAssignmentStatusUpdatePayload(assignment_status=RequestAssignmentStatus.IN_PROGRESS)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await manager.update_job_status(
+            str(assignment.id),
+            payload,
+            current_user=SimpleNamespace(role="guard_admin", tenant_uuid="guard-1"),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Cannot start this job after its scheduled end time"
+
+
+@pytest.mark.anyio
+async def test_update_job_status_rejects_one_time_request_completion_before_scheduled_start():
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+    manager._role_value = lambda current_user: str(getattr(current_user, "role", "") or "")
+    manager._is_platform_write_role = lambda _role: False
+    manager._allowed_assignment_transition = lambda current, nxt: (
+        current == RequestAssignmentStatus.IN_PROGRESS and nxt == RequestAssignmentStatus.COMPLETED
+    )
+    manager._assignment_scope_value = lambda _assignment: RequestAssignmentScope.REQUEST.value
+    manager._assignment_slots = lambda assignment: int(getattr(assignment, "slots_committed", None) or 1)
+
+    assignment = SimpleNamespace(
+        id=ObjectId(),
+        request_id="req-1",
+        client_tenant_id="client-1",
+        assignee_tenant_id="guard-1",
+        assignee_tenant_type=RequestTargetType.GUARD,
+        assignment_status=RequestAssignmentStatus.IN_PROGRESS,
+        assignment_scope=RequestAssignmentScope.REQUEST,
+        slots_committed=1,
+        lock_reason=None,
+    )
+    record = _make_request_record(
+        id="req-1",
+        title="Future Patrol",
+        request_status=RequestStatus.SUBMITTED,
+        staffing_status=RequestStaffingStatus.FILLED,
+        open_slots=0,
+        requested_start_at=datetime.utcnow() + timedelta(hours=3),
+        requested_end_at=datetime.utcnow() + timedelta(hours=8),
+    )
+    session_tenant = SimpleNamespace(id="guard-1", tenant_type=TenantType.GUARD)
+
+    async def _get_assignment(_assignment_id):
+        return assignment
+
+    async def _get_session_tenant(_current_user):
+        return session_tenant
+
+    async def _get_request(_request_id):
+        return record
+
+    async def _sync_request_runtime_state(request_record):
+        return request_record
+
+    async def _request_has_active_schedule(_request_id):
+        return False
+
+    manager._get_assignment_or_404 = _get_assignment
+    manager._get_session_tenant = _get_session_tenant
+    manager._get_request_or_404 = _get_request
+    manager._sync_request_runtime_state = _sync_request_runtime_state
+    manager._request_has_active_schedule = _request_has_active_schedule
+
+    payload = RequestAssignmentStatusUpdatePayload(assignment_status=RequestAssignmentStatus.COMPLETED)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await manager.update_job_status(
+            str(assignment.id),
+            payload,
+            current_user=SimpleNamespace(role="guard_admin", tenant_uuid="guard-1"),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Cannot complete this job before its scheduled start time"
+
+
+@pytest.mark.anyio
 async def test_update_job_status_guard_accepts_offer(monkeypatch):
     manager = object.__new__(RequestManager)
     manager._engine = FakeEngine()
@@ -1069,6 +1620,7 @@ async def test_update_job_status_guard_accepts_offer(monkeypatch):
     manager._request_snapshot = lambda record: {"id": str(record.id), "title": record.title}
     manager._assignment_scope_value = lambda _assignment: RequestAssignmentScope.REQUEST.value
     manager._assignment_slots = lambda assignment: int(getattr(assignment, "slots_committed", None) or 1)
+    manager._request_has_active_schedule = lambda _request_id: _async_return(False)
 
     assignment = SimpleNamespace(
         id=ObjectId(),
@@ -1181,6 +1733,7 @@ async def test_update_job_status_guard_declines_offer_with_reason(monkeypatch):
     manager._request_snapshot = lambda record: {"id": str(record.id), "title": record.title}
     manager._assignment_scope_value = lambda _assignment: RequestAssignmentScope.REQUEST.value
     manager._assignment_slots = lambda assignment: int(getattr(assignment, "slots_committed", None) or 1)
+    manager._request_has_active_schedule = lambda _request_id: _async_return(False)
 
     assignment = SimpleNamespace(
         id=ObjectId(),

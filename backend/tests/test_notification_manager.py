@@ -64,3 +64,36 @@ async def test_create_for_tenant_admin_users_falls_back_to_active_tenant_users()
     assert saved_count == 1
     assert captured["recipient_user_ids"] == ["guard-user-1"]
     assert captured["recipient_tenant_id"] == "guard-tenant-1"
+
+
+@pytest.mark.anyio
+async def test_create_for_platform_admin_users_targets_active_platform_roles():
+    manager = object.__new__(NotificationManager)
+    manager._engine = _FakeNotificationEngine([
+        SimpleNamespace(id="admin-1", role=user_role.ADMIN, status=UserStatus.ACTIVE),
+        SimpleNamespace(id="ops-1", role=user_role.OPS_ADMIN, status=UserStatus.ACTIVE),
+        SimpleNamespace(id="client-1", role=user_role.CLIENT_ADMIN, status=UserStatus.ACTIVE),
+        SimpleNamespace(id="support-1", role=user_role.SUPPORT_ADMIN, status=UserStatus.INACTIVE),
+    ])
+
+    captured = {}
+
+    async def _create_for_users(**kwargs):
+        captured.update(kwargs)
+        return len(kwargs.get("recipient_user_ids") or [])
+
+    manager.create_for_users = _create_for_users
+
+    saved_count = await manager.create_for_platform_admin_users(
+        title="Late arrival escalation",
+        message="A guard missed the grace period.",
+        category="warning",
+        source_module="requests",
+        action_url="/dashboard/requests?tab=shifts&slot=slot-1",
+        action_label="Open shift slot",
+        metadata={"slot_id": "slot-1"},
+    )
+
+    assert saved_count == 2
+    assert captured["recipient_user_ids"] == ["admin-1", "ops-1"]
+    assert captured["recipient_tenant_id"] is None

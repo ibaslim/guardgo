@@ -138,6 +138,9 @@ class ShiftSlotStatus(str, Enum):
 
 class ShiftAttendanceEventType(str, Enum):
     UNAVAILABLE_REPORTED = "unavailable_reported"
+    LEAVE_REPORTED = "leave_reported"
+    LEAVE_RETURNED = "leave_returned"
+    LATE_ARRIVAL = "late_arrival"
     CHECKIN_ATTEMPTED = "checkin_attempted"
     ARRIVED = "arrived"
     GEO_FAILED = "geo_failed"
@@ -150,6 +153,13 @@ class ShiftAttendanceEventType(str, Enum):
     NO_SHOW_CONFIRMED = "no_show_confirmed"
     REPLACEMENT_REQUESTED = "replacement_requested"
     REPLACEMENT_ASSIGNED = "replacement_assigned"
+
+
+class ShiftGuardLeaveStatus(str, Enum):
+    ACTIVE = "active"
+    RETURNED_EARLY = "returned_early"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
 
 
 class RequestSiteSnapshot(BaseModel):
@@ -188,6 +198,7 @@ class ClientRequestRecord(Model):
     created_by_user_id: str = Field(index=True)
     created_by_username: str = ""
     title: str = Field(index=True)
+    timezone: Optional[str] = None
     fulfillment_mode: RequestFulfillmentMode = Field(default=RequestFulfillmentMode.INDIVIDUAL_ONLY, index=True)
     target_type: RequestTargetType = Field(index=True)
     requested_guard_type: Optional[str] = Field(default=None, index=True)
@@ -305,6 +316,7 @@ class RequestScheduleTemplateRecord(Model):
     no_show_cutoff_minutes: int = 30
     checkin_geofence_meters: int = 200
     active: bool = True
+    system_generated: bool = False
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
@@ -378,8 +390,30 @@ class ShiftAttendanceEventRecord(Model):
     metadata: Dict[str, Any] = {}
 
 
+class ShiftGuardLeaveRecord(Model):
+    guard_tenant_id: str = Field(index=True)
+    service_provider_tenant_id: Optional[str] = Field(default=None, index=True)
+    leave_status: ShiftGuardLeaveStatus = Field(default=ShiftGuardLeaveStatus.ACTIVE, index=True)
+    start_at_utc: datetime = Field(index=True)
+    end_at_utc: datetime = Field(index=True)
+    effective_end_at_utc: datetime = Field(index=True)
+    reason: Optional[str] = None
+    affected_slot_ids: List[str] = []
+    replacement_slot_ids: List[str] = []
+    requested_by_user_id: Optional[str] = Field(default=None, index=True)
+    requested_by_username: Optional[str] = None
+    requested_by_role: Optional[str] = Field(default=None, index=True)
+    returned_early_at: Optional[datetime] = Field(default=None, index=True)
+    returned_early_by_user_id: Optional[str] = Field(default=None, index=True)
+    returned_early_by_username: Optional[str] = None
+    return_note: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
 class ClientRequestCreatePayload(BaseModel):
     title: str = PydanticField(min_length=3, max_length=140)
+    timezone: Optional[str] = PydanticField(default=None, min_length=1, max_length=80)
     fulfillment_mode: RequestFulfillmentMode = RequestFulfillmentMode.INDIVIDUAL_ONLY
     client_tenant_id: Optional[str] = PydanticField(default=None, min_length=1, max_length=80)
     site_index: Optional[int] = PydanticField(default=None, ge=0)
@@ -396,6 +430,7 @@ class ClientRequestCreatePayload(BaseModel):
 
 class ClientRequestUpdatePayload(BaseModel):
     title: Optional[str] = PydanticField(default=None, min_length=3, max_length=140)
+    timezone: Optional[str] = PydanticField(default=None, min_length=1, max_length=80)
     fulfillment_mode: Optional[RequestFulfillmentMode] = None
     site: Optional[RequestSiteInput] = None
     requested_guard_type: Optional[str] = None
@@ -432,6 +467,7 @@ class RequestPublishPayload(BaseModel):
 
 
 class RequestPublishUpdatePayload(BaseModel):
+    timezone: Optional[str] = PydanticField(default=None, min_length=1, max_length=80)
     fulfillment_mode: Optional[RequestFulfillmentMode] = None
     site: Optional[RequestSiteInput] = None
     requested_guard_type: Optional[str] = None
@@ -500,6 +536,7 @@ class ShiftSlotCheckInPayload(BaseModel):
     latitude: float
     longitude: float
     note: Optional[str] = PydanticField(default=None, max_length=500)
+    timezone: Optional[str] = PydanticField(default=None, min_length=1, max_length=80)
 
 
 class ShiftSlotClientConfirmPayload(BaseModel):
@@ -508,6 +545,7 @@ class ShiftSlotClientConfirmPayload(BaseModel):
 
 class ShiftSlotStartPayload(BaseModel):
     note: Optional[str] = PydanticField(default=None, max_length=500)
+    timezone: Optional[str] = PydanticField(default=None, min_length=1, max_length=80)
 
 
 class ShiftSlotCheckOutPayload(BaseModel):
@@ -521,6 +559,32 @@ class ShiftSlotUnavailablePayload(BaseModel):
 class ShiftSlotReopenPayload(BaseModel):
     note: Optional[str] = PydanticField(default=None, max_length=500)
     max_match_results: int = PydanticField(default=25, ge=1, le=200)
+
+
+class ShiftGuardLeaveCreatePayload(BaseModel):
+    guard_tenant_id: Optional[str] = PydanticField(default=None, min_length=1, max_length=80)
+    start_at_utc: datetime
+    end_at_utc: datetime
+    reason: Optional[str] = PydanticField(default=None, max_length=500)
+
+
+class ShiftGuardLeaveReturnPayload(BaseModel):
+    note: Optional[str] = PydanticField(default=None, max_length=500)
+
+
+class ShiftGuardLeaveReturnDecisionAction(str, Enum):
+    RESTORE_ORIGINAL = "restore_original"
+    KEEP_REPLACEMENT = "keep_replacement"
+
+
+class ShiftGuardLeaveReturnDecisionPayload(BaseModel):
+    original_slot_id: str = PydanticField(min_length=1, max_length=80)
+    action: ShiftGuardLeaveReturnDecisionAction
+
+
+class ShiftGuardLeaveReconcilePayload(BaseModel):
+    note: Optional[str] = PydanticField(default=None, max_length=500)
+    decisions: List[ShiftGuardLeaveReturnDecisionPayload] = []
 
 
 class ClientRequestListFilters(BaseModel):
