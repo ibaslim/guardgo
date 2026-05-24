@@ -1,4 +1,5 @@
 import threading
+import re
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, cast
@@ -744,6 +745,23 @@ class RequestManager:
         if self._is_platform_write_role(role_value):
             return await self._get_active_client_tenant_by_id(str(payload.client_tenant_id or "").strip())
         return await self._get_client_tenant(current_user)
+
+    @staticmethod
+    def _assert_client_billing_method(profile: Dict[str, Any]) -> None:
+        billing_method = profile.get("billing_method") if isinstance(profile, dict) else None
+        if not isinstance(billing_method, dict):
+            raise HTTPException(status_code=403, detail="Client billing method is required before creating requests")
+
+        method = str(billing_method.get("method") or billing_method.get("type") or "").strip().lower()
+        cardholder_name = str(billing_method.get("cardholder_name") or billing_method.get("cardholderName") or "").strip()
+        last4 = str(billing_method.get("last4") or billing_method.get("card_last4") or "").strip()
+        expiry_month = str(billing_method.get("expiry_month") or billing_method.get("expiryMonth") or "").strip()
+        expiry_year = str(billing_method.get("expiry_year") or billing_method.get("expiryYear") or "").strip()
+
+        if method not in {"credit_card", "debit_card"}:
+            raise HTTPException(status_code=403, detail="Client billing method is required before creating requests")
+        if not cardholder_name or not re.fullmatch(r"\d{4}", last4) or not re.fullmatch(r"(0[1-9]|1[0-2])", expiry_month) or not re.fullmatch(r"\d{2,4}", expiry_year):
+            raise HTTPException(status_code=403, detail="Client billing method is required before creating requests")
 
     @staticmethod
     def _client_tenant_label(tenant: Any) -> str:
@@ -1894,6 +1912,7 @@ class RequestManager:
     async def create_request(self, payload: ClientRequestCreatePayload, current_user) -> Dict[str, Any]:
         client_tenant = await self._resolve_request_client_tenant(payload, current_user)
         client_profile = client_tenant.profile if isinstance(client_tenant.profile, dict) else {}
+        self._assert_client_billing_method(client_profile)
         site_snapshot = self._resolve_site_snapshot(payload, client_profile)
         title = self._validate_trimmed_title(payload.title)
         self._validate_requested_window(payload.requested_start_at, payload.requested_end_at)

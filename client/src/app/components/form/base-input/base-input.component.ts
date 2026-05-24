@@ -41,6 +41,7 @@ export class BaseInputComponent implements ControlValueAccessor {
   @Input() min?: number | string;
   @Input() max?: number | string;
   @Input() autocomplete: string = 'on';
+  @Input() inputMode: string = '';
   value: string | number = '';
   onChange = (value: any) => { };
   onTouched = () => { };

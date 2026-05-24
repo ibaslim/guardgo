@@ -54,6 +54,14 @@ interface ContactPerson {
   landlinePhone: PhoneNumber | null;
 }
 
+interface BillingCard {
+  method: 'credit_card' | 'debit_card';
+  cardholderName: string;
+  last4: string;
+  expiryMonth: string;
+  expiryYear: string;
+}
+
 interface Site {
   siteName: string;
   siteAddress: Address;
@@ -74,6 +82,7 @@ interface Client {
   primaryContact: ContactPerson;
   secondaryContact: ContactPerson;
   billingAddress: Address;
+  billingMethod: BillingCard;
   preferredGuardTypes: string[];
   sites: Site[];
 }
@@ -101,6 +110,14 @@ interface Client {
 })
 export class ClientSettingComponent implements OnInit, OnDestroy {
   readonly showDummyDataButton = isLocalhostForDummyData();
+  readonly billingExpiryMonthOptions = Array.from({ length: 12 }, (_, index) => {
+    const month = String(index + 1).padStart(2, '0');
+    return { value: month, label: month };
+  });
+  readonly billingExpiryYearOptions = Array.from({ length: 11 }, (_, index) => {
+    const year = String(new Date().getFullYear() + index);
+    return { value: year, label: year };
+  });
 
   @Input() showPageWrapper: boolean = true;
   @Input() readonly: boolean = false;
@@ -134,6 +151,13 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       postalCode: '',
       latitude: '',
       longitude: '',
+    },
+    billingMethod: {
+      method: 'credit_card',
+      cardholderName: '',
+      last4: '',
+      expiryMonth: '',
+      expiryYear: '',
     },
     preferredGuardTypes: [],
     sites: []
@@ -229,6 +253,7 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     const primary = (data as any).primaryContact || (data as any).primary_contact || {};
     const secondary = (data as any).secondaryContact || (data as any).secondary_contact || {};
     const billing = (data as any).billingAddress || (data as any).billing_address || {};
+    const billingMethod = (data as any).billingMethod || (data as any).billing_method || {};
 
     const primaryName = safe(primary.name || '');
     const primaryMobile = primary.mobilePhone?.e164 || primary.phone || '';
@@ -263,6 +288,11 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       secondaryMobile ||
       secondaryLandline ||
       billingStreet.trim() ||
+      safe(billingMethod.method || billingMethod.type || '').trim() ||
+      safe(billingMethod.cardholderName || billingMethod.cardholder_name || '').trim() ||
+      safe(billingMethod.last4 || billingMethod.card_last4 || '').trim() ||
+      safe(billingMethod.expiryMonth || billingMethod.expiry_month || '').trim() ||
+      safe(billingMethod.expiryYear || billingMethod.expiry_year || '').trim() ||
       preferred.some((t: string) => safe(t).trim()) ||
       sites.some((site: any) => safe(site.siteName || site.site_name || '').trim() || safe(site.siteAddress?.street || site.site_address?.street || '').trim())
     );
@@ -441,6 +471,7 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     const primaryContact = profile.primary_contact || profile.primaryContact || {};
     const secondaryContact = profile.secondary_contact || profile.secondaryContact || {};
     const billingAddress = this.mapAddressFromBackend(profile.billing_address || profile.billingAddress || {});
+    const billingMethod = profile.billing_method || profile.billingMethod || {};
     const preferredTypes = Array.isArray(profile.preferred_guard_types)
       ? profile.preferred_guard_types
       : Array.isArray(profile.preferredGuardTypes)
@@ -492,8 +523,21 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
         landlinePhone: null
       },
       billingAddress,
+      billingMethod: this.normalizeBillingMethod(billingMethod),
       preferredGuardTypes: normalizedPreferredTypes.length > 0 ? normalizedPreferredTypes : [],
       sites: mappedSites
+    };
+  }
+
+  private normalizeBillingMethod(raw: any): BillingCard {
+    const method = String(raw?.method || raw?.type || '').trim().toLowerCase();
+    const normalizedMethod: 'credit_card' | 'debit_card' = method === 'debit_card' ? 'debit_card' : 'credit_card';
+    return {
+      method: normalizedMethod,
+      cardholderName: String(raw?.cardholderName || raw?.cardholder_name || '').trim(),
+      last4: String(raw?.last4 || raw?.card_last4 || '').trim(),
+      expiryMonth: String(raw?.expiryMonth || raw?.expiry_month || '').trim(),
+      expiryYear: String(raw?.expiryYear || raw?.expiry_year || '').trim(),
     };
   }
 
@@ -670,6 +714,23 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       }
     }
 
+    // Billing Method
+    if (!this.clientFormModel.billingMethod.method) {
+      this.clientErrors.billingMethod = 'Billing method is required.';
+    }
+    if (!this.clientFormModel.billingMethod.cardholderName.trim()) {
+      this.clientErrors.billingCardholderName = 'Cardholder name is required.';
+    }
+    if (!/^[0-9]{4}$/.test(this.clientFormModel.billingMethod.last4.trim())) {
+      this.clientErrors.billingCardLast4 = 'Enter the last 4 digits of the card.';
+    }
+    if (!/^(0[1-9]|1[0-2])$/.test(this.clientFormModel.billingMethod.expiryMonth.trim())) {
+      this.clientErrors.billingCardExpiryMonth = 'Expiry month must be two digits between 01 and 12.';
+    }
+    if (!/^\d{2,4}$/.test(this.clientFormModel.billingMethod.expiryYear.trim())) {
+      this.clientErrors.billingCardExpiryYear = 'Expiry year must be 2 to 4 digits.';
+    }
+
     this.clientFormModel.sites.forEach((site, index) => {
       const errorPrefix = `sites.${index}.`;
 
@@ -804,6 +865,13 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
           province: this.clientFormModel.billingAddress.province || '',
           postal_code: this.clientFormModel.billingAddress.postalCode
         },
+        billing_method: {
+          method: this.clientFormModel.billingMethod.method,
+          cardholder_name: this.clientFormModel.billingMethod.cardholderName.trim(),
+          last4: this.clientFormModel.billingMethod.last4.trim(),
+          expiry_month: this.clientFormModel.billingMethod.expiryMonth.trim(),
+          expiry_year: this.clientFormModel.billingMethod.expiryYear.trim(),
+        },
         sites: this.clientFormModel.sites.map((site) => ({
           site_name: site.siteName.trim(),
           site_manager_contact: site.siteManagerContact.trim() || undefined,
@@ -877,6 +945,13 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
       postalCode: 'M5H 2N2',
       latitude: '',
       longitude: '',
+    };
+    this.clientFormModel.billingMethod = {
+      method: 'credit_card',
+      cardholderName: `Client Billing ${nameTag}`,
+      last4: '4242',
+      expiryMonth: '12',
+      expiryYear: '29',
     };
     this.clientFormModel.sites = [{
       siteName: `Primary Operations Site ${nameTag}`,

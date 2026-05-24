@@ -198,6 +198,89 @@
         </app-section>
 
         <app-section
+            title="Billing Method"
+            subtitle="A credit or debit card is required before the client can create requests. We only store the billing details needed to keep the account eligible."
+        >
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col">
+                    <app-select-input
+                        label="Card Type"
+                        name="billingCardType"
+                        [(ngModel)]="clientFormModel.billingMethod.method"
+                        [options]="[
+                            { value: 'credit_card', label: 'Credit Card' },
+                            { value: 'debit_card', label: 'Debit Card' }
+                        ]"
+                        placeholder="-- Select Card Type --"
+                        [required]="true"
+                        [disabled]="readonly"
+                    ></app-select-input>
+                    <app-error-message [errorMessage]="clientErrors.billingMethod"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input
+                        label="Cardholder Name"
+                        name="billingCardholderName"
+                        [(ngModel)]="clientFormModel.billingMethod.cardholderName"
+                        [required]="true"
+                        [disabled]="readonly"
+                    ></app-base-input>
+                    <app-error-message [errorMessage]="clientErrors.billingCardholderName"></app-error-message>
+                </div>
+
+                <div class="flex flex-col">
+                    <app-base-input
+                        label="Card Reference (Last 4 Digits)"
+                        name="billingCardLast4"
+                        [(ngModel)]="clientFormModel.billingMethod.last4"
+                        [required]="true"
+                        [pattern]="'[0-9]{4}'"
+                        [helperText]="'Used to identify the saved card only, not for payment processing'"
+                        [disabled]="readonly"
+                    ></app-base-input>
+                    <app-error-message [errorMessage]="clientErrors.billingCardLast4"></app-error-message>
+                </div>
+
+                <div class="md:col-span-2">
+                    <div class="rounded-xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-950/40">
+                        <div class="mb-4">
+                            <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">Card Expiry</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Select the month and year together so the date reads as one card detail.</p>
+                        </div>
+                        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div class="flex flex-col">
+                                <app-select-input
+                                    label="Expiry Month"
+                                    name="billingCardExpiryMonth"
+                                    [(ngModel)]="clientFormModel.billingMethod.expiryMonth"
+                                    [options]="billingExpiryMonthOptions"
+                                    placeholder="-- Select Expiry Month --"
+                                    [required]="true"
+                                    [disabled]="readonly"
+                                ></app-select-input>
+                                <app-error-message [errorMessage]="clientErrors.billingCardExpiryMonth"></app-error-message>
+                            </div>
+
+                            <div class="flex flex-col">
+                                <app-select-input
+                                    label="Expiry Year"
+                                    name="billingCardExpiryYear"
+                                    [(ngModel)]="clientFormModel.billingMethod.expiryYear"
+                                    [options]="billingExpiryYearOptions"
+                                    placeholder="-- Select Expiry Year --"
+                                    [required]="true"
+                                    [disabled]="readonly"
+                                ></app-select-input>
+                                <app-error-message [errorMessage]="clientErrors.billingCardExpiryYear"></app-error-message>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </app-section>
+
+        <app-section
             title="Operational Sites"
             subtitle="Saved sites can be reused directly in client requests. Every site needs valid coordinates for matching and dispatch."
         >

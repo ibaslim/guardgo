@@ -39,6 +39,7 @@ class TenantDataModel(BaseModel):
     ownership_type: Optional[str] = None
     service_provider_tenant_id: Optional[str] = None
     service_provider: Optional[dict] = None
+    profile: Optional[dict] = None
 
 
 class NodeCallbackModel(BaseModel):

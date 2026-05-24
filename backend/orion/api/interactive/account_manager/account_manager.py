@@ -612,6 +612,7 @@ class AccountManager:
                         "ownership_type": None,
                         "service_provider_tenant_id": None,
                         "service_provider": None,
+                        "profile": {},
                     },
                 }
             )
@@ -655,6 +656,6 @@ class AccountManager:
                 tenant.id), "is_default": str(tenant.is_default), "name": tenant_name, "phone": tenant_phone, "country": tenant_country, "city": tenant_city, "postal_code": tenant_postal_code, "tax_id": str(tenant.id), "user_id": "", "licenses": [
                 self.safe_decrypt(enc, l) for l in (tenant.licenses or [])], "assigned_quota": str(
                 assigned_quota), "quota_exceeded": bool(
-                not tenant.is_default and tenant.user_quota is not None and assigned_quota < total_user), "image": tenant_image_path, "tenant_type": tenant.tenant_type.value, "status": tenant.status.value, "ownership_type": getattr(tenant, "ownership_type", None), "service_provider_tenant_id": service_provider_tenant_id, "service_provider": service_provider_summary, } })
+                not tenant.is_default and tenant.user_quota is not None and assigned_quota < total_user), "image": tenant_image_path, "tenant_type": tenant.tenant_type.value, "status": tenant.status.value, "ownership_type": getattr(tenant, "ownership_type", None), "service_provider_tenant_id": service_provider_tenant_id, "service_provider": service_provider_summary, "profile": profile, } })
 
         return node

@@ -18,6 +18,19 @@ export const clientRequestsGuard: CanActivateFn = async () => {
   }
 
   if (role === 'client_admin' && tenantType === 'client') {
+    const billingMethod = appService.userSessionData()?.tenant?.profile?.['billing_method'];
+    const hasBillingMethod = Boolean(
+      billingMethod
+      && typeof billingMethod === 'object'
+      && String(billingMethod.method || billingMethod.type || '').trim()
+      && String(billingMethod.cardholder_name || billingMethod.cardholderName || '').trim()
+      && String(billingMethod.last4 || billingMethod.card_last4 || '').trim()
+    );
+
+    if (!hasBillingMethod) {
+      return router.createUrlTree(['/dashboard/settings']);
+    }
+
     return true;
   }
 

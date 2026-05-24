@@ -520,6 +520,13 @@ async def test_create_request_uses_target_client_tenant_for_platform_user(monkey
     target_tenant = SimpleNamespace(
         id=ObjectId("507f1f77bcf86cd799439099"),
         profile={
+            "billing_method": {
+                "method": "credit_card",
+                "cardholder_name": "Client Billing",
+                "last4": "4242",
+                "expiry_month": "12",
+                "expiry_year": "29",
+            },
             "sites": [{
                 "site_name": "Client HQ",
                 "site_address": {
@@ -590,6 +597,50 @@ async def test_create_request_uses_target_client_tenant_for_platform_user(monkey
     assert result["item"]["client_tenant_id"] == "507f1f77bcf86cd799439099"
     assert engine.saved
     assert engine.saved[0].client_tenant_id == "507f1f77bcf86cd799439099"
+
+
+@pytest.mark.anyio
+async def test_create_request_requires_client_billing_method(monkeypatch):
+    manager = object.__new__(RequestManager)
+
+    async def _resolve_request_client_tenant(*_args, **_kwargs):
+        return SimpleNamespace(
+            id=ObjectId("507f1f77bcf86cd799439099"),
+            profile={
+                "sites": [{
+                    "site_name": "Client HQ",
+                    "site_address": {
+                        "street": "100 Main St",
+                        "city": "Toronto",
+                        "country": "CA",
+                        "province": "ON",
+                        "postal_code": "M5H 2N2",
+                        "latitude": 43.6532,
+                        "longitude": -79.3832,
+                    },
+                }],
+            },
+        )
+
+    manager._resolve_request_client_tenant = _resolve_request_client_tenant
+
+    payload = ClientRequestCreatePayload(
+        title="Billing missing request",
+        fulfillment_mode="individual_only",
+        client_tenant_id="507f1f77bcf86cd799439099",
+        site_index=0,
+        guards_required=2,
+        commit=False,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await manager.create_request(
+            payload=payload,
+            current_user=SimpleNamespace(id="user-1", username="ops", role="admin", tenant_uuid=""),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert "billing method" in str(exc_info.value.detail).lower()
 
 
 @pytest.mark.anyio
