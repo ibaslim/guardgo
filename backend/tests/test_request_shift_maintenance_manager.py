@@ -7,6 +7,8 @@ from bson import ObjectId
 from orion.management.managers.request_shift_maintenance_manager import request_shift_maintenance_manager
 from orion.services.mongo_manager.shared_model.db_notification_model import NotificationRecord
 from orion.services.mongo_manager.shared_model.db_request_model import (
+    RequestScheduleTemplateRecord,
+    RequestStatus,
     ShiftInstanceRecord,
     ShiftInstanceStatus,
     ShiftSlotRecord,
@@ -79,16 +81,33 @@ class _FakeNotificationCollection:
         return 0
 
 
+class _FakeScheduleCollection:
+    def __init__(self, docs):
+        self._docs = list(docs)
+
+    def find(self, query):
+        active_filter = query.get("active")
+        matched = [
+            doc
+            for doc in self._docs
+            if active_filter is None or bool(doc.get("active")) == bool(active_filter)
+        ]
+        return _FakeCursor(matched)
+
+
 class _FakeEngine:
-    def __init__(self, shift_docs, slot_docs):
+    def __init__(self, shift_docs, slot_docs, schedule_docs=None):
         self._shift_docs = list(shift_docs)
         self._slot_docs = list(slot_docs)
+        self._schedule_docs = list(schedule_docs or [])
 
     def get_collection(self, model):
         if model is ShiftInstanceRecord:
             return _FakeShiftCollection(self._shift_docs)
         if model is ShiftSlotRecord:
             return _FakeSlotCollection(self._slot_docs)
+        if model is RequestScheduleTemplateRecord:
+            return _FakeScheduleCollection(self._schedule_docs)
         if model is NotificationRecord:
             return _FakeNotificationCollection()
         raise AssertionError(f"Unexpected collection request: {model}")
@@ -183,3 +202,64 @@ async def test_guard_checkin_reminder_only_targets_slots_in_final_five_minutes(m
     assert sent_notifications[0]["title"] == "Shift starts in less than 5 minutes"
     assert sent_notifications[0]["action_url"] == f"/dashboard/requests?tab=shifts&slot={slot_due_id}"
     assert sent_notifications[0]["metadata"]["reminder_type"] == "guard_checkin_due"
+
+
+@pytest.mark.anyio
+async def test_sync_advance_request_invoices_only_counts_live_long_term_requests(monkeypatch):
+    engine = _FakeEngine(
+        shift_docs=[],
+        slot_docs=[],
+        schedule_docs=[
+            {"request_id": "req-long", "active": True},
+            {"request_id": "req-short", "active": True},
+            {"request_id": "req-draft", "active": True},
+        ],
+    )
+    synced = []
+
+    request_lookup = {
+        "req-long": SimpleNamespace(
+            id="req-long",
+            request_status=RequestStatus.SUBMITTED,
+            expired_at=None,
+            invoicing_snapshot={"contract_type": "long_term"},
+        ),
+        "req-short": SimpleNamespace(
+            id="req-short",
+            request_status=RequestStatus.SUBMITTED,
+            expired_at=None,
+            invoicing_snapshot={"contract_type": "short_term"},
+        ),
+        "req-draft": SimpleNamespace(
+            id="req-draft",
+            request_status=RequestStatus.DRAFT,
+            expired_at=None,
+            invoicing_snapshot={"contract_type": "long_term"},
+        ),
+    }
+
+    class _FakeRequestManager:
+        @staticmethod
+        def _normalize_invoice_contract_type(value):
+            return "long_term" if str(value or "").strip() == "long_term" else "short_term"
+
+        async def _get_request_or_404(self, request_id):
+            return request_lookup[request_id]
+
+        async def _sync_request_invoice_state(self, record, *, current_user, reason):
+            synced.append((record.id, current_user.username, getattr(reason, "value", reason)))
+            return {"action": "created", "invoice": None}
+
+    monkeypatch.setattr(
+        "orion.management.managers.request_shift_maintenance_manager.RequestManager.get_instance",
+        staticmethod(lambda: _FakeRequestManager()),
+    )
+
+    manager = object.__new__(request_shift_maintenance_manager)
+    manager._engine = engine
+    manager._task = None
+
+    synced_count = await manager._sync_advance_request_invoices(limit=10)
+
+    assert synced_count == 1
+    assert synced == [("req-long", "system", "monthly_advance")]

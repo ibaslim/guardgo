@@ -91,6 +91,27 @@ class RequestWaveStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class RequestInvoiceTrigger(str, Enum):
+    INITIAL_PUBLISH = "initial_publish"
+    PUBLISH_UPDATE = "publish_update"
+    ADDITIONAL_COVERAGE = "additional_coverage"
+    SCHEDULE_UPDATED = "schedule_updated"
+    MONTHLY_ADVANCE = "monthly_advance"
+
+
+class RequestInvoiceStatus(str, Enum):
+    PENDING = "pending"
+    ISSUED = "issued"
+    REVISED = "revised"
+
+
+class RequestInvoiceDeliveryStatus(str, Enum):
+    NOT_REQUESTED = "not_requested"
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
 class BroadcastReviewReasonCode(str, Enum):
     MISSING_GEO = "missing_geo"
     DISTANCE_UNVERIFIED = "distance_unverified"
@@ -206,6 +227,8 @@ class ClientRequestRecord(Model):
     request_status: RequestStatus = Field(default=RequestStatus.SUBMITTED, index=True)
     site_snapshot: Dict[str, Any] = {}
     special_instructions: Optional[str] = None
+    pricing_snapshot: Dict[str, Any] = {}
+    invoicing_snapshot: Dict[str, Any] = {}
     requested_start_at: Optional[datetime] = None
     requested_end_at: Optional[datetime] = None
     request_expires_at: Optional[datetime] = Field(default=None, index=True)
@@ -321,6 +344,44 @@ class RequestScheduleTemplateRecord(Model):
     updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
 
+class RequestInvoiceRecord(Model):
+    request_id: str = Field(index=True)
+    client_tenant_id: str = Field(index=True)
+    request_revision: int = Field(default=0, index=True)
+    trigger: RequestInvoiceTrigger = Field(default=RequestInvoiceTrigger.INITIAL_PUBLISH, index=True)
+    invoice_number: str = Field(index=True)
+    contract_type: str = Field(index=True)
+    billing_cycle: str = Field(index=True)
+    charge_timing: str = ""
+    monthly_cutoff_day: Optional[int] = None
+    billing_period_start_local: Optional[str] = Field(default=None, index=True)
+    billing_period_end_local: Optional[str] = Field(default=None, index=True)
+    billing_period_label: Optional[str] = None
+    currency: str = "CAD"
+    rate_basis: Optional[str] = None
+    guards_required: int = 1
+    client_hourly_quote: Optional[float] = None
+    requested_hours_per_position: Optional[float] = None
+    estimated_total_hours: Optional[float] = None
+    estimated_amount: Optional[float] = None
+    estimated_guard_payout: Optional[float] = None
+    estimated_provider_payout: Optional[float] = None
+    estimated_company_margin_with_guard: Optional[float] = None
+    estimated_company_margin_with_provider: Optional[float] = None
+    invoice_recipient_email: Optional[str] = Field(default=None, index=True)
+    invoice_status: RequestInvoiceStatus = Field(default=RequestInvoiceStatus.ISSUED, index=True)
+    payment_status: str = Field(default="pending_capture", index=True)
+    email_delivery_status: RequestInvoiceDeliveryStatus = Field(default=RequestInvoiceDeliveryStatus.NOT_REQUESTED, index=True)
+    email_delivery_error: Optional[str] = None
+    emailed_at: Optional[datetime] = None
+    line_items: List[Dict[str, Any]] = []
+    note: Optional[str] = None
+    created_by_user_id: Optional[str] = Field(default=None, index=True)
+    created_by_username: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
 class ShiftInstanceRecord(Model):
     request_id: str = Field(index=True)
     client_tenant_id: str = Field(index=True)
@@ -424,8 +485,24 @@ class ClientRequestCreatePayload(BaseModel):
     requested_end_at: Optional[datetime] = None
     request_expires_at: Optional[datetime] = None
     special_instructions: Optional[str] = PydanticField(default=None, max_length=2000)
+    invoice_contract_type: Optional[str] = PydanticField(default="short_term", max_length=30)
+    invoice_cutoff_day: Optional[int] = PydanticField(default=None, ge=1, le=28)
+    invoice_recipient_email: Optional[str] = PydanticField(default=None, max_length=254)
     max_match_results: int = PydanticField(default=25, ge=1, le=100)
     commit: bool = True
+
+
+class RequestPricingPreviewPayload(BaseModel):
+    fulfillment_mode: RequestFulfillmentMode = RequestFulfillmentMode.INDIVIDUAL_ONLY
+    client_tenant_id: Optional[str] = PydanticField(default=None, min_length=1, max_length=80)
+    site_index: Optional[int] = PydanticField(default=None, ge=0)
+    site: Optional[RequestSiteInput] = None
+    guards_required: int = PydanticField(default=1, ge=1, le=500)
+    requested_start_at: Optional[datetime] = None
+    requested_end_at: Optional[datetime] = None
+    invoice_contract_type: Optional[str] = PydanticField(default="short_term", max_length=30)
+    invoice_cutoff_day: Optional[int] = PydanticField(default=None, ge=1, le=28)
+    invoice_recipient_email: Optional[str] = PydanticField(default=None, max_length=254)
 
 
 class ClientRequestUpdatePayload(BaseModel):
@@ -439,6 +516,9 @@ class ClientRequestUpdatePayload(BaseModel):
     requested_end_at: Optional[datetime] = None
     request_expires_at: Optional[datetime] = None
     special_instructions: Optional[str] = PydanticField(default=None, max_length=2000)
+    invoice_contract_type: Optional[str] = PydanticField(default=None, max_length=30)
+    invoice_cutoff_day: Optional[int] = PydanticField(default=None, ge=1, le=28)
+    invoice_recipient_email: Optional[str] = PydanticField(default=None, max_length=254)
     max_match_results: Optional[int] = PydanticField(default=None, ge=1, le=100)
 
 
@@ -475,6 +555,9 @@ class RequestPublishUpdatePayload(BaseModel):
     requested_end_at: Optional[datetime] = None
     request_expires_at: Optional[datetime] = None
     special_instructions: Optional[str] = PydanticField(default=None, max_length=2000)
+    invoice_contract_type: Optional[str] = PydanticField(default=None, max_length=30)
+    invoice_cutoff_day: Optional[int] = PydanticField(default=None, ge=1, le=28)
+    invoice_recipient_email: Optional[str] = PydanticField(default=None, max_length=254)
     max_match_results: int = PydanticField(default=25, ge=1, le=100)
 
 

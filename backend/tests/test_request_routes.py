@@ -129,6 +129,46 @@ async def test_create_client_request_forbidden_for_guard_admin(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_preview_client_request_pricing_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def preview_request_pricing(self, payload, current_user):
+            captured["guards_required"] = payload.guards_required
+            captured["invoice_contract_type"] = payload.invoice_contract_type
+            captured["invoice_cutoff_day"] = payload.invoice_cutoff_day
+            captured["invoice_recipient_email"] = payload.invoice_recipient_email
+            captured["requested_start_at"] = payload.requested_start_at
+            captured["user"] = current_user.username
+            return {"pricing": {"client_hourly_quote": 28}, "invoicing": {"contract_type": "long_term"}}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.CLIENT_ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/requests/pricing-preview",
+            json={
+                "guards_required": 3,
+                "invoice_contract_type": "long_term",
+                "invoice_cutoff_day": 9,
+                "invoice_recipient_email": "billing@example.com",
+                "requested_start_at": "2026-05-16T18:00:00Z",
+            },
+        )
+
+    assert response.status_code == 200
+    assert captured == {
+        "guards_required": 3,
+        "invoice_contract_type": "long_term",
+        "invoice_cutoff_day": 9,
+        "invoice_recipient_email": "billing@example.com",
+        "requested_start_at": captured["requested_start_at"],
+        "user": "tester",
+    }
+    assert captured["requested_start_at"] is not None
+
+
+@pytest.mark.anyio
 async def test_list_request_client_tenants_forwards_filters(monkeypatch):
     captured = {}
 
@@ -218,6 +258,30 @@ async def test_list_request_jobs_forwards_filters(monkeypatch):
     assert captured["rows"] == 10
     assert captured["assignment_status"] == "offered"
     assert captured["keyword"] == "night"
+
+
+@pytest.mark.anyio
+async def test_get_request_invoice_forwards_ids(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def get_request_invoice_by_id(self, request_id, invoice_id, current_user):
+            captured["request_id"] = request_id
+            captured["invoice_id"] = invoice_id
+            captured["user"] = current_user.username
+            return {"id": invoice_id, "request_id": request_id}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.CLIENT_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/requests/req-9/invoices/inv-3")
+
+    assert response.status_code == 200
+    assert captured == {
+        "request_id": "req-9",
+        "invoice_id": "inv-3",
+        "user": "tester",
+    }
 
 
 @pytest.mark.anyio
@@ -333,6 +397,27 @@ async def test_get_client_request_wave_forwards_wave_id(monkeypatch):
 
     assert response.status_code == 200
     assert captured == {"wave_id": "wave-77", "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_list_request_invoices_forwards_request_id_and_pagination(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def list_request_invoices(self, **kwargs):
+            captured.update(kwargs)
+            return {"items": [], "pagination": {"page": kwargs["page"], "rows": kwargs["rows"]}}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.CLIENT_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/requests/req-81/invoices?page=2&rows=7")
+
+    assert response.status_code == 200
+    assert captured["request_id"] == "req-81"
+    assert captured["page"] == 2
+    assert captured["rows"] == 7
+    assert captured["current_user"].username == "tester"
 
 
 @pytest.mark.anyio
@@ -790,6 +875,9 @@ async def test_publish_client_request_update_forwards_payload(monkeypatch):
         async def publish_request_update(self, request_id, payload, current_user):
             captured["request_id"] = request_id
             captured["requested_start_at"] = payload.requested_start_at
+            captured["invoice_contract_type"] = payload.invoice_contract_type
+            captured["invoice_cutoff_day"] = payload.invoice_cutoff_day
+            captured["invoice_recipient_email"] = payload.invoice_recipient_email
             captured["user"] = current_user.username
             return {"id": request_id, "message": "publish-update"}
 
@@ -798,12 +886,21 @@ async def test_publish_client_request_update_forwards_payload(monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=_app(user_role.CLIENT_ADMIN)), base_url="http://test") as client:
         response = await client.post(
             "/api/requests/req-8/publish-update",
-            json={"requested_start_at": "2026-05-16T18:00:00Z", "max_match_results": 25},
+            json={
+                "requested_start_at": "2026-05-16T18:00:00Z",
+                "invoice_contract_type": "long_term",
+                "invoice_cutoff_day": 12,
+                "invoice_recipient_email": "billing@example.com",
+                "max_match_results": 25,
+            },
         )
 
     assert response.status_code == 200
     assert captured["request_id"] == "req-8"
     assert captured["requested_start_at"] is not None
+    assert captured["invoice_contract_type"] == "long_term"
+    assert captured["invoice_cutoff_day"] == 12
+    assert captured["invoice_recipient_email"] == "billing@example.com"
     assert captured["user"] == "tester"
 
 

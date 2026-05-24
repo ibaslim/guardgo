@@ -1,6 +1,7 @@
 import asyncio
 import threading
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
 from bson import ObjectId
@@ -11,6 +12,9 @@ from orion.api.interactive.request_shift_manager.request_shift_manager import Re
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_notification_model import NotificationRecord
 from orion.services.mongo_manager.shared_model.db_request_model import (
+    RequestInvoiceTrigger,
+    RequestScheduleTemplateRecord,
+    RequestStatus,
     ShiftInstanceRecord,
     ShiftInstanceStatus,
     ShiftSlotRecord,
@@ -55,6 +59,7 @@ class request_shift_maintenance_manager:
     async def run_iteration(self) -> Dict[str, int]:
         shift_manager = RequestShiftManager.get_instance()
         ensured = await shift_manager.ensure_future_shift_instances_for_active_schedules(limit=200)
+        invoice_sync_count = await self._sync_advance_request_invoices(limit=200)
         synced_leave_count = await shift_manager.sync_active_guard_leaves(limit=200)
         synced_exception_count = await self._sync_active_shift_runtime_exceptions(shift_manager)
         roster_reminder_count = await self._send_provider_roster_reminders()
@@ -64,6 +69,7 @@ class request_shift_maintenance_manager:
         summary = {
             "created_shift_count": int(ensured.get("created_shift_count") or 0),
             "touched_request_count": int(ensured.get("touched_request_count") or 0),
+            "advance_invoice_sync_count": invoice_sync_count,
             "leave_sync_count": synced_leave_count,
             "exception_sync_count": synced_exception_count,
             "provider_roster_reminders": roster_reminder_count,
@@ -73,6 +79,44 @@ class request_shift_maintenance_manager:
         if any(summary.values()):
             print(f"Shift maintenance summary: {summary}")
         return summary
+
+    async def _sync_advance_request_invoices(self, limit: int = 200) -> int:
+        request_manager = RequestManager.get_instance()
+        schedule_collection = self._engine.get_collection(RequestScheduleTemplateRecord)
+        schedule_docs = await schedule_collection.find({"active": True}).to_list(length=max(int(limit or 0), 0) or 200)
+        system_user = SimpleNamespace(id=None, username="system", role="admin")
+        synced_count = 0
+
+        for schedule_doc in schedule_docs:
+            request_id = str(schedule_doc.get("request_id") or "").strip()
+            if not request_id:
+                continue
+            try:
+                request_record = await request_manager._get_request_or_404(request_id)
+            except Exception:
+                continue
+            if request_record.request_status in {RequestStatus.DRAFT, RequestStatus.CANCELLED, RequestStatus.CLOSED}:
+                continue
+            if getattr(request_record, "expired_at", None) is not None:
+                continue
+
+            invoicing_snapshot = request_record.invoicing_snapshot if isinstance(getattr(request_record, "invoicing_snapshot", None), dict) else {}
+            if request_manager._normalize_invoice_contract_type(invoicing_snapshot.get("contract_type")) != "long_term":
+                continue
+
+            try:
+                result = await request_manager._sync_request_invoice_state(
+                    request_record,
+                    current_user=system_user,
+                    reason=RequestInvoiceTrigger.MONTHLY_ADVANCE,
+                )
+            except Exception as exc:
+                print(f"Advance invoice sync failed for request {request_id}: {exc}")
+                continue
+            if str(result.get("action") or "") in {"created", "updated"}:
+                synced_count += 1
+
+        return synced_count
 
     async def _sync_active_shift_runtime_exceptions(self, shift_manager: RequestShiftManager) -> int:
         now = datetime.now(timezone.utc).replace(tzinfo=None)

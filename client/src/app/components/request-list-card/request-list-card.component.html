@@ -140,6 +140,50 @@
         ></app-banner>
 
         <div
+          *ngIf="canShowViewerPricing"
+          class="rounded-2xl border border-emerald-200/80 bg-emerald-50/80 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20"
+        >
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div class="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Offer Pricing Snapshot</div>
+              <p class="mt-1 text-xs text-emerald-700 dark:text-emerald-200">
+                Client quote, your cut, and platform cut for this offer.
+              </p>
+            </div>
+            <span class="rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-emerald-800 shadow-sm dark:bg-slate-900/90 dark:text-emerald-200">
+              {{ viewerEstimatedHours != null ? ((viewerEstimatedHours || 0) + ' hrs') : 'Hours pending' }}
+            </span>
+          </div>
+
+          <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <app-summary-metric-card
+              label="Client Quote"
+              [value]="formatOptionalMoney(viewerClientQuoteTotal)"
+              [helperText]="formatOptionalMoney(viewerClientQuoteHourly) + ' / hr'"
+              [containerClass]="miniMetricContainerClass"
+              [labelClass]="miniMetricLabelClass"
+              [valueClass]="miniMetricValueClass"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Your Cut"
+              [value]="formatOptionalMoney(viewerPayoutTotal)"
+              [helperText]="formatOptionalMoney(viewerPayoutHourly) + ' / hr'"
+              [containerClass]="miniMetricContainerClass"
+              [labelClass]="miniMetricLabelClass"
+              [valueClass]="miniMetricValueClass"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Platform Cut"
+              [value]="formatOptionalMoney(viewerPlatformCutTotal)"
+              [helperText]="formatOptionalMoney(viewerPlatformCutHourly) + ' / hr'"
+              [containerClass]="miniMetricContainerClass"
+              [labelClass]="miniMetricLabelClass"
+              [valueClass]="miniMetricValueClass"
+            ></app-summary-metric-card>
+          </div>
+        </div>
+
+        <div
           *ngIf="hasManualAssignmentPanel"
           [class]="manualAssignmentPanelClass"
         >

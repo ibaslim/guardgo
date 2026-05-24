@@ -17,6 +17,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestAssignmentRecord,
     RequestAssignmentScope,
     RequestAssignmentStatus,
+    RequestInvoiceTrigger,
     RequestScheduleTemplateRecord,
     RequestScheduleType,
     RequestScheduleUpsertPayload,
@@ -2729,6 +2730,16 @@ class RequestShiftManager:
             for instance in generated_instances:
                 await self._engine.save(instance)
         slot_counts = await self.sync_shift_slots_for_request(request_record)
+        await request_manager._sync_request_finance_snapshot_for_schedule(request_record, saved_template)
+        if request_record.request_status != RequestStatus.DRAFT and saved_template.active:
+            try:
+                await request_manager._sync_request_invoice_state(
+                    request_record,
+                    current_user=current_user,
+                    reason=RequestInvoiceTrigger.SCHEDULE_UPDATED,
+                )
+            except Exception as exc:
+                print(f"[RequestShiftManager] Invoice sync failed for request {request_record.id}: {exc}")
 
         await request_manager._write_activity(
             action="request_schedule_upserted",

@@ -3,7 +3,7 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { formatBackendDateTime, readableTitle } from '../../shared/helpers/format.helper';
-import { ClientRequestItem, RequestAssignmentItem, RequestAssignmentStatus } from '../../shared/model/request/client-request.model';
+import { ClientRequestItem, RequestAssignmentItem, RequestAssignmentStatus, RequestPricingSnapshot } from '../../shared/model/request/client-request.model';
 import { BannerComponent } from '../banner/banner.component';
 import { ButtonComponent } from '../button/button.component';
 import { CardComponent } from '../card/card.component';
@@ -378,6 +378,96 @@ export class RequestListCardComponent {
     return this.canShowAssignmentActions && this.candidateOptions.length > 0;
   }
 
+  get viewerPricingSnapshot(): RequestPricingSnapshot {
+    return this.request?.pricing_snapshot || {};
+  }
+
+  get canShowViewerPricing(): boolean {
+    return Boolean(this.viewerAssignment && this.viewerPayoutHourly != null);
+  }
+
+  get viewerCommittedSlots(): number {
+    const slots = Number(this.viewerAssignment?.slots_committed ?? 1);
+    if (!Number.isFinite(slots) || slots < 1) {
+      return 1;
+    }
+    return Math.floor(slots);
+  }
+
+  get viewerRequestedHoursPerPosition(): number | null {
+    const snapshotHours = Number(this.viewerPricingSnapshot.requested_hours_per_position);
+    if (Number.isFinite(snapshotHours) && snapshotHours > 0) {
+      return Math.round(snapshotHours * 100) / 100;
+    }
+
+    const estimatedTotalHours = Number(this.viewerPricingSnapshot.estimated_total_hours);
+    const guardCount = Number(this.viewerPricingSnapshot.guards_required ?? this.request?.guards_required);
+    if (Number.isFinite(estimatedTotalHours) && estimatedTotalHours > 0 && Number.isFinite(guardCount) && guardCount > 0) {
+      return Math.round((estimatedTotalHours / guardCount) * 100) / 100;
+    }
+
+    const start = this.request?.requested_start_at ? new Date(this.request.requested_start_at) : null;
+    const end = this.request?.requested_end_at ? new Date(this.request.requested_end_at) : null;
+    if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      return null;
+    }
+    return Math.round((((end.getTime() - start.getTime()) / (1000 * 60 * 60)) * 100)) / 100;
+  }
+
+  get viewerEstimatedHours(): number | null {
+    const hoursPerPosition = this.viewerRequestedHoursPerPosition;
+    if (hoursPerPosition == null) {
+      return null;
+    }
+    return Math.round((hoursPerPosition * this.viewerCommittedSlots) * 100) / 100;
+  }
+
+  get viewerClientQuoteHourly(): number | null {
+    const quote = Number(this.viewerPricingSnapshot.client_hourly_quote);
+    return Number.isFinite(quote) ? quote : null;
+  }
+
+  get viewerPayoutHourly(): number | null {
+    if (!this.viewerAssignment) {
+      return null;
+    }
+    const payout = this.viewerAssignment.assignee_tenant_type === 'service_provider'
+      ? Number(this.viewerPricingSnapshot.provider_hourly_pay)
+      : Number(this.viewerPricingSnapshot.guard_hourly_pay);
+    return Number.isFinite(payout) ? payout : null;
+  }
+
+  get viewerPlatformCutHourly(): number | null {
+    if (!this.viewerAssignment) {
+      return null;
+    }
+    const cut = this.viewerAssignment.assignee_tenant_type === 'service_provider'
+      ? Number(this.viewerPricingSnapshot.provider_company_commission)
+      : Number(this.viewerPricingSnapshot.guard_company_margin);
+    return Number.isFinite(cut) ? cut : null;
+  }
+
+  get viewerClientQuoteTotal(): number | null {
+    if (this.viewerClientQuoteHourly == null || this.viewerEstimatedHours == null) {
+      return null;
+    }
+    return Math.round((this.viewerClientQuoteHourly * this.viewerEstimatedHours) * 100) / 100;
+  }
+
+  get viewerPayoutTotal(): number | null {
+    if (this.viewerPayoutHourly == null || this.viewerEstimatedHours == null) {
+      return null;
+    }
+    return Math.round((this.viewerPayoutHourly * this.viewerEstimatedHours) * 100) / 100;
+  }
+
+  get viewerPlatformCutTotal(): number | null {
+    if (this.viewerPlatformCutHourly == null || this.viewerEstimatedHours == null) {
+      return null;
+    }
+    return Math.round((this.viewerPlatformCutHourly * this.viewerEstimatedHours) * 100) / 100;
+  }
+
   emitPrimaryAction(): void {
     if (this.canPublish) {
       this.publish.emit();
@@ -409,6 +499,30 @@ export class RequestListCardComponent {
 
   formatTokenLabel(value: string): string {
     return readableTitle(String(value || '').trim());
+  }
+
+  formatMoney(value: number | null | undefined): string {
+    const amount = Number(value ?? 0);
+    if (!Number.isFinite(amount)) {
+      return '$0.00';
+    }
+    return new Intl.NumberFormat('en-CA', {
+      style: 'currency',
+      currency: 'CAD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  }
+
+  formatOptionalMoney(value: number | null | undefined): string {
+    if (value == null) {
+      return '—';
+    }
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) {
+      return '—';
+    }
+    return this.formatMoney(amount);
   }
 
   formatDisplayDate(value?: string | null): string {

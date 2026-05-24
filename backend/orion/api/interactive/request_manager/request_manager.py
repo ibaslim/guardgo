@@ -1,9 +1,10 @@
 import threading
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, cast
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from bson import ObjectId
 from fastapi import HTTPException
@@ -17,8 +18,12 @@ from orion.api.interactive.request_matching_manager.models.request_matching_mode
     TargetType,
 )
 from orion.api.interactive.request_matching_manager.request_matching_manager import RequestMatchingManager
+from configs.metadata_constants import CANADIAN_CITIES_BY_PROVINCE_OPTIONS, CANADIAN_PROVINCE_OPTIONS
+from orion.constants import constant
+from orion.services.mail_manager.mail_manager import mail_manager
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_auth_models import PLATFORM_ADMIN_ROLES, normalize_role_value
+from orion.services.mongo_manager.shared_model.db_billing_model import BillingRate
 from orion.services.mongo_manager.shared_model.db_request_model import (
     AssignmentLockReason,
     BroadcastReviewReasonCode,
@@ -36,9 +41,14 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestAssignmentStatusUpdatePayload,
     RequestBroadcastWaveRecord,
     RequestFulfillmentMode,
+    RequestInvoiceDeliveryStatus,
+    RequestInvoiceRecord,
+    RequestInvoiceStatus,
+    RequestInvoiceTrigger,
     RequestLockReason,
     RequestPublishPayload,
     RequestPublishUpdatePayload,
+    RequestPricingPreviewPayload,
     RequestScheduleTemplateRecord,
     RequestSiteInput,
     RequestStaffingStatus,
@@ -94,6 +104,8 @@ AUTO_COMPLETE_ELAPSED_ASSIGNMENT_STATUSES = {
     RequestAssignmentStatus.ACCEPTED,
     RequestAssignmentStatus.IN_PROGRESS,
 }
+
+_FINANCE_SNAPSHOT_UNSET = object()
 
 
 class RequestManager:
@@ -353,6 +365,8 @@ class RequestManager:
     @classmethod
     def _request_snapshot(cls, record: ClientRequestRecord | Dict[str, Any]) -> Dict[str, Any]:
         site_snapshot = record.get("site_snapshot") if isinstance(record, dict) else getattr(record, "site_snapshot", {})
+        pricing_snapshot = record.get("pricing_snapshot") if isinstance(record, dict) else getattr(record, "pricing_snapshot", {})
+        invoicing_snapshot = record.get("invoicing_snapshot") if isinstance(record, dict) else getattr(record, "invoicing_snapshot", {})
         return {
             "id": str(record.get("_id") if isinstance(record, dict) else record.id),
             "title": record.get("title") if isinstance(record, dict) else record.title,
@@ -361,6 +375,7 @@ class RequestManager:
             "staffing_status": cls._enum_value(record.get("staffing_status") if isinstance(record, dict) else record.staffing_status),
             "fulfillment_mode": cls._resolve_fulfillment_mode_from_record(record).value,
             "target_type": cls._enum_value(record.get("target_type") if isinstance(record, dict) else record.target_type),
+            "guards_required": int(record.get("guards_required") or 0) if isinstance(record, dict) else record.guards_required,
             "site_name": ((site_snapshot or {}).get("site_name") or ""),
             "requested_start_at": record.get("requested_start_at") if isinstance(record, dict) else record.requested_start_at,
             "requested_end_at": record.get("requested_end_at") if isinstance(record, dict) else record.requested_end_at,
@@ -369,7 +384,35 @@ class RequestManager:
             "accepted_slots": int(record.get("accepted_slots") or 0) if isinstance(record, dict) else record.accepted_slots,
             "open_slots": int(record.get("open_slots") or 0) if isinstance(record, dict) else record.open_slots,
             "has_schedule": bool(record.get("has_schedule") if isinstance(record, dict) else getattr(record, "has_schedule", False)),
+            "pricing_snapshot": pricing_snapshot or {},
+            "invoicing_snapshot": invoicing_snapshot or {},
         }
+
+    @classmethod
+    def _has_request_pricing_snapshot(cls, snapshot: Any) -> bool:
+        if not isinstance(snapshot, dict):
+            return False
+        return cls._as_float(snapshot.get("client_hourly_quote")) is not None
+
+    async def _ensure_request_doc_finance_snapshot(self, doc: Dict[str, Any]) -> Dict[str, Any]:
+        if self._has_request_pricing_snapshot(doc.get("pricing_snapshot")):
+            return doc
+
+        invoicing_snapshot = doc.get("invoicing_snapshot") if isinstance(doc.get("invoicing_snapshot"), dict) else {}
+        finance_snapshot = await self._build_request_pricing_and_invoicing(
+            site_snapshot=doc.get("site_snapshot") or {},
+            requested_start_at=self._as_datetime(doc.get("requested_start_at")),
+            requested_end_at=self._as_datetime(doc.get("requested_end_at")),
+            guards_required=int(doc.get("guards_required") or 1),
+            invoice_contract_type=invoicing_snapshot.get("contract_type"),
+            invoice_cutoff_day=invoicing_snapshot.get("monthly_cutoff_day"),
+            invoice_recipient_email=invoicing_snapshot.get("invoice_recipient_email"),
+        )
+        doc["pricing_snapshot"] = finance_snapshot["pricing_snapshot"]
+        merged_invoicing_snapshot = dict(finance_snapshot["invoicing_snapshot"])
+        merged_invoicing_snapshot.update(invoicing_snapshot)
+        doc["invoicing_snapshot"] = merged_invoicing_snapshot
+        return doc
 
     @staticmethod
     def _is_soft_deleted(record: ClientRequestRecord | Dict[str, Any]) -> bool:
@@ -403,6 +446,8 @@ class RequestManager:
                 "lock_reason": cls._enum_value(record.get("lock_reason"), default="") or None,
                 "site_snapshot": record.get("site_snapshot") or {},
                 "special_instructions": record.get("special_instructions"),
+                "pricing_snapshot": record.get("pricing_snapshot") or {},
+                "invoicing_snapshot": record.get("invoicing_snapshot") or {},
                 "requested_start_at": record.get("requested_start_at"),
                 "requested_end_at": record.get("requested_end_at"),
                 "request_expires_at": record.get("request_expires_at"),
@@ -445,6 +490,8 @@ class RequestManager:
             "lock_reason": cls._enum_value(record.lock_reason, default="") or None,
             "site_snapshot": record.site_snapshot or {},
             "special_instructions": record.special_instructions,
+            "pricing_snapshot": getattr(record, "pricing_snapshot", None) or {},
+            "invoicing_snapshot": getattr(record, "invoicing_snapshot", None) or {},
             "requested_start_at": record.requested_start_at,
             "requested_end_at": record.requested_end_at,
             "request_expires_at": record.request_expires_at,
@@ -678,6 +725,87 @@ class RequestManager:
             "updated_at": record.updated_at,
         }
 
+    @classmethod
+    def _serialize_invoice(cls, record: RequestInvoiceRecord | Dict[str, Any]) -> Dict[str, Any]:
+        if isinstance(record, dict):
+            return {
+                "id": str(record.get("_id") or record.get("id") or ""),
+                "request_id": record.get("request_id") or "",
+                "client_tenant_id": record.get("client_tenant_id") or "",
+                "request_revision": int(record.get("request_revision") or 0),
+                "trigger": cls._enum_value(record.get("trigger")),
+                "invoice_number": record.get("invoice_number") or "",
+                "contract_type": record.get("contract_type") or "",
+                "billing_cycle": record.get("billing_cycle") or "",
+                "charge_timing": record.get("charge_timing") or "",
+                "monthly_cutoff_day": record.get("monthly_cutoff_day"),
+                "billing_period_start_local": record.get("billing_period_start_local"),
+                "billing_period_end_local": record.get("billing_period_end_local"),
+                "billing_period_label": record.get("billing_period_label"),
+                "currency": record.get("currency") or "CAD",
+                "rate_basis": record.get("rate_basis"),
+                "guards_required": int(record.get("guards_required") or 0),
+                "client_hourly_quote": record.get("client_hourly_quote"),
+                "requested_hours_per_position": record.get("requested_hours_per_position"),
+                "estimated_total_hours": record.get("estimated_total_hours"),
+                "estimated_amount": record.get("estimated_amount"),
+                "estimated_guard_payout": record.get("estimated_guard_payout"),
+                "estimated_provider_payout": record.get("estimated_provider_payout"),
+                "estimated_company_margin_with_guard": record.get("estimated_company_margin_with_guard"),
+                "estimated_company_margin_with_provider": record.get("estimated_company_margin_with_provider"),
+                "invoice_recipient_email": record.get("invoice_recipient_email"),
+                "invoice_status": cls._enum_value(record.get("invoice_status")),
+                "payment_status": record.get("payment_status") or "",
+                "email_delivery_status": cls._enum_value(record.get("email_delivery_status")),
+                "email_delivery_error": record.get("email_delivery_error"),
+                "emailed_at": record.get("emailed_at"),
+                "line_items": record.get("line_items") or [],
+                "note": record.get("note"),
+                "created_by_user_id": record.get("created_by_user_id"),
+                "created_by_username": record.get("created_by_username"),
+                "created_at": record.get("created_at"),
+                "updated_at": record.get("updated_at"),
+            }
+
+        return {
+            "id": str(record.id),
+            "request_id": record.request_id,
+            "client_tenant_id": record.client_tenant_id,
+            "request_revision": record.request_revision,
+            "trigger": cls._enum_value(record.trigger),
+            "invoice_number": record.invoice_number,
+            "contract_type": record.contract_type,
+            "billing_cycle": record.billing_cycle,
+            "charge_timing": record.charge_timing,
+            "monthly_cutoff_day": record.monthly_cutoff_day,
+            "billing_period_start_local": record.billing_period_start_local,
+            "billing_period_end_local": record.billing_period_end_local,
+            "billing_period_label": record.billing_period_label,
+            "currency": record.currency,
+            "rate_basis": record.rate_basis,
+            "guards_required": record.guards_required,
+            "client_hourly_quote": record.client_hourly_quote,
+            "requested_hours_per_position": record.requested_hours_per_position,
+            "estimated_total_hours": record.estimated_total_hours,
+            "estimated_amount": record.estimated_amount,
+            "estimated_guard_payout": record.estimated_guard_payout,
+            "estimated_provider_payout": record.estimated_provider_payout,
+            "estimated_company_margin_with_guard": record.estimated_company_margin_with_guard,
+            "estimated_company_margin_with_provider": record.estimated_company_margin_with_provider,
+            "invoice_recipient_email": record.invoice_recipient_email,
+            "invoice_status": cls._enum_value(record.invoice_status),
+            "payment_status": record.payment_status,
+            "email_delivery_status": cls._enum_value(record.email_delivery_status),
+            "email_delivery_error": record.email_delivery_error,
+            "emailed_at": record.emailed_at,
+            "line_items": record.line_items or [],
+            "note": record.note,
+            "created_by_user_id": record.created_by_user_id,
+            "created_by_username": record.created_by_username,
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+        }
+
     async def _get_tenant(self, tenant_id: str):
         try:
             return await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(tenant_id))
@@ -762,6 +890,873 @@ class RequestManager:
             raise HTTPException(status_code=403, detail="Client billing method is required before creating requests")
         if not cardholder_name or not re.fullmatch(r"\d{4}", last4) or not re.fullmatch(r"(0[1-9]|1[0-2])", expiry_month) or not re.fullmatch(r"\d{2,4}", expiry_year):
             raise HTTPException(status_code=403, detail="Client billing method is required before creating requests")
+
+    @staticmethod
+    def _normalize_province_code(value: Any) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        normalized = text.upper()
+        valid_codes = {option["value"] for option in CANADIAN_PROVINCE_OPTIONS}
+        if normalized in valid_codes:
+            return normalized
+        for option in CANADIAN_PROVINCE_OPTIONS:
+            if option["label"].lower() == text.lower():
+                return option["value"]
+        return ""
+
+    @staticmethod
+    def _normalize_city_code(province_code: str, value: Any) -> str:
+        normalized_province = str(province_code or "").strip().upper()
+        text = str(value or "").strip()
+        if not normalized_province or not text:
+            return ""
+        options = CANADIAN_CITIES_BY_PROVINCE_OPTIONS.get(normalized_province, [])
+        normalized = text.upper()
+        for option in options:
+            if option["value"] == normalized:
+                return option["value"]
+        for option in options:
+            if option["label"].lower() == text.lower():
+                return option["value"]
+        return ""
+
+    @staticmethod
+    def _resolve_rate_field(requested_start_at: Optional[datetime]) -> str:
+        start = RequestManager._as_datetime(requested_start_at)
+        if not start:
+            return "standard_rate"
+        return "weekend_rate" if start.weekday() >= 5 else "standard_rate"
+
+    async def _resolve_scoped_rate(
+        self,
+        scopes: List[str],
+        province_code: str,
+        city_code: str,
+        rate_field: str,
+    ) -> float:
+        if not province_code:
+            return 0.0
+
+        normalized_city = str(city_code or "").strip().upper()
+        for scope in scopes:
+            if normalized_city:
+                city_match = await self._engine.find_one(
+                    BillingRate,
+                    (BillingRate.scope == scope)
+                    & (BillingRate.region_code == province_code)
+                    & (BillingRate.city_code == normalized_city),
+                )
+                if city_match:
+                    return round(float(getattr(city_match, rate_field, 0.0) or 0.0), 2)
+
+            province_match = await self._engine.find_one(
+                BillingRate,
+                (BillingRate.scope == scope)
+                & (BillingRate.region_code == province_code)
+                & (BillingRate.city_code == ""),
+            )
+            if province_match:
+                return round(float(getattr(province_match, rate_field, 0.0) or 0.0), 2)
+
+        return 0.0
+
+    @staticmethod
+    def _calculate_requested_hours(start_at: Optional[datetime], end_at: Optional[datetime]) -> Optional[float]:
+        start = RequestManager._as_datetime(start_at)
+        end = RequestManager._as_datetime(end_at)
+        if not start or not end or end <= start:
+            return None
+        return round(max((end - start).total_seconds() / 3600.0, 0.0), 2)
+
+    @staticmethod
+    def _normalize_invoice_contract_type(contract_type: Any) -> str:
+        normalized = str(contract_type or "").strip().lower()
+        if normalized in {"long_term", "long-term", "longterm", "monthly"}:
+            return "long_term"
+        return "short_term"
+
+    @staticmethod
+    def _derive_invoice_contract_type_for_schedule(schedule_type: Any) -> str:
+        normalized = str(getattr(schedule_type, "value", schedule_type) or "").strip().lower()
+        if normalized == RequestScheduleType.ONE_TIME.value:
+            return "short_term"
+        if normalized in {RequestScheduleType.DATE_RANGE.value, RequestScheduleType.RECURRING_WEEKLY.value}:
+            return "long_term"
+        return "short_term"
+
+    async def _refresh_request_finance_snapshot(
+        self,
+        record: ClientRequestRecord,
+        *,
+        invoice_contract_type: Any = _FINANCE_SNAPSHOT_UNSET,
+        invoice_cutoff_day: Any = _FINANCE_SNAPSHOT_UNSET,
+        invoice_recipient_email: Any = _FINANCE_SNAPSHOT_UNSET,
+    ) -> Dict[str, Dict[str, Any]]:
+        invoicing_snapshot = record.invoicing_snapshot if isinstance(getattr(record, "invoicing_snapshot", None), dict) else {}
+        resolved_contract_type = (
+            invoicing_snapshot.get("contract_type")
+            if invoice_contract_type is _FINANCE_SNAPSHOT_UNSET
+            else invoice_contract_type
+        )
+        resolved_cutoff_day = (
+            invoicing_snapshot.get("monthly_cutoff_day")
+            if invoice_cutoff_day is _FINANCE_SNAPSHOT_UNSET
+            else invoice_cutoff_day
+        )
+        resolved_recipient_email = (
+            invoicing_snapshot.get("invoice_recipient_email")
+            if invoice_recipient_email is _FINANCE_SNAPSHOT_UNSET
+            else invoice_recipient_email
+        )
+
+        finance_snapshot = await self._build_request_pricing_and_invoicing(
+            site_snapshot=record.site_snapshot or {},
+            requested_start_at=record.requested_start_at,
+            requested_end_at=record.requested_end_at,
+            guards_required=int(record.guards_required or 1),
+            invoice_contract_type=resolved_contract_type,
+            invoice_cutoff_day=resolved_cutoff_day,
+            invoice_recipient_email=resolved_recipient_email,
+        )
+        record.pricing_snapshot = finance_snapshot["pricing_snapshot"]
+        record.invoicing_snapshot = finance_snapshot["invoicing_snapshot"]
+        return finance_snapshot
+
+    async def _sync_request_finance_snapshot_for_schedule(
+        self,
+        record: ClientRequestRecord,
+        schedule_record: RequestScheduleTemplateRecord,
+    ) -> Dict[str, Dict[str, Any]]:
+        finance_snapshot = await self._refresh_request_finance_snapshot(
+            record,
+            invoice_contract_type=self._derive_invoice_contract_type_for_schedule(
+                getattr(schedule_record, "schedule_type", None),
+            ),
+        )
+        record.updated_at = datetime.utcnow()
+        await self._engine.save(record)
+        return finance_snapshot
+
+    @staticmethod
+    def _format_invoice_currency(value: Any) -> str:
+        amount = RequestManager._as_float(value)
+        if amount is None:
+            return "TBD"
+        return f"${amount:.2f} CAD"
+
+    @staticmethod
+    def _normalize_invoice_trigger(reason: Any) -> RequestInvoiceTrigger:
+        normalized = str(getattr(reason, "value", reason) or "").strip().lower()
+        if normalized == RequestInvoiceTrigger.PUBLISH_UPDATE.value:
+            return RequestInvoiceTrigger.PUBLISH_UPDATE
+        if normalized == RequestInvoiceTrigger.ADDITIONAL_COVERAGE.value:
+            return RequestInvoiceTrigger.ADDITIONAL_COVERAGE
+        if normalized == RequestInvoiceTrigger.SCHEDULE_UPDATED.value:
+            return RequestInvoiceTrigger.SCHEDULE_UPDATED
+        if normalized == RequestInvoiceTrigger.MONTHLY_ADVANCE.value:
+            return RequestInvoiceTrigger.MONTHLY_ADVANCE
+        return RequestInvoiceTrigger.INITIAL_PUBLISH
+
+    def _resolve_invoice_timezone(
+        self,
+        record: ClientRequestRecord,
+        schedule_record: Optional[RequestScheduleTemplateRecord] = None,
+    ) -> ZoneInfo:
+        timezone_name = str(
+            getattr(schedule_record, "timezone", None)
+            or getattr(record, "timezone", None)
+            or "UTC",
+        ).strip() or "UTC"
+        try:
+            return ZoneInfo(timezone_name)
+        except Exception:
+            return ZoneInfo("UTC")
+
+    @staticmethod
+    def _shift_month(anchor: date, months: int) -> date:
+        month_index = (anchor.month - 1) + int(months or 0)
+        year = anchor.year + (month_index // 12)
+        month = (month_index % 12) + 1
+        return date(year, month, 1)
+
+    @classmethod
+    def _month_bounds(cls, anchor: date) -> tuple[date, date]:
+        month_start = date(anchor.year, anchor.month, 1)
+        next_month_start = cls._shift_month(month_start, 1)
+        return month_start, next_month_start - timedelta(days=1)
+
+    @staticmethod
+    def _parse_invoice_local_time(field_name: str, value: Any) -> time:
+        try:
+            return datetime.strptime(str(value or "").strip(), "%H:%M").time()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid {field_name}") from exc
+
+    @classmethod
+    def _build_invoice_number(
+        cls,
+        record: ClientRequestRecord,
+        *,
+        billing_period_start_local: Optional[str],
+        issued_at: datetime,
+    ) -> str:
+        request_token = str(getattr(record, "id", "") or "").replace("-", "")[-6:].upper() or "REQ"
+        period_token = ""
+        if billing_period_start_local:
+            try:
+                period_token = date.fromisoformat(billing_period_start_local).strftime("%Y%m")
+            except Exception:
+                period_token = billing_period_start_local.replace("-", "")[:6]
+        if not period_token:
+            period_token = issued_at.strftime("%Y%m%d")
+        return f"INV-{period_token}-{request_token}"
+
+    @staticmethod
+    def _build_invoice_line_item(
+        *,
+        description: str,
+        service_date_local: date,
+        guards_required: int,
+        client_hourly_quote: float,
+        hours_per_position: float,
+        local_start: datetime,
+        local_end: datetime,
+    ) -> Dict[str, Any]:
+        quantity = round(hours_per_position * max(int(guards_required or 1), 1), 2)
+        amount = round(client_hourly_quote * quantity, 2)
+        return {
+            "description": description,
+            "service_date_local": service_date_local.isoformat(),
+            "unit": "hour",
+            "quantity": quantity,
+            "unit_rate": round(client_hourly_quote, 2),
+            "amount": amount,
+            "metadata": {
+                "guards_required": max(int(guards_required or 1), 1),
+                "hours_per_position": round(hours_per_position, 2),
+                "start_at_local": local_start.isoformat(),
+                "end_at_local": local_end.isoformat(),
+            },
+        }
+
+    def _build_short_term_invoice_details(
+        self,
+        record: ClientRequestRecord,
+        *,
+        schedule_record: Optional[RequestScheduleTemplateRecord],
+    ) -> Optional[Dict[str, Any]]:
+        pricing_snapshot = record.pricing_snapshot if isinstance(getattr(record, "pricing_snapshot", None), dict) else {}
+        client_hourly_quote = self._as_float(pricing_snapshot.get("client_hourly_quote"))
+        if client_hourly_quote is None:
+            return None
+
+        tzinfo = self._resolve_invoice_timezone(record, schedule_record)
+        local_start: Optional[datetime] = None
+        local_end: Optional[datetime] = None
+
+        if schedule_record and self._enum_value(getattr(schedule_record, "schedule_type", None)) == "one_time":
+            occurrence_date = date.fromisoformat(str(getattr(schedule_record, "start_date_local", "") or "").strip())
+            start_clock = self._parse_invoice_local_time("start_time_local", getattr(schedule_record, "start_time_local", ""))
+            end_clock = self._parse_invoice_local_time("end_time_local", getattr(schedule_record, "end_time_local", ""))
+            local_start = datetime.combine(occurrence_date, start_clock, tzinfo=tzinfo)
+            local_end_date = occurrence_date + timedelta(days=1) if bool(getattr(schedule_record, "is_overnight", False)) else occurrence_date
+            local_end = datetime.combine(local_end_date, end_clock, tzinfo=tzinfo)
+        else:
+            start_at = self._as_datetime(getattr(record, "requested_start_at", None))
+            end_at = self._as_datetime(getattr(record, "requested_end_at", None))
+            if start_at and end_at:
+                local_start = start_at.replace(tzinfo=timezone.utc).astimezone(tzinfo)
+                local_end = end_at.replace(tzinfo=timezone.utc).astimezone(tzinfo)
+
+        if not local_start or not local_end or local_end <= local_start:
+            return None
+
+        hours_per_position = round(max((local_end - local_start).total_seconds() / 3600.0, 0.0), 2)
+        service_date = local_start.date()
+        line_items = [self._build_invoice_line_item(
+            description=str(getattr(record, "title", "") or "Client request coverage").strip() or "Client request coverage",
+            service_date_local=service_date,
+            guards_required=int(pricing_snapshot.get("guards_required") or record.guards_required or 1),
+            client_hourly_quote=client_hourly_quote,
+            hours_per_position=hours_per_position,
+            local_start=local_start,
+            local_end=local_end,
+        )]
+        return {
+            "billing_period_start_local": service_date.isoformat(),
+            "billing_period_end_local": local_end.date().isoformat(),
+            "billing_period_label": service_date.strftime("%b %d, %Y"),
+            "line_items": line_items,
+        }
+
+    def _iter_schedule_dates_for_period(
+        self,
+        schedule_record: RequestScheduleTemplateRecord,
+        *,
+        period_start: date,
+        period_end: date,
+    ) -> List[date]:
+        try:
+            schedule_start = date.fromisoformat(str(getattr(schedule_record, "start_date_local", "") or "").strip())
+        except Exception:
+            return []
+        schedule_end_raw = str(getattr(schedule_record, "end_date_local", "") or "").strip()
+        schedule_end = date.fromisoformat(schedule_end_raw) if schedule_end_raw else schedule_start
+
+        effective_start = max(period_start, schedule_start)
+        effective_end = min(period_end, schedule_end)
+        if effective_end < effective_start:
+            return []
+
+        schedule_type = self._enum_value(getattr(schedule_record, "schedule_type", None))
+        if schedule_type == "one_time":
+            return [schedule_start] if effective_start <= schedule_start <= effective_end else []
+
+        recurrence_days = {
+            token.strip().lower()
+            for token in list(getattr(schedule_record, "recurrence_days", []) or [])
+            if str(token or "").strip()
+        }
+        weekday_map = {
+            "mon": 0,
+            "monday": 0,
+            "tue": 1,
+            "tues": 1,
+            "tuesday": 1,
+            "wed": 2,
+            "wednesday": 2,
+            "thu": 3,
+            "thur": 3,
+            "thurs": 3,
+            "thursday": 3,
+            "fri": 4,
+            "friday": 4,
+            "sat": 5,
+            "saturday": 5,
+            "sun": 6,
+            "sunday": 6,
+        }
+        allowed_weekdays = {weekday_map[token] for token in recurrence_days if token in weekday_map}
+
+        current = effective_start
+        results: List[date] = []
+        while current <= effective_end:
+            if schedule_type == "date_range" or current.weekday() in allowed_weekdays:
+                results.append(current)
+            current += timedelta(days=1)
+        return results
+
+    def _build_long_term_invoice_details(
+        self,
+        record: ClientRequestRecord,
+        *,
+        schedule_record: RequestScheduleTemplateRecord,
+        cutoff_day: int,
+    ) -> Optional[Dict[str, Any]]:
+        pricing_snapshot = record.pricing_snapshot if isinstance(getattr(record, "pricing_snapshot", None), dict) else {}
+        client_hourly_quote = self._as_float(pricing_snapshot.get("client_hourly_quote"))
+        if client_hourly_quote is None:
+            return None
+
+        tzinfo = self._resolve_invoice_timezone(record, schedule_record)
+        today_local = datetime.now(tzinfo).date()
+        anchor = date(today_local.year, today_local.month, 1)
+        if today_local.day >= max(int(cutoff_day or 1), 1):
+            anchor = self._shift_month(anchor, 1)
+        period_start, period_end = self._month_bounds(anchor)
+
+        occurrence_dates = self._iter_schedule_dates_for_period(
+            schedule_record,
+            period_start=period_start,
+            period_end=period_end,
+        )
+        if not occurrence_dates:
+            return None
+
+        start_clock = self._parse_invoice_local_time("start_time_local", getattr(schedule_record, "start_time_local", ""))
+        end_clock = self._parse_invoice_local_time("end_time_local", getattr(schedule_record, "end_time_local", ""))
+        guards_required = int(pricing_snapshot.get("guards_required") or record.guards_required or 1)
+        line_items: List[Dict[str, Any]] = []
+
+        for occurrence_date in occurrence_dates:
+            local_start = datetime.combine(occurrence_date, start_clock, tzinfo=tzinfo)
+            local_end_date = occurrence_date + timedelta(days=1) if bool(getattr(schedule_record, "is_overnight", False)) else occurrence_date
+            local_end = datetime.combine(local_end_date, end_clock, tzinfo=tzinfo)
+            if local_end <= local_start:
+                continue
+            hours_per_position = round(max((local_end - local_start).total_seconds() / 3600.0, 0.0), 2)
+            line_items.append(self._build_invoice_line_item(
+                description=f"{str(getattr(record, 'title', '') or 'Client request coverage').strip() or 'Client request coverage'} - {occurrence_date.isoformat()}",
+                service_date_local=occurrence_date,
+                guards_required=guards_required,
+                client_hourly_quote=client_hourly_quote,
+                hours_per_position=hours_per_position,
+                local_start=local_start,
+                local_end=local_end,
+            ))
+
+        if not line_items:
+            return None
+
+        return {
+            "billing_period_start_local": period_start.isoformat(),
+            "billing_period_end_local": period_end.isoformat(),
+            "billing_period_label": period_start.strftime("%B %Y"),
+            "line_items": line_items,
+        }
+
+    @staticmethod
+    def _summarize_invoice_line_items(line_items: List[Dict[str, Any]]) -> Dict[str, Optional[float]]:
+        total_hours = 0.0
+        total_amount = 0.0
+        first_hours: Optional[float] = None
+        for item in line_items:
+            quantity = RequestManager._as_float(item.get("quantity")) or 0.0
+            amount = RequestManager._as_float(item.get("amount")) or 0.0
+            hours_per_position = RequestManager._as_float((item.get("metadata") or {}).get("hours_per_position"))
+            total_hours += quantity
+            total_amount += amount
+            if first_hours is None and hours_per_position is not None:
+                first_hours = hours_per_position
+        return {
+            "requested_hours_per_position": round(first_hours, 2) if first_hours is not None else None,
+            "estimated_total_hours": round(total_hours, 2),
+            "estimated_amount": round(total_amount, 2),
+        }
+
+    async def _find_existing_invoice(
+        self,
+        *,
+        request_id: str,
+        contract_type: str,
+        billing_period_start_local: str,
+        billing_period_end_local: str,
+    ) -> Optional[RequestInvoiceRecord]:
+        return await self._engine.find_one(
+            RequestInvoiceRecord,
+            (RequestInvoiceRecord.request_id == str(request_id))
+            & (RequestInvoiceRecord.contract_type == contract_type)
+            & (RequestInvoiceRecord.billing_period_start_local == billing_period_start_local)
+            & (RequestInvoiceRecord.billing_period_end_local == billing_period_end_local),
+        )
+
+    @staticmethod
+    def _invoice_material_snapshot(invoice_record: RequestInvoiceRecord | Dict[str, Any]) -> Dict[str, Any]:
+        if isinstance(invoice_record, dict):
+            return {
+                "request_revision": int(invoice_record.get("request_revision") or 0),
+                "trigger": RequestManager._enum_value(invoice_record.get("trigger")),
+                "billing_cycle": invoice_record.get("billing_cycle") or "",
+                "charge_timing": invoice_record.get("charge_timing") or "",
+                "monthly_cutoff_day": invoice_record.get("monthly_cutoff_day"),
+                "billing_period_start_local": invoice_record.get("billing_period_start_local"),
+                "billing_period_end_local": invoice_record.get("billing_period_end_local"),
+                "billing_period_label": invoice_record.get("billing_period_label"),
+                "guards_required": int(invoice_record.get("guards_required") or 0),
+                "client_hourly_quote": RequestManager._as_float(invoice_record.get("client_hourly_quote")),
+                "requested_hours_per_position": RequestManager._as_float(invoice_record.get("requested_hours_per_position")),
+                "estimated_total_hours": RequestManager._as_float(invoice_record.get("estimated_total_hours")),
+                "estimated_amount": RequestManager._as_float(invoice_record.get("estimated_amount")),
+                "invoice_recipient_email": invoice_record.get("invoice_recipient_email"),
+                "line_items": invoice_record.get("line_items") or [],
+                "note": invoice_record.get("note"),
+            }
+        return {
+            "request_revision": int(invoice_record.request_revision or 0),
+            "trigger": RequestManager._enum_value(invoice_record.trigger),
+            "billing_cycle": invoice_record.billing_cycle,
+            "charge_timing": invoice_record.charge_timing,
+            "monthly_cutoff_day": invoice_record.monthly_cutoff_day,
+            "billing_period_start_local": invoice_record.billing_period_start_local,
+            "billing_period_end_local": invoice_record.billing_period_end_local,
+            "billing_period_label": invoice_record.billing_period_label,
+            "guards_required": int(invoice_record.guards_required or 0),
+            "client_hourly_quote": RequestManager._as_float(invoice_record.client_hourly_quote),
+            "requested_hours_per_position": RequestManager._as_float(invoice_record.requested_hours_per_position),
+            "estimated_total_hours": RequestManager._as_float(invoice_record.estimated_total_hours),
+            "estimated_amount": RequestManager._as_float(invoice_record.estimated_amount),
+            "invoice_recipient_email": invoice_record.invoice_recipient_email,
+            "line_items": invoice_record.line_items or [],
+            "note": invoice_record.note,
+        }
+
+    async def _sync_request_invoice_state(self, record: ClientRequestRecord, *, current_user, reason: Any) -> Dict[str, Any]:
+        pricing_snapshot = record.pricing_snapshot if isinstance(getattr(record, "pricing_snapshot", None), dict) else {}
+        invoicing_snapshot = record.invoicing_snapshot if isinstance(getattr(record, "invoicing_snapshot", None), dict) else {}
+        trigger = self._normalize_invoice_trigger(reason)
+        contract_type = self._normalize_invoice_contract_type(invoicing_snapshot.get("contract_type"))
+        recipient_email = str(invoicing_snapshot.get("invoice_recipient_email") or "").strip() or None
+        schedule_record = await self._get_active_schedule_template(str(record.id))
+
+        invoice_details: Optional[Dict[str, Any]] = None
+        if contract_type == "long_term":
+            cutoff_day = invoicing_snapshot.get("monthly_cutoff_day")
+            if cutoff_day is None:
+                return {"action": "skipped", "invoice": None}
+            if schedule_record is None:
+                return {"action": "skipped", "invoice": None}
+            invoice_details = self._build_long_term_invoice_details(
+                record,
+                schedule_record=schedule_record,
+                cutoff_day=int(cutoff_day),
+            )
+        else:
+            invoice_details = self._build_short_term_invoice_details(record, schedule_record=schedule_record)
+
+        if not invoice_details:
+            return {"action": "skipped", "invoice": None}
+
+        billing_period_start_local = str(invoice_details.get("billing_period_start_local") or "").strip()
+        billing_period_end_local = str(invoice_details.get("billing_period_end_local") or "").strip()
+        line_items = list(invoice_details.get("line_items") or [])
+        if not billing_period_start_local or not billing_period_end_local or not line_items:
+            return {"action": "skipped", "invoice": None}
+
+        issued_at = datetime.utcnow()
+        summary = self._summarize_invoice_line_items(line_items)
+        guards_required = int(pricing_snapshot.get("guards_required") or record.guards_required or 1)
+        client_hourly_quote = self._as_float(pricing_snapshot.get("client_hourly_quote"))
+        estimated_total_hours = self._as_float(summary.get("estimated_total_hours"))
+        estimated_amount = self._as_float(summary.get("estimated_amount"))
+        requested_hours_per_position = self._as_float(summary.get("requested_hours_per_position"))
+        note = (
+            f"Advance invoice for {invoice_details['billing_period_label']} scheduled coverage."
+            if contract_type == "long_term"
+            else "Invoice issued for the scheduled one-time coverage window."
+        )
+        invoice_payload = {
+            "request_revision": max(int(record.request_revision or 0), 1),
+            "trigger": trigger,
+            "contract_type": contract_type,
+            "billing_cycle": str(invoicing_snapshot.get("billing_cycle") or ("monthly" if contract_type == "long_term" else "per_request")),
+            "charge_timing": str(invoicing_snapshot.get("charge_timing") or ("advance_monthly" if contract_type == "long_term" else "on_the_go")),
+            "monthly_cutoff_day": invoicing_snapshot.get("monthly_cutoff_day"),
+            "billing_period_start_local": billing_period_start_local,
+            "billing_period_end_local": billing_period_end_local,
+            "billing_period_label": str(invoice_details.get("billing_period_label") or "").strip() or None,
+            "currency": str(pricing_snapshot.get("currency") or "CAD"),
+            "rate_basis": str(pricing_snapshot.get("rate_basis") or "") or None,
+            "guards_required": guards_required,
+            "client_hourly_quote": client_hourly_quote,
+            "requested_hours_per_position": requested_hours_per_position,
+            "estimated_total_hours": estimated_total_hours,
+            "estimated_amount": estimated_amount,
+            "estimated_guard_payout": round((self._as_float(pricing_snapshot.get("guard_hourly_pay")) or 0.0) * (estimated_total_hours or 0.0), 2) if estimated_total_hours is not None else None,
+            "estimated_provider_payout": round((self._as_float(pricing_snapshot.get("provider_hourly_pay")) or 0.0) * (estimated_total_hours or 0.0), 2) if estimated_total_hours is not None else None,
+            "estimated_company_margin_with_guard": round((self._as_float(pricing_snapshot.get("guard_company_margin")) or 0.0) * (estimated_total_hours or 0.0), 2) if estimated_total_hours is not None else None,
+            "estimated_company_margin_with_provider": round((self._as_float(pricing_snapshot.get("provider_company_commission")) or 0.0) * (estimated_total_hours or 0.0), 2) if estimated_total_hours is not None else None,
+            "invoice_recipient_email": recipient_email,
+            "payment_status": str(pricing_snapshot.get("mock_payment_status") or "pending_capture"),
+            "line_items": line_items,
+            "note": note,
+        }
+
+        existing_invoice = await self._find_existing_invoice(
+            request_id=str(record.id),
+            contract_type=contract_type,
+            billing_period_start_local=billing_period_start_local,
+            billing_period_end_local=billing_period_end_local,
+        )
+        previous_snapshot = self._invoice_material_snapshot(existing_invoice) if existing_invoice else None
+        next_snapshot = self._invoice_material_snapshot({**invoice_payload, "trigger": trigger})
+
+        if existing_invoice and previous_snapshot == next_snapshot:
+            latest_snapshot = dict(invoicing_snapshot)
+            latest_snapshot["invoice_status"] = self._enum_value(existing_invoice.invoice_status, RequestInvoiceStatus.ISSUED.value)
+            latest_snapshot["latest_invoice_id"] = str(existing_invoice.id)
+            latest_snapshot["latest_invoice_number"] = existing_invoice.invoice_number
+            latest_snapshot["last_invoice_issued_at"] = existing_invoice.updated_at or existing_invoice.created_at
+            latest_snapshot["email_delivery_status"] = self._enum_value(existing_invoice.email_delivery_status)
+            record.invoicing_snapshot = latest_snapshot
+            record.updated_at = datetime.utcnow()
+            await self._engine.save(record)
+            return {"action": "unchanged", "invoice": existing_invoice}
+
+        created = existing_invoice is None
+        if created:
+            invoice_record = RequestInvoiceRecord(
+                id=ObjectId(),
+                request_id=str(record.id),
+                client_tenant_id=record.client_tenant_id,
+                invoice_number=self._build_invoice_number(
+                    record,
+                    billing_period_start_local=billing_period_start_local,
+                    issued_at=issued_at,
+                ),
+                created_by_user_id=str(getattr(current_user, "id", "") or "") or None,
+                created_by_username=str(getattr(current_user, "username", "") or "") or None,
+                created_at=issued_at,
+                updated_at=issued_at,
+                **invoice_payload,
+                invoice_status=RequestInvoiceStatus.ISSUED,
+                email_delivery_status=(
+                    RequestInvoiceDeliveryStatus.PENDING
+                    if recipient_email
+                    else RequestInvoiceDeliveryStatus.NOT_REQUESTED
+                ),
+            )
+        else:
+            invoice_record = existing_invoice
+            invoice_record.request_revision = invoice_payload["request_revision"]
+            invoice_record.trigger = trigger
+            invoice_record.contract_type = contract_type
+            invoice_record.billing_cycle = str(invoice_payload["billing_cycle"])
+            invoice_record.charge_timing = str(invoice_payload["charge_timing"])
+            invoice_record.monthly_cutoff_day = invoice_payload["monthly_cutoff_day"]
+            invoice_record.billing_period_start_local = billing_period_start_local
+            invoice_record.billing_period_end_local = billing_period_end_local
+            invoice_record.billing_period_label = invoice_payload["billing_period_label"]
+            invoice_record.currency = str(invoice_payload["currency"])
+            invoice_record.rate_basis = invoice_payload["rate_basis"]
+            invoice_record.guards_required = guards_required
+            invoice_record.client_hourly_quote = client_hourly_quote
+            invoice_record.requested_hours_per_position = requested_hours_per_position
+            invoice_record.estimated_total_hours = estimated_total_hours
+            invoice_record.estimated_amount = estimated_amount
+            invoice_record.estimated_guard_payout = invoice_payload["estimated_guard_payout"]
+            invoice_record.estimated_provider_payout = invoice_payload["estimated_provider_payout"]
+            invoice_record.estimated_company_margin_with_guard = invoice_payload["estimated_company_margin_with_guard"]
+            invoice_record.estimated_company_margin_with_provider = invoice_payload["estimated_company_margin_with_provider"]
+            invoice_record.invoice_recipient_email = recipient_email
+            invoice_record.payment_status = str(invoice_payload["payment_status"])
+            invoice_record.line_items = line_items
+            invoice_record.note = note
+            invoice_record.invoice_status = RequestInvoiceStatus.REVISED
+            invoice_record.email_delivery_status = (
+                RequestInvoiceDeliveryStatus.PENDING
+                if recipient_email
+                else RequestInvoiceDeliveryStatus.NOT_REQUESTED
+            )
+            invoice_record.email_delivery_error = None
+            invoice_record.updated_at = issued_at
+
+        saved_invoice = await self._engine.save(invoice_record)
+
+        next_invoicing_snapshot = dict(invoicing_snapshot)
+        next_invoicing_snapshot["invoice_status"] = self._enum_value(saved_invoice.invoice_status)
+        next_invoicing_snapshot["latest_invoice_id"] = str(saved_invoice.id)
+        next_invoicing_snapshot["latest_invoice_number"] = saved_invoice.invoice_number
+        next_invoicing_snapshot["last_invoice_issued_at"] = issued_at
+        next_invoicing_snapshot["email_delivery_status"] = self._enum_value(saved_invoice.email_delivery_status)
+        record.invoicing_snapshot = next_invoicing_snapshot
+        record.updated_at = issued_at
+        await self._engine.save(record)
+
+        if recipient_email:
+            email_sent = await self._send_request_invoice_email(
+                record,
+                saved_invoice,
+                reason=trigger,
+                is_revision=not created,
+            )
+            saved_invoice.email_delivery_status = (
+                RequestInvoiceDeliveryStatus.SENT
+                if email_sent
+                else RequestInvoiceDeliveryStatus.FAILED
+            )
+            if email_sent:
+                saved_invoice.emailed_at = datetime.utcnow()
+                saved_invoice.email_delivery_error = None
+            else:
+                saved_invoice.email_delivery_error = "Invoice email dispatch failed"
+            saved_invoice.updated_at = datetime.utcnow()
+            next_invoicing_snapshot["email_delivery_status"] = self._enum_value(saved_invoice.email_delivery_status)
+            record.invoicing_snapshot = next_invoicing_snapshot
+            record.updated_at = datetime.utcnow()
+            await self._engine.save(saved_invoice)
+            await self._engine.save(record)
+
+        return {"action": "created" if created else "updated", "invoice": saved_invoice}
+
+    async def _send_request_invoice_email(
+        self,
+        record: ClientRequestRecord,
+        invoice_record: RequestInvoiceRecord,
+        *,
+        reason: Any,
+        is_revision: bool,
+    ) -> bool:
+        recipient_email = str(getattr(invoice_record, "invoice_recipient_email", None) or "").strip()
+        if not recipient_email:
+            return False
+
+        template = getattr(constant, "mail_template", None)
+        if template is None:
+            print(f"[RequestManager] Invoice email skipped for request {record.id}: mail template unavailable")
+            return False
+
+        normalized_reason = self._enum_value(reason)
+        contract_type = self._normalize_invoice_contract_type(getattr(invoice_record, "contract_type", None))
+        header = "Advance Invoice Ready" if contract_type == "long_term" else "Invoice Ready"
+        if is_revision:
+            header = "Invoice Updated"
+
+        subject_prefix = "Updated invoice" if is_revision else "Invoice"
+        subject = f"{subject_prefix} {invoice_record.invoice_number} for {record.title}"
+        reason_text = {
+            RequestWaveTrigger.PUBLISH_UPDATE.value: "The invoice was updated because the request details changed.",
+            RequestWaveTrigger.ADDITIONAL_COVERAGE.value: "The invoice was updated because additional coverage was requested.",
+            RequestInvoiceTrigger.SCHEDULE_UPDATED.value: "The invoice was updated because the coverage schedule changed.",
+            RequestInvoiceTrigger.MONTHLY_ADVANCE.value: "The next monthly advance invoice is ready for the upcoming billing period.",
+        }.get(
+            normalized_reason,
+            "A client invoice is ready for this request.",
+        )
+
+        estimated_charge = self._format_invoice_currency(invoice_record.estimated_amount)
+        client_hourly_quote = self._format_invoice_currency(invoice_record.client_hourly_quote)
+        billing_cycle = str(invoice_record.billing_cycle or "per_request").replace("_", " ")
+        charge_timing = str(invoice_record.charge_timing or "on_the_go").replace("_", " ")
+        period_label = str(invoice_record.billing_period_label or "").strip()
+        period_start = str(invoice_record.billing_period_start_local or "").strip()
+        period_end = str(invoice_record.billing_period_end_local or "").strip()
+
+        body_text = (
+            f"{reason_text}<br><br>"
+            f"Request: <strong>{record.title}</strong><br>"
+            f"Invoice number: <strong>{invoice_record.invoice_number}</strong><br>"
+            f"Invoice amount: <strong>{estimated_charge}</strong><br>"
+            f"Client hourly quote: <strong>{client_hourly_quote}</strong><br>"
+            f"Billing cycle: <strong>{billing_cycle.title()}</strong><br>"
+            f"Charge timing: <strong>{charge_timing.title()}</strong>"
+        )
+        if period_label:
+            body_text += f"<br>Billing period: <strong>{period_label}</strong>"
+        elif period_start and period_end:
+            body_text += f"<br>Billing period: <strong>{period_start}</strong> to <strong>{period_end}</strong>"
+        if contract_type == "long_term" and invoice_record.monthly_cutoff_day is not None:
+            body_text += f"<br>Monthly cutoff day: <strong>{int(invoice_record.monthly_cutoff_day)}</strong>"
+        body_text += (
+            f"<br>Scheduled invoice lines: <strong>{len(invoice_record.line_items or [])}</strong>"
+            "<br><br>Client payment capture is still mocked inside the platform until gateway automation is enabled, "
+            "but this email reflects the actual invoice document and scheduled totals."
+        )
+
+        html_content = template.render(
+            username=str((record.site_snapshot or {}).get("site_name") or "Client Billing"),
+            email=recipient_email,
+            subject=subject,
+            lurlHeading="",
+            url="",
+            header=header,
+            body_text=body_text,
+        )
+
+        try:
+            await mail_manager.get_instance().send_verification_mail(
+                to=recipient_email,
+                subject=subject,
+                body=html_content,
+            )
+        except Exception as exc:
+            print(f"[RequestManager] Failed to send invoice email for request {record.id}: {exc}")
+            return False
+        return True
+
+    async def _build_request_pricing_and_invoicing(
+        self,
+        *,
+        site_snapshot: Dict[str, Any],
+        requested_start_at: Optional[datetime],
+        requested_end_at: Optional[datetime],
+        guards_required: int,
+        invoice_contract_type: Any,
+        invoice_cutoff_day: Optional[int],
+        invoice_recipient_email: Optional[str],
+    ) -> Dict[str, Dict[str, Any]]:
+        site_address = site_snapshot.get("site_address") if isinstance(site_snapshot, dict) else {}
+        province_code = self._normalize_province_code((site_address or {}).get("province"))
+        city_code = self._normalize_city_code(province_code, (site_address or {}).get("city"))
+        rate_field = self._resolve_rate_field(requested_start_at)
+
+        guard_base_rate = await self._resolve_scoped_rate(
+            [BillingManager.SCOPE_GUARD_DEFAULT, BillingManager.SCOPE_GUARD_DEFAULT_LEGACY],
+            province_code,
+            city_code,
+            rate_field,
+        )
+        provider_base_rate = await self._resolve_scoped_rate(
+            [BillingManager.SCOPE_PROVIDER_DEFAULT],
+            province_code,
+            city_code,
+            rate_field,
+        )
+        guard_margin_default = await self._resolve_scoped_rate(
+            [BillingManager.SCOPE_GUARD_MARGIN_DEFAULT],
+            province_code,
+            city_code,
+            rate_field,
+        )
+        provider_commission_default = await self._resolve_scoped_rate(
+            [BillingManager.SCOPE_PROVIDER_COMMISSION_DEFAULT],
+            province_code,
+            city_code,
+            rate_field,
+        )
+
+        guard_quote = round(guard_base_rate + guard_margin_default, 2)
+        provider_quote = round(provider_base_rate + provider_commission_default, 2)
+        client_hourly_quote = round(max(guard_quote, provider_quote), 2)
+
+        guard_company_margin = round(max(client_hourly_quote - guard_base_rate, 0.0), 2)
+        provider_company_commission = round(max(client_hourly_quote - provider_base_rate, 0.0), 2)
+
+        requested_hours = self._calculate_requested_hours(requested_start_at, requested_end_at)
+        normalized_guards_required = max(int(guards_required or 1), 1)
+        estimated_total_hours = round(requested_hours * normalized_guards_required, 2) if requested_hours is not None else None
+
+        pricing_snapshot = {
+            "currency": "CAD",
+            "rate_basis": "hourly",
+            "rate_field": rate_field,
+            "location": {
+                "province_code": province_code,
+                "city_code": city_code,
+                "province": str((site_address or {}).get("province") or "").strip(),
+                "city": str((site_address or {}).get("city") or "").strip(),
+            },
+            "guards_required": normalized_guards_required,
+            "client_hourly_quote": client_hourly_quote,
+            "guard_hourly_pay": round(guard_base_rate, 2),
+            "guard_company_margin": guard_company_margin,
+            "provider_hourly_pay": round(provider_base_rate, 2),
+            "provider_company_commission": provider_company_commission,
+            "requested_hours_per_position": requested_hours,
+            "estimated_total_hours": estimated_total_hours,
+            "estimated_client_charge": round(client_hourly_quote * estimated_total_hours, 2) if estimated_total_hours is not None else None,
+            "estimated_guard_payout": round(guard_base_rate * estimated_total_hours, 2) if estimated_total_hours is not None else None,
+            "estimated_provider_payout": round(provider_base_rate * estimated_total_hours, 2) if estimated_total_hours is not None else None,
+            "estimated_company_margin_with_guard": round(guard_company_margin * estimated_total_hours, 2) if estimated_total_hours is not None else None,
+            "estimated_company_margin_with_provider": round(provider_company_commission * estimated_total_hours, 2) if estimated_total_hours is not None else None,
+            "mock_payment_status": "pending_capture",
+            "calculation_version": "mock_v1",
+        }
+
+        contract_type = self._normalize_invoice_contract_type(invoice_contract_type)
+        cutoff_day = int(invoice_cutoff_day) if invoice_cutoff_day is not None else None
+        if contract_type == "long_term" and (cutoff_day is None or cutoff_day < 1 or cutoff_day > 28):
+            cutoff_day = 1
+
+        invoicing_snapshot = {
+            "contract_type": contract_type,
+            "billing_cycle": "monthly" if contract_type == "long_term" else "per_request",
+            "charge_timing": "advance_monthly" if contract_type == "long_term" else "on_the_go",
+            "monthly_cutoff_day": cutoff_day if contract_type == "long_term" else None,
+            "invoice_delivery_channel": "email",
+            "invoice_recipient_email": str(invoice_recipient_email or "").strip() or None,
+            "invoice_status": RequestInvoiceStatus.PENDING.value,
+            "invoice_note": (
+                "Invoices are generated one month in advance on the monthly cutoff and emailed to the client."
+                if contract_type == "long_term"
+                else "A one-time invoice is issued for this coverage window when the request is published."
+            ),
+        }
+
+        return {
+            "pricing_snapshot": pricing_snapshot,
+            "invoicing_snapshot": invoicing_snapshot,
+        }
 
     @staticmethod
     def _client_tenant_label(tenant: Any) -> str:
@@ -945,6 +1940,13 @@ class RequestManager:
 
     async def _request_has_active_schedule(self, request_id: str) -> bool:
         return request_id in await self._request_ids_with_active_schedules([request_id])
+
+    async def _get_active_schedule_template(self, request_id: str) -> Optional[RequestScheduleTemplateRecord]:
+        return await self._engine.find_one(
+            RequestScheduleTemplateRecord,
+            (RequestScheduleTemplateRecord.request_id == str(request_id))
+            & (RequestScheduleTemplateRecord.active == True),
+        )
 
     async def _can_view_request(self, record: ClientRequestRecord, current_user) -> bool:
         role_value = self._role_value(current_user)
@@ -1903,6 +2905,11 @@ class RequestManager:
             metadata={"trigger": trigger.value, "wave_id": str(wave.id) if wave else None},
         )
 
+        try:
+            await self._sync_request_invoice_state(record, current_user=current_user, reason=trigger)
+        except Exception as exc:
+            print(f"[RequestManager] Invoice sync failed for request {record.id}: {exc}")
+
         return {
             "message": wave_message,
             "item": self._serialize(record),
@@ -1927,6 +2934,15 @@ class RequestManager:
             payload.requested_start_at,
             payload.requested_end_at,
         )
+        finance_snapshot = await self._build_request_pricing_and_invoicing(
+            site_snapshot=site_snapshot,
+            requested_start_at=payload.requested_start_at,
+            requested_end_at=payload.requested_end_at,
+            guards_required=int(payload.guards_required or 1),
+            invoice_contract_type=payload.invoice_contract_type,
+            invoice_cutoff_day=payload.invoice_cutoff_day,
+            invoice_recipient_email=payload.invoice_recipient_email,
+        )
 
         now = datetime.utcnow()
         record = ClientRequestRecord(
@@ -1946,6 +2962,8 @@ class RequestManager:
             open_slots=int(payload.guards_required or 1),
             site_snapshot=site_snapshot,
             special_instructions=(payload.special_instructions or "").strip() or None,
+            pricing_snapshot=finance_snapshot["pricing_snapshot"],
+            invoicing_snapshot=finance_snapshot["invoicing_snapshot"],
             requested_start_at=payload.requested_start_at,
             requested_end_at=payload.requested_end_at,
             request_expires_at=payload.request_expires_at,
@@ -1990,6 +3008,28 @@ class RequestManager:
             increment_revision=False,
         )
 
+    async def preview_request_pricing(self, payload: RequestPricingPreviewPayload, current_user) -> Dict[str, Any]:
+        client_tenant = await self._resolve_request_client_tenant(payload, current_user)
+        client_profile = client_tenant.profile if isinstance(client_tenant.profile, dict) else {}
+        self._assert_client_billing_method(client_profile)
+        site_snapshot = self._resolve_site_snapshot(payload, client_profile)
+        self._validate_requested_window(payload.requested_start_at, payload.requested_end_at)
+
+        finance_snapshot = await self._build_request_pricing_and_invoicing(
+            site_snapshot=site_snapshot,
+            requested_start_at=payload.requested_start_at,
+            requested_end_at=payload.requested_end_at,
+            guards_required=int(payload.guards_required or 1),
+            invoice_contract_type=payload.invoice_contract_type,
+            invoice_cutoff_day=payload.invoice_cutoff_day,
+            invoice_recipient_email=payload.invoice_recipient_email,
+        )
+
+        return {
+            "pricing": finance_snapshot["pricing_snapshot"],
+            "invoicing": finance_snapshot["invoicing_snapshot"],
+        }
+
     async def update_request(self, request_id: str, payload: ClientRequestUpdatePayload, current_user) -> Dict[str, Any]:
         record = await self._get_request_or_404(request_id)
         self._assert_not_soft_deleted(record)
@@ -2008,6 +3048,9 @@ class RequestManager:
                 "requested_start_at",
                 "requested_end_at",
                 "special_instructions",
+                "invoice_contract_type",
+                "invoice_cutoff_day",
+                "invoice_recipient_email",
             }
             attempted_material_fields = [key for key in provided if key in material_fields]
             if attempted_material_fields:
@@ -2056,6 +3099,13 @@ class RequestManager:
 
         if "site" in provided and payload.site is not None:
             record.site_snapshot = self._resolve_site_input_snapshot(payload.site)
+
+        await self._refresh_request_finance_snapshot(
+            record,
+            invoice_contract_type=payload.invoice_contract_type if "invoice_contract_type" in provided else _FINANCE_SNAPSHOT_UNSET,
+            invoice_cutoff_day=payload.invoice_cutoff_day if "invoice_cutoff_day" in provided else _FINANCE_SNAPSHOT_UNSET,
+            invoice_recipient_email=payload.invoice_recipient_email if "invoice_recipient_email" in provided else _FINANCE_SNAPSHOT_UNSET,
+        )
 
         max_results = payload.max_match_results if payload.max_match_results is not None else 25
         await self._refresh_request_matching(record, max_results)
@@ -2123,6 +3173,9 @@ class RequestManager:
         start = (safe_page - 1) * safe_rows
         end = start + safe_rows
         page_docs = filtered_docs[start:end]
+        for doc in page_docs:
+            if isinstance(doc, dict):
+                await self._ensure_request_doc_finance_snapshot(doc)
 
         return {
             "items": await self._serialize_requests_with_client_tenant_labels(page_docs),
@@ -2146,6 +3199,8 @@ class RequestManager:
         if not await self._can_view_request(record, current_user):
             raise HTTPException(status_code=403, detail="Access forbidden")
         await self._sync_request_runtime_state(record)
+        if not self._has_request_pricing_snapshot(getattr(record, "pricing_snapshot", None)):
+            await self._refresh_request_finance_snapshot(record)
         serialized = self._serialize(record)
         viewer_assignment = await self._resolve_viewer_assignment_for_request(str(record.id), current_user)
         if viewer_assignment:
@@ -2154,6 +3209,72 @@ class RequestManager:
         label_lookup = await self._build_client_tenant_label_lookup([tenant_id])
         serialized["client_tenant_label"] = label_lookup.get(tenant_id, tenant_id)
         return serialized
+
+    async def _assert_request_invoice_view_access(self, record: ClientRequestRecord, current_user) -> None:
+        role_value = self._role_value(current_user)
+        if self._is_platform_role(role_value):
+            return
+        if role_value == "client_admin":
+            session_tenant = await self._get_session_tenant(current_user)
+            if session_tenant.tenant_type == TenantType.CLIENT and str(session_tenant.id) == str(record.client_tenant_id):
+                return
+        raise HTTPException(status_code=403, detail="Access forbidden")
+
+    async def list_request_invoices(
+        self,
+        request_id: str,
+        current_user,
+        page: int = 1,
+        rows: int = 20,
+    ) -> Dict[str, Any]:
+        record = await self._get_request_or_404(request_id)
+        self._assert_not_soft_deleted(record)
+        await self._assert_request_invoice_view_access(record, current_user)
+
+        collection = self._engine.get_collection(RequestInvoiceRecord)
+        docs = await collection.find({"request_id": str(record.id)}).sort("created_at", -1).to_list(length=None)
+
+        safe_rows = rows if rows and rows > 0 else 20
+        safe_page = page if page and page > 0 else 1
+        total_items = len(docs)
+        total_pages = (total_items + safe_rows - 1) // safe_rows if total_items > 0 else 0
+        start = (safe_page - 1) * safe_rows
+        end = start + safe_rows
+        page_docs = docs[start:end]
+
+        return {
+            "items": [self._serialize_invoice(doc) for doc in page_docs],
+            "pagination": {
+                "page": safe_page,
+                "rows": safe_rows,
+                "total_items": total_items,
+                "total_pages": total_pages,
+            },
+        }
+
+    async def get_request_invoice_by_id(
+        self,
+        request_id: str,
+        invoice_id: str,
+        current_user,
+    ) -> Dict[str, Any]:
+        record = await self._get_request_or_404(request_id)
+        self._assert_not_soft_deleted(record)
+        await self._assert_request_invoice_view_access(record, current_user)
+
+        try:
+            object_id = ObjectId(invoice_id)
+        except Exception:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        collection = self._engine.get_collection(RequestInvoiceRecord)
+        docs = await collection.find({
+            "_id": object_id,
+            "request_id": str(record.id),
+        }).to_list(length=1)
+        if not docs:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+        return self._serialize_invoice(docs[0])
 
     async def get_request_wave_by_id(self, wave_id: str, current_user) -> Dict[str, Any]:
         wave = await self._get_wave_or_404(wave_id)
@@ -2183,6 +3304,8 @@ class RequestManager:
         record = await self._get_request_or_404(assignment.request_id)
         self._assert_not_soft_deleted(record)
         await self._sync_request_runtime_state(record)
+        if not self._has_request_pricing_snapshot(getattr(record, "pricing_snapshot", None)):
+            await self._refresh_request_finance_snapshot(record)
         if (
             self._assignment_scope_value(assignment) == RequestAssignmentScope.REQUEST.value
             and assignment.assignment_status in COMMITTED_SLOT_STATUSES
@@ -2230,6 +3353,13 @@ class RequestManager:
 
         provided = payload.model_dump(exclude_unset=True)
         changed = False
+        invoicing_snapshot = record.invoicing_snapshot if isinstance(getattr(record, "invoicing_snapshot", None), dict) else {}
+        current_invoice_contract_type = self._normalize_invoice_contract_type(invoicing_snapshot.get("contract_type"))
+        next_invoice_contract_type = current_invoice_contract_type
+        current_invoice_cutoff_day = invoicing_snapshot.get("monthly_cutoff_day")
+        next_invoice_cutoff_day = current_invoice_cutoff_day
+        current_invoice_recipient_email = str(invoicing_snapshot.get("invoice_recipient_email") or "").strip() or None
+        next_invoice_recipient_email = current_invoice_recipient_email
 
         if "fulfillment_mode" in provided and payload.fulfillment_mode is not None and payload.fulfillment_mode != record.fulfillment_mode:
             record.fulfillment_mode = payload.fulfillment_mode
@@ -2253,6 +3383,18 @@ class RequestManager:
         if "special_instructions" in provided and (payload.special_instructions or "").strip() != (record.special_instructions or ""):
             record.special_instructions = (payload.special_instructions or "").strip() or None
             changed = True
+        if "invoice_contract_type" in provided:
+            next_invoice_contract_type = self._normalize_invoice_contract_type(payload.invoice_contract_type)
+            if next_invoice_contract_type != current_invoice_contract_type:
+                changed = True
+        if "invoice_cutoff_day" in provided:
+            next_invoice_cutoff_day = payload.invoice_cutoff_day
+            if next_invoice_cutoff_day != current_invoice_cutoff_day:
+                changed = True
+        if "invoice_recipient_email" in provided:
+            next_invoice_recipient_email = str(payload.invoice_recipient_email or "").strip() or None
+            if next_invoice_recipient_email != current_invoice_recipient_email:
+                changed = True
         if "request_expires_at" in provided:
             self._validate_request_expiry(payload.request_expires_at, record.requested_start_at, require_value=True)
             record.request_expires_at = payload.request_expires_at
@@ -2261,6 +3403,13 @@ class RequestManager:
         self._validate_request_expiry(record.request_expires_at, record.requested_start_at, require_value=True)
         if not changed:
             raise HTTPException(status_code=400, detail="Publish update requires a material request change")
+
+        await self._refresh_request_finance_snapshot(
+            record,
+            invoice_contract_type=next_invoice_contract_type,
+            invoice_cutoff_day=next_invoice_cutoff_day,
+            invoice_recipient_email=next_invoice_recipient_email,
+        )
 
         await self._supersede_previous_waves(record)
         await self._mark_assignments_reconfirmation_required(record)
@@ -2294,6 +3443,8 @@ class RequestManager:
             self._validate_request_expiry(payload.request_expires_at, record.requested_start_at, require_value=True)
             record.request_expires_at = payload.request_expires_at
 
+        await self._refresh_request_finance_snapshot(record)
+
         record.request_revision = max(int(record.request_revision or 0) + 1, 1)
         await self._refresh_request_matching(record, payload.max_match_results)
         await self._sync_request_runtime_state(record)
@@ -2319,6 +3470,11 @@ class RequestManager:
             action_label="Open requests",
             metadata={"request_id": str(record.id), "wave_id": str(wave.id) if wave else None},
         )
+
+        try:
+            await self._sync_request_invoice_state(record, current_user=current_user, reason=RequestInvoiceTrigger.ADDITIONAL_COVERAGE)
+        except Exception as exc:
+            print(f"[RequestManager] Invoice sync failed for request {record.id}: {exc}")
 
         return {
             "message": "Additional coverage requested",
@@ -2802,6 +3958,7 @@ class RequestManager:
                 for request_doc in request_docs
             ])
             for request_doc in request_docs:
+                await self._ensure_request_doc_finance_snapshot(request_doc)
                 request_doc["has_schedule"] = str(request_doc.get("_id") or "") in active_schedule_request_ids
                 request_lookup[str(request_doc.get("_id"))] = self._request_snapshot(request_doc)
 

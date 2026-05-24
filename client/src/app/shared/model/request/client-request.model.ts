@@ -19,6 +19,7 @@ export type RequestAssignmentScope = 'request' | 'shift_replacement';
 export type RequestAssignmentLockReason = 'filled' | 'wave_expired' | 'request_expired' | 'superseded' | 'request_cancelled';
 export type RequestWaveTrigger = 'initial_publish' | 'publish_update' | 'additional_coverage' | 'capacity_reopened';
 export type RequestWaveStatus = 'pending_review' | 'active' | 'returned' | 'filled' | 'expired' | 'superseded' | 'cancelled';
+export type RequestInvoiceTrigger = RequestWaveTrigger | 'schedule_updated' | 'monthly_advance';
 export type RequestScheduleType = 'one_time' | 'date_range' | 'recurring_weekly';
 export type ShiftInstanceStatus =
   | 'scheduled'
@@ -60,6 +61,103 @@ export type ShiftAttendanceEventType =
   | 'replacement_requested'
   | 'replacement_assigned';
 
+export interface RequestPricingSnapshot {
+  currency?: string;
+  rate_basis?: string;
+  rate_field?: string;
+  location?: {
+    province_code?: string;
+    city_code?: string;
+    province?: string;
+    city?: string;
+  };
+  guards_required?: number;
+  client_hourly_quote?: number;
+  guard_hourly_pay?: number;
+  guard_company_margin?: number;
+  provider_hourly_pay?: number;
+  provider_company_commission?: number;
+  requested_hours_per_position?: number | null;
+  estimated_total_hours?: number | null;
+  estimated_client_charge?: number | null;
+  estimated_guard_payout?: number | null;
+  estimated_provider_payout?: number | null;
+  estimated_company_margin_with_guard?: number | null;
+  estimated_company_margin_with_provider?: number | null;
+  mock_payment_status?: string;
+  calculation_version?: string;
+}
+
+export interface RequestInvoicingSnapshot {
+  contract_type?: 'short_term' | 'long_term' | string;
+  billing_cycle?: string;
+  charge_timing?: string;
+  monthly_cutoff_day?: number | null;
+  invoice_delivery_channel?: string;
+  invoice_recipient_email?: string | null;
+  invoice_status?: string;
+  latest_invoice_id?: string | null;
+  latest_invoice_number?: string | null;
+  last_invoice_issued_at?: string | null;
+  email_delivery_status?: string | null;
+  invoice_note?: string;
+}
+
+export interface RequestInvoiceItem {
+  id: string;
+  request_id: string;
+  client_tenant_id: string;
+  request_revision: number;
+  trigger: RequestInvoiceTrigger | string;
+  invoice_number: string;
+  contract_type?: 'short_term' | 'long_term' | string;
+  billing_cycle?: string;
+  charge_timing?: string;
+  monthly_cutoff_day?: number | null;
+  billing_period_start_local?: string | null;
+  billing_period_end_local?: string | null;
+  billing_period_label?: string | null;
+  currency?: string;
+  rate_basis?: string | null;
+  guards_required?: number;
+  client_hourly_quote?: number | null;
+  requested_hours_per_position?: number | null;
+  estimated_total_hours?: number | null;
+  estimated_amount?: number | null;
+  estimated_guard_payout?: number | null;
+  estimated_provider_payout?: number | null;
+  estimated_company_margin_with_guard?: number | null;
+  estimated_company_margin_with_provider?: number | null;
+  invoice_recipient_email?: string | null;
+  invoice_status?: string;
+  payment_status?: string;
+  email_delivery_status?: string;
+  email_delivery_error?: string | null;
+  emailed_at?: string | null;
+  line_items?: RequestInvoiceLineItem[];
+  note?: string | null;
+  created_by_user_id?: string | null;
+  created_by_username?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RequestInvoiceLineItem {
+  description?: string;
+  service_date_local?: string | null;
+  unit?: string;
+  quantity?: number | null;
+  unit_rate?: number | null;
+  amount?: number | null;
+  metadata?: {
+    guards_required?: number | null;
+    hours_per_position?: number | null;
+    start_at_local?: string | null;
+    end_at_local?: string | null;
+    [key: string]: any;
+  };
+}
+
 export interface ClientRequestItem {
   id: string;
   client_tenant_id: string;
@@ -96,6 +194,8 @@ export interface ClientRequestItem {
     };
   };
   special_instructions?: string | null;
+  pricing_snapshot?: RequestPricingSnapshot;
+  invoicing_snapshot?: RequestInvoicingSnapshot;
   requested_start_at?: string | null;
   requested_end_at?: string | null;
   request_expires_at?: string | null;
@@ -119,6 +219,27 @@ export interface ClientRequestItem {
   created_at: string;
   updated_at: string;
   viewer_assignment?: RequestAssignmentItem | null;
+}
+
+export interface RequestAssignmentRequestSnapshot {
+  id?: string;
+  title?: string;
+  request_status?: ClientRequestStatus | string;
+  staffing_status?: RequestStaffingStatus | string;
+  fulfillment_mode?: ClientRequestFulfillmentMode | string;
+  target_type?: ClientRequestTargetType | string;
+  requested_guard_type?: string | null;
+  guards_required?: number;
+  site_name?: string;
+  requested_start_at?: string | null;
+  requested_end_at?: string | null;
+  request_revision?: number;
+  request_expires_at?: string | null;
+  accepted_slots?: number;
+  open_slots?: number;
+  has_schedule?: boolean;
+  pricing_snapshot?: RequestPricingSnapshot;
+  invoicing_snapshot?: RequestInvoicingSnapshot;
 }
 
 export interface RequestAssignmentItem {
@@ -155,23 +276,7 @@ export interface RequestAssignmentItem {
   cancelled_at?: string | null;
   created_at: string;
   updated_at: string;
-  request?: {
-    id?: string;
-    title?: string;
-    request_status?: ClientRequestStatus | string;
-    staffing_status?: RequestStaffingStatus | string;
-    fulfillment_mode?: ClientRequestFulfillmentMode | string;
-    target_type?: ClientRequestTargetType | string;
-    requested_guard_type?: string | null;
-    site_name?: string;
-    requested_start_at?: string | null;
-    requested_end_at?: string | null;
-    request_revision?: number;
-    request_expires_at?: string | null;
-    accepted_slots?: number;
-    open_slots?: number;
-    has_schedule?: boolean;
-  };
+  request?: RequestAssignmentRequestSnapshot;
 }
 
 export interface RequestBroadcastWaveItem {
@@ -554,6 +659,16 @@ export interface ClientRequestListResponse {
   };
 }
 
+export interface RequestInvoiceListResponse {
+  items: RequestInvoiceItem[];
+  pagination: {
+    page: number;
+    rows: number;
+    total_items: number;
+    total_pages: number;
+  };
+}
+
 export interface ClientRequestCreatePayload {
   title: string;
   timezone?: string | null;
@@ -582,8 +697,16 @@ export interface ClientRequestCreatePayload {
   requested_end_at?: string | null;
   request_expires_at?: string | null;
   special_instructions?: string | null;
+  invoice_contract_type?: 'short_term' | 'long_term' | string | null;
+  invoice_cutoff_day?: number | null;
+  invoice_recipient_email?: string | null;
   max_match_results: number;
   commit?: boolean;
+}
+
+export interface RequestPricingPreviewResponse {
+  pricing: RequestPricingSnapshot;
+  invoicing: RequestInvoicingSnapshot;
 }
 
 export interface ClientRequestUpdatePayload {
@@ -612,6 +735,9 @@ export interface ClientRequestUpdatePayload {
   requested_end_at?: string | null;
   request_expires_at?: string | null;
   special_instructions?: string | null;
+  invoice_contract_type?: 'short_term' | 'long_term' | string | null;
+  invoice_cutoff_day?: number | null;
+  invoice_recipient_email?: string | null;
   max_match_results?: number;
 }
 
@@ -661,6 +787,9 @@ export interface RequestPublishUpdatePayload {
   requested_end_at?: string | null;
   request_expires_at?: string | null;
   special_instructions?: string | null;
+  invoice_contract_type?: 'short_term' | 'long_term' | string | null;
+  invoice_cutoff_day?: number | null;
+  invoice_recipient_email?: string | null;
   max_match_results: number;
 }
 

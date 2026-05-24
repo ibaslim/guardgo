@@ -14,6 +14,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestAssignmentStatus,
     RequestAssignmentScope,
     RequestBroadcastWaveRecord,
+    RequestInvoiceTrigger,
     RequestWaveStatus,
     RequestScheduleTemplateRecord,
     RequestScheduleType,
@@ -488,7 +489,14 @@ def _make_assignment(**overrides):
     return RequestAssignmentRecord(**base)
 
 
-def _fake_request_manager(request_record, assignments=None, tenants=None, engine=None):
+def _fake_request_manager(
+    request_record,
+    assignments=None,
+    tenants=None,
+    engine=None,
+    schedule_finance_sync=None,
+    invoice_sync=None,
+):
     assignments = list(assignments or [])
     tenants = dict(tenants or {})
 
@@ -524,6 +532,16 @@ def _fake_request_manager(request_record, assignments=None, tenants=None, engine
 
         async def _write_activity(self, **kwargs):
             return None
+
+        async def _sync_request_finance_snapshot_for_schedule(self, record, schedule_record):
+            if schedule_finance_sync is None:
+                return None
+            return await schedule_finance_sync(record, schedule_record)
+
+        async def _sync_request_invoice_state(self, record, *, current_user, reason):
+            if invoice_sync is None:
+                return None
+            return await invoice_sync(record, current_user=current_user, reason=reason)
 
         async def _close_open_offers_for_request(self, *args, **kwargs):
             return 0
@@ -640,6 +658,82 @@ async def test_upsert_request_schedule_generates_recurring_overnight_shifts(monk
         assert shift.slots_required == 2
         assert shift.shift_end_at_utc > shift.shift_start_at_utc
         assert shift.roster_due_at == shift.shift_start_at_utc - timedelta(minutes=120)
+
+
+@pytest.mark.anyio
+async def test_upsert_request_schedule_syncs_long_term_finance_snapshot(monkeypatch):
+    engine = FakeEngine()
+    request_record = _make_request(invoicing_snapshot={"contract_type": "short_term"})
+    engine.request_record = request_record
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+
+    captured = {}
+
+    async def _schedule_finance_sync(record, schedule_record):
+        captured["request_id"] = str(record.id)
+        captured["schedule_type"] = getattr(schedule_record.schedule_type, "value", schedule_record.schedule_type)
+        record.invoicing_snapshot = {"contract_type": "long_term"}
+        return None
+
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(request_record, schedule_finance_sync=_schedule_finance_sync),
+    )
+
+    today = date.today() + timedelta(days=1)
+    payload = RequestScheduleUpsertPayload(
+        timezone="Asia/Karachi",
+        schedule_type=RequestScheduleType.RECURRING_WEEKLY,
+        start_date=today,
+        end_date=today + timedelta(days=14),
+        start_time_local="08:00",
+        end_time_local="16:00",
+        recurrence_days=["mon", "wed"],
+        generation_horizon_days=14,
+    )
+
+    response = await manager.upsert_request_schedule("req-1", payload, current_user=SimpleNamespace(username="tester"))
+
+    assert response["schedule"]["schedule_type"] == "recurring_weekly"
+    assert captured["request_id"] == str(request_record.id)
+    assert captured["schedule_type"] == "recurring_weekly"
+    assert request_record.invoicing_snapshot["contract_type"] == "long_term"
+
+
+@pytest.mark.anyio
+async def test_upsert_request_schedule_syncs_invoice_for_live_request(monkeypatch):
+    engine = FakeEngine()
+    request_record = _make_request(request_status=RequestStatus.SUBMITTED, invoicing_snapshot={"contract_type": "short_term"})
+    engine.request_record = request_record
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+
+    invoice_calls = []
+
+    async def _invoice_sync(record, *, current_user, reason):
+        invoice_calls.append((str(record.id), getattr(reason, "value", reason), getattr(current_user, "username", "")))
+        return None
+
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(request_record, invoice_sync=_invoice_sync),
+    )
+
+    today = date.today() + timedelta(days=1)
+    payload = RequestScheduleUpsertPayload(
+        timezone="Asia/Karachi",
+        schedule_type=RequestScheduleType.DATE_RANGE,
+        start_date=today,
+        end_date=today + timedelta(days=3),
+        start_time_local="08:00",
+        end_time_local="16:00",
+        generation_horizon_days=10,
+    )
+
+    await manager.upsert_request_schedule("req-1", payload, current_user=SimpleNamespace(username="tester"))
+
+    assert invoice_calls == [(str(request_record.id), RequestInvoiceTrigger.SCHEDULE_UPDATED.value, "tester")]
 
 
 @pytest.mark.anyio

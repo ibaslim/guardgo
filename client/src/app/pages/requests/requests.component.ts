@@ -36,10 +36,15 @@ import {
   ClientRequestStatus,
   ProviderRosterPayload,
   RequestAssignmentItem,
+  RequestAssignmentRequestSnapshot,
   RequestAssignmentStatus,
   RequestBroadcastWaveItem,
+  RequestInvoiceItem,
+  RequestInvoiceLineItem,
   RequestScheduleItem,
   RequestScheduleType,
+  RequestPricingSnapshot,
+  RequestInvoicingSnapshot,
   ServiceProviderGuardSummaryItem,
   ShiftExceptionItem,
   ShiftGuardLeaveItem,
@@ -111,6 +116,11 @@ interface ClientArrivalFocusContext {
   slot: ShiftSlotItem;
 }
 
+type PricingRequestContext = Pick<
+  ClientRequestItem,
+  'pricing_snapshot' | 'invoicing_snapshot' | 'requested_start_at' | 'requested_end_at' | 'guards_required'
+> | RequestAssignmentRequestSnapshot;
+
 @Component({
   selector: 'app-requests',
   standalone: true,
@@ -147,6 +157,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly jobListScope = 'requests:jobs';
   readonly metadataScope = 'requests:metadata';
   readonly saveRequestScope = 'requests:save';
+  readonly requestPricingPreviewScope = 'requests:pricing:preview';
   readonly reviewListScope = 'requests:review:list';
   readonly requestScheduleScope = 'requests:detail:schedule';
   readonly saveRequestScheduleScope = 'requests:detail:schedule:save';
@@ -165,8 +176,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly exceptionListScope = 'requests:exceptions:list';
   readonly exceptionDetailScope = 'requests:exceptions:detail';
   readonly requestWavesScope = 'requests:detail:waves';
+  readonly requestInvoicesScope = 'requests:detail:invoices';
+  readonly requestInvoiceDetailScope = 'requests:detail:invoice';
   readonly jobDetailRequestScope = 'requests:job:detail';
   readonly jobDetailWavesScope = 'requests:job:waves';
+  readonly acceptJobRequestScope = 'requests:job:accept:request';
   readonly metricCompactContainerClass =
     'rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800/70 dark:text-gray-200';
   readonly metricCompactValueClass = 'mt-1 font-semibold text-gray-900 dark:text-gray-100';
@@ -263,11 +277,15 @@ export class RequestsComponent implements OnInit, OnDestroy {
   requestErrors: Record<string, string> = {};
 
   selectedRequest: ClientRequestItem | null = null;
+  selectedRequestInvoices: RequestInvoiceItem[] = [];
+  selectedInvoice: RequestInvoiceItem | null = null;
+  selectedInvoiceRequest: ClientRequestItem | null = null;
   selectedRequestSchedule: RequestScheduleItem | null = null;
   selectedWave: RequestBroadcastWaveItem | null = null;
   selectedJob: RequestAssignmentItem | null = null;
   selectedJobRequest: ClientRequestItem | null = null;
   selectedJobWaves: RequestBroadcastWaveItem[] = [];
+  selectedAcceptJobRequest: ClientRequestItem | null = null;
   selectedShift: ShiftInstanceItem | null = null;
   selectedShiftSlots: ShiftSlotItem[] = [];
   selectedShiftSlotSummary: ShiftSlotSummary | null = null;
@@ -286,6 +304,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   selectedBulkConfirmShift: ShiftInstanceItem | null = null;
   bulkConfirmShiftSlots: ShiftSlotItem[] = [];
   showRequestDrawer = false;
+  showInvoiceDrawer = false;
   showRequestFormDrawer = false;
   showScheduleDrawer = false;
   showWaveDrawer = false;
@@ -430,6 +449,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
     requestExpiresDate: '',
     requestExpiresTime: '',
     specialInstructions: '',
+    invoiceContractType: 'short_term' as 'short_term' | 'long_term',
+    invoiceCutoffDay: 1,
+    invoiceRecipientEmail: '',
   };
   requestSiteSourceMode: RequestSiteSourceMode = 'manual';
   selectedSavedSiteIndex = '';
@@ -513,6 +535,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
     { label: 'Sat', value: 'sat' },
     { label: 'Sun', value: 'sun' },
   ];
+
+  invoiceContractTypeOptions = [
+    { label: 'Short-Term (Charge Per Job)', value: 'short_term' },
+    { label: 'Long-Term (Advance Monthly Invoice)', value: 'long_term' },
+  ];
+
+  pricingPreview: RequestPricingSnapshot | null = null;
+  invoicingPreview: RequestInvoicingSnapshot | null = null;
 
   exceptionStatusOptions = [
     { label: 'All Issues', value: '' },
@@ -621,6 +651,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   get isGuardAdmin(): boolean {
     return this.role === 'guard_admin' && this.tenantType === 'guard';
+  }
+
+  get isProviderAdmin(): boolean {
+    return this.role === 'sp_admin' && this.tenantType === 'service_provider';
   }
 
   get hasPlatformRequestScope(): boolean {
@@ -1608,6 +1642,32 @@ export class RequestsComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadRequestInvoices(requestId: string, options?: { silent?: boolean; suppressError?: boolean }): void {
+    if (!this.canViewRequestInvoices) {
+      this.selectedRequestInvoices = [];
+      return;
+    }
+
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    this.requestService.listRequestInvoices(requestId, 1, 12, {
+      loadingScope: this.requestInvoicesScope,
+      loadingMode: silent ? 'silent' : undefined,
+      suppressErrorStatuses: [404],
+    }).subscribe({
+      next: (response) => {
+        this.selectedRequestInvoices = response.items || [];
+      },
+      error: (error) => {
+        this.selectedRequestInvoices = [];
+        const status = Number(error?.status || error?.statusCode || 0);
+        if (!suppressError && status !== 404) {
+          this.notification.show(error?.error?.detail || 'Failed to load request invoices', 'fail', 5000);
+        }
+      }
+    });
+  }
+
   getDefaultScheduleTimezone(): string {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -1682,14 +1742,45 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (this.scheduleForm.scheduleType === 'one_time') {
       this.scheduleForm.endDate = this.scheduleForm.startDate;
       this.scheduleForm.recurrenceDays = [];
+    } else {
+      if (!this.scheduleForm.endDate) {
+        this.scheduleForm.endDate = this.scheduleForm.startDate;
+      }
+      if (this.scheduleForm.scheduleType === 'date_range') {
+        this.scheduleForm.recurrenceDays = [];
+      }
+    }
+
+    this.syncInvoiceContractTypeWithSchedule();
+  }
+
+  private deriveInvoiceContractTypeFromScheduleType(scheduleType: RequestScheduleType): 'short_term' | 'long_term' {
+    return scheduleType === 'one_time' ? 'short_term' : 'long_term';
+  }
+
+  private syncInvoiceContractTypeWithSchedule(): void {
+    if (!this.requestScheduleSetupEnabled) {
       return;
     }
-    if (!this.scheduleForm.endDate) {
-      this.scheduleForm.endDate = this.scheduleForm.startDate;
+
+    const derivedContractType = this.deriveInvoiceContractTypeFromScheduleType(this.scheduleForm.scheduleType);
+    this.requestForm.invoiceContractType = derivedContractType;
+    if (derivedContractType !== 'long_term') {
+      this.requestForm.invoiceCutoffDay = 1;
+      delete this.requestErrors['invoiceCutoffDay'];
     }
-    if (this.scheduleForm.scheduleType === 'date_range') {
-      this.scheduleForm.recurrenceDays = [];
+    delete this.requestErrors['invoiceContractType'];
+    if (this.requestForm.invoiceRecipientEmail.trim()) {
+      delete this.requestErrors['invoiceRecipientEmail'];
     }
+  }
+
+  onInvoiceContractTypeChange(): void {
+    if (this.requestForm.invoiceContractType !== 'long_term') {
+      this.requestForm.invoiceCutoffDay = 1;
+    }
+    delete this.requestErrors['invoiceCutoffDay'];
+    delete this.requestErrors['invoiceContractType'];
   }
 
   toggleScheduleRecurrenceDay(day: string, checked: boolean): void {
@@ -1806,16 +1897,19 @@ export class RequestsComponent implements OnInit, OnDestroy {
         const schedule = response.schedule || null;
         if (!schedule) {
           this.seedInlineScheduleFromRequestForm();
+          this.syncInvoiceContractTypeWithSchedule();
           return;
         }
         this.selectedRequestSchedule = schedule;
         this.requestScheduleSetupEnabled = true;
         this.populateScheduleForm(request, schedule);
+        this.syncInvoiceContractTypeWithSchedule();
       },
       error: (error) => {
         const status = Number(error?.status || error?.statusCode || 0);
         if (status === 404) {
           this.seedInlineScheduleFromRequestForm();
+          this.syncInvoiceContractTypeWithSchedule();
           return;
         }
         this.notification.show(error?.error?.detail || 'Failed to load request schedule into the request form', 'fail', 5000);
@@ -1892,6 +1986,17 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
     if (this.requestForm.managerEmail.trim() && !this.isValidEmail(this.requestForm.managerEmail)) {
       this.requestErrors['managerEmail'] = 'Manager email is invalid.';
+    }
+    if (!this.requestForm.invoiceRecipientEmail.trim()) {
+      this.requestErrors['invoiceRecipientEmail'] = 'Invoice recipient email is required.';
+    } else if (!this.isValidEmail(this.requestForm.invoiceRecipientEmail)) {
+      this.requestErrors['invoiceRecipientEmail'] = 'Invoice recipient email is invalid.';
+    }
+    if (this.requestForm.invoiceContractType === 'long_term') {
+      const cutoffDay = Number(this.requestForm.invoiceCutoffDay);
+      if (!Number.isInteger(cutoffDay) || cutoffDay < 1 || cutoffDay > 28) {
+        this.requestErrors['invoiceCutoffDay'] = 'Monthly cutoff day must be between 1 and 28.';
+      }
     }
 
     const latitude = this.parseCoordinate(this.requestForm.latitude);
@@ -1986,6 +2091,195 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
 
     return Object.keys(this.requestErrors).length === 0;
+  }
+
+  get isLongTermInvoiceContract(): boolean {
+    return this.requestForm.invoiceContractType === 'long_term';
+  }
+
+  get isInvoiceContractScheduleDriven(): boolean {
+    return this.requestScheduleSetupEnabled;
+  }
+
+  get canViewRequestInvoices(): boolean {
+    return this.isClientAdmin || this.isPlatformAdmin;
+  }
+
+  formatMoney(value: number | null | undefined): string {
+    const amount = Number(value ?? 0);
+    if (!Number.isFinite(amount)) {
+      return '$0.00';
+    }
+    return new Intl.NumberFormat('en-CA', {
+      style: 'currency',
+      currency: 'CAD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  }
+
+  formatOptionalMoney(value: number | null | undefined): string {
+    if (value == null) {
+      return '—';
+    }
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) {
+      return '—';
+    }
+    return this.formatMoney(amount);
+  }
+
+  estimateRequestPricing(): void {
+    const payload = this.buildRequestPayload();
+    this.requestService.previewRequestPricing(payload, { loadingScope: this.requestPricingPreviewScope }).subscribe({
+      next: (response) => {
+        this.pricingPreview = response.pricing || null;
+        this.invoicingPreview = response.invoicing || null;
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to estimate request pricing', 'fail', 4500);
+      },
+    });
+  }
+
+  getPricingSnapshotForRequest(request: PricingRequestContext | null | undefined): RequestPricingSnapshot {
+    if (!request) {
+      return {};
+    }
+    return request.pricing_snapshot || {};
+  }
+
+  getInvoicingSnapshotForRequest(request: PricingRequestContext | null | undefined): RequestInvoicingSnapshot {
+    if (!request) {
+      return {};
+    }
+    return request.invoicing_snapshot || {};
+  }
+
+  getInvoiceLineItems(invoice: RequestInvoiceItem | null | undefined): RequestInvoiceLineItem[] {
+    return invoice?.line_items || [];
+  }
+
+  getInvoiceLineItemGuardCount(item: RequestInvoiceLineItem | null | undefined): number {
+    return Number(item?.metadata?.guards_required || 0);
+  }
+
+  getInvoiceLineItemHoursPerPosition(item: RequestInvoiceLineItem | null | undefined): number {
+    return Number(item?.metadata?.hours_per_position || 0);
+  }
+
+  getJobCommittedSlots(job: RequestAssignmentItem, slotOverride?: number | string | null): number {
+    const rawSlots = Number(slotOverride ?? job.slots_committed ?? 1);
+    if (!Number.isFinite(rawSlots) || rawSlots < 1) {
+      return 1;
+    }
+    return Math.floor(rawSlots);
+  }
+
+  getJobPricingRequestContext(job: RequestAssignmentItem, request: ClientRequestItem | null): PricingRequestContext | null {
+    return request || job.request || null;
+  }
+
+  getAcceptJobPricingRequestContext(job: RequestAssignmentItem | null): PricingRequestContext | null {
+    if (!job) {
+      return null;
+    }
+    return this.selectedAcceptJobRequest || job.request || null;
+  }
+
+  getJobRequestedHoursPerPosition(request: PricingRequestContext | null): number | null {
+    const pricing = this.getPricingSnapshotForRequest(request);
+    const snapshotHours = Number(pricing.requested_hours_per_position);
+    if (Number.isFinite(snapshotHours) && snapshotHours > 0) {
+      return Math.round(snapshotHours * 100) / 100;
+    }
+
+    const estimatedTotalHours = Number(pricing.estimated_total_hours);
+    const guardsRequired = Number(pricing.guards_required ?? request?.guards_required);
+    if (Number.isFinite(estimatedTotalHours) && estimatedTotalHours > 0 && Number.isFinite(guardsRequired) && guardsRequired > 0) {
+      return Math.round((estimatedTotalHours / guardsRequired) * 100) / 100;
+    }
+
+    const requestedStartAt = request?.requested_start_at;
+    const requestedEndAt = request?.requested_end_at;
+    if (!requestedStartAt || !requestedEndAt) {
+      return null;
+    }
+
+    const start = new Date(requestedStartAt);
+    const end = new Date(requestedEndAt);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      return null;
+    }
+
+    return Math.round((((end.getTime() - start.getTime()) / (1000 * 60 * 60)) * 100)) / 100;
+  }
+
+  getJobEstimatedHours(job: RequestAssignmentItem, request: PricingRequestContext | null, slotOverride?: number | string | null): number | null {
+    const hoursPerPosition = this.getJobRequestedHoursPerPosition(request);
+    if (hoursPerPosition == null) {
+      return null;
+    }
+    const committedSlots = this.getJobCommittedSlots(job, slotOverride);
+    return Math.round((hoursPerPosition * committedSlots) * 100) / 100;
+  }
+
+  getJobClientQuoteAmount(request: PricingRequestContext | null): number | null {
+    const quote = Number(this.getPricingSnapshotForRequest(request).client_hourly_quote);
+    return Number.isFinite(quote) ? quote : null;
+  }
+
+  getJobPayoutAmount(job: RequestAssignmentItem, request: PricingRequestContext | null): number | null {
+    const pricing = this.getPricingSnapshotForRequest(request);
+    const payout = job.assignee_tenant_type === 'service_provider'
+      ? Number(pricing.provider_hourly_pay)
+      : Number(pricing.guard_hourly_pay);
+    return Number.isFinite(payout) ? payout : null;
+  }
+
+  getJobCompanyTakeAmount(job: RequestAssignmentItem, request: PricingRequestContext | null): number | null {
+    const pricing = this.getPricingSnapshotForRequest(request);
+    if (job.assignee_tenant_type === 'service_provider') {
+      const commission = Number(pricing.provider_company_commission);
+      return Number.isFinite(commission) ? commission : null;
+    }
+    const margin = Number(pricing.guard_company_margin);
+    return Number.isFinite(margin) ? margin : null;
+  }
+
+  getJobEstimatedQuoteTotal(job: RequestAssignmentItem, request: PricingRequestContext | null, slotOverride?: number | string | null): number | null {
+    const hourlyQuote = this.getJobClientQuoteAmount(request);
+    const estimatedHours = this.getJobEstimatedHours(job, request, slotOverride);
+    if (hourlyQuote == null || estimatedHours == null) {
+      return null;
+    }
+    return Math.round((hourlyQuote * estimatedHours) * 100) / 100;
+  }
+
+  getJobEstimatedPayoutTotal(job: RequestAssignmentItem, request: PricingRequestContext | null, slotOverride?: number | string | null): number | null {
+    const payout = this.getJobPayoutAmount(job, request);
+    const estimatedHours = this.getJobEstimatedHours(job, request, slotOverride);
+    if (payout == null || estimatedHours == null) {
+      return null;
+    }
+    return Math.round((payout * estimatedHours) * 100) / 100;
+  }
+
+  getJobEstimatedCompanyTakeTotal(job: RequestAssignmentItem, request: PricingRequestContext | null, slotOverride?: number | string | null): number | null {
+    const companyTake = this.getJobCompanyTakeAmount(job, request);
+    const estimatedHours = this.getJobEstimatedHours(job, request, slotOverride);
+    if (companyTake == null || estimatedHours == null) {
+      return null;
+    }
+    return Math.round((companyTake * estimatedHours) * 100) / 100;
+  }
+
+  getJobCompanyTakeLabel(job: RequestAssignmentItem, request: PricingRequestContext | null): string {
+    return this.formatOptionalMoney(this.getJobCompanyTakeAmount(job, request));
+  }
+
+  getJobPayoutLabel(job: RequestAssignmentItem, request: PricingRequestContext | null): string {
+    return this.formatOptionalMoney(this.getJobPayoutAmount(job, request));
   }
 
   async submitRequest(commit: boolean): Promise<void> {
@@ -2181,6 +2475,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
       requestExpiresDate: '',
       requestExpiresTime: '',
       specialInstructions: '',
+      invoiceContractType: 'short_term',
+      invoiceCutoffDay: 1,
+      invoiceRecipientEmail: '',
     };
     this.requestSiteSourceMode = 'manual';
     this.selectedSavedSiteIndex = '';
@@ -2196,6 +2493,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.selectedRequestClientTenantLabel = '';
     }
     this.requestErrors = {};
+    this.pricingPreview = null;
+    this.invoicingPreview = null;
   }
 
   openCreateRequestDrawer(): void {
@@ -2368,6 +2667,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
       requestExpiresDate: this.formatDateInput(expiryDate),
       requestExpiresTime: this.formatTimeInput(expiryDate),
       specialInstructions: picked.specialInstructions,
+      invoiceContractType: 'short_term',
+      invoiceCutoffDay: 1,
+      invoiceRecipientEmail: picked.managerEmail,
     };
     if (this.requestScheduleSetupEnabled && !this.selectedRequestSchedule?.id) {
       this.seedInlineScheduleFromRequestForm();
@@ -2403,6 +2705,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
       requestExpiresDate: this.formatDateInput(item.request_expires_at),
       requestExpiresTime: this.formatTimeInput(item.request_expires_at),
       specialInstructions: item.special_instructions || '',
+      invoiceContractType: (item.invoicing_snapshot?.contract_type as 'short_term' | 'long_term') || 'short_term',
+      invoiceCutoffDay: Number(item.invoicing_snapshot?.monthly_cutoff_day || 1),
+      invoiceRecipientEmail: item.invoicing_snapshot?.invoice_recipient_email || item.site_snapshot?.manager_email || '',
     };
     this.requestSiteSourceMode = item.site_snapshot?.site_source === 'saved' ? 'saved' : 'manual';
     this.selectedSavedSiteIndex = Number.isInteger(item.site_snapshot?.site_index) && Number(item.site_snapshot?.site_index) >= 0
@@ -2458,6 +2763,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
       requested_end_at: requestedEndAt || null,
       request_expires_at: requestExpiresAt || null,
       special_instructions: this.requestForm.specialInstructions.trim() || null,
+      invoice_contract_type: this.requestForm.invoiceContractType,
+      invoice_cutoff_day: this.requestForm.invoiceContractType === 'long_term'
+        ? Number(this.requestForm.invoiceCutoffDay || 1)
+        : null,
+      invoice_recipient_email: this.requestForm.invoiceRecipientEmail.trim() || null,
       max_match_results: 25,
     };
   }
@@ -2473,6 +2783,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
       requested_end_at: payload.requested_end_at,
       request_expires_at: payload.request_expires_at,
       special_instructions: payload.special_instructions,
+      invoice_contract_type: payload.invoice_contract_type,
+      invoice_cutoff_day: payload.invoice_cutoff_day,
+      invoice_recipient_email: payload.invoice_recipient_email,
       max_match_results: payload.max_match_results,
     };
   }
@@ -2498,10 +2811,15 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   openRequestDetails(item: ClientRequestItem): void {
+    if (this.showInvoiceDrawer) {
+      this.closeInvoiceDrawer();
+    }
     this.selectedRequest = item;
+    this.selectedRequestInvoices = [];
     this.selectedRequestSchedule = null;
     this.selectedRequestWaves = [];
     this.showRequestDrawer = true;
+    this.loadRequestInvoices(item.id);
     this.loadRequestSchedule(item.id);
     this.loadRequestWaves(item.id);
   }
@@ -2515,6 +2833,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
       suppressErrorStatuses: [404],
     }).subscribe({
       next: (response) => {
+        if (this.showInvoiceDrawer) {
+          this.closeInvoiceDrawer();
+        }
         if (this.selectedWave) {
           this.closeWaveDrawer();
         }
@@ -2522,9 +2843,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
           this.closeJobDrawer();
         }
         this.selectedRequest = response;
+        this.selectedRequestInvoices = [];
         this.selectedRequestSchedule = null;
         this.selectedRequestWaves = [];
         this.showRequestDrawer = true;
+        this.loadRequestInvoices(requestId, options);
         this.loadRequestSchedule(requestId, options);
         this.loadRequestWaves(requestId, options);
       },
@@ -2541,6 +2864,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
           if (this.selectedRequest?.id === requestId) {
             this.showRequestDrawer = false;
             this.selectedRequest = null;
+            this.selectedRequestInvoices = [];
             this.selectedRequestSchedule = null;
             this.selectedRequestWaves = [];
           }
@@ -2553,12 +2877,52 @@ export class RequestsComponent implements OnInit, OnDestroy {
     });
   }
 
+  openRequestInvoiceDetails(invoice: RequestInvoiceItem, request?: ClientRequestItem | null): void {
+    const targetRequest = request || this.selectedRequest;
+    if (!targetRequest) {
+      this.notification.show('Request context is missing for this invoice.', 'fail', 3500);
+      return;
+    }
+
+    this.requestService.getRequestInvoice(targetRequest.id, invoice.id, {
+      loadingScope: this.requestInvoiceDetailScope,
+      suppressErrorStatuses: [404],
+    }).subscribe({
+      next: (response) => {
+        if (this.selectedRequest?.id === targetRequest.id) {
+          this.closeRequestDrawer();
+        }
+        this.selectedInvoiceRequest = targetRequest;
+        this.selectedInvoice = response;
+        this.showInvoiceDrawer = true;
+      },
+      error: (error) => {
+        const status = Number(error?.status || error?.statusCode || 0);
+        if (status === 404) {
+          this.notification.show('This invoice is no longer available.', 'fail', 4000);
+          if (this.selectedRequest?.id === targetRequest.id) {
+            this.loadRequestInvoices(targetRequest.id, { silent: true, suppressError: true });
+          }
+          return;
+        }
+        this.notification.show(error?.error?.detail || 'Failed to open invoice details', 'fail', 5000);
+      }
+    });
+  }
+
   closeRequestDrawer(): void {
     this.showRequestDrawer = false;
     this.selectedRequest = null;
+    this.selectedRequestInvoices = [];
     this.selectedRequestSchedule = null;
     this.selectedRequestWaves = [];
     this.clearRouteFocusParams(['request']);
+  }
+
+  closeInvoiceDrawer(): void {
+    this.showInvoiceDrawer = false;
+    this.selectedInvoice = null;
+    this.selectedInvoiceRequest = null;
   }
 
   openScheduleDrawer(request?: ClientRequestItem | null): void {
@@ -3173,24 +3537,66 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   openAcceptJobDrawer(job: RequestAssignmentItem): void {
+    const existingRequest = this.selectedJob?.id === job.id ? this.selectedJobRequest : null;
     if (this.selectedJob?.id === job.id) {
       this.closeJobDrawer();
     }
     this.selectedAcceptJob = job;
+    this.selectedAcceptJobRequest = existingRequest?.id === job.request_id ? existingRequest : null;
     this.acceptJobErrors = {};
     this.acceptJobForm = {
       slotsCommitted: Number(job.slots_committed || 1),
     };
     this.showAcceptJobDrawer = true;
+    if (!this.selectedAcceptJobRequest) {
+      this.loadAcceptJobRequest(job, { silent: true, suppressError: true });
+    }
   }
 
   closeAcceptJobDrawer(): void {
     this.showAcceptJobDrawer = false;
     this.selectedAcceptJob = null;
+    this.selectedAcceptJobRequest = null;
     this.acceptJobErrors = {};
     this.acceptJobForm = {
       slotsCommitted: 1,
     };
+  }
+
+  loadAcceptJobRequest(job: RequestAssignmentItem, options?: { silent?: boolean; suppressError?: boolean }): void {
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    this.requestService.getRequest(job.request_id, {
+      loadingScope: this.acceptJobRequestScope,
+      loadingMode: silent ? 'silent' : undefined,
+      suppressErrorStatuses: [404],
+    }).subscribe({
+      next: (response) => {
+        if (this.selectedAcceptJob?.id !== job.id) {
+          return;
+        }
+        this.selectedAcceptJobRequest = response;
+      },
+      error: (error) => {
+        if (this.selectedAcceptJob?.id !== job.id) {
+          return;
+        }
+        this.selectedAcceptJobRequest = null;
+        const status = Number(error?.status || error?.statusCode || 0);
+        if (status === 404) {
+          this.purgeDeletedRequestReferences(job.request_id, {
+            reloadRequests: true,
+            reloadJobs: true,
+            reloadShifts: true,
+            reloadCalendar: true,
+          });
+          return;
+        }
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to load request pricing', 'fail', 5000);
+        }
+      }
+    });
   }
 
   openShiftActionDrawer(slot: ShiftSlotItem, action: 'report_unavailable' | 'check_in' | 'client_confirm' | 'start' | 'check_out'): void {
@@ -4373,12 +4779,20 @@ export class RequestsComponent implements OnInit, OnDestroy {
         return 'bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-300';
       case 'closed':
       case 'completed':
+      case 'sent':
+      case 'issued':
+      case 'revised':
+      case 'mock_issued':
         return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300';
       case 'cancelled':
       case 'declined':
+      case 'failed':
         return 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300';
       case 'in_progress':
       case 'accepted':
+      case 'pending':
+      case 'pending_capture':
+      case 'mock_pending':
         return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
       default:
         return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300';
@@ -5864,6 +6278,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (!this.selectedRequestSchedule?.id) {
       this.seedInlineScheduleFromRequestForm();
     }
+    this.syncInvoiceContractTypeWithSchedule();
   }
 
   useFirstShiftTimingForSchedule(): void {
@@ -5991,6 +6406,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       startTimeLocal: startTime || this.scheduleForm.startTimeLocal,
       endTimeLocal: endTime || this.scheduleForm.endTimeLocal,
     };
+    this.syncInvoiceContractTypeWithSchedule();
   }
 
   private combineDateAndTime(dateValue: string | null | undefined, timeValue: string | null | undefined): string {
@@ -6204,6 +6620,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   private closeBlockingDrawersForShiftDetail(): void {
     if (this.showRequestDrawer) {
       this.closeRequestDrawer();
+    }
+    if (this.showInvoiceDrawer) {
+      this.closeInvoiceDrawer();
     }
     if (this.showJobDrawer) {
       this.closeJobDrawer();

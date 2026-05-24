@@ -13,10 +13,13 @@ import {
   RequestAdditionalCoveragePayload,
   RequestAssignmentListResponse,
   RequestAssignmentItem,
+  RequestInvoiceItem,
+  RequestInvoiceListResponse,
   RequestAssignmentStatus,
   RequestBroadcastWaveItem,
   RequestPublishPayload,
   RequestPublishUpdatePayload,
+  RequestPricingPreviewResponse,
   RequestReviewWaveListResponse,
   ProviderRosterPayload,
   ServiceProviderGuardListResponse,
@@ -79,8 +82,23 @@ export class RequestService {
     return this.api.post<{ message: string; item: ClientRequestItem }>('requests', payload, options);
   }
 
+  previewRequestPricing(payload: ClientRequestCreatePayload, options?: ApiRequestOptions) {
+    return this.api.post<RequestPricingPreviewResponse>('requests/pricing-preview', payload, options);
+  }
+
   getRequest(requestId: string, options?: ApiRequestOptions) {
     return this.api.get<ClientRequestItem>(`requests/${requestId}`, options);
+  }
+
+  listRequestInvoices(requestId: string, page = 1, rows = 20, options?: ApiRequestOptions) {
+    const params = new HttpParams()
+      .set('page', page)
+      .set('rows', rows);
+    return this.api.get<RequestInvoiceListResponse>(`requests/${requestId}/invoices`, { ...options, params });
+  }
+
+  getRequestInvoice(requestId: string, invoiceId: string, options?: ApiRequestOptions) {
+    return this.api.get<RequestInvoiceItem>(`requests/${requestId}/invoices/${invoiceId}`, options);
   }
 
   getRequestSchedule(requestId: string, options?: ApiRequestOptions) {

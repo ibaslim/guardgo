@@ -18,6 +18,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestAssignmentStatusUpdatePayload,
     RequestPublishPayload,
     RequestPublishUpdatePayload,
+    RequestPricingPreviewPayload,
     ShiftSlotCheckInPayload,
     ShiftSlotCheckOutPayload,
     ShiftSlotClientConfirmPayload,
@@ -93,6 +94,26 @@ async def list_client_requests(
 )
 async def create_client_request(payload: ClientRequestCreatePayload, current_user=Depends(get_current_user)):
     return await RequestManager.get_instance().create_request(payload=payload, current_user=current_user)
+
+
+@request_routes.post(
+    "/api/requests/pricing-preview",
+    summary="Preview request pricing and invoicing",
+    description="Return client charge estimates and invoice settings for a request before saving it.",
+    tags=["Client Requests"],
+    operation_id="previewClientRequestPricing",
+    response_description="Pricing and invoicing preview.",
+    status_code=200,
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def preview_client_request_pricing(payload: RequestPricingPreviewPayload, current_user=Depends(get_current_user)):
+    return await RequestManager.get_instance().preview_request_pricing(payload=payload, current_user=current_user)
 
 
 @request_routes.get(
@@ -185,6 +206,64 @@ async def update_client_request(request_id: str, payload: ClientRequestUpdatePay
 )
 async def get_client_request(request_id: str, current_user=Depends(get_current_user)):
     return await RequestManager.get_instance().get_request_by_id(request_id=request_id, current_user=current_user)
+
+
+@request_routes.get(
+    "/api/requests/{request_id}/invoices",
+    summary="List request invoices",
+    description="Return persisted request invoice records for a request.",
+    tags=["Client Requests"],
+    operation_id="listRequestInvoices",
+    response_description="Paginated request invoices.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def list_request_invoices(
+    request_id: str,
+    page: int = 1,
+    rows: int = 20,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().list_request_invoices(
+        request_id=request_id,
+        current_user=current_user,
+        page=page,
+        rows=rows,
+    )
+
+
+@request_routes.get(
+    "/api/requests/{request_id}/invoices/{invoice_id}",
+    summary="Get request invoice",
+    description="Return a single persisted request invoice record.",
+    tags=["Client Requests"],
+    operation_id="getRequestInvoiceById",
+    response_description="Request invoice detail.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def get_request_invoice(
+    request_id: str,
+    invoice_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().get_request_invoice_by_id(
+        request_id=request_id,
+        invoice_id=invoice_id,
+        current_user=current_user,
+    )
 
 
 @request_routes.get(
