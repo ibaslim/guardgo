@@ -413,6 +413,156 @@ async def test_preview_matches_accepts_am_pm_weekly_availability_format():
 
 
 @pytest.mark.anyio
+async def test_preview_matches_accepts_overnight_window_ending_at_day_boundary():
+    manager = object.__new__(RequestMatchingManager)
+    manager._engine = FakeEngine([
+        db_tenant_model(
+            tenant_type=TenantType.GUARD,
+            status=TenantStatus.ACTIVE,
+            ownership_type=GuardOwnershipType.PLATFORM,
+            profile={
+                "full_name": "Night Shift Guard",
+                "home_address": {
+                    "province": "BC",
+                    "city": "Vancouver",
+                    "country": "CA",
+                    "latitude": 49.282893,
+                    "longitude": -123.120664,
+                },
+                "operational_region_code": "BC",
+                "operational_city_code": "VANCOUVER",
+                "max_travel_radius_km": 30,
+                "weekly_availability": {
+                    "Wednesday": [{"start": "9:00 PM", "end": "6:00 AM"}],
+                },
+                "preferred_guard_types": ["armed"],
+            },
+        ),
+    ])
+
+    result = await manager.preview_matches(
+        RequestMatchingPreviewPayload(
+            target_type="guard",
+            requested_guard_type="armed",
+            site_address=MatchAddress(
+                country="CA",
+                province="British Columbia",
+                city="Vancouver",
+                latitude=49.282445,
+                longitude=-123.123067,
+            ),
+            requested_start_at=datetime(2026, 5, 20, 23, 0),
+            requested_end_at=datetime(2026, 5, 21, 6, 0),
+        )
+    )
+
+    assert result.summary["outside_availability_count"] == 0
+    assert result.summary["eligible_count"] == 1
+    assert result.results[0].eligible is True
+    assert result.results[0].reason_code == "within_radius"
+
+
+@pytest.mark.anyio
+async def test_preview_matches_accepts_wrapped_calendar_style_availability_range():
+    manager = object.__new__(RequestMatchingManager)
+    manager._engine = FakeEngine([
+        db_tenant_model(
+            tenant_type=TenantType.GUARD,
+            status=TenantStatus.ACTIVE,
+            ownership_type=GuardOwnershipType.PLATFORM,
+            profile={
+                "full_name": "Near Full Day Guard",
+                "home_address": {
+                    "province": "BC",
+                    "city": "Vancouver",
+                    "country": "CA",
+                    "latitude": 49.282893,
+                    "longitude": -123.120664,
+                },
+                "operational_region_code": "BC",
+                "operational_city_code": "VANCOUVER",
+                "max_travel_radius_km": 30,
+                "weekly_availability": {
+                    "Wednesday": [{"start": "12:00 AM", "end": "11:55 PM"}],
+                },
+                "preferred_guard_types": ["armed"],
+            },
+        ),
+    ])
+
+    result = await manager.preview_matches(
+        RequestMatchingPreviewPayload(
+            target_type="guard",
+            requested_guard_type="armed",
+            site_address=MatchAddress(
+                country="CA",
+                province="British Columbia",
+                city="Vancouver",
+                latitude=49.282445,
+                longitude=-123.123067,
+            ),
+            requested_start_at=datetime(2026, 5, 21, 2, 0),
+            requested_end_at=datetime(2026, 5, 21, 3, 0),
+        )
+    )
+
+    assert result.summary["outside_availability_count"] == 0
+    assert result.summary["eligible_count"] == 1
+    assert result.results[0].eligible is True
+    assert result.results[0].reason_code == "within_radius"
+
+
+@pytest.mark.anyio
+async def test_preview_matches_accepts_night_request_for_daily_near_full_day_availability():
+    manager = object.__new__(RequestMatchingManager)
+    manager._engine = FakeEngine([
+        db_tenant_model(
+            tenant_type=TenantType.GUARD,
+            status=TenantStatus.ACTIVE,
+            ownership_type=GuardOwnershipType.PLATFORM,
+            profile={
+                "full_name": "Daily Availability Guard",
+                "home_address": {
+                    "province": "BC",
+                    "city": "Vancouver",
+                    "country": "CA",
+                    "latitude": 49.282893,
+                    "longitude": -123.120664,
+                },
+                "operational_region_code": "BC",
+                "operational_city_code": "VANCOUVER",
+                "max_travel_radius_km": 30,
+                "weekly_availability": {
+                    "Wednesday": [{"start": "12:00 AM", "end": "11:59 PM"}],
+                },
+                "preferred_guard_types": ["armed"],
+            },
+        ),
+    ])
+
+    result = await manager.preview_matches(
+        RequestMatchingPreviewPayload(
+            target_type="guard",
+            requested_guard_type="armed",
+            site_address=MatchAddress(
+                country="CA",
+                province="British Columbia",
+                city="Vancouver",
+                latitude=49.282445,
+                longitude=-123.123067,
+            ),
+            requested_start_at=datetime(2026, 5, 20, 21, 0),
+            requested_end_at=datetime(2026, 5, 21, 1, 0),
+        )
+    )
+
+    assert result.summary["outside_availability_count"] == 0
+    assert result.summary["eligible_count"] == 1
+    assert result.results[0].eligible is True
+    assert result.results[0].reason_code == "within_radius"
+
+
+@pytest.mark.anyio
 async def test_preview_matches_prefers_provider_city_entry_coordinates_over_head_office():
     provider = _provider_tenant()
     manager = object.__new__(RequestMatchingManager)

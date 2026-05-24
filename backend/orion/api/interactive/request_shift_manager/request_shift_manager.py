@@ -3616,6 +3616,16 @@ class RequestShiftManager:
             shift_record=shift_record,
             request_record=request_record,
         )
+        await NotificationManager.get_instance().create_for_tenant_admin_users(
+            tenant_id=request_record.client_tenant_id,
+            title="Shift started",
+            message=f"{request_record.title}: guard is now in progress on site.",
+            category="info",
+            source_module="requests",
+            action_url=f"/dashboard/requests?shift={shift_record.id}",
+            action_label="Review shift",
+            metadata={"request_id": str(request_record.id), "shift_id": str(shift_record.id), "slot_id": str(slot_record.id)},
+        )
         return await self.get_shift_slot_by_id(slot_id=str(slot_record.id), current_user=current_user)
 
     async def check_out_shift_slot(self, slot_id: str, payload: ShiftSlotCheckOutPayload, current_user) -> Dict[str, Any]:
@@ -3655,5 +3665,15 @@ class RequestShiftManager:
             slot_record=slot_record,
             shift_record=shift_record,
             request_record=request_record,
+        )
+        await NotificationManager.get_instance().create_for_tenant_admin_users(
+            tenant_id=request_record.client_tenant_id,
+            title="Shift checked out",
+            message=f"{request_record.title}: guard checked out and shift work was marked complete.",
+            category="success",
+            source_module="requests",
+            action_url=f"/dashboard/requests?shift={shift_record.id}",
+            action_label="Review shift",
+            metadata={"request_id": str(request_record.id), "shift_id": str(shift_record.id), "slot_id": str(slot_record.id)},
         )
         return await self.get_shift_slot_by_id(slot_id=str(slot_record.id), current_user=current_user)

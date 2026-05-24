@@ -3,7 +3,7 @@ import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { HttpParams } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Subscription, forkJoin } from 'rxjs';
+import { Subscription, forkJoin, interval } from 'rxjs';
 
 import { ButtonComponent } from '../../components/button/button.component';
 import { CardComponent } from '../../components/card/card.component';
@@ -194,6 +194,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
   requestWavesLoading = false;
   private readonly loadingFeedback = inject(LoadingFeedbackService);
   private routeQuerySubscription: Subscription | null = null;
+  private realtimeRefreshSubscription: Subscription | null = null;
+  private realtimeRefreshTick = 0;
   private lastHandledRouteFocus = '';
 
   role = '';
@@ -882,11 +884,117 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.routeQuerySubscription = this.route.queryParams.subscribe((params) => {
       this.handleRouteFocusParams(params || {});
     });
+    this.startRealtimeRefreshLoop();
   }
 
   ngOnDestroy(): void {
     this.routeQuerySubscription?.unsubscribe();
     this.routeQuerySubscription = null;
+    this.realtimeRefreshSubscription?.unsubscribe();
+    this.realtimeRefreshSubscription = null;
+  }
+
+  private startRealtimeRefreshLoop(): void {
+    this.realtimeRefreshSubscription?.unsubscribe();
+    this.realtimeRefreshTick = 0;
+    this.realtimeRefreshSubscription = interval(10000).subscribe(() => {
+      if (document.visibilityState !== 'visible' || this.isRefreshPauseStateActive()) {
+        return;
+      }
+      this.realtimeRefreshTick += 1;
+      if (this.activeTab !== 'shifts' && this.realtimeRefreshTick % 3 !== 0) {
+        return;
+      }
+      this.refreshRealtimeRequestLifecycleState();
+    });
+  }
+
+  private refreshRealtimeRequestLifecycleState(): void {
+    const currentScrollY = window.scrollY;
+
+    switch (this.activeTab) {
+      case 'requests':
+        this.loadRequests(this.page, { silent: true, suppressError: true });
+        break;
+      case 'jobs':
+        this.loadJobs(this.jobPage, { silent: true, suppressError: true });
+        break;
+      case 'shifts':
+        if (this.canViewShifts) {
+          this.loadShifts(this.shiftPage, { silent: true, suppressError: true });
+          this.loadShiftCalendar(this.shiftCalendarMonthAnchor, { silent: true, suppressError: true });
+        }
+        break;
+      case 'exceptions':
+        if (this.canViewShiftExceptions) {
+          this.loadShiftExceptions(this.exceptionPage, { silent: true, suppressError: true });
+        }
+        break;
+      case 'review':
+        if (this.canReviewBroadcastWaves) {
+          this.loadReviewWaves(this.reviewPage, { silent: true, suppressError: true });
+        }
+        break;
+      default:
+        break;
+    }
+
+    if (this.showShiftSlotDrawer && this.selectedShiftSlot?.id) {
+      this.requestService.getShiftSlot(this.selectedShiftSlot.id, {
+        loadingScope: undefined,
+        loadingMode: 'silent',
+        suppressErrorStatuses: [404],
+      }).subscribe({
+        next: (response) => {
+          this.selectedShiftSlot = response.slot;
+          this.selectedShiftSlotDetail = response;
+          this.restoreScrollAfterBackgroundRefresh(currentScrollY);
+        },
+        error: () => {},
+      });
+    }
+
+    if (!this.showShiftSlotDrawer && this.showShiftDrawer && this.selectedShift?.id) {
+      this.requestService.getShift(this.selectedShift.id, {
+        loadingScope: undefined,
+        loadingMode: 'silent',
+      }).subscribe({
+        next: (response) => {
+          this.selectedShift = response.shift;
+          this.selectedShiftSlots = response.slots || [];
+          this.selectedShiftSlotSummary = response.slot_summary || null;
+          this.ensureShiftRequestSummaries([response.shift]);
+          this.restoreScrollAfterBackgroundRefresh(currentScrollY);
+        },
+        error: () => {},
+      });
+    }
+
+    // Keep viewport stable during background polling updates.
+    this.restoreScrollAfterBackgroundRefresh(currentScrollY);
+  }
+
+  private restoreScrollAfterBackgroundRefresh(scrollY: number): void {
+    setTimeout(() => {
+      window.scrollTo({ top: scrollY, behavior: 'auto' });
+    }, 0);
+  }
+
+  private isRefreshPauseStateActive(): boolean {
+    return Boolean(
+      this.showRequestFormDrawer
+      || this.showScheduleDrawer
+      || this.showCoverageDrawer
+      || this.showReturnWaveDrawer
+      || this.showAcceptJobDrawer
+      || this.showRosterDrawer
+      || this.showReasonDrawer
+      || this.showShiftActionDrawer
+      || this.showShiftGuardLeaveDrawer
+      || this.showShiftGuardLeaveReviewDrawer
+      || this.showReopenExceptionDrawer
+      || this.showBulkConfirmDrawer
+    );
   }
 
   handleRouteFocusParams(params: Record<string, any>): void {
@@ -1092,7 +1200,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
   loadRequests(page: number, options?: { silent?: boolean; suppressError?: boolean }): void {
     const silent = Boolean(options?.silent);
     const suppressError = Boolean(options?.suppressError);
-    this.loading = true;
+    const loadingScope = silent ? undefined : this.requestListScope;
+    if (!silent) {
+      this.loading = true;
+    }
     this.requestService.listRequests(
       page,
       this.rows,
@@ -1101,7 +1212,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.fulfillmentModeFilter,
       this.hasPlatformRequestScope ? this.requestClientTenantFilter : '',
       {
-        loadingScope: this.requestListScope,
+        loadingScope,
         loadingMode: silent ? 'silent' : undefined,
       },
     ).subscribe({
@@ -1116,10 +1227,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
             this.selectedRequest = refreshed;
           }
         }
-        this.loading = false;
+        if (!silent) {
+          this.loading = false;
+        }
       },
       error: (error) => {
-        this.loading = false;
+        if (!silent) {
+          this.loading = false;
+        }
         if (!suppressError) {
           this.notification.show(error?.error?.detail || 'Failed to load requests', 'fail', 5000);
         }
@@ -1130,9 +1245,12 @@ export class RequestsComponent implements OnInit, OnDestroy {
   loadJobs(page: number, options?: { silent?: boolean; suppressError?: boolean }): void {
     const silent = Boolean(options?.silent);
     const suppressError = Boolean(options?.suppressError);
-    this.jobsLoading = true;
+    const loadingScope = silent ? undefined : this.jobListScope;
+    if (!silent) {
+      this.jobsLoading = true;
+    }
     this.requestService.listJobs(page, this.jobRows, this.jobStatusFilter, this.jobKeyword, {
-      loadingScope: this.jobListScope,
+      loadingScope,
       loadingMode: silent ? 'silent' : undefined,
     }).subscribe({
       next: (response) => {
@@ -1146,10 +1264,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
             this.selectedJob = refreshed;
           }
         }
-        this.jobsLoading = false;
+        if (!silent) {
+          this.jobsLoading = false;
+        }
       },
       error: (error) => {
-        this.jobsLoading = false;
+        if (!silent) {
+          this.jobsLoading = false;
+        }
         if (!suppressError) {
           this.notification.show(error?.error?.detail || 'Failed to load jobs', 'fail', 5000);
         }
@@ -1164,7 +1286,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
     const silent = Boolean(options?.silent);
     const suppressError = Boolean(options?.suppressError);
-    this.reviewLoading = true;
+    const loadingScope = silent ? undefined : this.reviewListScope;
+    if (!silent) {
+      this.reviewLoading = true;
+    }
     this.requestService.listRequestReviewWaves(
       page,
       this.reviewRows,
@@ -1173,7 +1298,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       '',
       '',
       {
-        loadingScope: this.reviewListScope,
+        loadingScope,
         loadingMode: silent ? 'silent' : undefined,
       },
     ).subscribe({
@@ -1188,10 +1313,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
             this.selectedWave = refreshed;
           }
         }
-        this.reviewLoading = false;
+        if (!silent) {
+          this.reviewLoading = false;
+        }
       },
       error: (error) => {
-        this.reviewLoading = false;
+        if (!silent) {
+          this.reviewLoading = false;
+        }
         if (!suppressError) {
           this.notification.show(error?.error?.detail || 'Failed to load request review queue', 'fail', 5000);
         }
@@ -1206,6 +1335,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
     const silent = Boolean(options?.silent);
     const suppressError = Boolean(options?.suppressError);
+    const loadingScope = silent ? undefined : this.shiftListScope;
     this.requestService.listShifts(
       page,
       this.shiftRows,
@@ -1214,7 +1344,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.shiftDateFrom,
       this.shiftDateTo,
       {
-        loadingScope: this.shiftListScope,
+        loadingScope,
         loadingMode: silent ? 'silent' : undefined,
       },
     ).subscribe({
@@ -1257,6 +1387,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.shiftCalendarMonthAnchor = anchor;
     const silent = Boolean(options?.silent);
     const suppressError = Boolean(options?.suppressError);
+    const loadingScope = silent ? undefined : this.shiftCalendarScope;
     const monthStart = this.formatDateInput(anchor);
     const monthEnd = this.formatDateInput(this.getEndOfMonth(anchor));
 
@@ -1268,7 +1399,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       monthStart,
       monthEnd,
       {
-        loadingScope: this.shiftCalendarScope,
+        loadingScope,
         loadingMode: silent ? 'silent' : undefined,
       },
     ).subscribe({
@@ -1294,6 +1425,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
     const silent = Boolean(options?.silent);
     const suppressError = Boolean(options?.suppressError);
+    const loadingScope = silent ? undefined : this.exceptionListScope;
     this.requestService.listShiftExceptions(
       page,
       this.exceptionRows,
@@ -1302,7 +1434,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.exceptionDateFrom,
       this.exceptionDateTo,
       {
-        loadingScope: this.exceptionListScope,
+        loadingScope,
         loadingMode: silent ? 'silent' : undefined,
       },
     ).subscribe({

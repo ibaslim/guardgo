@@ -247,6 +247,14 @@ class RequestMatchingManager:
         return minute_of_day + ((24 - cls._DAY_BOUNDARY_HOUR) * 60)
 
     @classmethod
+    def _normalize_availability_end_minutes(cls, minute_of_day: int) -> int:
+        normalized = cls._normalize_availability_minutes(minute_of_day)
+        if minute_of_day == cls._DAY_BOUNDARY_HOUR * 60:
+            return 24 * 60
+        # Treat configured end-times as inclusive at minute precision.
+        return min(normalized + 1, 24 * 60)
+
+    @classmethod
     def _availability_windows_for_day(cls, weekly_availability: Any, day_name: str) -> List[tuple[int, int]]:
         if not isinstance(weekly_availability, dict):
             return []
@@ -263,11 +271,18 @@ class RequestMatchingManager:
             end_minutes = cls._parse_time_value(entry.get("end"))
             if start_minutes is None or end_minutes is None:
                 continue
-            normalized_start = cls._normalize_availability_minutes(start_minutes)
-            normalized_end = cls._normalize_availability_minutes(end_minutes)
-            if normalized_end <= normalized_start:
+            if start_minutes == end_minutes:
                 continue
-            windows.append((normalized_start, normalized_end))
+            normalized_start = cls._normalize_availability_minutes(start_minutes)
+            normalized_end = cls._normalize_availability_end_minutes(end_minutes)
+            if normalized_end == normalized_start:
+                windows.append((0, 24 * 60))
+                continue
+            if normalized_end > normalized_start:
+                windows.append((normalized_start, normalized_end))
+            else:
+                windows.append((0, normalized_end))
+                windows.append((normalized_start, 24 * 60))
 
         if not windows:
             return []

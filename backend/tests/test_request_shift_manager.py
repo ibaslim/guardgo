@@ -1225,6 +1225,95 @@ async def test_shift_slot_attendance_flow_updates_slot_shift_and_events(monkeypa
 
 
 @pytest.mark.anyio
+async def test_shift_slot_attendance_flow_emits_notifications_after_confirmation(monkeypatch):
+    tenant_notifications: list[dict] = []
+
+    class FakeNotificationManager:
+        async def create_for_tenant_admin_users(self, **kwargs):
+            tenant_notifications.append(kwargs)
+            return None
+
+        async def create_for_platform_admin_users(self, **kwargs):
+            return None
+
+    monkeypatch.setattr(NotificationManager, "get_instance", staticmethod(lambda: FakeNotificationManager()))
+
+    engine = FakeEngine()
+    request_record = _make_request(guards_required=1, request_status=RequestStatus.SUBMITTED)
+    engine.request_record = request_record
+    direct_assignment = _make_assignment(
+        request_id=str(request_record.id),
+        assignee_tenant_id="guard-direct-1",
+        assignee_tenant_type=RequestTargetType.GUARD,
+        slots_committed=1,
+    )
+    schedule = RequestScheduleTemplateRecord(
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        timezone="Asia/Karachi",
+        schedule_type=RequestScheduleType.ONE_TIME,
+        start_date_local=date.today().isoformat(),
+        end_date_local=None,
+        start_time_local="08:00",
+        end_time_local="16:00",
+        checkin_geofence_meters=300,
+    )
+    object.__setattr__(schedule, "id", ObjectId())
+    engine.schedule_record = schedule
+    shift = ShiftInstanceRecord(
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        schedule_template_id=str(schedule.id),
+        shift_date_local=date.today().isoformat(),
+        shift_start_at_utc=datetime.utcnow() - timedelta(hours=1),
+        shift_end_at_utc=datetime.utcnow() + timedelta(hours=7),
+        timezone="Asia/Karachi",
+        slots_required=1,
+    )
+    object.__setattr__(shift, "id", ObjectId())
+    engine.shift_instances.append(shift)
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(request_record, assignments=[direct_assignment]),
+    )
+
+    await manager.sync_shift_slots_for_request(request_record)
+    slot = engine.shift_slots[0]
+
+    guard_user = SimpleNamespace(username="guard", role="guard_admin", tenant_uuid="guard-direct-1")
+    client_user = SimpleNamespace(username="client", role="client_admin", tenant_uuid=request_record.client_tenant_id)
+
+    await manager.check_in_shift_slot(
+        str(slot.id),
+        ShiftSlotCheckInPayload(latitude=24.8608, longitude=67.0012, note="arrived"),
+        guard_user,
+    )
+    await manager.confirm_shift_slot_arrival(
+        str(slot.id),
+        ShiftSlotClientConfirmPayload(note="ok"),
+        client_user,
+    )
+    await manager.start_shift_slot(
+        str(slot.id),
+        ShiftSlotStartPayload(note="start"),
+        guard_user,
+    )
+    await manager.check_out_shift_slot(
+        str(slot.id),
+        ShiftSlotCheckOutPayload(note="done"),
+        guard_user,
+    )
+
+    titles = [str(item.get("title") or "") for item in tenant_notifications]
+    assert "Guard arrived on site" in titles
+    assert "Arrival confirmed" in titles
+    assert "Shift started" in titles
+    assert "Shift checked out" in titles
+
+
+@pytest.mark.anyio
 async def test_completed_shift_marks_parent_assignment_completed_only_after_schedule_window_elapses(monkeypatch):
     _stub_notifications(monkeypatch)
     engine = FakeEngine()
