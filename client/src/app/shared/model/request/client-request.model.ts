@@ -669,6 +669,105 @@ export interface RequestInvoiceListResponse {
   };
 }
 
+export interface MyInvoiceLineItem {
+  description?: string;
+  service_date_local?: string | null;
+  unit?: string;
+  quantity?: number | null;
+  unit_rate?: number | null;
+  amount?: number | null;
+  metadata?: {
+    committed_slots?: number | null;
+    hours_per_position?: number | null;
+    request_guards_required?: number | null;
+    start_at_local?: string | null;
+    end_at_local?: string | null;
+    [key: string]: any;
+  };
+}
+
+export interface MyInvoiceItem {
+  id: string;
+  request_id: string;
+  invoice_number: string;
+  request_title?: string | null;
+  site_name?: string | null;
+  assignee_tenant_type?: ClientRequestTargetType | string;
+  coverage_status?: RequestAssignmentStatus | string | null;
+  contract_type?: 'short_term' | 'long_term' | string;
+  billing_cycle?: string;
+  charge_timing?: string;
+  billing_period_start_local?: string | null;
+  billing_period_end_local?: string | null;
+  billing_period_label?: string | null;
+  currency?: string;
+  committed_slots?: number | null;
+  payout_hourly_rate?: number | null;
+  estimated_total_hours?: number | null;
+  estimated_amount?: number | null;
+  invoice_status?: string;
+  line_items?: MyInvoiceLineItem[];
+  note?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MyInvoiceListResponse {
+  items: MyInvoiceItem[];
+  pagination: {
+    page: number;
+    rows: number;
+    total_items: number;
+    total_pages: number;
+  };
+}
+
+export interface PlatformPayoutInvoiceItem extends MyInvoiceItem {
+  assignee_tenant_id?: string | null;
+  assignee_label?: string | null;
+  client_tenant_id?: string | null;
+  client_label?: string | null;
+  client_hourly_quote?: number | null;
+  estimated_client_revenue?: number | null;
+  estimated_platform_earning?: number | null;
+  platform_cut_hourly_rate?: number | null;
+  platform_margin_percent?: number | null;
+  linked_client_invoice_id?: string | null;
+  linked_client_invoice_number?: string | null;
+  linked_client_invoice_status?: string | null;
+  linked_client_payment_status?: string | null;
+  linked_client_invoice_period_label?: string | null;
+  linked_client_invoice_trigger?: string | null;
+  reporting_basis?: string | null;
+  reporting_note?: string | null;
+}
+
+export interface PlatformPayoutInvoiceListResponse {
+  items: PlatformPayoutInvoiceItem[];
+  pagination: {
+    page: number;
+    rows: number;
+    total_items: number;
+    total_pages: number;
+  };
+  filters?: {
+    keyword?: string;
+    assignee_tenant_type?: string;
+  };
+  summary?: {
+    invoice_count?: number;
+    total_client_revenue?: number;
+    total_payout?: number;
+    total_platform_earning?: number;
+    total_hours?: number;
+    total_guard_payout?: number;
+    total_provider_payout?: number;
+    total_guard_earning?: number;
+    total_provider_earning?: number;
+    platform_margin_percent?: number | null;
+  };
+}
+
 export interface ClientRequestCreatePayload {
   title: string;
   timezone?: string | null;

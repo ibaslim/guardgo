@@ -285,6 +285,86 @@ async def test_get_request_invoice_forwards_ids(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_list_my_invoices_forwards_pagination(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def list_my_invoices(self, **kwargs):
+            captured.update(kwargs)
+            return {"items": [], "pagination": {"page": kwargs["page"], "rows": kwargs["rows"]}}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.GUARD_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/my-invoices?page=3&rows=9")
+
+    assert response.status_code == 200
+    assert captured["page"] == 3
+    assert captured["rows"] == 9
+    assert captured["current_user"].username == "tester"
+
+
+@pytest.mark.anyio
+async def test_get_my_invoice_forwards_invoice_id(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def get_my_invoice_by_id(self, invoice_id, current_user):
+            captured["invoice_id"] = invoice_id
+            captured["user"] = current_user.username
+            return {"id": invoice_id}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.SP_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/my-invoices/inv-77")
+
+    assert response.status_code == 200
+    assert captured == {"invoice_id": "inv-77", "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_list_platform_payout_invoices_forwards_filters(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def list_platform_payout_invoices(self, **kwargs):
+            captured.update(kwargs)
+            return {"items": [], "pagination": {"page": kwargs["page"], "rows": kwargs["rows"]}}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.OPS_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/payout-invoices?page=2&rows=15&keyword=vancouver&assignee_tenant_type=guard")
+
+    assert response.status_code == 200
+    assert captured["page"] == 2
+    assert captured["rows"] == 15
+    assert captured["keyword"] == "vancouver"
+    assert captured["assignee_tenant_type"] == "guard"
+    assert captured["current_user"].username == "tester"
+
+
+@pytest.mark.anyio
+async def test_get_platform_payout_invoice_forwards_invoice_id(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def get_platform_payout_invoice_by_id(self, invoice_id, current_user):
+            captured["invoice_id"] = invoice_id
+            captured["user"] = current_user.username
+            return {"id": invoice_id}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.READ_ONLY_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/payout-invoices/pinv-77")
+
+    assert response.status_code == 200
+    assert captured == {"invoice_id": "pinv-77", "user": "tester"}
+
+
+@pytest.mark.anyio
 async def test_update_request_job_status_forwards_payload(monkeypatch):
     captured = {}
 

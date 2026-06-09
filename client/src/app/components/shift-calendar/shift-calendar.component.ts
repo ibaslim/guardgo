@@ -1,6 +1,5 @@
 import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { RouterLink } from '@angular/router';
 
 import { ButtonComponent } from '../button/button.component';
 import { formatBackendDateTime } from '../../shared/helpers/format.helper';
@@ -18,7 +17,7 @@ interface ShiftCalendarDay {
 @Component({
   selector: 'app-shift-calendar',
   standalone: true,
-  imports: [CommonModule, ButtonComponent, RouterLink],
+  imports: [CommonModule, ButtonComponent],
   templateUrl: './shift-calendar.component.html',
 })
 export class ShiftCalendarComponent {

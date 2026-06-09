@@ -267,6 +267,108 @@ async def get_request_invoice(
 
 
 @request_routes.get(
+    "/api/my-invoices",
+    summary="List assignee invoices",
+    description="Return guard or service-provider payout-side invoices derived from issued request invoices.",
+    tags=["Client Requests"],
+    operation_id="listMyInvoices",
+    response_description="Paginated assignee invoices.",
+    dependencies=[Depends(role_required([
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def list_my_invoices(
+    page: int = 1,
+    rows: int = 20,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().list_my_invoices(
+        current_user=current_user,
+        page=page,
+        rows=rows,
+    )
+
+
+@request_routes.get(
+    "/api/my-invoices/{invoice_id}",
+    summary="Get assignee invoice",
+    description="Return a single guard or service-provider invoice detail derived from the request invoice share for that assignee.",
+    tags=["Client Requests"],
+    operation_id="getMyInvoiceById",
+    response_description="Assignee invoice detail.",
+    dependencies=[Depends(role_required([
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def get_my_invoice(
+    invoice_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().get_my_invoice_by_id(
+        invoice_id=invoice_id,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/payout-invoices",
+    summary="List platform payout invoices",
+    description="Return guard and service-provider payout invoices for platform-side reporting and analysis.",
+    tags=["Client Requests"],
+    operation_id="listPlatformPayoutInvoices",
+    response_description="Paginated platform payout invoices.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+    ]))],
+)
+async def list_platform_payout_invoices(
+    page: int = 1,
+    rows: int = 20,
+    keyword: str = "",
+    assignee_tenant_type: str = "",
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().list_platform_payout_invoices(
+        current_user=current_user,
+        page=page,
+        rows=rows,
+        keyword=keyword,
+        assignee_tenant_type=assignee_tenant_type,
+    )
+
+
+@request_routes.get(
+    "/api/payout-invoices/{invoice_id}",
+    summary="Get platform payout invoice",
+    description="Return one guard or service-provider payout invoice for platform-side reporting and analysis.",
+    tags=["Client Requests"],
+    operation_id="getPlatformPayoutInvoiceById",
+    response_description="Platform payout invoice detail.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+    ]))],
+)
+async def get_platform_payout_invoice(
+    invoice_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().get_platform_payout_invoice_by_id(
+        invoice_id=invoice_id,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
     "/api/requests/{request_id}/schedule",
     summary="Get request schedule",
     description="Return the configured schedule template for a request.",

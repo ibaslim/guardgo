@@ -59,6 +59,8 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestWaveTrigger,
     ShiftAttendanceEventType,
     ShiftCoverageSourceType,
+    ShiftInstanceRecord,
+    ShiftSlotRecord,
     ShiftSlotStatus,
 )
 from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus, TenantType
@@ -159,6 +161,24 @@ class RequestManager:
         if parsed.tzinfo is not None:
             return parsed.astimezone(timezone.utc).replace(tzinfo=None)
         return parsed
+
+    @staticmethod
+    def _as_date(value: Any) -> Optional[date]:
+        if value is None:
+            return None
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        parsed_datetime = RequestManager._as_datetime(value)
+        if parsed_datetime:
+            return parsed_datetime.date()
+
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            return date.fromisoformat(text)
+        except ValueError:
+            return None
 
     @staticmethod
     def _as_float(value: Any) -> Optional[float]:
@@ -805,6 +825,805 @@ class RequestManager:
             "created_at": record.created_at,
             "updated_at": record.updated_at,
         }
+
+    @staticmethod
+    def _assignee_invoice_allowed_statuses() -> set[str]:
+        return {
+            RequestAssignmentStatus.ACCEPTED.value,
+            RequestAssignmentStatus.RECONFIRMATION_REQUIRED.value,
+            RequestAssignmentStatus.IN_PROGRESS.value,
+            RequestAssignmentStatus.COMPLETED.value,
+        }
+
+    @staticmethod
+    def _rollup_assignee_assignment_status(statuses: set[str]) -> str:
+        for candidate in (
+            RequestAssignmentStatus.IN_PROGRESS.value,
+            RequestAssignmentStatus.ACCEPTED.value,
+            RequestAssignmentStatus.RECONFIRMATION_REQUIRED.value,
+            RequestAssignmentStatus.COMPLETED.value,
+        ):
+            if candidate in statuses:
+                return candidate
+        return ""
+
+    @classmethod
+    def _invoice_assignee_hourly_rate(
+        cls,
+        invoice_record: RequestInvoiceRecord | Dict[str, Any],
+        assignee_tenant_type: str,
+    ) -> Optional[float]:
+        if isinstance(invoice_record, dict):
+            payout_total = (
+                invoice_record.get("estimated_provider_payout")
+                if assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER.value
+                else invoice_record.get("estimated_guard_payout")
+            )
+            estimated_total_hours = invoice_record.get("estimated_total_hours")
+        else:
+            payout_total = (
+                invoice_record.estimated_provider_payout
+                if assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER.value
+                else invoice_record.estimated_guard_payout
+            )
+            estimated_total_hours = invoice_record.estimated_total_hours
+
+        payout_value = cls._as_float(payout_total)
+        hours_value = cls._as_float(estimated_total_hours)
+        if payout_value is None or hours_value is None or hours_value <= 0:
+            return None
+        return round(payout_value / hours_value, 2)
+
+    @classmethod
+    def _build_assignee_invoice_line_items(
+        cls,
+        invoice_record: RequestInvoiceRecord | Dict[str, Any],
+        *,
+        committed_slots: int,
+        assignee_tenant_type: str,
+    ) -> Dict[str, Any]:
+        raw_line_items = invoice_record.get("line_items") if isinstance(invoice_record, dict) else invoice_record.line_items
+        line_items = list(raw_line_items or [])
+        payout_hourly_rate = cls._invoice_assignee_hourly_rate(invoice_record, assignee_tenant_type)
+
+        assignee_line_items: List[Dict[str, Any]] = []
+        total_hours = 0.0
+        total_amount = 0.0
+
+        for item in line_items:
+            metadata = item.get("metadata") or {}
+            hours_per_position = cls._as_float(metadata.get("hours_per_position"))
+            if hours_per_position is None:
+                request_quantity = cls._as_float(item.get("quantity"))
+                request_guard_count = cls._as_float(metadata.get("guards_required"))
+                if request_quantity is not None and request_guard_count and request_guard_count > 0:
+                    hours_per_position = round(request_quantity / request_guard_count, 2)
+            if hours_per_position is None or hours_per_position <= 0:
+                continue
+
+            quantity = round(hours_per_position * max(int(committed_slots or 1), 1), 2)
+            amount = round((payout_hourly_rate or 0.0) * quantity, 2) if payout_hourly_rate is not None else None
+            total_hours += quantity
+            total_amount += amount or 0.0
+
+            assignee_line_items.append({
+                "description": item.get("description") or "Coverage payout",
+                "service_date_local": item.get("service_date_local"),
+                "unit": item.get("unit") or "hour",
+                "quantity": quantity,
+                "unit_rate": payout_hourly_rate,
+                "amount": amount,
+                "metadata": {
+                    "committed_slots": max(int(committed_slots or 1), 1),
+                    "hours_per_position": round(hours_per_position, 2),
+                    "request_guards_required": metadata.get("guards_required"),
+                    "start_at_local": metadata.get("start_at_local"),
+                    "end_at_local": metadata.get("end_at_local"),
+                },
+            })
+
+        return {
+            "payout_hourly_rate": payout_hourly_rate,
+            "line_items": assignee_line_items,
+            "estimated_total_hours": round(total_hours, 2) if assignee_line_items else None,
+            "estimated_amount": round(total_amount, 2) if assignee_line_items and payout_hourly_rate is not None else None,
+        }
+
+    @classmethod
+    def _serialize_assignee_invoice(
+        cls,
+        invoice_record: RequestInvoiceRecord | Dict[str, Any],
+        *,
+        assignee_tenant_type: str,
+        committed_slots: int,
+        coverage_status: str = "",
+        request_title: str = "",
+        site_name: str = "",
+    ) -> Dict[str, Any]:
+        base = cls._serialize_invoice(invoice_record)
+        payout_summary = cls._build_assignee_invoice_line_items(
+            invoice_record,
+            committed_slots=max(int(committed_slots or 1), 1),
+            assignee_tenant_type=assignee_tenant_type,
+        )
+        return {
+            "id": base["id"],
+            "request_id": base["request_id"],
+            "invoice_number": base["invoice_number"],
+            "request_title": request_title,
+            "site_name": site_name,
+            "assignee_tenant_type": assignee_tenant_type,
+            "coverage_status": coverage_status,
+            "contract_type": base["contract_type"],
+            "billing_cycle": base["billing_cycle"],
+            "charge_timing": base["charge_timing"],
+            "billing_period_start_local": base["billing_period_start_local"],
+            "billing_period_end_local": base["billing_period_end_local"],
+            "billing_period_label": base["billing_period_label"],
+            "currency": base["currency"],
+            "committed_slots": max(int(committed_slots or 1), 1),
+            "payout_hourly_rate": payout_summary["payout_hourly_rate"],
+            "estimated_total_hours": payout_summary["estimated_total_hours"],
+            "estimated_amount": payout_summary["estimated_amount"],
+            "invoice_status": base["invoice_status"],
+            "line_items": payout_summary["line_items"],
+            "note": base["note"],
+            "created_at": base["created_at"],
+            "updated_at": base["updated_at"],
+        }
+
+    @staticmethod
+    def _week_bounds(anchor: date) -> tuple[date, date]:
+        week_start = anchor - timedelta(days=anchor.weekday())
+        return week_start, week_start + timedelta(days=6)
+
+    @staticmethod
+    def _safe_zoneinfo(value: Any) -> ZoneInfo:
+        timezone_name = str(value or "").strip() or "UTC"
+        try:
+            return ZoneInfo(timezone_name)
+        except Exception:
+            return ZoneInfo("UTC")
+
+    @classmethod
+    def _date_ranges_overlap(
+        cls,
+        start_a: Any,
+        end_a: Any,
+        start_b: Any,
+        end_b: Any,
+    ) -> bool:
+        start_a_date = cls._as_date(start_a)
+        end_a_date = cls._as_date(end_a) or start_a_date
+        start_b_date = cls._as_date(start_b)
+        end_b_date = cls._as_date(end_b) or start_b_date
+        if not start_a_date or not end_a_date or not start_b_date or not end_b_date:
+            return False
+        return max(start_a_date, start_b_date) <= min(end_a_date, end_b_date)
+
+    @classmethod
+    def _weekly_assignee_invoice_id(
+        cls,
+        *,
+        request_id: str,
+        assignee_tenant_id: str,
+        assignee_tenant_type: str,
+        billing_period_start_local: str,
+    ) -> str:
+        return (
+            f"weekly:{str(assignee_tenant_type or '').strip().lower()}:"
+            f"{str(assignee_tenant_id or '').strip()}:"
+            f"{str(request_id or '').strip()}:"
+            f"{str(billing_period_start_local or '').strip()}"
+        )
+
+    @classmethod
+    def _weekly_assignee_invoice_number(
+        cls,
+        *,
+        request_id: str,
+        assignee_tenant_id: str,
+        billing_period_start_local: str,
+    ) -> str:
+        request_token = str(request_id or "").replace("-", "")[-4:].upper() or "REQ"
+        assignee_token = str(assignee_tenant_id or "").replace("-", "")[-4:].upper() or "TEN"
+        try:
+            period_token = date.fromisoformat(str(billing_period_start_local or "").strip()).strftime("%Y%m%d")
+        except Exception:
+            period_token = str(billing_period_start_local or "").replace("-", "")[:8] or datetime.utcnow().strftime("%Y%m%d")
+        return f"PINV-{period_token}-{assignee_token}-{request_token}"
+
+    @classmethod
+    def _localize_utc_datetime(cls, value: Any, tzinfo: ZoneInfo) -> Optional[datetime]:
+        parsed = cls._as_datetime(value)
+        if not parsed:
+            return None
+        utc_value = parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+        return utc_value.astimezone(tzinfo)
+
+    @classmethod
+    def _shift_slot_duration_hours(
+        cls,
+        slot_doc: Dict[str, Any],
+        shift_doc: Dict[str, Any],
+    ) -> Optional[float]:
+        actual_start = (
+            cls._as_datetime(slot_doc.get("actual_start_at"))
+            or cls._as_datetime(slot_doc.get("started_at"))
+            or cls._as_datetime(shift_doc.get("shift_start_at_utc"))
+        )
+        actual_end = (
+            cls._as_datetime(slot_doc.get("actual_end_at"))
+            or cls._as_datetime(slot_doc.get("checked_out_at"))
+            or cls._as_datetime(slot_doc.get("completed_at"))
+            or cls._as_datetime(shift_doc.get("shift_end_at_utc"))
+        )
+        if actual_start and actual_end and actual_end > actual_start:
+            return round(max((actual_end - actual_start).total_seconds() / 3600.0, 0.0), 2)
+        return cls._calculate_requested_hours(
+            cls._as_datetime(shift_doc.get("shift_start_at_utc")),
+            cls._as_datetime(shift_doc.get("shift_end_at_utc")),
+        )
+
+    @classmethod
+    def _build_weekly_assignee_line_item(
+        cls,
+        *,
+        request_title: str,
+        service_date_local: date,
+        payout_hourly_rate: float,
+        total_hours: float,
+        completed_slots: int,
+        request_guards_required: int,
+        local_start: Optional[datetime],
+        local_end: Optional[datetime],
+    ) -> Dict[str, Any]:
+        hours_per_position = round(total_hours / max(int(completed_slots or 1), 1), 2)
+        return {
+            "description": f"{request_title} - {service_date_local.isoformat()}",
+            "service_date_local": service_date_local.isoformat(),
+            "unit": "hour",
+            "quantity": round(total_hours, 2),
+            "unit_rate": round(payout_hourly_rate, 2),
+            "amount": round(payout_hourly_rate * total_hours, 2),
+            "metadata": {
+                "committed_slots": max(int(completed_slots or 1), 1),
+                "hours_per_position": hours_per_position,
+                "request_guards_required": max(int(request_guards_required or 1), 1),
+                "start_at_local": local_start.isoformat() if local_start else None,
+                "end_at_local": local_end.isoformat() if local_end else None,
+            },
+        }
+
+    async def _build_short_term_assignee_invoice_items(
+        self,
+        *,
+        request_ids: List[str],
+        assignment_map: Dict[str, Dict[str, Any]],
+        request_lookup: Dict[str, Dict[str, Any]],
+        assignee_tenant_type: str,
+    ) -> List[Dict[str, Any]]:
+        if not request_ids:
+            return []
+
+        invoice_collection = self._engine.get_collection(RequestInvoiceRecord)
+        invoice_docs = await invoice_collection.find({
+            "request_id": {"$in": request_ids},
+        }).sort("created_at", -1).to_list(length=None)
+
+        items: List[Dict[str, Any]] = []
+        for invoice_doc in invoice_docs:
+            request_id = str(invoice_doc.get("request_id") or "").strip()
+            assignment_summary = assignment_map.get(request_id)
+            if not assignment_summary:
+                continue
+
+            request_summary = request_lookup.get(request_id, {})
+            items.append(self._serialize_assignee_invoice(
+                invoice_doc,
+                assignee_tenant_type=assignee_tenant_type,
+                committed_slots=int(assignment_summary.get("committed_slots") or 1),
+                coverage_status=self._rollup_assignee_assignment_status(set(assignment_summary.get("statuses") or set())),
+                request_title=str(request_summary.get("title") or "").strip(),
+                site_name=str(request_summary.get("site_name") or "").strip(),
+            ))
+
+        return items
+
+    async def _build_long_term_assignee_weekly_invoice_items(
+        self,
+        *,
+        request_ids: List[str],
+        assignment_map: Dict[str, Dict[str, Any]],
+        request_lookup: Dict[str, Dict[str, Any]],
+        assignee_tenant_id: str,
+        assignee_tenant_type: str,
+    ) -> List[Dict[str, Any]]:
+        normalized_request_ids = [
+            str(request_id or "").strip()
+            for request_id in request_ids
+            if str(request_id or "").strip()
+        ]
+        if not normalized_request_ids:
+            return []
+
+        shift_collection = self._engine.get_collection(ShiftInstanceRecord)
+        slot_collection = self._engine.get_collection(ShiftSlotRecord)
+        shift_docs = await shift_collection.find({
+            "request_id": {"$in": normalized_request_ids},
+        }).to_list(length=None)
+        slot_docs = await slot_collection.find({
+            "request_id": {"$in": normalized_request_ids},
+        }).to_list(length=None)
+
+        shift_lookup = {
+            str(shift_doc.get("_id") or "").strip(): shift_doc
+            for shift_doc in shift_docs
+            if str(shift_doc.get("_id") or "").strip()
+        }
+
+        grouped: Dict[tuple[str, str], Dict[str, Any]] = {}
+        now_utc = datetime.utcnow()
+
+        for slot_doc in slot_docs:
+            request_id = str(slot_doc.get("request_id") or "").strip()
+            if not request_id or request_id not in request_lookup:
+                continue
+            if assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER.value:
+                if str(slot_doc.get("service_provider_tenant_id") or "").strip() != assignee_tenant_id:
+                    continue
+            else:
+                if str(slot_doc.get("assigned_guard_tenant_id") or "").strip() != assignee_tenant_id:
+                    continue
+            if self._as_datetime(slot_doc.get("completed_at")) is None:
+                continue
+
+            shift_id = str(slot_doc.get("shift_instance_id") or "").strip()
+            shift_doc = shift_lookup.get(shift_id)
+            if not shift_doc:
+                continue
+
+            try:
+                service_date_local = date.fromisoformat(str(shift_doc.get("shift_date_local") or "").strip())
+            except Exception:
+                continue
+
+            timezone_name = str(shift_doc.get("timezone") or request_lookup[request_id].get("timezone") or "UTC").strip() or "UTC"
+            tzinfo = self._safe_zoneinfo(timezone_name)
+            today_local = now_utc.replace(tzinfo=timezone.utc).astimezone(tzinfo).date()
+            week_start, week_end = self._week_bounds(service_date_local)
+            if week_end >= today_local:
+                continue
+
+            request_summary = request_lookup[request_id]
+            payout_hourly_rate = self._as_float(
+                request_summary.get("provider_hourly_pay")
+                if assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER.value
+                else request_summary.get("guard_hourly_pay")
+            )
+            if payout_hourly_rate is None:
+                continue
+
+            duration_hours = self._shift_slot_duration_hours(slot_doc, shift_doc)
+            if duration_hours is None or duration_hours <= 0:
+                continue
+
+            group_key = (request_id, week_start.isoformat())
+            group = grouped.setdefault(group_key, {
+                "request_id": request_id,
+                "week_start": week_start,
+                "week_end": week_end,
+                "request_title": str(request_summary.get("title") or "").strip() or "Coverage payout",
+                "site_name": str(request_summary.get("site_name") or "").strip(),
+                "timezone": timezone_name,
+                "currency": str(request_summary.get("currency") or "CAD"),
+                "request_guards_required": max(int(request_summary.get("guards_required") or 1), 1),
+                "request_committed_slots": max(int((assignment_map.get(request_id) or {}).get("committed_slots") or 1), 1),
+                "payout_hourly_rate": round(payout_hourly_rate, 2),
+                "completed_at_latest": None,
+                "line_groups": {},
+            })
+
+            line_key = str(shift_doc.get("_id") or "").strip() or service_date_local.isoformat()
+            line_group = group["line_groups"].setdefault(line_key, {
+                "service_date_local": service_date_local,
+                "total_hours": 0.0,
+                "completed_slots": 0,
+                "local_start": None,
+                "local_end": None,
+                "completed_at_latest": None,
+            })
+            line_group["total_hours"] += float(duration_hours)
+            line_group["completed_slots"] += 1
+
+            local_start = self._localize_utc_datetime(
+                slot_doc.get("actual_start_at") or slot_doc.get("started_at") or shift_doc.get("shift_start_at_utc"),
+                tzinfo,
+            )
+            local_end = self._localize_utc_datetime(
+                slot_doc.get("actual_end_at") or slot_doc.get("checked_out_at") or slot_doc.get("completed_at") or shift_doc.get("shift_end_at_utc"),
+                tzinfo,
+            )
+            if local_start and (line_group["local_start"] is None or local_start < line_group["local_start"]):
+                line_group["local_start"] = local_start
+            if local_end and (line_group["local_end"] is None or local_end > line_group["local_end"]):
+                line_group["local_end"] = local_end
+
+            completed_at = self._as_datetime(slot_doc.get("completed_at"))
+            if completed_at and (line_group["completed_at_latest"] is None or completed_at > line_group["completed_at_latest"]):
+                line_group["completed_at_latest"] = completed_at
+            if completed_at and (group["completed_at_latest"] is None or completed_at > group["completed_at_latest"]):
+                group["completed_at_latest"] = completed_at
+
+        items: List[Dict[str, Any]] = []
+        for group in grouped.values():
+            line_items: List[Dict[str, Any]] = []
+            total_hours = 0.0
+            total_amount = 0.0
+
+            ordered_line_groups = sorted(
+                group["line_groups"].values(),
+                key=lambda item: item["service_date_local"],
+            )
+            for line_group in ordered_line_groups:
+                line_item = self._build_weekly_assignee_line_item(
+                    request_title=group["request_title"],
+                    service_date_local=line_group["service_date_local"],
+                    payout_hourly_rate=group["payout_hourly_rate"],
+                    total_hours=round(float(line_group["total_hours"]), 2),
+                    completed_slots=int(line_group["completed_slots"] or 0),
+                    request_guards_required=group["request_guards_required"],
+                    local_start=line_group["local_start"],
+                    local_end=line_group["local_end"],
+                )
+                line_items.append(line_item)
+                total_hours += float(line_item["quantity"] or 0.0)
+                total_amount += float(line_item["amount"] or 0.0)
+
+            if not line_items:
+                continue
+
+            billing_period_start_local = group["week_start"].isoformat()
+            billing_period_end_local = group["week_end"].isoformat()
+            completed_at_latest = group["completed_at_latest"] or now_utc
+            items.append({
+                "id": self._weekly_assignee_invoice_id(
+                    request_id=group["request_id"],
+                    assignee_tenant_id=assignee_tenant_id,
+                    assignee_tenant_type=assignee_tenant_type,
+                    billing_period_start_local=billing_period_start_local,
+                ),
+                "request_id": group["request_id"],
+                "invoice_number": self._weekly_assignee_invoice_number(
+                    request_id=group["request_id"],
+                    assignee_tenant_id=assignee_tenant_id,
+                    billing_period_start_local=billing_period_start_local,
+                ),
+                "request_title": group["request_title"],
+                "site_name": group["site_name"],
+                "assignee_tenant_type": assignee_tenant_type,
+                "coverage_status": RequestAssignmentStatus.COMPLETED.value,
+                "contract_type": "long_term",
+                "billing_cycle": "weekly",
+                "charge_timing": "weekly_cutoff",
+                "billing_period_start_local": billing_period_start_local,
+                "billing_period_end_local": billing_period_end_local,
+                "billing_period_label": f"{group['week_start'].strftime('%b %d, %Y')} - {group['week_end'].strftime('%b %d, %Y')}",
+                "currency": group["currency"],
+                "committed_slots": group["request_committed_slots"],
+                "payout_hourly_rate": group["payout_hourly_rate"],
+                "estimated_total_hours": round(total_hours, 2),
+                "estimated_amount": round(total_amount, 2),
+                "invoice_status": RequestInvoiceStatus.ISSUED.value,
+                "line_items": line_items,
+                "note": "Weekly payout invoice generated from completed scheduled coverage after the weekly cutoff.",
+                "created_at": completed_at_latest,
+                "updated_at": completed_at_latest,
+            })
+
+        return items
+
+    async def _build_assignee_invoice_items(
+        self,
+        *,
+        assignee_tenant_id: str,
+        assignee_tenant_type: str,
+        assignment_map: Dict[str, Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        request_ids = list(assignment_map.keys())
+        if not request_ids:
+            return []
+
+        request_collection = self._engine.get_collection(ClientRequestRecord)
+        request_object_ids: List[ObjectId] = []
+        for request_id in request_ids:
+            try:
+                request_object_ids.append(ObjectId(request_id))
+            except Exception:
+                continue
+
+        request_docs = await request_collection.find({"_id": {"$in": request_object_ids}}).to_list(length=None) if request_object_ids else []
+        request_lookup: Dict[str, Dict[str, Any]] = {}
+        short_term_request_ids: List[str] = []
+        long_term_request_ids: List[str] = []
+
+        for doc in request_docs:
+            request_id = str(doc.get("_id") or "").strip()
+            pricing_snapshot = doc.get("pricing_snapshot") if isinstance(doc.get("pricing_snapshot"), dict) else {}
+            invoicing_snapshot = doc.get("invoicing_snapshot") if isinstance(doc.get("invoicing_snapshot"), dict) else {}
+            request_lookup[request_id] = {
+                "title": str(doc.get("title") or "").strip(),
+                "site_name": str((doc.get("site_snapshot") or {}).get("site_name") or "").strip(),
+                "timezone": str(doc.get("timezone") or "").strip() or "UTC",
+                "currency": str(pricing_snapshot.get("currency") or "CAD"),
+                "guards_required": int(doc.get("guards_required") or pricing_snapshot.get("guards_required") or 1),
+                "guard_hourly_pay": pricing_snapshot.get("guard_hourly_pay"),
+                "provider_hourly_pay": pricing_snapshot.get("provider_hourly_pay"),
+                "contract_type": self._normalize_invoice_contract_type(invoicing_snapshot.get("contract_type")),
+            }
+            if request_lookup[request_id]["contract_type"] == "long_term":
+                long_term_request_ids.append(request_id)
+            else:
+                short_term_request_ids.append(request_id)
+
+        items = await self._build_short_term_assignee_invoice_items(
+            request_ids=short_term_request_ids,
+            assignment_map=assignment_map,
+            request_lookup=request_lookup,
+            assignee_tenant_type=assignee_tenant_type,
+        )
+        items.extend(await self._build_long_term_assignee_weekly_invoice_items(
+            request_ids=long_term_request_ids,
+            assignment_map=assignment_map,
+            request_lookup=request_lookup,
+            assignee_tenant_id=assignee_tenant_id,
+            assignee_tenant_type=assignee_tenant_type,
+        ))
+        items.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        return items
+
+    async def _build_platform_finance_context(
+        self,
+        request_ids: List[str],
+    ) -> tuple[Dict[str, Dict[str, Any]], Dict[str, List[Dict[str, Any]]], Dict[str, str]]:
+        normalized_request_ids = [
+            str(request_id or "").strip()
+            for request_id in request_ids
+            if str(request_id or "").strip()
+        ]
+        if not normalized_request_ids:
+            return {}, {}, {}
+
+        request_object_ids: List[ObjectId] = []
+        for request_id in normalized_request_ids:
+            try:
+                request_object_ids.append(ObjectId(request_id))
+            except Exception:
+                continue
+
+        request_collection = self._engine.get_collection(ClientRequestRecord)
+        request_docs = await request_collection.find({
+            "_id": {"$in": request_object_ids},
+        }).to_list(length=None) if request_object_ids else []
+
+        request_lookup: Dict[str, Dict[str, Any]] = {}
+        client_tenant_ids: List[str] = []
+        for doc in request_docs:
+            request_id = str(doc.get("_id") or "").strip()
+            pricing_snapshot = doc.get("pricing_snapshot") if isinstance(doc.get("pricing_snapshot"), dict) else {}
+            invoicing_snapshot = doc.get("invoicing_snapshot") if isinstance(doc.get("invoicing_snapshot"), dict) else {}
+            client_tenant_id = str(doc.get("client_tenant_id") or "").strip()
+            if client_tenant_id:
+                client_tenant_ids.append(client_tenant_id)
+            request_lookup[request_id] = {
+                "request_id": request_id,
+                "client_tenant_id": client_tenant_id,
+                "title": str(doc.get("title") or "").strip(),
+                "site_name": str((doc.get("site_snapshot") or {}).get("site_name") or "").strip(),
+                "timezone": str(doc.get("timezone") or "").strip() or "UTC",
+                "currency": str(pricing_snapshot.get("currency") or "CAD"),
+                "contract_type": self._normalize_invoice_contract_type(invoicing_snapshot.get("contract_type")),
+                "client_hourly_quote": pricing_snapshot.get("client_hourly_quote"),
+                "guard_hourly_pay": pricing_snapshot.get("guard_hourly_pay"),
+                "provider_hourly_pay": pricing_snapshot.get("provider_hourly_pay"),
+                "guard_company_margin": pricing_snapshot.get("guard_company_margin"),
+                "provider_company_commission": pricing_snapshot.get("provider_company_commission"),
+            }
+
+        invoice_collection = self._engine.get_collection(RequestInvoiceRecord)
+        invoice_docs = await invoice_collection.find({
+            "request_id": {"$in": normalized_request_ids},
+        }).sort("created_at", -1).to_list(length=None)
+
+        invoice_lookup: Dict[str, List[Dict[str, Any]]] = {}
+        for doc in invoice_docs:
+            request_id = str(doc.get("request_id") or "").strip()
+            if not request_id:
+                continue
+            invoice_lookup.setdefault(request_id, []).append(doc)
+            client_tenant_id = str(doc.get("client_tenant_id") or "").strip()
+            if client_tenant_id:
+                client_tenant_ids.append(client_tenant_id)
+            request_entry = request_lookup.setdefault(request_id, {"request_id": request_id})
+            if not request_entry.get("client_tenant_id") and client_tenant_id:
+                request_entry["client_tenant_id"] = client_tenant_id
+            if request_entry.get("client_hourly_quote") is None and doc.get("client_hourly_quote") is not None:
+                request_entry["client_hourly_quote"] = doc.get("client_hourly_quote")
+
+        client_labels = await self._build_tenant_label_lookup(client_tenant_ids) if client_tenant_ids else {}
+        return request_lookup, invoice_lookup, client_labels
+
+    @classmethod
+    def _match_client_invoice_for_platform_item(
+        cls,
+        item: Dict[str, Any],
+        candidate_invoices: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if not candidate_invoices:
+            return None
+
+        normalized_invoice_number = str(item.get("invoice_number") or "").strip()
+        if normalized_invoice_number:
+            for candidate in candidate_invoices:
+                if str(candidate.get("invoice_number") or "").strip() == normalized_invoice_number:
+                    return candidate
+
+        overlapping = [
+            candidate
+            for candidate in candidate_invoices
+            if cls._date_ranges_overlap(
+                item.get("billing_period_start_local"),
+                item.get("billing_period_end_local"),
+                candidate.get("billing_period_start_local"),
+                candidate.get("billing_period_end_local"),
+            )
+        ]
+        pool = overlapping or candidate_invoices
+        pool = sorted(
+            pool,
+            key=lambda candidate: (
+                str(candidate.get("billing_period_start_local") or ""),
+                str(candidate.get("updated_at") or candidate.get("created_at") or ""),
+            ),
+            reverse=True,
+        )
+        return pool[0] if pool else None
+
+    @classmethod
+    def _enrich_platform_payout_invoice_item(
+        cls,
+        item: Dict[str, Any],
+        *,
+        request_summary: Dict[str, Any],
+        candidate_invoices: List[Dict[str, Any]],
+        client_label: str = "",
+    ) -> Dict[str, Any]:
+        enriched = dict(item)
+        matched_invoice = cls._match_client_invoice_for_platform_item(enriched, candidate_invoices)
+        serialized_invoice = cls._serialize_invoice(matched_invoice) if matched_invoice else {}
+
+        client_hourly_quote = cls._as_float(
+            serialized_invoice.get("client_hourly_quote")
+            if serialized_invoice
+            else request_summary.get("client_hourly_quote")
+        )
+        payout_hourly_rate = cls._as_float(enriched.get("payout_hourly_rate"))
+        total_hours = cls._as_float(enriched.get("estimated_total_hours"))
+        payout_total = cls._as_float(enriched.get("estimated_amount"))
+
+        estimated_client_revenue = round(client_hourly_quote * total_hours, 2) if client_hourly_quote is not None and total_hours is not None else None
+        estimated_platform_earning = round(estimated_client_revenue - payout_total, 2) if estimated_client_revenue is not None and payout_total is not None else None
+        platform_cut_hourly_rate = round(max(client_hourly_quote - payout_hourly_rate, 0.0), 2) if client_hourly_quote is not None and payout_hourly_rate is not None else None
+        platform_margin_percent = round((estimated_platform_earning / estimated_client_revenue) * 100, 2) if estimated_client_revenue and estimated_platform_earning is not None else None
+
+        request_client_tenant_id = str(
+            request_summary.get("client_tenant_id")
+            or serialized_invoice.get("client_tenant_id")
+            or ""
+        ).strip()
+        contract_type = str(enriched.get("contract_type") or request_summary.get("contract_type") or "").strip()
+        reporting_basis = "attendance_realized_hours" if str(enriched.get("billing_cycle") or "").strip() == "weekly" else "request_invoice_estimate"
+
+        enriched.update({
+            "client_tenant_id": request_client_tenant_id or None,
+            "client_label": client_label or request_client_tenant_id or None,
+            "client_hourly_quote": client_hourly_quote,
+            "estimated_client_revenue": estimated_client_revenue,
+            "estimated_platform_earning": estimated_platform_earning,
+            "platform_cut_hourly_rate": platform_cut_hourly_rate,
+            "platform_margin_percent": platform_margin_percent,
+            "linked_client_invoice_id": serialized_invoice.get("id"),
+            "linked_client_invoice_number": serialized_invoice.get("invoice_number"),
+            "linked_client_invoice_status": serialized_invoice.get("invoice_status"),
+            "linked_client_payment_status": serialized_invoice.get("payment_status"),
+            "linked_client_invoice_period_label": serialized_invoice.get("billing_period_label"),
+            "linked_client_invoice_trigger": serialized_invoice.get("trigger"),
+            "reporting_basis": reporting_basis,
+            "reporting_note": (
+                "Client revenue is normalized from completed attendance against the saved client hourly quote for weekly payout reporting."
+                if contract_type == "long_term" and str(enriched.get("billing_cycle") or "").strip() == "weekly"
+                else "Client revenue is aligned to the issued request invoice estimate for this payout invoice."
+            ),
+        })
+        return enriched
+
+    @classmethod
+    def _build_platform_payout_summary(cls, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        total_client_revenue = 0.0
+        total_payout = 0.0
+        total_platform_earning = 0.0
+        total_hours = 0.0
+        total_guard_payout = 0.0
+        total_provider_payout = 0.0
+        total_guard_earning = 0.0
+        total_provider_earning = 0.0
+
+        for item in items:
+            client_revenue = float(cls._as_float(item.get("estimated_client_revenue")) or 0.0)
+            payout = float(cls._as_float(item.get("estimated_amount")) or 0.0)
+            earning = float(cls._as_float(item.get("estimated_platform_earning")) or 0.0)
+            hours = float(cls._as_float(item.get("estimated_total_hours")) or 0.0)
+            tenant_type = str(item.get("assignee_tenant_type") or "").strip().lower()
+
+            total_client_revenue += client_revenue
+            total_payout += payout
+            total_platform_earning += earning
+            total_hours += hours
+
+            if tenant_type == RequestTargetType.SERVICE_PROVIDER.value:
+                total_provider_payout += payout
+                total_provider_earning += earning
+            else:
+                total_guard_payout += payout
+                total_guard_earning += earning
+
+        margin_percent = round((total_platform_earning / total_client_revenue) * 100, 2) if total_client_revenue > 0 else None
+        return {
+            "invoice_count": len(items),
+            "total_client_revenue": round(total_client_revenue, 2),
+            "total_payout": round(total_payout, 2),
+            "total_platform_earning": round(total_platform_earning, 2),
+            "total_hours": round(total_hours, 2),
+            "total_guard_payout": round(total_guard_payout, 2),
+            "total_provider_payout": round(total_provider_payout, 2),
+            "total_guard_earning": round(total_guard_earning, 2),
+            "total_provider_earning": round(total_provider_earning, 2),
+            "platform_margin_percent": margin_percent,
+        }
+
+    async def _collect_platform_assignee_invoice_scopes(self) -> List[Dict[str, Any]]:
+        assignment_collection = self._engine.get_collection(RequestAssignmentRecord)
+        assignment_docs = await assignment_collection.find({}).to_list(length=None)
+        allowed_statuses = self._assignee_invoice_allowed_statuses()
+        scopes: Dict[tuple[str, str], Dict[str, Any]] = {}
+
+        for doc in assignment_docs:
+            if self._assignment_scope_value(doc) != RequestAssignmentScope.REQUEST.value:
+                continue
+            status_value = self._enum_value(doc.get("assignment_status"))
+            if status_value not in allowed_statuses:
+                continue
+
+            tenant_id = str(doc.get("assignee_tenant_id") or "").strip()
+            tenant_type = str(doc.get("assignee_tenant_type") or "").strip().lower()
+            request_id = str(doc.get("request_id") or "").strip()
+            if not tenant_id or not tenant_type or not request_id:
+                continue
+
+            scope_key = (tenant_id, tenant_type)
+            scope = scopes.setdefault(scope_key, {
+                "tenant_id": tenant_id,
+                "assignee_tenant_type": tenant_type,
+                "assignment_map": {},
+            })
+            request_entry = scope["assignment_map"].setdefault(request_id, {
+                "committed_slots": 0,
+                "statuses": set(),
+            })
+            request_entry["committed_slots"] += self._assignment_slots(doc)
+            request_entry["statuses"].add(status_value)
+
+        return list(scopes.values())
 
     async def _get_tenant(self, tenant_id: str):
         try:
@@ -1771,6 +2590,21 @@ class RequestManager:
             or str(getattr(tenant, "id", "") or "").strip()
         )
 
+    @staticmethod
+    def _extract_tenant_name(profile: Optional[Dict[str, Any]]) -> str:
+        if not isinstance(profile, dict):
+            return ""
+        for key in ["legal_company_name", "trading_name", "legal_entity_name", "full_name", "company_name", "name"]:
+            value = profile.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        primary_contact = cast(Dict[str, Any], profile.get("primary_contact") or {})
+        representative = cast(Dict[str, Any], profile.get("primary_representative") or {})
+        for candidate in [primary_contact.get("name"), representative.get("name")]:
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+        return ""
+
     async def _build_client_tenant_label_lookup(self, tenant_ids: List[str]) -> Dict[str, str]:
         normalized_ids: List[str] = []
         object_ids: List[ObjectId] = []
@@ -1799,6 +2633,40 @@ class RequestManager:
                     profile=profile,
                     name=str(doc.get("name") or ""),
                 ))
+
+        for tenant_id in normalized_ids:
+            label_lookup.setdefault(tenant_id, tenant_id)
+
+        return label_lookup
+
+    async def _build_tenant_label_lookup(self, tenant_ids: List[str]) -> Dict[str, str]:
+        normalized_ids: List[str] = []
+        object_ids: List[ObjectId] = []
+        label_lookup: Dict[str, str] = {}
+        seen_ids = set()
+
+        for raw_tenant_id in tenant_ids:
+            tenant_id = str(raw_tenant_id or "").strip()
+            if not tenant_id or tenant_id in seen_ids:
+                continue
+            seen_ids.add(tenant_id)
+            normalized_ids.append(tenant_id)
+            try:
+                object_ids.append(ObjectId(tenant_id))
+            except Exception:
+                label_lookup[tenant_id] = tenant_id
+
+        if object_ids:
+            collection = self._engine.get_collection(db_tenant_model)
+            docs = await collection.find({"_id": {"$in": object_ids}}).to_list(length=None)
+            for doc in docs:
+                tenant_id = str(doc.get("_id") or "")
+                profile = cast(Dict[str, Any], doc.get("profile") or {})
+                label_lookup[tenant_id] = (
+                    self._extract_tenant_name(profile)
+                    or str(doc.get("name") or "").strip()
+                    or tenant_id
+                )
 
         for tenant_id in normalized_ids:
             label_lookup.setdefault(tenant_id, tenant_id)
@@ -3219,6 +4087,250 @@ class RequestManager:
             if session_tenant.tenant_type == TenantType.CLIENT and str(session_tenant.id) == str(record.client_tenant_id):
                 return
         raise HTTPException(status_code=403, detail="Access forbidden")
+
+    async def _get_assignee_invoice_scope(self, current_user) -> Dict[str, str]:
+        role_value = self._role_value(current_user)
+        session_tenant = await self._get_session_tenant(current_user)
+
+        if role_value == "guard_admin" and session_tenant.tenant_type == TenantType.GUARD:
+            return {
+                "tenant_id": str(session_tenant.id),
+                "assignee_tenant_type": RequestTargetType.GUARD.value,
+            }
+
+        if role_value == "sp_admin" and session_tenant.tenant_type == TenantType.SERVICE_PROVIDER:
+            return {
+                "tenant_id": str(session_tenant.id),
+                "assignee_tenant_type": RequestTargetType.SERVICE_PROVIDER.value,
+            }
+
+        raise HTTPException(status_code=403, detail="Access forbidden")
+
+    async def _collect_assignee_invoice_assignment_map(
+        self,
+        *,
+        assignee_tenant_id: str,
+        request_ids: Optional[List[str]] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        query: Dict[str, Any] = {"assignee_tenant_id": assignee_tenant_id}
+        normalized_request_ids = [
+            str(request_id or "").strip()
+            for request_id in list(request_ids or [])
+            if str(request_id or "").strip()
+        ]
+        if normalized_request_ids:
+            query["request_id"] = {"$in": normalized_request_ids}
+
+        assignment_collection = self._engine.get_collection(RequestAssignmentRecord)
+        assignment_docs = await assignment_collection.find(query).to_list(length=None)
+
+        relevant: Dict[str, Dict[str, Any]] = {}
+        allowed_statuses = self._assignee_invoice_allowed_statuses()
+        for doc in assignment_docs:
+            if self._assignment_scope_value(doc) != RequestAssignmentScope.REQUEST.value:
+                continue
+
+            status_value = self._enum_value(doc.get("assignment_status"))
+            if status_value not in allowed_statuses:
+                continue
+
+            request_id = str(doc.get("request_id") or "").strip()
+            if not request_id:
+                continue
+
+            entry = relevant.setdefault(request_id, {
+                "committed_slots": 0,
+                "statuses": set(),
+            })
+            entry["committed_slots"] += self._assignment_slots(doc)
+            entry["statuses"].add(status_value)
+
+        return relevant
+
+    async def list_my_invoices(
+        self,
+        current_user,
+        page: int = 1,
+        rows: int = 20,
+    ) -> Dict[str, Any]:
+        scope = await self._get_assignee_invoice_scope(current_user)
+        assignment_map = await self._collect_assignee_invoice_assignment_map(
+            assignee_tenant_id=scope["tenant_id"],
+        )
+        if not assignment_map:
+            safe_rows = rows if rows and rows > 0 else 20
+            safe_page = page if page and page > 0 else 1
+            return {
+                "items": [],
+                "pagination": {
+                    "page": safe_page,
+                    "rows": safe_rows,
+                    "total_items": 0,
+                    "total_pages": 0,
+                },
+            }
+        items = await self._build_assignee_invoice_items(
+            assignee_tenant_id=scope["tenant_id"],
+            assignee_tenant_type=scope["assignee_tenant_type"],
+            assignment_map=assignment_map,
+        )
+
+        safe_rows = rows if rows and rows > 0 else 20
+        safe_page = page if page and page > 0 else 1
+        total_items = len(items)
+        total_pages = (total_items + safe_rows - 1) // safe_rows if total_items > 0 else 0
+        start = (safe_page - 1) * safe_rows
+        end = start + safe_rows
+
+        return {
+            "items": items[start:end],
+            "pagination": {
+                "page": safe_page,
+                "rows": safe_rows,
+                "total_items": total_items,
+                "total_pages": total_pages,
+            },
+        }
+
+    async def get_my_invoice_by_id(
+        self,
+        invoice_id: str,
+        current_user,
+    ) -> Dict[str, Any]:
+        scope = await self._get_assignee_invoice_scope(current_user)
+        assignment_map = await self._collect_assignee_invoice_assignment_map(
+            assignee_tenant_id=scope["tenant_id"],
+        )
+        items = await self._build_assignee_invoice_items(
+            assignee_tenant_id=scope["tenant_id"],
+            assignee_tenant_type=scope["assignee_tenant_type"],
+            assignment_map=assignment_map,
+        )
+        for item in items:
+            if str(item.get("id") or "").strip() == str(invoice_id or "").strip():
+                return item
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    async def list_platform_payout_invoices(
+        self,
+        current_user,
+        page: int = 1,
+        rows: int = 20,
+        keyword: str = "",
+        assignee_tenant_type: str = "",
+    ) -> Dict[str, Any]:
+        if not self._is_platform_role(self._role_value(current_user)):
+            raise HTTPException(status_code=403, detail="Access forbidden")
+
+        normalized_type = str(assignee_tenant_type or "").strip().lower()
+        scopes = await self._collect_platform_assignee_invoice_scopes()
+        tenant_labels = await self._build_tenant_label_lookup([scope["tenant_id"] for scope in scopes])
+
+        items: List[Dict[str, Any]] = []
+        for scope in scopes:
+            scope_type = str(scope.get("assignee_tenant_type") or "").strip().lower()
+            if normalized_type and scope_type != normalized_type:
+                continue
+            scope_items = await self._build_assignee_invoice_items(
+                assignee_tenant_id=str(scope.get("tenant_id") or "").strip(),
+                assignee_tenant_type=scope_type,
+                assignment_map=cast(Dict[str, Dict[str, Any]], scope.get("assignment_map") or {}),
+            )
+            assignee_label = tenant_labels.get(str(scope.get("tenant_id") or "").strip(), str(scope.get("tenant_id") or "").strip())
+            for item in scope_items:
+                item["assignee_tenant_id"] = str(scope.get("tenant_id") or "").strip()
+                item["assignee_label"] = assignee_label
+                items.append(item)
+
+        request_lookup, invoice_lookup, client_labels = await self._build_platform_finance_context([
+            str(item.get("request_id") or "").strip()
+            for item in items
+        ])
+        items = [
+            self._enrich_platform_payout_invoice_item(
+                item,
+                request_summary=request_lookup.get(str(item.get("request_id") or "").strip(), {}),
+                candidate_invoices=invoice_lookup.get(str(item.get("request_id") or "").strip(), []),
+                client_label=client_labels.get(
+                    str(request_lookup.get(str(item.get("request_id") or "").strip(), {}).get("client_tenant_id") or "").strip(),
+                    "",
+                ),
+            )
+            for item in items
+        ]
+
+        normalized_keyword = self._normalize_text(keyword)
+        if normalized_keyword:
+            items = [
+                item for item in items
+                if normalized_keyword in self._normalize_text(item.get("invoice_number"))
+                or normalized_keyword in self._normalize_text(item.get("request_title"))
+                or normalized_keyword in self._normalize_text(item.get("site_name"))
+                or normalized_keyword in self._normalize_text(item.get("assignee_label"))
+                or normalized_keyword in self._normalize_text(item.get("assignee_tenant_id"))
+                or normalized_keyword in self._normalize_text(item.get("client_label"))
+                or normalized_keyword in self._normalize_text(item.get("linked_client_invoice_number"))
+            ]
+
+        items.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        summary = self._build_platform_payout_summary(items)
+        safe_rows = rows if rows and rows > 0 else 20
+        safe_page = page if page and page > 0 else 1
+        total_items = len(items)
+        total_pages = (total_items + safe_rows - 1) // safe_rows if total_items > 0 else 0
+        start = (safe_page - 1) * safe_rows
+        end = start + safe_rows
+        return {
+            "items": items[start:end],
+            "pagination": {
+                "page": safe_page,
+                "rows": safe_rows,
+                "total_items": total_items,
+                "total_pages": total_pages,
+            },
+            "filters": {
+                "keyword": str(keyword or "").strip(),
+                "assignee_tenant_type": normalized_type,
+            },
+            "summary": summary,
+        }
+
+    async def get_platform_payout_invoice_by_id(
+        self,
+        invoice_id: str,
+        current_user,
+    ) -> Dict[str, Any]:
+        if not self._is_platform_role(self._role_value(current_user)):
+            raise HTTPException(status_code=403, detail="Access forbidden")
+
+        scopes = await self._collect_platform_assignee_invoice_scopes()
+        tenant_labels = await self._build_tenant_label_lookup([scope["tenant_id"] for scope in scopes])
+        normalized_invoice_id = str(invoice_id or "").strip()
+
+        for scope in scopes:
+            scope_items = await self._build_assignee_invoice_items(
+                assignee_tenant_id=str(scope.get("tenant_id") or "").strip(),
+                assignee_tenant_type=str(scope.get("assignee_tenant_type") or "").strip().lower(),
+                assignment_map=cast(Dict[str, Dict[str, Any]], scope.get("assignment_map") or {}),
+            )
+            assignee_id = str(scope.get("tenant_id") or "").strip()
+            assignee_label = tenant_labels.get(assignee_id, assignee_id)
+            for item in scope_items:
+                if str(item.get("id") or "").strip() != normalized_invoice_id:
+                    continue
+                item["assignee_tenant_id"] = assignee_id
+                item["assignee_label"] = assignee_label
+                request_lookup, invoice_lookup, client_labels = await self._build_platform_finance_context([str(item.get("request_id") or "").strip()])
+                request_summary = request_lookup.get(str(item.get("request_id") or "").strip(), {})
+                client_label = client_labels.get(str(request_summary.get("client_tenant_id") or "").strip(), "")
+                return self._enrich_platform_payout_invoice_item(
+                    item,
+                    request_summary=request_summary,
+                    candidate_invoices=invoice_lookup.get(str(item.get("request_id") or "").strip(), []),
+                    client_label=client_label,
+                )
+
+        raise HTTPException(status_code=404, detail="Invoice not found")
 
     async def list_request_invoices(
         self,

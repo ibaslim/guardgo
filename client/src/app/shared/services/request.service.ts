@@ -15,6 +15,10 @@ import {
   RequestAssignmentItem,
   RequestInvoiceItem,
   RequestInvoiceListResponse,
+  MyInvoiceItem,
+  MyInvoiceListResponse,
+  PlatformPayoutInvoiceItem,
+  PlatformPayoutInvoiceListResponse,
   RequestAssignmentStatus,
   RequestBroadcastWaveItem,
   RequestPublishPayload,
@@ -99,6 +103,36 @@ export class RequestService {
 
   getRequestInvoice(requestId: string, invoiceId: string, options?: ApiRequestOptions) {
     return this.api.get<RequestInvoiceItem>(`requests/${requestId}/invoices/${invoiceId}`, options);
+  }
+
+  listMyInvoices(page = 1, rows = 20, options?: ApiRequestOptions) {
+    const params = new HttpParams()
+      .set('page', page)
+      .set('rows', rows);
+    return this.api.get<MyInvoiceListResponse>('my-invoices', { ...options, params });
+  }
+
+  getMyInvoice(invoiceId: string, options?: ApiRequestOptions) {
+    return this.api.get<MyInvoiceItem>(`my-invoices/${invoiceId}`, options);
+  }
+
+  listPlatformPayoutInvoices(
+    page = 1,
+    rows = 20,
+    keyword = '',
+    assigneeTenantType = '',
+    options?: ApiRequestOptions,
+  ) {
+    let params = new HttpParams()
+      .set('page', page)
+      .set('rows', rows)
+      .set('keyword', keyword);
+    params = this.withOptionalParam(params, 'assignee_tenant_type', assigneeTenantType);
+    return this.api.get<PlatformPayoutInvoiceListResponse>('payout-invoices', { ...options, params });
+  }
+
+  getPlatformPayoutInvoice(invoiceId: string, options?: ApiRequestOptions) {
+    return this.api.get<PlatformPayoutInvoiceItem>(`payout-invoices/${invoiceId}`, options);
   }
 
   getRequestSchedule(requestId: string, options?: ApiRequestOptions) {

@@ -31,6 +31,8 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestWaveTrigger,
     RequestWaveStatus,
     ShiftCoverageSourceType,
+    ShiftInstanceRecord,
+    ShiftSlotRecord,
 )
 from orion.services.mongo_manager.shared_model.db_tenant_model import TenantType
 
@@ -97,12 +99,14 @@ class _FakeCollection:
 
 
 class _FakeListJobsEngine(FakeEngine):
-    def __init__(self, assignment_docs, request_docs, schedule_docs=None, invoice_docs=None):
+    def __init__(self, assignment_docs, request_docs, schedule_docs=None, invoice_docs=None, shift_docs=None, slot_docs=None):
         super().__init__()
         self._assignment_docs = assignment_docs
         self._request_docs = request_docs
         self._schedule_docs = schedule_docs or []
         self._invoice_docs = invoice_docs or []
+        self._shift_docs = shift_docs or []
+        self._slot_docs = slot_docs or []
 
     def get_collection(self, model):
         if model is RequestAssignmentRecord:
@@ -113,6 +117,10 @@ class _FakeListJobsEngine(FakeEngine):
             return _FakeCollection(self._schedule_docs)
         if model is RequestInvoiceRecord:
             return _FakeCollection(self._invoice_docs)
+        if model is ShiftInstanceRecord:
+            return _FakeCollection(self._shift_docs)
+        if model is ShiftSlotRecord:
+            return _FakeCollection(self._slot_docs)
         raise AssertionError(f"Unexpected collection request: {model}")
 
 
@@ -393,6 +401,391 @@ async def test_get_request_invoice_by_id_returns_invoice_for_client_admin():
     assert result["id"] == str(invoice_id)
     assert result["invoice_number"] == "INV-202606-NEW"
     assert result["billing_period_label"] == "June 2026"
+
+
+@pytest.mark.anyio
+async def test_list_my_invoices_returns_guard_payout_share():
+    manager = object.__new__(RequestManager)
+    request_id = ObjectId()
+    request_docs = [{
+        "_id": request_id,
+        "title": "Weekend Patrol",
+        "site_snapshot": {"site_name": "Harbour Centre"},
+    }]
+    assignment_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "assignee_tenant_id": "guard-tenant-1",
+        "assignee_tenant_type": "guard",
+        "assignment_scope": "request",
+        "assignment_status": "accepted",
+        "slots_committed": 1,
+    }]
+    invoice_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "client_tenant_id": "client-1",
+        "request_revision": 1,
+        "trigger": "initial_publish",
+        "invoice_number": "INV-202606-GUARD",
+        "contract_type": "short_term",
+        "billing_cycle": "per_request",
+        "charge_timing": "on_the_go",
+        "billing_period_start_local": "2026-06-12",
+        "billing_period_end_local": "2026-06-12",
+        "billing_period_label": "Jun 12, 2026",
+        "currency": "CAD",
+        "estimated_total_hours": 16,
+        "estimated_guard_payout": 400,
+        "invoice_status": "issued",
+        "line_items": [{
+            "description": "Weekend Patrol",
+            "service_date_local": "2026-06-12",
+            "unit": "hour",
+            "quantity": 16,
+            "unit_rate": 39,
+            "amount": 624,
+            "metadata": {
+                "guards_required": 2,
+                "hours_per_position": 8,
+                "start_at_local": "2026-06-12T08:00:00-07:00",
+                "end_at_local": "2026-06-12T16:00:00-07:00",
+            },
+        }],
+        "created_at": datetime(2026, 6, 10, 10, 0),
+        "updated_at": datetime(2026, 6, 10, 10, 0),
+    }]
+
+    manager._engine = _FakeListJobsEngine(assignment_docs, request_docs, invoice_docs=invoice_docs)
+    manager._get_assignee_invoice_scope = lambda _user: _async_return({
+        "tenant_id": "guard-tenant-1",
+        "assignee_tenant_type": "guard",
+    })
+
+    result = await manager.list_my_invoices(
+        current_user=SimpleNamespace(role="guard_admin", tenant_uuid="guard-tenant-1"),
+        page=1,
+        rows=10,
+    )
+
+    assert result["pagination"]["total_items"] == 1
+    assert result["items"][0]["invoice_number"] == "INV-202606-GUARD"
+    assert result["items"][0]["request_title"] == "Weekend Patrol"
+    assert result["items"][0]["site_name"] == "Harbour Centre"
+    assert result["items"][0]["payout_hourly_rate"] == 25.0
+    assert result["items"][0]["estimated_total_hours"] == 8.0
+    assert result["items"][0]["estimated_amount"] == 200.0
+    assert result["items"][0]["committed_slots"] == 1
+
+
+@pytest.mark.anyio
+async def test_get_my_invoice_by_id_returns_provider_weekly_completed_share(monkeypatch):
+    manager = object.__new__(RequestManager)
+    request_id = ObjectId()
+    request_record = _make_request_record(
+        id=request_id,
+        title="Monthly Concierge",
+        timezone="America/Vancouver",
+        site_snapshot={"site_name": "Pacific Tower"},
+        pricing_snapshot={
+            "currency": "CAD",
+            "provider_hourly_pay": 22,
+            "guards_required": 3,
+        },
+        invoicing_snapshot={"contract_type": "long_term"},
+    )
+    assignment_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "assignee_tenant_id": "sp-tenant-1",
+        "assignee_tenant_type": "service_provider",
+        "assignment_scope": "request",
+        "assignment_status": "accepted",
+        "slots_committed": 2,
+    }]
+    shift_id = ObjectId()
+    shift_docs = [{
+        "_id": shift_id,
+        "request_id": str(request_id),
+        "shift_date_local": "2026-06-08",
+        "shift_start_at_utc": datetime(2026, 6, 8, 16, 0),
+        "shift_end_at_utc": datetime(2026, 6, 8, 22, 0),
+        "timezone": "America/Vancouver",
+    }]
+    slot_docs = [
+        {
+            "_id": ObjectId(),
+            "request_id": str(request_id),
+            "shift_instance_id": str(shift_id),
+            "service_provider_tenant_id": "sp-tenant-1",
+            "completed_at": datetime(2026, 6, 8, 22, 5),
+            "actual_start_at": datetime(2026, 6, 8, 16, 0),
+            "actual_end_at": datetime(2026, 6, 8, 22, 0),
+        },
+        {
+            "_id": ObjectId(),
+            "request_id": str(request_id),
+            "shift_instance_id": str(shift_id),
+            "service_provider_tenant_id": "sp-tenant-1",
+            "completed_at": datetime(2026, 6, 8, 22, 6),
+            "actual_start_at": datetime(2026, 6, 8, 16, 0),
+            "actual_end_at": datetime(2026, 6, 8, 22, 0),
+        },
+    ]
+
+    class _FrozenDateTime(datetime):
+        @classmethod
+        def utcnow(cls):
+            return datetime(2026, 6, 16, 12, 0)
+
+        @classmethod
+        def now(cls, tz=None):
+            value = datetime(2026, 6, 16, 12, 0, tzinfo=tz)
+            if tz is None:
+                return value.replace(tzinfo=None)
+            return value
+
+        @classmethod
+        def strptime(cls, value, fmt):
+            return datetime.strptime(value, fmt)
+
+    monkeypatch.setattr(
+        "orion.api.interactive.request_manager.request_manager.datetime",
+        _FrozenDateTime,
+    )
+
+    manager._engine = _FakeListJobsEngine(assignment_docs, [{
+        "_id": request_id,
+        "title": "Monthly Concierge",
+        "timezone": "America/Vancouver",
+        "guards_required": 3,
+        "site_snapshot": {"site_name": "Pacific Tower"},
+        "pricing_snapshot": {"currency": "CAD", "provider_hourly_pay": 22, "guards_required": 3},
+        "invoicing_snapshot": {"contract_type": "long_term"},
+    }], shift_docs=shift_docs, slot_docs=slot_docs)
+    manager._get_assignee_invoice_scope = lambda _user: _async_return({
+        "tenant_id": "sp-tenant-1",
+        "assignee_tenant_type": "service_provider",
+    })
+    weekly_items = await manager.list_my_invoices(
+        current_user=SimpleNamespace(role="sp_admin", tenant_uuid="sp-tenant-1"),
+        page=1,
+        rows=10,
+    )
+    assert weekly_items["pagination"]["total_items"] == 1
+    invoice_id = weekly_items["items"][0]["id"]
+
+    result = await manager.get_my_invoice_by_id(invoice_id=invoice_id, current_user=SimpleNamespace(role="sp_admin", tenant_uuid="sp-tenant-1"))
+
+    assert result["id"] == invoice_id
+    assert result["request_title"] == "Monthly Concierge"
+    assert result["site_name"] == "Pacific Tower"
+    assert result["committed_slots"] == 2
+    assert result["payout_hourly_rate"] == 22.0
+    assert result["estimated_total_hours"] == 12.0
+    assert result["estimated_amount"] == 264.0
+    assert result["line_items"][0]["quantity"] == 12.0
+    assert result["line_items"][0]["amount"] == 264.0
+    assert result["billing_cycle"] == "weekly"
+    assert result["billing_period_start_local"] == "2026-06-08"
+    assert result["billing_period_end_local"] == "2026-06-14"
+
+
+@pytest.mark.anyio
+async def test_list_platform_payout_invoices_returns_enriched_items(monkeypatch):
+    manager = object.__new__(RequestManager)
+    request_id = ObjectId()
+    request_docs = [{
+        "_id": request_id,
+        "client_tenant_id": "client-1",
+        "title": "Weekly Patrol",
+        "timezone": "America/Vancouver",
+        "guards_required": 1,
+        "site_snapshot": {"site_name": "Pacific Centre"},
+        "pricing_snapshot": {"currency": "CAD", "guard_hourly_pay": 25.5, "client_hourly_quote": 39, "guards_required": 1},
+        "invoicing_snapshot": {"contract_type": "short_term"},
+    }]
+    assignment_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "assignee_tenant_id": "guard-tenant-1",
+        "assignee_tenant_type": "guard",
+        "assignment_scope": "request",
+        "assignment_status": "accepted",
+        "slots_committed": 1,
+    }]
+    invoice_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "client_tenant_id": "client-1",
+        "request_revision": 1,
+        "trigger": "initial_publish",
+        "invoice_number": "INV-202606-GUARD",
+        "contract_type": "short_term",
+        "billing_cycle": "per_request",
+        "charge_timing": "on_the_go",
+        "billing_period_start_local": "2026-06-12",
+        "billing_period_end_local": "2026-06-12",
+        "billing_period_label": "Jun 12, 2026",
+        "currency": "CAD",
+        "client_hourly_quote": 39,
+        "estimated_total_hours": 8,
+        "estimated_guard_payout": 204,
+        "invoice_status": "issued",
+        "payment_status": "pending_capture",
+        "line_items": [{
+            "description": "Weekly Patrol",
+            "service_date_local": "2026-06-12",
+            "unit": "hour",
+            "quantity": 8,
+            "unit_rate": 39,
+            "amount": 312,
+            "metadata": {
+                "guards_required": 1,
+                "hours_per_position": 8,
+                "start_at_local": "2026-06-12T08:00:00-07:00",
+                "end_at_local": "2026-06-12T16:00:00-07:00",
+            },
+        }],
+        "created_at": datetime(2026, 6, 10, 10, 0),
+        "updated_at": datetime(2026, 6, 10, 10, 0),
+    }]
+
+    manager._engine = _FakeListJobsEngine(assignment_docs, request_docs, invoice_docs=invoice_docs)
+    manager._role_value = lambda _user: "ops_admin"
+    manager._is_platform_role = lambda role: role in {"admin", "ops_admin", "support_admin", "compliance_admin", "read_only_admin"}
+    manager._build_tenant_label_lookup = lambda tenant_ids: _async_return({"guard-tenant-1": "Guard One"})
+
+    result = await manager.list_platform_payout_invoices(
+        current_user=SimpleNamespace(role="ops_admin"),
+        page=1,
+        rows=10,
+        keyword="guard one",
+        assignee_tenant_type="guard",
+    )
+
+    assert result["pagination"]["total_items"] == 1
+    assert result["items"][0]["assignee_tenant_id"] == "guard-tenant-1"
+    assert result["items"][0]["assignee_label"] == "Guard One"
+    assert result["items"][0]["invoice_number"] == "INV-202606-GUARD"
+    assert result["items"][0]["estimated_client_revenue"] == 312.0
+    assert result["items"][0]["estimated_platform_earning"] == 108.0
+    assert result["items"][0]["linked_client_invoice_number"] == "INV-202606-GUARD"
+    assert result["summary"]["total_client_revenue"] == 312.0
+    assert result["summary"]["total_payout"] == 204.0
+    assert result["summary"]["total_platform_earning"] == 108.0
+
+
+@pytest.mark.anyio
+async def test_get_platform_payout_invoice_by_id_returns_item(monkeypatch):
+    manager = object.__new__(RequestManager)
+    request_id = ObjectId()
+    shift_id = ObjectId()
+    assignment_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "assignee_tenant_id": "sp-tenant-1",
+        "assignee_tenant_type": "service_provider",
+        "assignment_scope": "request",
+        "assignment_status": "accepted",
+        "slots_committed": 2,
+    }]
+    request_docs = [{
+        "_id": request_id,
+        "client_tenant_id": "client-9",
+        "title": "Concierge",
+        "timezone": "America/Vancouver",
+        "guards_required": 2,
+        "site_snapshot": {"site_name": "Tower"},
+        "pricing_snapshot": {"currency": "CAD", "provider_hourly_pay": 22, "client_hourly_quote": 28, "guards_required": 2},
+        "invoicing_snapshot": {"contract_type": "long_term"},
+    }]
+    invoice_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "client_tenant_id": "client-9",
+        "request_revision": 1,
+        "trigger": "scheduled_long_term_cycle",
+        "invoice_number": "INV-202606-CLIENT",
+        "contract_type": "long_term",
+        "billing_cycle": "monthly",
+        "charge_timing": "advance_monthly",
+        "billing_period_start_local": "2026-06-01",
+        "billing_period_end_local": "2026-06-30",
+        "billing_period_label": "Jun 2026",
+        "currency": "CAD",
+        "client_hourly_quote": 28,
+        "invoice_status": "issued",
+        "payment_status": "pending_capture",
+        "created_at": datetime(2026, 5, 25, 9, 0),
+        "updated_at": datetime(2026, 5, 25, 9, 0),
+    }]
+    shift_docs = [{
+        "_id": shift_id,
+        "request_id": str(request_id),
+        "shift_date_local": "2026-06-02",
+        "shift_start_at_utc": datetime(2026, 6, 2, 16, 0),
+        "shift_end_at_utc": datetime(2026, 6, 2, 22, 0),
+        "timezone": "America/Vancouver",
+    }]
+    slot_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "shift_instance_id": str(shift_id),
+        "service_provider_tenant_id": "sp-tenant-1",
+        "completed_at": datetime(2026, 6, 2, 22, 5),
+        "actual_start_at": datetime(2026, 6, 2, 16, 0),
+        "actual_end_at": datetime(2026, 6, 2, 22, 0),
+    }]
+
+    class _FrozenDateTime(datetime):
+        @classmethod
+        def utcnow(cls):
+            return datetime(2026, 6, 16, 12, 0)
+
+        @classmethod
+        def now(cls, tz=None):
+            value = datetime(2026, 6, 16, 12, 0, tzinfo=tz)
+            if tz is None:
+                return value.replace(tzinfo=None)
+            return value
+
+        @classmethod
+        def strptime(cls, value, fmt):
+            return datetime.strptime(value, fmt)
+
+    monkeypatch.setattr(
+        "orion.api.interactive.request_manager.request_manager.datetime",
+        _FrozenDateTime,
+    )
+
+    manager._engine = _FakeListJobsEngine(assignment_docs, request_docs, invoice_docs=invoice_docs, shift_docs=shift_docs, slot_docs=slot_docs)
+    manager._role_value = lambda _user: "read_only_admin"
+    manager._is_platform_role = lambda role: role in {"admin", "ops_admin", "support_admin", "compliance_admin", "read_only_admin"}
+    manager._build_tenant_label_lookup = lambda tenant_ids: _async_return({
+        "sp-tenant-1": "Provider One",
+        "client-9": "Client Nine",
+    })
+
+    listing = await manager.list_platform_payout_invoices(
+        current_user=SimpleNamespace(role="read_only_admin"),
+        page=1,
+        rows=10,
+    )
+    invoice_id = listing["items"][0]["id"]
+
+    result = await manager.get_platform_payout_invoice_by_id(
+        invoice_id=invoice_id,
+        current_user=SimpleNamespace(role="read_only_admin"),
+    )
+
+    assert result["id"] == invoice_id
+    assert result["assignee_label"] == "Provider One"
+    assert result["billing_cycle"] == "weekly"
+    assert result["client_label"] == "Client Nine"
+    assert result["linked_client_invoice_number"] == "INV-202606-CLIENT"
+    assert result["estimated_client_revenue"] == 168.0
+    assert result["estimated_platform_earning"] == 36.0
 
 
 @pytest.mark.anyio

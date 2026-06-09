@@ -1666,8 +1666,8 @@
 
       <app-section
         *ngIf="isGuardOrProvider && getViewerAssignment(request) as viewerAssignment"
-        [title]="'Pricing Snapshot'"
-        [subtitle]="'Estimated client quote, your cut, and platform cut for this offer.'"
+        [title]="'Payment Snapshot'"
+        [subtitle]="'Your estimated payout for this offer based on the saved request window.'"
         [containerClass]="drawerSectionContainerClass"
         [headerClass]="drawerSectionHeaderClass"
         [titleClass]="drawerSectionTitleClass"
@@ -1675,44 +1675,27 @@
       >
         <div *ngIf="getJobPayoutAmount(viewerAssignment, request) != null; else noViewerPricingSnapshot" class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <app-summary-metric-card
-            label="Client Quote (Est. Total)"
-            [value]="formatOptionalMoney(getJobEstimatedQuoteTotal(viewerAssignment, request))"
-            [containerClass]="metricCompactContainerClass"
-            [valueClass]="metricCompactValueClass"
-          ></app-summary-metric-card>
-          <app-summary-metric-card
-            label="Your Cut (Est. Total)"
+            label="Your Estimated Payment"
             [value]="formatOptionalMoney(getJobEstimatedPayoutTotal(viewerAssignment, request))"
             [containerClass]="metricCompactContainerClass"
             [valueClass]="metricCompactValueClass"
           ></app-summary-metric-card>
           <app-summary-metric-card
-            label="Platform Cut (Est. Total)"
-            [value]="formatOptionalMoney(getJobEstimatedCompanyTakeTotal(viewerAssignment, request))"
-            [containerClass]="metricCompactContainerClass"
-            [valueClass]="metricCompactValueClass"
-          ></app-summary-metric-card>
-          <app-summary-metric-card
-            label="Client Quote (Hourly)"
-            [value]="formatOptionalMoney(getJobClientQuoteAmount(request))"
-            [containerClass]="metricCompactContainerClass"
-            [valueClass]="metricCompactValueClass"
-          ></app-summary-metric-card>
-          <app-summary-metric-card
-            label="Your Cut (Hourly)"
+            label="Your Rate (Hourly)"
             [value]="getJobPayoutLabel(viewerAssignment, request)"
-            [containerClass]="metricCompactContainerClass"
-            [valueClass]="metricCompactValueClass"
-          ></app-summary-metric-card>
-          <app-summary-metric-card
-            label="Platform Cut (Hourly)"
-            [value]="getJobCompanyTakeLabel(viewerAssignment, request)"
             [containerClass]="metricCompactContainerClass"
             [valueClass]="metricCompactValueClass"
           ></app-summary-metric-card>
           <app-summary-metric-card
             label="Estimated Assignment Hours"
             [value]="getJobEstimatedHours(viewerAssignment, request) != null ? ((getJobEstimatedHours(viewerAssignment, request) || 0) + ' hrs') : '—'"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            *ngIf="viewerAssignment.assignee_tenant_type === 'service_provider'"
+            label="Committed Positions"
+            [value]="getJobCommittedSlots(viewerAssignment)"
             [containerClass]="metricCompactContainerClass"
             [valueClass]="metricCompactValueClass"
           ></app-summary-metric-card>
@@ -3245,8 +3228,8 @@
       <ng-container *ngIf="getJobPricingRequestContext(job, selectedJobRequest) as pricingRequest">
         <app-section
           *ngIf="(isGuardAdmin || isProviderAdmin) && getJobPayoutAmount(job, pricingRequest) != null"
-          [title]="'Quote & Cut Estimate'"
-          [subtitle]="'Estimated client quote, your cut, and platform cut for this offer.'"
+          [title]="'Payment Estimate'"
+          [subtitle]="'Your estimated payout for this offer based on the saved request window.'"
           [containerClass]="drawerSectionContainerClass"
           [headerClass]="drawerSectionHeaderClass"
           [titleClass]="drawerSectionTitleClass"
@@ -3254,38 +3237,14 @@
         >
           <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
             <app-summary-metric-card
-              label="Client Quote (Hourly)"
-              [value]="formatOptionalMoney(getJobClientQuoteAmount(pricingRequest))"
-              [containerClass]="metricCompactContainerClass"
-              [valueClass]="metricCompactValueClass"
-            ></app-summary-metric-card>
-            <app-summary-metric-card
-              label="Client Quote (Est. Total)"
-              [value]="formatOptionalMoney(getJobEstimatedQuoteTotal(job, pricingRequest))"
-              [containerClass]="metricCompactContainerClass"
-              [valueClass]="metricCompactValueClass"
-            ></app-summary-metric-card>
-            <app-summary-metric-card
-              label="Your Cut (Hourly)"
+              label="Your Rate (Hourly)"
               [value]="getJobPayoutLabel(job, pricingRequest)"
               [containerClass]="metricCompactContainerClass"
               [valueClass]="metricCompactValueClass"
             ></app-summary-metric-card>
             <app-summary-metric-card
-              label="Your Cut (Est. Total)"
+              label="Your Estimated Payment"
               [value]="formatOptionalMoney(getJobEstimatedPayoutTotal(job, pricingRequest))"
-              [containerClass]="metricCompactContainerClass"
-              [valueClass]="metricCompactValueClass"
-            ></app-summary-metric-card>
-            <app-summary-metric-card
-              label="Platform Cut (Hourly)"
-              [value]="getJobCompanyTakeLabel(job, pricingRequest)"
-              [containerClass]="metricCompactContainerClass"
-              [valueClass]="metricCompactValueClass"
-            ></app-summary-metric-card>
-            <app-summary-metric-card
-              label="Platform Cut (Est. Total)"
-              [value]="formatOptionalMoney(getJobEstimatedCompanyTakeTotal(job, pricingRequest))"
               [containerClass]="metricCompactContainerClass"
               [valueClass]="metricCompactValueClass"
             ></app-summary-metric-card>
@@ -3295,9 +3254,16 @@
               [containerClass]="metricCompactContainerClass"
               [valueClass]="metricCompactValueClass"
             ></app-summary-metric-card>
+            <app-summary-metric-card
+              *ngIf="job.assignee_tenant_type === 'service_provider'"
+              label="Committed Positions"
+              [value]="getJobCommittedSlots(job)"
+              [containerClass]="metricCompactContainerClass"
+              [valueClass]="metricCompactValueClass"
+            ></app-summary-metric-card>
           </div>
           <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
-            Estimated from the saved client quote and request window. Final earnings are based on confirmed attendance hours.
+            Estimated from the saved request window and your committed coverage share.
           </p>
           <p *ngIf="job.assignee_tenant_type === 'service_provider' && !job.slots_committed" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
             Pending provider offers assume one committed position until you confirm coverage.
@@ -3480,21 +3446,21 @@
 
       <app-section
         *ngIf="getAcceptJobPricingRequestContext(job) as request"
-        [title]="'Projected Totals'"
+        [title]="'Projected Payment'"
         [subtitle]="'These estimates update as you change the number of positions you can cover.'"
       >
         <div class="mt-3 grid grid-cols-2 gap-3">
           <app-summary-metric-card
-            label="Client Quote (Est. Total)"
-            [value]="formatOptionalMoney(getJobEstimatedQuoteTotal(job, request, acceptJobForm.slotsCommitted))"
-          ></app-summary-metric-card>
-          <app-summary-metric-card
-            label="Your Cut (Est. Total)"
+            label="Your Estimated Payment"
             [value]="formatOptionalMoney(getJobEstimatedPayoutTotal(job, request, acceptJobForm.slotsCommitted))"
           ></app-summary-metric-card>
           <app-summary-metric-card
-            label="Platform Cut (Est. Total)"
-            [value]="formatOptionalMoney(getJobEstimatedCompanyTakeTotal(job, request, acceptJobForm.slotsCommitted))"
+            label="Your Rate (Hourly)"
+            [value]="getJobPayoutLabel(job, request)"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Committed Positions"
+            [value]="getJobCommittedSlots(job, acceptJobForm.slotsCommitted)"
           ></app-summary-metric-card>
           <app-summary-metric-card
             label="Estimated Assignment Hours"
@@ -3502,7 +3468,7 @@
           ></app-summary-metric-card>
         </div>
         <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-          Estimates use the saved client quote. Final payout remains attendance-based.
+          Estimates use the saved request window and your committed coverage share.
         </p>
       </app-section>
 
