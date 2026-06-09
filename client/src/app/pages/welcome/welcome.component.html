@@ -1,17 +1,13 @@
 <div class="welcome-container">
-    <div class="container">
-        <div class="row align-items-center justify-content-center min-vh-100">
-            <div class="col-lg-6 col-md-8 text-center">
-                <div class="welcome-content">
-                    <img src="/assets/images/shared/welcom_icon.svg" alt="Welcome" class="welcome-icon mb-4">
-                    <h1 class="welcome-heading">{{ heading }}</h1>
-                    <hr class="welcome-divider">
-                    <p class="welcome-message">{{ message }}</p>
-                    <button *ngIf="hasToken" class="btn btn-primary btn-lg mt-4 welcome-button" (click)="goToLogin()">
-                        Go to Login
-                    </button>
-                </div>
-            </div>
+    <div class="w-full max-w-3xl text-center">
+        <div class="welcome-content">
+            <img src="/assets/images/shared/welcom_icon.svg" alt="Welcome" class="welcome-icon mb-4">
+            <h1 class="welcome-heading">{{ heading }}</h1>
+            <hr class="welcome-divider">
+            <p class="welcome-message">{{ message }}</p>
+            <button *ngIf="hasToken" class="welcome-button mt-4" (click)="goToLogin()">
+                Go to Login
+            </button>
         </div>
     </div>
 </div>

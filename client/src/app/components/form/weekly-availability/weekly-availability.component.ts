@@ -178,25 +178,25 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
             }
           }
 
-          // Validate time is within the day window (6:00 AM to 5:59 AM next day)
+          // Validate time is within the day window (6:00 AM to 6:00 AM next day)
           if (range.start && !this.isTimeInValidWindow(range.start)) {
-            if (!this.validationErrors[day].includes('Start time must be between 6:00 AM and 5:59 AM (next day).')) {
-              this.validationErrors[day].push('Start time must be between 6:00 AM and 5:59 AM (next day).');
+            if (!this.validationErrors[day].includes('Start time must be between 6:00 AM and 6:00 AM (next day boundary).')) {
+              this.validationErrors[day].push('Start time must be between 6:00 AM and 6:00 AM (next day boundary).');
             }
             isValid = false;
           }
 
           if (range.end && !this.isTimeInValidWindow(range.end)) {
-            if (!this.validationErrors[day].includes('End time must be between 6:00 AM and 5:59 AM (next day).')) {
-              this.validationErrors[day].push('End time must be between 6:00 AM and 5:59 AM (next day).');
+            if (!this.validationErrors[day].includes('End time must be between 6:00 AM and 6:00 AM (next day boundary).')) {
+              this.validationErrors[day].push('End time must be between 6:00 AM and 6:00 AM (next day boundary).');
             }
             isValid = false;
           }
 
           // Check if start time is before end time (within the day window)
           if (range.start && range.end && !this.isStartBeforeEnd(range.start, range.end)) {
-            if (!this.validationErrors[day].includes('Start time must be before end time within the day window (6:00 AM to 5:59 AM next day).')) {
-              this.validationErrors[day].push('Start time must be before end time within the day window (6:00 AM to 5:59 AM next day).');
+            if (!this.validationErrors[day].includes('Start time must be before end time within the day window (6:00 AM to 6:00 AM next day boundary).')) {
+              this.validationErrors[day].push('Start time must be before end time within the day window (6:00 AM to 6:00 AM next day boundary).');
             }
             isValid = false;
           }
@@ -219,7 +219,7 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
     return isValid;
   }
 
-  // Check if time is within the valid window (6:00 AM to 5:59 AM next day)
+  // Check if time is within the valid window (6:00 AM to 6:00 AM next day boundary)
   private isTimeInValidWindow(time: string): boolean {
     const minutes = this.parseTime(time);
     if (minutes === null) return false;
@@ -238,9 +238,9 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
 
       if (startMinutes !== null && endMinutes !== null) {
         const normalizedStart = this.normalizeTimeToWindow(startMinutes);
-        const normalizedEnd = this.normalizeTimeToWindow(endMinutes);
+        const normalizedEnd = this.normalizeTimeToWindow(endMinutes, true);
 
-        const duration = normalizedEnd - normalizedStart;
+        const duration = this.calculateRangeDuration(normalizedStart, normalizedEnd);
         totalMinutes += duration;
       }
     });
@@ -276,12 +276,22 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
 
     // Normalize all times to the day window
     const normStart1 = this.normalizeTimeToWindow(start1);
-    const normEnd1 = this.normalizeTimeToWindow(end1);
+    const normEnd1 = this.normalizeTimeToWindow(end1, true);
     const normStart2 = this.normalizeTimeToWindow(start2);
-    const normEnd2 = this.normalizeTimeToWindow(end2);
+    const normEnd2 = this.normalizeTimeToWindow(end2, true);
 
-    // Check for overlap in normalized space
-    return (normStart1 < normEnd2 && normEnd1 > normStart2);
+    const intervals1 = this.expandWrappedRange(normStart1, normEnd1);
+    const intervals2 = this.expandWrappedRange(normStart2, normEnd2);
+
+    for (const [startA, endA] of intervals1) {
+      for (const [startB, endB] of intervals2) {
+        if (startA < endB && endA > startB) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   // Check if start time is before end time within the day window
@@ -295,14 +305,47 @@ export class WeeklyAvailabilityComponent implements ControlValueAccessor {
 
     // Normalize times relative to 6:00 AM
     const normalizedStart = this.normalizeTimeToWindow(startMinutes);
-    const normalizedEnd = this.normalizeTimeToWindow(endMinutes);
+    const normalizedEnd = this.normalizeTimeToWindow(endMinutes, true);
 
-    // Start must be before end in the normalized window
-    return normalizedStart < normalizedEnd;
+    // Equal start/end represents an empty/ambiguous window and remains invalid.
+    if (normalizedStart === normalizedEnd) {
+      return false;
+    }
+
+    // Wrapped ranges are allowed (e.g., 12:00 AM -> 11:55 PM in a 6:00 AM day boundary model).
+    return true;
+  }
+
+  private calculateRangeDuration(normalizedStart: number, normalizedEnd: number): number {
+    if (normalizedStart === normalizedEnd) {
+      return 0;
+    }
+    if (normalizedEnd > normalizedStart) {
+      return normalizedEnd - normalizedStart;
+    }
+    return (24 * 60) - normalizedStart + normalizedEnd;
+  }
+
+  private expandWrappedRange(normalizedStart: number, normalizedEnd: number): Array<[number, number]> {
+    if (normalizedStart === normalizedEnd) {
+      return [];
+    }
+    if (normalizedEnd > normalizedStart) {
+      return [[normalizedStart, normalizedEnd]];
+    }
+    return [
+      [0, normalizedEnd],
+      [normalizedStart, 24 * 60],
+    ];
   }
 
   // Normalize time to the day window
-  private normalizeTimeToWindow(minutes: number): number {
+  private normalizeTimeToWindow(minutes: number, isEnd: boolean = false): number {
+    // Treat the day boundary (6:00 AM) as the logical end of day when used as an end-time.
+    if (isEnd && minutes === this.DAY_START_MINUTES) {
+      return 24 * 60;
+    }
+
     if (minutes >= this.DAY_START_MINUTES) {
       return minutes - this.DAY_START_MINUTES;
     } else {

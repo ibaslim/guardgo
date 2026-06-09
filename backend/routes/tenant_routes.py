@@ -14,7 +14,7 @@ from orion.api.interactive.tenant_manager.models.service_provider_guard_models i
     GuardServiceProviderLinkPayload,
     GuardServiceProviderUnlinkPayload,
 )
-from orion.services.mongo_manager.shared_model.db_auth_models import user_role, UserStatus
+from orion.services.mongo_manager.shared_model.db_auth_models import PLATFORM_ADMIN_ROLES, normalize_role_value, user_role, UserStatus
 from orion.services.mongo_manager.shared_model.db_tenant_model import TenantRequest, db_tenant_model, TenantPayload, TenantStatus
 from orion.api.interactive.tenant_manager.tenant_manager import TenantManager
 from orion.api.interactive.account_manager.models.user_model import user_model
@@ -37,10 +37,49 @@ tenant_routes = APIRouter(
     operation_id="getTenant",
     response_description="Complete tenant data.",
     status_code=200,
-    dependencies=[Depends(role_required([user_role.ADMIN, user_role.COMPLIANCE_ADMIN, user_role.GUARD_ADMIN, user_role.CLIENT_ADMIN, user_role.SP_ADMIN]))], )
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.CLIENT_ADMIN,
+        user_role.SP_ADMIN,
+    ]))], )
 async def get_tenant(current_user=Depends(get_current_user)):
     manager = TenantManager.get_instance()
-    tenant = await manager._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(current_user.tenant_uuid))
+    role_value = normalize_role_value(getattr(current_user, "role", ""))
+    tenant_uuid = str(getattr(current_user, "tenant_uuid", "") or "").strip()
+
+    if not tenant_uuid and role_value in PLATFORM_ADMIN_ROLES:
+        return {
+            "id": "",
+            "tenant_type": None,
+            "profile": {},
+            "ownership_type": None,
+            "service_provider_tenant_id": None,
+            "service_provider": None,
+            "subscription": False,
+            "verified": False,
+            "user_quota": 0,
+            "status": "",
+            "approvals_required": 0,
+            "approvals_done": 0,
+            "approvals_remaining": 0,
+            "licenses": [],
+            "iocs": [],
+            "created_at": None,
+            "updated_at": None,
+            "verified_date": None,
+        }
+
+    try:
+        tenant_object_id = ObjectId(tenant_uuid)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid tenant association")
+
+    tenant = await manager._engine.find_one(db_tenant_model, db_tenant_model.id == tenant_object_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
     provider_summary = await manager._provider_summary(getattr(tenant, "service_provider_tenant_id", None))

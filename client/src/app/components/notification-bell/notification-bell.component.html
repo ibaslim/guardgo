@@ -16,7 +16,7 @@
 
   <div
     *ngIf="isOpen"
-    class="absolute right-0 z-50 mt-3 w-[24rem] overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-2xl ring-1 ring-black/5 dark:border-gray-700 dark:bg-gray-900"
+    class="absolute right-0 z-50 mt-3 w-[min(24rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-2xl ring-1 ring-black/5 dark:border-gray-700 dark:bg-gray-900 sm:max-w-[24rem]"
   >
     <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800">
       <div>

@@ -255,6 +255,14 @@ class ClientProfile(EmbeddedModel):
 
 
 # Service provider profile structures
+class OperatingRegionCityEntry(EmbeddedModel):
+    city_code: str = ""
+    city: str = ""
+    coverage_radius_km: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
 class OperatingRegion(EmbeddedModel):
     city: str = ""
     country: str = ""
@@ -262,6 +270,7 @@ class OperatingRegion(EmbeddedModel):
     region_code: Optional[str] = None
     city_codes: List[str] = []
     coverage_radius_km: Optional[int] = None
+    city_entries: List[OperatingRegionCityEntry] = []
 
 
 class SecurityLicense(EmbeddedModel):

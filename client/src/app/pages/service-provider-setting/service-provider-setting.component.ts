@@ -14,6 +14,7 @@ import { SectionComponent } from '../../components/section/section.component';
 import { ButtonComponent } from '../../components/button/button.component';
 import { StickyActionBarComponent } from '../../components/sticky-action-bar/sticky-action-bar.component';
 import { ErrorMessageComponent } from "../../components/error-message/error-message.component";
+import { GeoLocationPickerComponent } from '../../components/geo-location-picker/geo-location-picker.component';
 import { ProfilePictureUploadComponent } from '../../components/profile-picture-upload/profile-picture-upload.component';
 import { CardComponent } from '../../components/card/card.component';
 import { ClientPreferredGuardTypesComponent } from '../../components/client-preferred-guard-types/client-preferred-guard-types.component';
@@ -22,6 +23,9 @@ import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { getIssuingAuthorityForProvince } from '../../shared/constants/provincial-authorities.constants';
 import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared/helpers/distance.helper';
+import { GeoLocationSelection, buildGoogleMapsLocationUrl } from '../../shared/helpers/google-maps-address.helper';
+import { formatCoordinateInput, parseCoordinate } from '../../shared/helpers/location.helper';
+import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import {
   buildAlphabeticDummyTag,
   buildSeededCaPhone,
@@ -48,6 +52,16 @@ interface Address {
   country: string;
   province: string;
   postalCode: string;
+  latitude: string;
+  longitude: string;
+}
+
+interface OperatingRegionCityEntry {
+  cityCode: string;
+  coverageRadiusKm: number | null;
+  latitude: string;
+  longitude: string;
+  mapUrl: string;
 }
 
 interface ContactPerson {
@@ -76,7 +90,7 @@ interface SecurityLicense {
 interface OperatingRegion {
   country: string;
   regionCode: string;
-  cityEntries: { cityCode: string; coverageRadiusKm: number | null }[];
+  cityEntries: OperatingRegionCityEntry[];
 }
 
 interface InsurancePolicy {
@@ -127,13 +141,17 @@ interface ServiceProvider {
     ErrorMessageComponent,
     ProfilePictureUploadComponent,
     CardComponent,
-    ClientPreferredGuardTypesComponent
+    ClientPreferredGuardTypesComponent,
+    GeoLocationPickerComponent,
   ],
   templateUrl: './service-provider-setting.component.html',
   styleUrls: ['./service-provider-setting.component.css']
 })
 export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   readonly showDummyDataButton = isLocalhostForDummyData();
+  headOfficeMapUrl = '';
+  providerHeadOfficeLocationSelected = false;
+  providerHeadOfficeLocationStale = false;
 
   @Input() showPageWrapper: boolean = true;
   @Input() readonly: boolean = false;
@@ -152,7 +170,9 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       city: '',
       country: 'CA',
       province: '',
-      postalCode: ''
+      postalCode: '',
+      latitude: '',
+      longitude: '',
     },
     primaryRepresentative: {
       name: '',
@@ -190,7 +210,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       {
         country: 'CA',
         regionCode: '',
-        cityEntries: [{ cityCode: '', coverageRadiusKm: null }]
+        cityEntries: [{ cityCode: '', coverageRadiusKm: null, latitude: '', longitude: '', mapUrl: '' }]
       }
     ],
     guardCategoriesOffered: []
@@ -221,7 +241,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   constructor(
     private apiService: ApiService,
     private router: Router,
-    private appService: AppService
+    private appService: AppService,
+    private addressConsistencyService: GoogleMapsAddressConsistencyService,
   ) { }
 
   ngOnInit(): void {
@@ -310,7 +331,9 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       city: resolvedCityCode || rawCity || fallbackDefaultCity,
       country: raw?.country || 'CA',
       province: provinceCode,
-      postalCode: raw?.postal_code || raw?.postalCode || ''
+      postalCode: raw?.postal_code || raw?.postalCode || '',
+      latitude: formatCoordinateInput(raw?.latitude),
+      longitude: formatCoordinateInput(raw?.longitude),
     };
   }
 
@@ -337,6 +360,103 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     if (!isCurrentValid) {
       this.providerFormModel.headOfficeAddress.city = '';
     }
+  }
+
+  getHeadOfficeSearchSummary(): string {
+    return [
+      this.providerFormModel.headOfficeAddress.street,
+      this.cityLabelFromCode(
+        this.providerFormModel.headOfficeAddress.province,
+        this.providerFormModel.headOfficeAddress.city,
+      ),
+      this.providerFormModel.headOfficeAddress.province,
+      this.providerFormModel.headOfficeAddress.postalCode,
+      this.providerFormModel.headOfficeAddress.country,
+    ]
+      .map((part) => String(part || '').trim())
+      .filter((part) => !!part)
+      .join(', ');
+  }
+
+  getRegionCitySearchSummary(regionIndex: number, cityIndex: number): string {
+    const region = this.providerFormModel.operatingRegions[regionIndex];
+    const entry = region?.cityEntries?.[cityIndex];
+    if (!region || !entry) {
+      return '';
+    }
+
+    return [
+      this.cityLabelFromCode(region.regionCode, entry.cityCode),
+      this.getProvinceLabel(region.regionCode),
+      region.country,
+    ]
+      .map((part) => String(part || '').trim())
+      .filter((part) => !!part)
+      .join(', ');
+  }
+
+  onHeadOfficeLocationChange(selection: GeoLocationSelection): void {
+    if (selection.street) {
+      this.providerFormModel.headOfficeAddress.street = selection.street;
+    }
+    if (selection.postalCode) {
+      this.providerFormModel.headOfficeAddress.postalCode = selection.postalCode;
+    }
+    if (selection.countryCode || selection.countryName) {
+      this.providerFormModel.headOfficeAddress.country = selection.countryCode || selection.countryName;
+    }
+    if (selection.provinceCode) {
+      this.providerFormModel.headOfficeAddress.province = selection.provinceCode;
+    }
+    if (selection.provinceCode && selection.city) {
+      const resolvedCityCode = this.resolveCityCodeForRegion(selection.provinceCode, selection.city);
+      this.providerFormModel.headOfficeAddress.city = resolvedCityCode || this.providerFormModel.headOfficeAddress.city;
+    }
+
+    this.providerHeadOfficeLocationSelected = true;
+    this.providerHeadOfficeLocationStale = false;
+    this.seedMatchingOperatingRegionsFromHeadOffice();
+  }
+
+  markProviderHeadOfficeAddressDirty(): void {
+    if (this.providerHeadOfficeLocationSelected) {
+      this.providerHeadOfficeLocationStale = true;
+    }
+  }
+
+  onOperatingRegionLocationChange(regionIndex: number, cityIndex: number, selection: GeoLocationSelection): void {
+    const region = this.providerFormModel.operatingRegions[regionIndex];
+    const entry = region?.cityEntries?.[cityIndex];
+    if (!region || !entry) {
+      return;
+    }
+
+    if (selection.countryCode || selection.countryName) {
+      region.country = selection.countryCode || selection.countryName;
+    }
+
+    if (!region.regionCode && selection.provinceCode) {
+      region.regionCode = selection.provinceCode;
+    }
+
+    const effectiveProvince = String(region.regionCode || selection.provinceCode || '').trim().toUpperCase();
+    if (effectiveProvince && selection.city) {
+      const resolvedCityCode = this.resolveCityCodeForRegion(effectiveProvince, selection.city);
+      if (resolvedCityCode) {
+        entry.cityCode = resolvedCityCode;
+      }
+    }
+  }
+
+  onRegionCityCodeChange(regionIndex: number, cityIndex: number, cityCode: string): void {
+    const region = this.providerFormModel.operatingRegions[regionIndex];
+    const entry = region?.cityEntries?.[cityIndex];
+    if (!region || !entry) {
+      return;
+    }
+
+    entry.cityCode = String(cityCode || '').trim().toUpperCase();
+    this.seedOperatingEntryFromHeadOffice(region, entry);
   }
 
   /**
@@ -381,9 +501,9 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     }
 
     this.providerFormModel.operatingRegions = this.providerFormModel.operatingRegions.map((region) => {
-      return {
-        ...region,
-        cityEntries: (region.cityEntries || []).map((entry) => {
+    return {
+      ...region,
+      cityEntries: (region.cityEntries || []).map((entry) => {
           const normalizedRadius = this.normalizeCoverageRadius(entry.coverageRadiusKm);
           if (normalizedRadius == null) {
             return entry;
@@ -469,14 +589,16 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     const options = this.getCityOptionsForRegion(regionCode);
     region.cityEntries = (region.cityEntries || []).map((entry) => {
       const normalized = String(entry.cityCode || '').trim().toUpperCase();
-      return {
+      const nextEntry = {
         ...entry,
         cityCode: options.some(opt => opt.value === normalized) ? normalized : ''
       };
+      this.seedOperatingEntryFromHeadOffice(region, nextEntry);
+      return nextEntry;
     });
 
     if (!region.cityEntries.length) {
-      region.cityEntries = [{ cityCode: '', coverageRadiusKm: null }];
+      region.cityEntries = [{ cityCode: '', coverageRadiusKm: null, latitude: '', longitude: '', mapUrl: '' }];
     }
   }
 
@@ -485,7 +607,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     if (!region) {
       return;
     }
-    region.cityEntries = [...(region.cityEntries || []), { cityCode: '', coverageRadiusKm: null }];
+    region.cityEntries = [...(region.cityEntries || []), { cityCode: '', coverageRadiusKm: null, latitude: '', longitude: '', mapUrl: '' }];
   }
 
   removeRegionCity(regionIndex: number, cityIndex: number): void {
@@ -496,7 +618,80 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
 
     region.cityEntries.splice(cityIndex, 1);
     if (!region.cityEntries.length) {
-      region.cityEntries = [{ cityCode: '', coverageRadiusKm: null }];
+      region.cityEntries = [{ cityCode: '', coverageRadiusKm: null, latitude: '', longitude: '', mapUrl: '' }];
+    }
+  }
+
+  useHeadOfficeAsOperatingRegion(): void {
+    const province = String(this.providerFormModel.headOfficeAddress.province || '').trim().toUpperCase();
+    const cityCode = String(this.providerFormModel.headOfficeAddress.city || '').trim().toUpperCase();
+    if (!province || !cityCode) {
+      return;
+    }
+
+    const suggestedEntry: OperatingRegionCityEntry = {
+      cityCode,
+      coverageRadiusKm: Math.max(this.minimumCoverageRadiusDisplay, 10),
+      latitude: this.providerFormModel.headOfficeAddress.latitude || '',
+      longitude: this.providerFormModel.headOfficeAddress.longitude || '',
+      mapUrl: '',
+    };
+
+    const existingRegion = this.providerFormModel.operatingRegions.find(
+      (region) => String(region.regionCode || '').trim().toUpperCase() === province,
+    );
+    if (existingRegion) {
+      const existingEntry = (existingRegion.cityEntries || []).find(
+        (entry) => String(entry.cityCode || '').trim().toUpperCase() === cityCode,
+      );
+      if (!existingEntry) {
+        existingRegion.cityEntries = [...(existingRegion.cityEntries || []), suggestedEntry];
+      } else {
+        existingEntry.latitude = suggestedEntry.latitude;
+        existingEntry.longitude = suggestedEntry.longitude;
+        existingEntry.mapUrl = this.headOfficeMapUrl || existingEntry.mapUrl;
+        if (this.normalizeCoverageRadius(existingEntry.coverageRadiusKm) == null) {
+          existingEntry.coverageRadiusKm = suggestedEntry.coverageRadiusKm;
+        }
+      }
+      return;
+    }
+
+    this.providerFormModel.operatingRegions.push({
+      country: 'CA',
+      regionCode: province,
+      cityEntries: [suggestedEntry],
+    });
+  }
+
+  private seedMatchingOperatingRegionsFromHeadOffice(): void {
+    this.providerFormModel.operatingRegions.forEach((region) => {
+      (region.cityEntries || []).forEach((entry) => this.seedOperatingEntryFromHeadOffice(region, entry));
+    });
+  }
+
+  private seedOperatingEntryFromHeadOffice(region: OperatingRegion, entry: OperatingRegionCityEntry): void {
+    const headOfficeProvince = String(this.providerFormModel.headOfficeAddress.province || '').trim().toUpperCase();
+    const headOfficeCity = String(this.providerFormModel.headOfficeAddress.city || '').trim().toUpperCase();
+    const regionProvince = String(region.regionCode || '').trim().toUpperCase();
+    const entryCity = String(entry.cityCode || '').trim().toUpperCase();
+
+    if (!headOfficeProvince || !headOfficeCity || !regionProvince || !entryCity) {
+      return;
+    }
+
+    if (headOfficeProvince !== regionProvince || headOfficeCity !== entryCity) {
+      return;
+    }
+
+    if (!String(entry.latitude || '').trim()) {
+      entry.latitude = this.providerFormModel.headOfficeAddress.latitude || '';
+    }
+    if (!String(entry.longitude || '').trim()) {
+      entry.longitude = this.providerFormModel.headOfficeAddress.longitude || '';
+    }
+    if (!String(entry.mapUrl || '').trim()) {
+      entry.mapUrl = this.headOfficeMapUrl || '';
     }
   }
 
@@ -526,6 +721,13 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   private transformBackendDataToForm(data: any): ServiceProvider {
     const profile = data?.profile || data || {};
     const headOfficeAddress = this.mapAddressFromBackend(profile.head_office_address || profile.headOfficeAddress || {});
+    const headOfficeLatitude = parseCoordinate(headOfficeAddress.latitude);
+    const headOfficeLongitude = parseCoordinate(headOfficeAddress.longitude);
+    this.headOfficeMapUrl = headOfficeLatitude != null && headOfficeLongitude != null
+      ? buildGoogleMapsLocationUrl(headOfficeLatitude, headOfficeLongitude)
+      : '';
+    this.providerHeadOfficeLocationSelected = !!(String(headOfficeAddress.latitude || '').trim() && String(headOfficeAddress.longitude || '').trim());
+    this.providerHeadOfficeLocationStale = false;
     const primaryRep = profile.primary_representative || profile.primaryRepresentative || {};
     const secondaryContact = profile.emergency_contact || profile.secondaryContact || {};
     const securityLicensesRaw =
@@ -556,27 +758,46 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
                   return null;
                 }
                 const kmValue = Number(entry?.coverage_radius_km ?? entry?.coverageRadiusKm);
+                const latitude = formatCoordinateInput(entry?.latitude);
+                const longitude = formatCoordinateInput(entry?.longitude);
+                const parsedLatitude = parseCoordinate(latitude);
+                const parsedLongitude = parseCoordinate(longitude);
                 return {
                   cityCode,
-                  coverageRadiusKm: Number.isFinite(kmValue) ? this.toDisplayDistance(kmValue) : defaultRadius
+                  coverageRadiusKm: Number.isFinite(kmValue) ? this.toDisplayDistance(kmValue) : defaultRadius,
+                  latitude,
+                  longitude,
+                  mapUrl: parsedLatitude != null && parsedLongitude != null
+                    ? buildGoogleMapsLocationUrl(parsedLatitude, parsedLongitude)
+                    : '',
                 };
               })
               .filter((entry: any) => !!entry);
-            return mappedEntries.length ? mappedEntries : (firstCityByProvince ? [{ cityCode: firstCityByProvince, coverageRadiusKm: defaultRadius }] : [{ cityCode: '', coverageRadiusKm: defaultRadius }]);
+            return mappedEntries.length
+              ? mappedEntries
+              : (firstCityByProvince
+                ? [{ cityCode: firstCityByProvince, coverageRadiusKm: defaultRadius, latitude: '', longitude: '', mapUrl: '' }]
+                : [{ cityCode: '', coverageRadiusKm: defaultRadius, latitude: '', longitude: '', mapUrl: '' }]);
           }
 
           if (Array.isArray(region.city_codes) && region.city_codes.length > 0) {
             const mappedEntries = region.city_codes
               .map((code: string) => this.resolveCityCodeForRegion(regionCode, code))
               .filter((code: string) => !!code)
-              .map((cityCode: string) => ({ cityCode, coverageRadiusKm: defaultRadius }));
-            return mappedEntries.length ? mappedEntries : (firstCityByProvince ? [{ cityCode: firstCityByProvince, coverageRadiusKm: defaultRadius }] : [{ cityCode: '', coverageRadiusKm: defaultRadius }]);
+              .map((cityCode: string) => ({ cityCode, coverageRadiusKm: defaultRadius, latitude: '', longitude: '', mapUrl: '' }));
+            return mappedEntries.length
+              ? mappedEntries
+              : (firstCityByProvince
+                ? [{ cityCode: firstCityByProvince, coverageRadiusKm: defaultRadius, latitude: '', longitude: '', mapUrl: '' }]
+                : [{ cityCode: '', coverageRadiusKm: defaultRadius, latitude: '', longitude: '', mapUrl: '' }]);
           }
 
           const legacyCityCode = this.resolveCityCodeForRegion(regionCode, region.city || '');
           return legacyCityCode
-            ? [{ cityCode: legacyCityCode, coverageRadiusKm: defaultRadius }]
-            : (firstCityByProvince ? [{ cityCode: firstCityByProvince, coverageRadiusKm: defaultRadius }] : [{ cityCode: '', coverageRadiusKm: defaultRadius }]);
+            ? [{ cityCode: legacyCityCode, coverageRadiusKm: defaultRadius, latitude: '', longitude: '', mapUrl: '' }]
+            : (firstCityByProvince
+              ? [{ cityCode: firstCityByProvince, coverageRadiusKm: defaultRadius, latitude: '', longitude: '', mapUrl: '' }]
+              : [{ cityCode: '', coverageRadiusKm: defaultRadius, latitude: '', longitude: '', mapUrl: '' }]);
         })(),
       }))
       : [];
@@ -635,7 +856,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
           {
             country: 'CA',
             regionCode: '',
-            cityEntries: [{ cityCode: '', coverageRadiusKm: null }]
+            cityEntries: [{ cityCode: '', coverageRadiusKm: null, latitude: '', longitude: '', mapUrl: '' }]
           }
         ],
       guardCategoriesOffered: Array.isArray(profile.guard_categories_offered)
@@ -668,7 +889,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     this.providerFormModel.operatingRegions.push({
       country: 'CA',
       regionCode: '',
-      cityEntries: [{ cityCode: '', coverageRadiusKm: null }]
+      cityEntries: [{ cityCode: '', coverageRadiusKm: null, latitude: '', longitude: '', mapUrl: '' }]
     });
   }
 
@@ -778,6 +999,28 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       if (!postalCodePattern.test(this.providerFormModel.headOfficeAddress.postalCode.trim())) {
         this.providerErrors.officePostalCode = 'Invalid Canadian postal code format (e.g., A1A 1A1).';
       }
+    }
+
+    const officeLatitude = parseCoordinate(this.providerFormModel.headOfficeAddress.latitude);
+    const officeLongitude = parseCoordinate(this.providerFormModel.headOfficeAddress.longitude);
+    const hasOfficeLatitude = String(this.providerFormModel.headOfficeAddress.latitude || '').trim() !== '';
+    const hasOfficeLongitude = String(this.providerFormModel.headOfficeAddress.longitude || '').trim() !== '';
+    if (!hasOfficeLatitude && !hasOfficeLongitude) {
+      this.providerErrors.officeCoordinates = 'Head office coordinates are required. Select the head office on Google Maps.';
+    } else if (hasOfficeLatitude !== hasOfficeLongitude) {
+      this.providerErrors.officeCoordinates = 'Provide both head office latitude and longitude.';
+    }
+    if (hasOfficeLatitude && officeLatitude === null) {
+      this.providerErrors.officeLatitude = 'Latitude must be a valid number.';
+    }
+    if (hasOfficeLongitude && officeLongitude === null) {
+      this.providerErrors.officeLongitude = 'Longitude must be a valid number.';
+    }
+    if (officeLatitude !== null && (officeLatitude < -90 || officeLatitude > 90)) {
+      this.providerErrors.officeLatitude = 'Latitude must be between -90 and 90.';
+    }
+    if (officeLongitude !== null && (officeLongitude < -180 || officeLongitude > 180)) {
+      this.providerErrors.officeLongitude = 'Longitude must be between -180 and 180.';
     }
 
     // Primary Representative
@@ -990,6 +1233,31 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
         if (normalizedRadius < this.minimumCoverageRadiusDisplay) {
           this.providerErrors[`region_${index}_city_${cityIndex}_radius`] = `Coverage radius must be at least ${this.minimumCoverageRadiusText}.`;
         }
+
+        const latitude = parseCoordinate(entry.latitude);
+        const longitude = parseCoordinate(entry.longitude);
+        const hasLatitude = String(entry.latitude || '').trim() !== '';
+        const hasLongitude = String(entry.longitude || '').trim() !== '';
+        if (hasLatitude !== hasLongitude) {
+          this.providerErrors[`region_${index}_city_${cityIndex}_coordinates`] = 'Provide both latitude and longitude for each selected operating city.';
+          return;
+        }
+        if (!hasLatitude || !hasLongitude) {
+          this.providerErrors[`region_${index}_city_${cityIndex}_coordinates`] = 'Select a Google Maps location for each selected operating city.';
+          return;
+        }
+        if (latitude === null) {
+          this.providerErrors[`region_${index}_city_${cityIndex}_latitude`] = 'Latitude must be a valid number.';
+        }
+        if (longitude === null) {
+          this.providerErrors[`region_${index}_city_${cityIndex}_longitude`] = 'Longitude must be a valid number.';
+        }
+        if (latitude !== null && (latitude < -90 || latitude > 90)) {
+          this.providerErrors[`region_${index}_city_${cityIndex}_latitude`] = 'Latitude must be between -90 and 90.';
+        }
+        if (longitude !== null && (longitude < -180 || longitude > 180)) {
+          this.providerErrors[`region_${index}_city_${cityIndex}_longitude`] = 'Longitude must be between -180 and 180.';
+        }
       });
     });
 
@@ -1150,12 +1418,17 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       });
   }
 
-  submitProviderForm() {
+  async submitProviderForm(): Promise<void> {
     if (this.readonly) {
       return;
     }
 
     if (!this.validateProviderForm()) {
+      return;
+    }
+
+    const addressConsistent = await this.validateProviderHeadOfficeAddressConsistency();
+    if (!addressConsistent) {
       return;
     }
 
@@ -1227,7 +1500,9 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
           ),
           country: this.providerFormModel.headOfficeAddress.country,
           province: this.providerFormModel.headOfficeAddress.province || '',
-          postal_code: this.providerFormModel.headOfficeAddress.postalCode
+          postal_code: this.providerFormModel.headOfficeAddress.postalCode,
+          latitude: parseCoordinate(this.providerFormModel.headOfficeAddress.latitude),
+          longitude: parseCoordinate(this.providerFormModel.headOfficeAddress.longitude),
         },
         company_phone: primaryRepPhone,
         company_email: this.providerFormModel.primaryRepresentative.email,
@@ -1263,19 +1538,30 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
           const cityEntries = (region.cityEntries || [])
             .map(entry => ({
               cityCode: String(entry.cityCode || '').trim().toUpperCase(),
-              coverageRadiusKm: this.normalizeCoverageRadius(entry.coverageRadiusKm)
+              coverageRadiusKm: this.normalizeCoverageRadius(entry.coverageRadiusKm),
+              latitude: parseCoordinate(entry.latitude),
+              longitude: parseCoordinate(entry.longitude),
             }))
             .filter(entry => !!entry.cityCode)
             .filter(entry => entry.coverageRadiusKm != null);
 
-          const dedupedEntriesMap = new Map<string, number>();
+          const dedupedEntriesMap = new Map<string, { coverageRadiusKm: number; latitude: number | null; longitude: number | null }>();
           cityEntries.forEach(entry => {
             if (!dedupedEntriesMap.has(entry.cityCode)) {
-              dedupedEntriesMap.set(entry.cityCode, Number(entry.coverageRadiusKm));
+              dedupedEntriesMap.set(entry.cityCode, {
+                coverageRadiusKm: Number(entry.coverageRadiusKm),
+                latitude: entry.latitude,
+                longitude: entry.longitude,
+              });
             }
           });
 
-          const dedupedEntries = Array.from(dedupedEntriesMap.entries()).map(([cityCode, coverageRadiusKm]) => ({ cityCode, coverageRadiusKm }));
+          const dedupedEntries = Array.from(dedupedEntriesMap.entries()).map(([cityCode, value]) => ({
+            cityCode,
+            coverageRadiusKm: value.coverageRadiusKm,
+            latitude: value.latitude,
+            longitude: value.longitude,
+          }));
           const cityCodes = dedupedEntries.map(entry => entry.cityCode);
           const firstCityCode = cityCodes[0] || '';
           return {
@@ -1289,7 +1575,9 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
             city_entries: dedupedEntries.map(entry => ({
               city_code: entry.cityCode,
               city: this.cityLabelFromCode(region.regionCode, entry.cityCode),
-              coverage_radius_km: this.toStorageKm(entry.coverageRadiusKm)
+              coverage_radius_km: this.toStorageKm(entry.coverageRadiusKm),
+              latitude: entry.latitude,
+              longitude: entry.longitude,
             }))
           };
         }),
@@ -1315,6 +1603,28 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     });
   }
 
+  private async validateProviderHeadOfficeAddressConsistency(): Promise<boolean> {
+    const result = await this.addressConsistencyService.validate({
+      latitude: this.providerFormModel.headOfficeAddress.latitude,
+      longitude: this.providerFormModel.headOfficeAddress.longitude,
+      expectedCountryCode: this.providerFormModel.headOfficeAddress.country,
+      expectedProvinceCode: this.providerFormModel.headOfficeAddress.province,
+      expectedProvinceName: this.getProvinceLabel(this.providerFormModel.headOfficeAddress.province),
+      expectedCity: this.cityLabelFromCode(
+        this.providerFormModel.headOfficeAddress.province,
+        this.providerFormModel.headOfficeAddress.city,
+      ),
+      expectedPostalCode: this.providerFormModel.headOfficeAddress.postalCode,
+    });
+
+    if (!result.ok) {
+      this.providerErrors.officeCoordinates = result.message || 'Head office coordinates do not match the manual address.';
+      return false;
+    }
+
+    return true;
+  }
+
   fillDummyData(): void {
     const seed = nextDummySeed();
     const nameTag = buildAlphabeticDummyTag(seed.sequence);
@@ -1336,6 +1646,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
       country: 'CA',
       province,
       postalCode: 'M4B 1B3',
+      latitude: '43.653200',
+      longitude: '-79.383200',
     };
     this.providerFormModel.primaryRepresentative = {
       name: `Provider Primary Contact ${nameTag}`,
@@ -1369,6 +1681,9 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
           {
             cityCode: city,
             coverageRadiusKm: Math.max(this.minimumCoverageRadiusDisplay, 10),
+            latitude: '43.653200',
+            longitude: '-79.383200',
+            mapUrl: '',
           },
         ],
       },

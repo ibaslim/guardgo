@@ -4,6 +4,7 @@ import { Observable, tap } from 'rxjs';
 
 import { ApiService } from '../../shared/services/api.service';
 import { LatestNotificationResponse, NotificationItem, NotificationListResponse } from '../../shared/model/notification/notification.model';
+import { MessageNotificationService, ToastType } from '../message_notification/message-notification.service';
 
 @Injectable({ providedIn: 'root' })
 export class NotificationsService {
@@ -15,8 +16,13 @@ export class NotificationsService {
   readonly unreadCount = signal<number>(0);
   readonly latestLoading = signal<boolean>(false);
   readonly pageLoading = signal<boolean>(false);
+  private hasInitializedLatest = false;
+  private readonly seenNotificationIds = new Set<string>();
 
-  constructor(private api: ApiService) {}
+  constructor(
+    private api: ApiService,
+    private messageNotification: MessageNotificationService,
+  ) {}
 
   loadLatest(limit = 5): Observable<LatestNotificationResponse> {
     this.latestLoading.set(true);
@@ -24,7 +30,9 @@ export class NotificationsService {
     return this.api.get<LatestNotificationResponse>('notifications/latest', { params, loadingMode: 'silent', loadingScope: this.latestScope }).pipe(
       tap({
         next: (response) => {
-          this.latestItems.set(response.items || []);
+          const nextItems = response.items || [];
+          this.maybeShowLiveNotificationToasts(nextItems);
+          this.latestItems.set(nextItems);
           this.unreadCount.set(Number(response.unread_count || 0));
           this.latestLoading.set(false);
         },
@@ -80,5 +88,49 @@ export class NotificationsService {
         this.unreadCount.set(Number(response.unread_count || 0));
       })
     );
+  }
+
+  private maybeShowLiveNotificationToasts(items: NotificationItem[]): void {
+    const normalizedItems = Array.isArray(items) ? items : [];
+    const unseenUnreadItems = normalizedItems.filter((item) => {
+      const id = String(item?.id || '').trim();
+      return Boolean(id) && !item.is_read && !this.seenNotificationIds.has(id);
+    });
+
+    for (const item of normalizedItems) {
+      const id = String(item?.id || '').trim();
+      if (id) {
+        this.seenNotificationIds.add(id);
+      }
+    }
+
+    if (!this.hasInitializedLatest) {
+      this.hasInitializedLatest = true;
+      return;
+    }
+
+    unseenUnreadItems
+      .slice(0, 2)
+      .reverse()
+      .forEach((item) => {
+        this.messageNotification.show(
+          item.title || item.message || 'New notification received',
+          this.toToastType(item.category),
+          4500,
+        );
+      });
+  }
+
+  private toToastType(category: string): ToastType {
+    switch (String(category || '').trim().toLowerCase()) {
+      case 'success':
+        return 'success';
+      case 'warning':
+        return 'warning';
+      case 'error':
+        return 'fail';
+      default:
+        return 'info';
+    }
   }
 }

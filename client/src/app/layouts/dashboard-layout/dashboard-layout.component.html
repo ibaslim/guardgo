@@ -6,7 +6,7 @@
 
   <aside [class.w-64]="!sidebarCollapsed && !isMobileView" [class.w-20]="sidebarCollapsed && !isMobileView"
     [class.w-full]="!sidebarCollapsed && isMobileView" [class.-translate-x-full]="sidebarCollapsed && isMobileView"
-    class="fixed inset-y-0 left-0 z-50 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300">
+    class="fixed inset-y-0 left-0 z-50 max-w-[18rem] sm:max-w-xs lg:max-w-none bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300">
     <div class="flex flex-col h-full">
       <div class="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
         @if (!sidebarCollapsed) {
@@ -92,8 +92,8 @@
     [class.ml-0]="isMobileView" class="transition-all duration-300 bg-gray-50 dark:bg-gray-900 min-h-screen">
     <!-- Top Navbar -->
     <header
-      class="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-      <div class="flex items-center">
+      class="flex min-h-16 flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+      <div class="flex min-w-0 items-center">
         @if (isMobileView) {
         <button (click)="toggleSidebar()" [attr.aria-label]="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
           class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
@@ -107,13 +107,13 @@
         </button>
         }
         @if (showGuardServiceProviderInfo) {
-        <div class="ml-3 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
+        <div class="ml-3 inline-flex min-w-0 items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
           <span class="inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
-          <span>Managed by {{ guardServiceProviderLabel }}</span>
+          <span class="truncate">Managed by {{ guardServiceProviderLabel }}</span>
         </div>
         }
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex shrink-0 items-center gap-2 sm:gap-3">
         <app-notification-bell *ngIf="shouldShowNotificationBell()"></app-notification-bell>
         <app-avatar-menu></app-avatar-menu>
       </div>

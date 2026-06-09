@@ -18,6 +18,7 @@ import { TenantSettingsComponent } from './pages/tenant-settings/tenant-settings
 import { PendingVerificationComponent } from './pages/pending-verification/pending-verification.component';
 import { pendingVerificationGuard } from './shared/guards/pending-verification.guard';
 import { clientRequestsGuard } from './shared/guards/client-requests.guard';
+import { myInvoicesGuard } from './shared/guards/my-invoices.guard';
 import { platformSettingsGuard, platformUserManagementGuard, tenantSettingsGuard } from './shared/guards/settings.guard';
 
 export const routes: Routes = [
@@ -142,6 +143,16 @@ export const routes: Routes = [
         path: 'requests',
         loadComponent: () => import('./pages/requests/requests.component').then(m => m.RequestsComponent),
         canActivate: [onboardingGuard, pendingVerificationGuard, clientRequestsGuard]
+      },
+      {
+        path: 'my-invoices',
+        loadComponent: () => import('./pages/my-invoices/my-invoices.component').then(m => m.MyInvoicesComponent),
+        canActivate: [onboardingGuard, pendingVerificationGuard, myInvoicesGuard]
+      },
+      {
+        path: 'payout-invoices',
+        loadComponent: () => import('./pages/platform-payout-invoices/platform-payout-invoices.component').then(m => m.PlatformPayoutInvoicesComponent),
+        canActivate: [onboardingGuard, pendingVerificationGuard, platformSettingsGuard]
       },
       {
         path: 'notifications',

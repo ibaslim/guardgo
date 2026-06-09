@@ -1,0 +1,16 @@
+<div [class]="containerClass">
+  <div [class]="layoutClass">
+    <div [class]="contentClass">
+      <h2 [class]="titleClass">{{ title }}</h2>
+      <p *ngIf="subtitle" [class]="subtitleClass">{{ subtitle }}</p>
+    </div>
+
+    <div *ngIf="showControls" [class]="controlsClass">
+      <ng-content select="[toolbar-controls]"></ng-content>
+    </div>
+  </div>
+
+  <div *ngIf="showFooter" [class]="footerClass">
+    <ng-content select="[toolbar-footer]"></ng-content>
+  </div>
+</div>

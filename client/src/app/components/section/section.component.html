@@ -1,10 +1,12 @@
 <section [class]="containerClass">
   <div [class]="headerClass">
-    <div>
+    <div class="min-w-0">
       <h2 *ngIf="title" [class]="titleClass">{{ title }}</h2>
       <p *ngIf="subtitle" [class]="subtitleClass">{{ subtitle }}</p>
     </div>
-    <ng-content select="[section-actions]"></ng-content>
+    <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+      <ng-content select="[section-actions]"></ng-content>
+    </div>
   </div>
 
   <ng-content></ng-content>

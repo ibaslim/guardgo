@@ -127,6 +127,18 @@ class TenantManager:
     def _normalize_code(value: Any) -> str:
         return str(value or "").strip().upper()
 
+    @staticmethod
+    def _coerce_coordinate(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        try:
+            parsed = float(value)
+        except Exception:
+            return None
+        return parsed
+
     @classmethod
     def _resolve_city_code(cls, region_code: str, value: Any) -> str:
         raw = str(value or "").strip()
@@ -231,6 +243,9 @@ class TenantManager:
                 except Exception:
                     radius_km = None
 
+                latitude = cls._coerce_coordinate(entry.get("latitude") if isinstance(entry, dict) else None)
+                longitude = cls._coerce_coordinate(entry.get("longitude") if isinstance(entry, dict) else None)
+
                 if radius_km is None:
                     raise HTTPException(
                         status_code=400,
@@ -243,12 +258,32 @@ class TenantManager:
                         detail=f"Coverage radius must be at least 1 km for city '{code}' in province '{region_code}' at index {index}"
                     )
 
+                if latitude is None or longitude is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Latitude and longitude are required for city '{code}' in province '{region_code}' at index {index}"
+                    )
+
+                if latitude < -90 or latitude > 90:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Latitude must be between -90 and 90 for city '{code}' in province '{region_code}' at index {index}"
+                    )
+
+                if longitude < -180 or longitude > 180:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Longitude must be between -180 and 180 for city '{code}' in province '{region_code}' at index {index}"
+                    )
+
                 seen.add(code)
                 resolved_city_codes.append(code)
                 normalized_city_entries.append({
                     "city_code": code,
                     "city": by_code.get(code, code),
                     "coverage_radius_km": radius_km,
+                    "latitude": latitude,
+                    "longitude": longitude,
                 })
 
             if not resolved_city_codes:
@@ -268,6 +303,8 @@ class TenantManager:
             normalized_region["city_code"] = first_city_code
             normalized_region["city"] = by_code.get(first_city_code, first_city_code)
             normalized_region["coverage_radius_km"] = normalized_city_entries[0]["coverage_radius_km"] if normalized_city_entries else default_region_radius
+            normalized_region["latitude"] = normalized_city_entries[0]["latitude"] if normalized_city_entries else None
+            normalized_region["longitude"] = normalized_city_entries[0]["longitude"] if normalized_city_entries else None
             normalized_regions.append(normalized_region)
 
         profile["operating_regions"] = normalized_regions

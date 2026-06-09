@@ -1,0 +1,27 @@
+<div [class]="containerClass">
+  <div [class]="layoutClass">
+    <div [class]="contentClass">
+      <div [class]="badgesClass">
+        <ng-content select="[record-badges]"></ng-content>
+      </div>
+
+      <ng-content select="[record-title]"></ng-content>
+
+      <div [class]="metaClass">
+        <ng-content select="[record-meta]"></ng-content>
+      </div>
+
+      <div [class]="bodyClass">
+        <ng-content select="[record-body]"></ng-content>
+      </div>
+    </div>
+
+    <div [class]="actionsClass">
+      <ng-content select="[record-actions]"></ng-content>
+    </div>
+  </div>
+
+  <div [class]="extraClass">
+    <ng-content select="[record-extra]"></ng-content>
+  </div>
+</div>

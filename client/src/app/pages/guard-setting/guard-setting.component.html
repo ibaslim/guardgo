@@ -25,8 +25,8 @@
                     </app-profile-picture-upload>
                 </ng-container>
                 <ng-container *ngIf="readonly">
-                    <div *ngIf="getProfileImageUrl(); else noProfilePic">
-                        <img [src]="getProfileImageUrl()" alt="Profile picture" class="w-32 h-32 rounded-full object-cover">
+                    <div *ngIf="getProfileImageUrl(); else noProfilePic" class="flex justify-center sm:justify-start">
+                        <img [src]="getProfileImageUrl()" alt="Profile picture" class="h-24 w-24 rounded-full object-cover sm:h-32 sm:w-32">
                     </div>
                     <ng-template #noProfilePic>
                         <p class="text-sm text-gray-600">No profile picture available.</p>
@@ -85,6 +85,26 @@
 
         <app-section title="Home Address" subtitle="Used to align nearby shifts.">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="md:col-span-2">
+                    <app-geo-location-picker
+                        title="Home Location Coordinates"
+                        helperText="Search your home or base location in realtime with Google Maps to improve nearby guard matching. This only manages coordinates."
+                        [showMapUrl]="true"
+                        [(mapUrl)]="homeAddressMapUrl"
+                        [(latitude)]="guardFormModel.address.latitude"
+                        [(longitude)]="guardFormModel.address.longitude"
+                        [latitudeError]="guardErrors.addressLatitude || ''"
+                        [longitudeError]="guardErrors.addressLongitude || ''"
+                        [coordinateError]="guardErrors.addressCoordinates || ''"
+                        [disabled]="readonly"
+                        [readonly]="readonly"
+                        mapUrlName="guardHomeMapUrl"
+                        latitudeName="guardHomeLatitude"
+                        longitudeName="guardHomeLongitude"
+                        [previewHeightPx]="320"
+                    ></app-geo-location-picker>
+                </div>
+
                 <div class="flex flex-col">
                     <app-select-input label="Country" [name]="'addressCountry'"
                         [(ngModel)]="guardFormModel.address.country" [options]="countryOptions"

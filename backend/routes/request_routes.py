@@ -1,14 +1,34 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends
 
 from configs.app_dependency import get_current_user, role_required, status_required
 from orion.api.interactive.request_manager.request_manager import RequestManager
+from orion.api.interactive.request_shift_manager.request_shift_manager import RequestShiftManager
 from orion.services.mongo_manager.shared_model.db_auth_models import UserStatus, user_role
 from orion.services.mongo_manager.shared_model.db_request_model import (
     ClientRequestCreatePayload,
+    ClientRequestSoftDeletePayload,
+    ClientRequestStatusUpdatePayload,
     ClientRequestUpdatePayload,
+    ProviderRosterPayload,
+    RequestScheduleUpsertPayload,
+    RequestAdditionalCoveragePayload,
     RequestAssignmentCreatePayload,
     RequestAssignmentStatusUpdatePayload,
-    ClientRequestStatusUpdatePayload,
+    RequestPublishPayload,
+    RequestPublishUpdatePayload,
+    RequestPricingPreviewPayload,
+    ShiftSlotCheckInPayload,
+    ShiftSlotCheckOutPayload,
+    ShiftSlotClientConfirmPayload,
+    ShiftGuardLeaveCreatePayload,
+    ShiftGuardLeaveReconcilePayload,
+    ShiftGuardLeaveReturnPayload,
+    ShiftSlotReopenPayload,
+    ShiftSlotStartPayload,
+    ShiftSlotUnavailablePayload,
+    RequestWaveReviewPayload,
 )
 
 
@@ -21,7 +41,7 @@ request_routes = APIRouter(
 @request_routes.get(
     "/api/requests",
     summary="List client requests",
-    description="Return paginated requests for the current client tenant.",
+    description="Return paginated requests in the current role scope.",
     tags=["Client Requests"],
     operation_id="listClientRequests",
     response_description="Paginated client requests.",
@@ -42,6 +62,7 @@ async def list_client_requests(
     keyword: str = "",
     request_status: str = "",
     fulfillment_mode: str = "",
+    client_tenant_id: str = "",
     current_user=Depends(get_current_user),
 ):
     return await RequestManager.get_instance().list_requests(
@@ -51,6 +72,7 @@ async def list_client_requests(
         keyword=keyword,
         request_status=request_status,
         fulfillment_mode=fulfillment_mode,
+        client_tenant_id=client_tenant_id,
     )
 
 
@@ -62,10 +84,87 @@ async def list_client_requests(
     operation_id="createClientRequest",
     response_description="Created client request.",
     status_code=201,
-    dependencies=[Depends(role_required([user_role.CLIENT_ADMIN]))],
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
 )
 async def create_client_request(payload: ClientRequestCreatePayload, current_user=Depends(get_current_user)):
     return await RequestManager.get_instance().create_request(payload=payload, current_user=current_user)
+
+
+@request_routes.post(
+    "/api/requests/pricing-preview",
+    summary="Preview request pricing and invoicing",
+    description="Return client charge estimates and invoice settings for a request before saving it.",
+    tags=["Client Requests"],
+    operation_id="previewClientRequestPricing",
+    response_description="Pricing and invoicing preview.",
+    status_code=200,
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def preview_client_request_pricing(payload: RequestPricingPreviewPayload, current_user=Depends(get_current_user)):
+    return await RequestManager.get_instance().preview_request_pricing(payload=payload, current_user=current_user)
+
+
+@request_routes.get(
+    "/api/request-client-tenants",
+    summary="List active client tenants for request operations",
+    description="Return active client tenants that platform users can target when creating or filtering requests.",
+    tags=["Client Requests"],
+    operation_id="listRequestClientTenants",
+    response_description="Active client tenants available for request creation.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+    ]))],
+)
+async def list_request_client_tenants(
+    keyword: str = "",
+    rows: int = 100,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().list_request_client_tenants(
+        current_user=current_user,
+        keyword=keyword,
+        rows=rows,
+    )
+
+
+@request_routes.get(
+    "/api/request-client-tenants/{tenant_id}",
+    summary="Get active client tenant snapshot for request creation",
+    description="Return the client profile snapshot, including saved sites, for a platform-targeted request.",
+    tags=["Client Requests"],
+    operation_id="getRequestClientTenantSnapshot",
+    response_description="Client tenant snapshot.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+    ]))],
+)
+async def get_request_client_tenant_snapshot(
+    tenant_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().get_request_client_tenant_snapshot(
+        tenant_id=tenant_id,
+        current_user=current_user,
+    )
 
 
 @request_routes.patch(
@@ -109,6 +208,784 @@ async def get_client_request(request_id: str, current_user=Depends(get_current_u
     return await RequestManager.get_instance().get_request_by_id(request_id=request_id, current_user=current_user)
 
 
+@request_routes.get(
+    "/api/requests/{request_id}/invoices",
+    summary="List request invoices",
+    description="Return persisted request invoice records for a request.",
+    tags=["Client Requests"],
+    operation_id="listRequestInvoices",
+    response_description="Paginated request invoices.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def list_request_invoices(
+    request_id: str,
+    page: int = 1,
+    rows: int = 20,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().list_request_invoices(
+        request_id=request_id,
+        current_user=current_user,
+        page=page,
+        rows=rows,
+    )
+
+
+@request_routes.get(
+    "/api/requests/{request_id}/invoices/{invoice_id}",
+    summary="Get request invoice",
+    description="Return a single persisted request invoice record.",
+    tags=["Client Requests"],
+    operation_id="getRequestInvoiceById",
+    response_description="Request invoice detail.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def get_request_invoice(
+    request_id: str,
+    invoice_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().get_request_invoice_by_id(
+        request_id=request_id,
+        invoice_id=invoice_id,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/my-invoices",
+    summary="List assignee invoices",
+    description="Return guard or service-provider payout-side invoices derived from issued request invoices.",
+    tags=["Client Requests"],
+    operation_id="listMyInvoices",
+    response_description="Paginated assignee invoices.",
+    dependencies=[Depends(role_required([
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def list_my_invoices(
+    page: int = 1,
+    rows: int = 20,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().list_my_invoices(
+        current_user=current_user,
+        page=page,
+        rows=rows,
+    )
+
+
+@request_routes.get(
+    "/api/my-invoices/{invoice_id}",
+    summary="Get assignee invoice",
+    description="Return a single guard or service-provider invoice detail derived from the request invoice share for that assignee.",
+    tags=["Client Requests"],
+    operation_id="getMyInvoiceById",
+    response_description="Assignee invoice detail.",
+    dependencies=[Depends(role_required([
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def get_my_invoice(
+    invoice_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().get_my_invoice_by_id(
+        invoice_id=invoice_id,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/payout-invoices",
+    summary="List platform payout invoices",
+    description="Return guard and service-provider payout invoices for platform-side reporting and analysis.",
+    tags=["Client Requests"],
+    operation_id="listPlatformPayoutInvoices",
+    response_description="Paginated platform payout invoices.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+    ]))],
+)
+async def list_platform_payout_invoices(
+    page: int = 1,
+    rows: int = 20,
+    keyword: str = "",
+    assignee_tenant_type: str = "",
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().list_platform_payout_invoices(
+        current_user=current_user,
+        page=page,
+        rows=rows,
+        keyword=keyword,
+        assignee_tenant_type=assignee_tenant_type,
+    )
+
+
+@request_routes.get(
+    "/api/payout-invoices/{invoice_id}",
+    summary="Get platform payout invoice",
+    description="Return one guard or service-provider payout invoice for platform-side reporting and analysis.",
+    tags=["Client Requests"],
+    operation_id="getPlatformPayoutInvoiceById",
+    response_description="Platform payout invoice detail.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+    ]))],
+)
+async def get_platform_payout_invoice(
+    invoice_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().get_platform_payout_invoice_by_id(
+        invoice_id=invoice_id,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/requests/{request_id}/schedule",
+    summary="Get request schedule",
+    description="Return the configured schedule template for a request.",
+    tags=["Client Requests"],
+    operation_id="getRequestSchedule",
+    response_description="Request schedule.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.CLIENT_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def get_request_schedule(request_id: str, current_user=Depends(get_current_user)):
+    return await RequestShiftManager.get_instance().get_request_schedule(request_id=request_id, current_user=current_user)
+
+
+@request_routes.post(
+    "/api/requests/{request_id}/schedule",
+    summary="Create or replace request schedule",
+    description="Create or replace the schedule template for a request and regenerate future shift instances.",
+    tags=["Client Requests"],
+    operation_id="upsertRequestSchedule",
+    response_description="Updated request schedule.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def create_request_schedule(
+    request_id: str,
+    payload: RequestScheduleUpsertPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().upsert_request_schedule(
+        request_id=request_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.patch(
+    "/api/requests/{request_id}/schedule",
+    summary="Update request schedule",
+    description="Update the schedule template for a request and regenerate future shift instances.",
+    tags=["Client Requests"],
+    operation_id="updateRequestSchedule",
+    response_description="Updated request schedule.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def update_request_schedule(
+    request_id: str,
+    payload: RequestScheduleUpsertPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().upsert_request_schedule(
+        request_id=request_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/shifts",
+    summary="List shifts",
+    description="Return paginated shift instances visible to the current user.",
+    tags=["Client Requests"],
+    operation_id="listRequestShifts",
+    response_description="Paginated shift instances.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.CLIENT_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def list_request_shifts(
+    page: int = 1,
+    rows: int = 20,
+    request_id: str = "",
+    instance_status: str = "",
+    date_from: date | None = None,
+    date_to: date | None = None,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().list_shifts(
+        current_user=current_user,
+        page=page,
+        rows=rows,
+        request_id=request_id,
+        instance_status=instance_status,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+@request_routes.get(
+    "/api/shift-exceptions",
+    summary="List shift exceptions",
+    description="Return shift-slot exceptions for platform review, including unavailable and no-show cases.",
+    tags=["Client Requests"],
+    operation_id="listShiftExceptions",
+    response_description="Paginated shift-slot exceptions.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+    ]))],
+)
+async def list_shift_exceptions(
+    page: int = 1,
+    rows: int = 20,
+    exception_status: str = "",
+    request_id: str = "",
+    date_from: date | None = None,
+    date_to: date | None = None,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().list_shift_exceptions(
+        current_user=current_user,
+        page=page,
+        rows=rows,
+        exception_status=exception_status,
+        request_id=request_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+@request_routes.get(
+    "/api/shifts/{shift_id}",
+    summary="Get shift",
+    description="Return one shift instance when it is visible to the current user.",
+    tags=["Client Requests"],
+    operation_id="getRequestShift",
+    response_description="Shift instance details.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.CLIENT_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def get_request_shift(shift_id: str, current_user=Depends(get_current_user)):
+    return await RequestShiftManager.get_instance().get_shift_by_id(shift_id=shift_id, current_user=current_user)
+
+
+@request_routes.get(
+    "/api/shift-slots/{slot_id}",
+    summary="Get shift slot",
+    description="Return one shift slot when it is visible to the current user.",
+    tags=["Client Requests"],
+    operation_id="getRequestShiftSlot",
+    response_description="Shift slot details.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.CLIENT_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def get_request_shift_slot(slot_id: str, current_user=Depends(get_current_user)):
+    return await RequestShiftManager.get_instance().get_shift_slot_by_id(slot_id=slot_id, current_user=current_user)
+
+
+@request_routes.post(
+    "/api/shifts/{shift_id}/roster",
+    summary="Roster provider guards for a shift",
+    description="Assign named active service-provider guards to provider-backed shift slots.",
+    tags=["Client Requests"],
+    operation_id="rosterRequestShift",
+    response_description="Updated shift with rostered slots.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def roster_request_shift(
+    shift_id: str,
+    payload: ProviderRosterPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().roster_shift(
+        shift_id=shift_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/shift-guard-leaves",
+    summary="List shift guard leave records",
+    description="Return guard leave records visible to the current platform, provider, or guard role.",
+    tags=["Client Requests"],
+    operation_id="listShiftGuardLeaves",
+    response_description="Paginated shift guard leave records.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def list_shift_guard_leaves(
+    page: int = 1,
+    rows: int = 20,
+    guard_tenant_id: str = "",
+    leave_status: str = "",
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().list_guard_leaves(
+        current_user=current_user,
+        page=page,
+        rows=rows,
+        guard_tenant_id=guard_tenant_id,
+        leave_status=leave_status,
+    )
+
+
+@request_routes.post(
+    "/api/shift-guard-leaves",
+    summary="Report guard leave range",
+    description="Record a future guard leave window and apply it across scheduled shift slots.",
+    tags=["Client Requests"],
+    operation_id="reportShiftGuardLeave",
+    response_description="Created shift guard leave record.",
+    status_code=201,
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def report_shift_guard_leave(
+    payload: ShiftGuardLeaveCreatePayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().report_guard_leave(
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/shift-guard-leaves/{leave_id}/return-early",
+    summary="Return guard from leave early",
+    description="End an active guard leave early and reconcile future unstaffed replacements.",
+    tags=["Client Requests"],
+    operation_id="returnShiftGuardLeaveEarly",
+    response_description="Updated shift guard leave record.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def return_shift_guard_leave_early(
+    leave_id: str,
+    payload: ShiftGuardLeaveReturnPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().return_guard_leave_early(
+        leave_id=leave_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/shift-guard-leaves/{leave_id}/return-review",
+    summary="Preview guard leave return reconciliation",
+    description="Return future shift replacements that must be reviewed before handing work back to the original guard.",
+    tags=["Client Requests"],
+    operation_id="getShiftGuardLeaveReturnReview",
+    response_description="Preview of future shift replacements affected by the leave return.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def get_shift_guard_leave_return_review(
+    leave_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().get_guard_leave_return_review(
+        leave_id=leave_id,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/shift-guard-leaves/{leave_id}/reconcile-return",
+    summary="Reconcile guard leave return",
+    description="Resolve future replacement ownership when the original guard returns from leave.",
+    tags=["Client Requests"],
+    operation_id="reconcileShiftGuardLeaveReturn",
+    response_description="Updated guard leave record after return reconciliation.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def reconcile_shift_guard_leave_return(
+    leave_id: str,
+    payload: ShiftGuardLeaveReconcilePayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().reconcile_guard_leave_return(
+        leave_id=leave_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/shift-slots/{slot_id}/report-unavailable",
+    summary="Report shift slot unavailable",
+    description="Report that an assigned guard cannot cover the shift slot before start time.",
+    tags=["Client Requests"],
+    operation_id="reportRequestShiftSlotUnavailable",
+    response_description="Updated shift slot with exception events.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+    ]))],
+)
+async def report_request_shift_slot_unavailable(
+    slot_id: str,
+    payload: ShiftSlotUnavailablePayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().report_shift_slot_unavailable(
+        slot_id=slot_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/shift-slots/{slot_id}/reopen",
+    summary="Reopen shift slot for replacement",
+    description="Create a replacement slot and broadcast wave for an exception shift slot.",
+    tags=["Client Requests"],
+    operation_id="reopenRequestShiftSlot",
+    response_description="Replacement slot and wave context.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+    ]))],
+)
+async def reopen_request_shift_slot(
+    slot_id: str,
+    payload: ShiftSlotReopenPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().reopen_shift_slot(
+        slot_id=slot_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/shift-slots/{slot_id}/check-in",
+    summary="Check in to a shift slot",
+    description="Submit guard arrival with location proof for a shift slot.",
+    tags=["Client Requests"],
+    operation_id="checkInRequestShiftSlot",
+    response_description="Updated shift slot with attendance events.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+    ]))],
+)
+async def check_in_request_shift_slot(
+    slot_id: str,
+    payload: ShiftSlotCheckInPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().check_in_shift_slot(
+        slot_id=slot_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/shift-slots/{slot_id}/client-confirm",
+    summary="Confirm shift slot arrival",
+    description="Confirm that a guard is physically present and ready to start the shift.",
+    tags=["Client Requests"],
+    operation_id="confirmRequestShiftSlotArrival",
+    response_description="Updated shift slot with attendance events.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def confirm_request_shift_slot_arrival(
+    slot_id: str,
+    payload: ShiftSlotClientConfirmPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().confirm_shift_slot_arrival(
+        slot_id=slot_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/shift-slots/{slot_id}/start",
+    summary="Start shift slot",
+    description="Start the shift slot after arrival confirmation, or through platform override.",
+    tags=["Client Requests"],
+    operation_id="startRequestShiftSlot",
+    response_description="Updated shift slot with attendance events.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+    ]))],
+)
+async def start_request_shift_slot(
+    slot_id: str,
+    payload: ShiftSlotStartPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().start_shift_slot(
+        slot_id=slot_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/shift-slots/{slot_id}/check-out",
+    summary="Check out from a shift slot",
+    description="Check out and complete the shift slot using actual end time.",
+    tags=["Client Requests"],
+    operation_id="checkOutRequestShiftSlot",
+    response_description="Updated shift slot with attendance events.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+    ]))],
+)
+async def check_out_request_shift_slot(
+    slot_id: str,
+    payload: ShiftSlotCheckOutPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().check_out_shift_slot(
+        slot_id=slot_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/request-waves/{wave_id}",
+    summary="Get request wave",
+    description="Return a single request broadcast wave when it is visible to the current user.",
+    tags=["Client Requests"],
+    operation_id="getClientRequestWave",
+    response_description="Request wave details.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.CLIENT_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def get_client_request_wave(wave_id: str, current_user=Depends(get_current_user)):
+    return await RequestManager.get_instance().get_request_wave_by_id(wave_id=wave_id, current_user=current_user)
+
+
+@request_routes.post(
+    "/api/requests/{request_id}/publish",
+    summary="Publish client request",
+    description="Publish a draft client request and create the first broadcast wave.",
+    tags=["Client Requests"],
+    operation_id="publishClientRequest",
+    response_description="Published client request.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def publish_client_request(request_id: str, payload: RequestPublishPayload, current_user=Depends(get_current_user)):
+    return await RequestManager.get_instance().publish_request(request_id=request_id, payload=payload, current_user=current_user)
+
+
+@request_routes.post(
+    "/api/requests/{request_id}/publish-update",
+    summary="Publish request update",
+    description="Apply a material update to a live request and issue a fresh broadcast wave.",
+    tags=["Client Requests"],
+    operation_id="publishClientRequestUpdate",
+    response_description="Updated and republished client request.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def publish_client_request_update(
+    request_id: str,
+    payload: RequestPublishUpdatePayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().publish_request_update(
+        request_id=request_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/requests/{request_id}/additional-coverage",
+    summary="Request additional coverage",
+    description="Increase open staffing slots for a live request and issue a fresh broadcast wave.",
+    tags=["Client Requests"],
+    operation_id="requestAdditionalCoverage",
+    response_description="Client request with additional coverage issued.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def request_additional_coverage(
+    request_id: str,
+    payload: RequestAdditionalCoveragePayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().request_additional_coverage(
+        request_id=request_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
 @request_routes.patch(
     "/api/requests/{request_id}/status",
     summary="Update client request status",
@@ -126,6 +1003,144 @@ async def get_client_request(request_id: str, current_user=Depends(get_current_u
 )
 async def update_client_request_status(request_id: str, payload: ClientRequestStatusUpdatePayload, current_user=Depends(get_current_user)):
     return await RequestManager.get_instance().update_request_status(request_id=request_id, payload=payload, current_user=current_user)
+
+
+@request_routes.post(
+    "/api/requests/{request_id}/soft-delete",
+    summary="Soft delete client request",
+    description="Remove a client request from dashboard listings without permanently deleting its underlying record.",
+    tags=["Client Requests"],
+    operation_id="softDeleteClientRequest",
+    response_description="Soft-deleted client request.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+    ]))],
+)
+async def soft_delete_client_request(
+    request_id: str,
+    payload: ClientRequestSoftDeletePayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().soft_delete_request(
+        request_id=request_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/requests/{request_id}/waves",
+    summary="List request waves",
+    description="List broadcast waves for a client request.",
+    tags=["Client Requests"],
+    operation_id="listClientRequestWaves",
+    response_description="Paginated request waves.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.CLIENT_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def list_client_request_waves(
+    request_id: str,
+    page: int = 1,
+    rows: int = 20,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().list_request_waves(
+        request_id=request_id,
+        current_user=current_user,
+        page=page,
+        rows=rows,
+    )
+
+
+@request_routes.get(
+    "/api/request-review-waves",
+    summary="List request review waves",
+    description="List request broadcast waves that are visible to platform reviewers.",
+    tags=["Client Requests"],
+    operation_id="listRequestReviewWaves",
+    response_description="Paginated request review waves.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+    ]))],
+)
+async def list_request_review_waves(
+    page: int = 1,
+    rows: int = 20,
+    wave_status: str = "",
+    trigger: str = "",
+    request_id: str = "",
+    client_tenant_id: str = "",
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().list_review_waves(
+        current_user=current_user,
+        page=page,
+        rows=rows,
+        wave_status=wave_status,
+        trigger=trigger,
+        request_id=request_id,
+        client_tenant_id=client_tenant_id,
+    )
+
+
+@request_routes.post(
+    "/api/request-review-waves/{wave_id}/approve",
+    summary="Approve request wave",
+    description="Approve a pending-review request broadcast wave and send offers.",
+    tags=["Client Requests"],
+    operation_id="approveRequestReviewWave",
+    response_description="Approved request wave.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+    ]))],
+)
+async def approve_request_review_wave(
+    wave_id: str,
+    payload: RequestWaveReviewPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().approve_request_wave(
+        wave_id=wave_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/request-review-waves/{wave_id}/return",
+    summary="Return request wave",
+    description="Return a pending-review request broadcast wave back to the client.",
+    tags=["Client Requests"],
+    operation_id="returnRequestReviewWave",
+    response_description="Returned request wave.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+    ]))],
+)
+async def return_request_review_wave(
+    wave_id: str,
+    payload: RequestWaveReviewPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().return_request_wave(
+        wave_id=wave_id,
+        payload=payload,
+        current_user=current_user,
+    )
 
 
 @request_routes.post(
@@ -180,6 +1195,28 @@ async def list_request_jobs(
         assignment_status=assignment_status,
         keyword=keyword,
     )
+
+
+@request_routes.get(
+    "/api/jobs/{assignment_id}",
+    summary="Get request job",
+    description="Return a single assignment/job when it is visible to the current user.",
+    tags=["Client Requests"],
+    operation_id="getRequestJob",
+    response_description="Request assignment.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.CLIENT_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def get_request_job(assignment_id: str, current_user=Depends(get_current_user)):
+    return await RequestManager.get_instance().get_job_by_id(assignment_id=assignment_id, current_user=current_user)
 
 
 @request_routes.patch(

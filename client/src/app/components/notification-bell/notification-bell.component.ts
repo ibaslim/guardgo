@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Router, RouterModule } from '@angular/router';
+import { Subscription, interval } from 'rxjs';
 
 import { IconComponent } from '../icon/icon.component';
 import { NotificationsService } from '../../services/notifications/notifications.service';
@@ -14,8 +15,9 @@ import { ButtonComponent } from '../button/button.component';
   imports: [CommonModule, RouterModule, IconComponent, ButtonComponent],
   templateUrl: './notification-bell.component.html'
 })
-export class NotificationBellComponent implements OnInit {
+export class NotificationBellComponent implements OnInit, OnDestroy {
   isOpen = false;
+  private refreshSubscription: Subscription | null = null;
 
   constructor(
     protected notificationsService: NotificationsService,
@@ -26,6 +28,17 @@ export class NotificationBellComponent implements OnInit {
   ngOnInit(): void {
     if (!this.canUseNotifications()) return;
     this.notificationsService.loadLatest(6).subscribe();
+    this.refreshSubscription = interval(10000).subscribe(() => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+      this.notificationsService.loadLatest(6).subscribe();
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.refreshSubscription?.unsubscribe();
+    this.refreshSubscription = null;
   }
 
   toggleMenu(event: MouseEvent): void {

@@ -14,8 +14,8 @@
     </tr>
   </ng-template>
 
-  <div class="mb-4 flex flex-col md:flex-row md:items-start md:gap-4">
-    <div *ngIf="!isSpAdmin()" class="mt-3 md:mt-0 flex-1 min-w-0 max-w-xs">
+  <div class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_200px_200px_120px] md:items-start">
+    <div *ngIf="!isSpAdmin()" class="flex-1 min-w-0">
       <div class="mt-1">
         <app-base-input
           [(ngModel)]="keyword"
@@ -26,21 +26,21 @@
         ></app-base-input>
       </div>
     </div>
-    <div *ngIf="!isSpAdmin()" class="mt-3 md:mt-0 md:ml-2" style="min-width:200px;">
+    <div *ngIf="!isSpAdmin()" class="w-full md:w-[200px]">
       <div class="mt-1">
         <app-select-input [options]="tenantTypeOptions" [(ngModel)]="tenant_type"
           (ngModelChange)="onTenantTypeChange($event)" [searchable]="false" placeholder="Type"
           aria-label="Tenant type"></app-select-input>
       </div>
     </div>
-    <div *ngIf="!isSpAdmin()" class="mt-3 md:mt-0 md:ml-2" style="min-width:200px;">
+    <div *ngIf="!isSpAdmin()" class="w-full md:w-[200px]">
       <div class="mt-1">
         <app-select-input [options]="tenantStatusOptions" [(ngModel)]="tenant_status"
           (ngModelChange)="onTenantStatusChange($event)" [searchable]="false" placeholder="Status"
           aria-label="Tenant status"></app-select-input>
       </div>
     </div>
-    <div class="mt-3 md:mt-0 md:ml-2" style="min-width:120px;">
+    <div class="w-full md:w-[120px]">
       <div class="mt-1">
         <app-select-input
           [options]="[{ label: '10', value: 10 }, { label: '25', value: 25 }, { label: '50', value: 50 }, { label: '100', value: 100 }]"
@@ -50,7 +50,7 @@
     </div>
   </div>
 
-  <div class="flex items-center justify-between gap-4 mb-4">
+  <div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
     <div *ngIf="!isSpAdmin()" class="flex items-center flex-wrap gap-2">
       <ng-container *ngIf="keyword">
         <div class="inline-flex items-center bg-gray-100 dark:bg-gray-800 text-sm rounded-full px-2 py-0.5">
@@ -84,7 +84,7 @@
       </ng-container>
     </div>
     <div>
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
         <app-button *ngIf="isSpAdmin()" size="sm" type="primary" label="Invite Guard" [customClass]="'px-3 py-1 text-sm'"
           ariaLabel="Invite guard" (pressed)="openInviteGuardModal()"></app-button>
         <app-button *ngIf="!isSpAdmin()" size="sm" type="secondary" label="Reset filters" [customClass]="'px-3 py-1 text-sm'"

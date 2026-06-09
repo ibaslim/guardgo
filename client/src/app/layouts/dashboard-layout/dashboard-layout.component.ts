@@ -14,6 +14,7 @@ type DashboardLink = {
   route: string;
   icon: IconName;
   policy?: AccessPolicy;
+  roles?: string[];
   hidden?: boolean;
 };
 
@@ -63,6 +64,18 @@ export class DashboardLayoutComponent implements OnInit {
       route: '/dashboard/requests',
       icon: 'file-text',
       policy: 'clientRequests'
+    },
+    {
+      label: 'My Invoices',
+      route: '/dashboard/my-invoices',
+      icon: 'file-text',
+      roles: ['guard_admin', 'sp_admin']
+    },
+    {
+      label: 'Finance Analysis',
+      route: '/dashboard/payout-invoices',
+      icon: 'file-text',
+      policy: 'platform'
     },
     {
       label: 'Notifications',
@@ -136,6 +149,9 @@ export class DashboardLayoutComponent implements OnInit {
     if (link.hidden) return false;
     const rawRole = String(this.appService.userSessionData()?.user?.role || '').trim().toLowerCase();
     const role = rawRole.includes('.') ? (rawRole.split('.').pop() || '') : rawRole;
+    if (Array.isArray(link.roles) && link.roles.length > 0 && !link.roles.includes(role)) {
+      return false;
+    }
     if (link.route === '/dashboard/tenants' && role === 'sp_admin') {
       return true;
     }

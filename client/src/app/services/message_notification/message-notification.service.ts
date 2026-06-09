@@ -14,6 +14,8 @@ export interface ToastItem {
 export class MessageNotificationService {
   private toastsSignal = signal<ToastItem[]>([]);
   private timeouts = new Map<string, ReturnType<typeof setTimeout>>();
+  private lastToastFingerprint = '';
+  private lastToastAt = 0;
 
   toasts = computed(() => this.toastsSignal());
 
@@ -24,15 +26,28 @@ export class MessageNotificationService {
   show(message: string, type: ToastType = 'fail', duration: number = 3000): string {
     const trimmed = String(message || '').trim();
     if (!trimmed) return '';
+    const now = Date.now();
+    const fingerprint = `${type}::${trimmed}`;
+    if (this.lastToastFingerprint === fingerprint && now - this.lastToastAt < 1200) {
+      return '';
+    }
+    if (this.toastsSignal().some((toast) => toast.type === type && toast.message === trimmed)) {
+      this.lastToastFingerprint = fingerprint;
+      this.lastToastAt = now;
+      return '';
+    }
 
-    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const id = `${now}_${Math.random().toString(36).slice(2, 8)}`;
     const toast: ToastItem = {
       id,
       message: trimmed,
       type,
       duration: Math.max(1200, Number(duration) || 3000),
-      createdAt: Date.now()
+      createdAt: now
     };
+
+    this.lastToastFingerprint = fingerprint;
+    this.lastToastAt = now;
 
     this.toastsSignal.update((prev) => [toast, ...prev].slice(0, 5));
 
