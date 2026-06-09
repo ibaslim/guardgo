@@ -1,11 +1,13 @@
 <div [class]="containerClass">
   <div [class]="contentClass">
     <div *ngIf="title || subtitle" [class]="headerClass">
-      <div>
+      <div class="min-w-0">
         <h1 *ngIf="title" [class]="titleClass">{{ title }}</h1>
         <p *ngIf="subtitle" [class]="subtitleClass">{{ subtitle }}</p>
       </div>
-      <ng-content select="[page-actions]"></ng-content>
+      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+        <ng-content select="[page-actions]"></ng-content>
+      </div>
     </div>
 
     <ng-content></ng-content>

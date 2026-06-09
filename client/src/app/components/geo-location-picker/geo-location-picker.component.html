@@ -1,0 +1,123 @@
+<div class="rounded-lg border border-gray-200 bg-gray-50/70 p-4 dark:border-gray-800 dark:bg-gray-800/40">
+  <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ title }}</h4>
+      <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ helperText }}</p>
+    </div>
+
+    <a
+      *ngIf="showMapUrl && openInGoogleMapsUrl"
+      [href]="openInGoogleMapsUrl"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="inline-flex shrink-0 items-center rounded-md border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:bg-gray-900 dark:text-blue-300 dark:hover:bg-gray-800"
+    >
+      Open In Google Maps
+    </a>
+  </div>
+
+  <div *ngIf="showSearchInput" class="mt-4">
+    <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Search Location</label>
+    <div class="relative">
+      <input
+        type="text"
+        [value]="searchQuery"
+        (input)="onSearchQueryInput($any($event.target).value)"
+        [disabled]="disabled || readonly || !googleMapsReady"
+        [placeholder]="'Search for an address, place, or landmark'"
+        autocomplete="off"
+        class="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800"
+      />
+
+      <div
+        *ngIf="predictions.length"
+        class="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900"
+      >
+        <button
+          *ngFor="let prediction of predictions"
+          type="button"
+          class="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800"
+          (click)="selectPrediction(prediction)"
+        >
+          <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ prediction.description }}</span>
+          <span *ngIf="prediction.secondaryText" class="text-xs text-gray-500 dark:text-gray-400">{{ prediction.secondaryText }}</span>
+        </button>
+      </div>
+    </div>
+    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+      Start typing to search locations in realtime, then choose a result or click directly on the map.
+    </p>
+  </div>
+
+  <app-banner
+    *ngIf="!googleMapsReady && !loadingMaps"
+    class="mt-4 block"
+    tone="warning"
+    title="Google Maps unavailable"
+    message="The live map search is not configured yet for this environment. Coordinates can still be entered manually."
+  ></app-banner>
+
+  <div class="mt-4 overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+    <div
+      #mapCanvas
+      class="w-full"
+      [style.height.px]="previewHeightPx"
+    ></div>
+    <div *ngIf="loadingMaps" class="border-t border-gray-200 px-3 py-2 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
+      Loading Google Maps...
+    </div>
+  </div>
+
+  <div *ngIf="showCoordinateInputs" class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+    <app-base-input
+      [label]="latitudeLabel"
+      [name]="latitudeName"
+      [placeholder]="latitudePlaceholder"
+      [disabled]="disabled"
+      [readonly]="readonly"
+      [autocomplete]="'off'"
+      [errorText]="latitudeError"
+      [(ngModel)]="latitude"
+      (ngModelChange)="onLatitudeInput($event)"
+    ></app-base-input>
+
+    <app-base-input
+      [label]="longitudeLabel"
+      [name]="longitudeName"
+      [placeholder]="longitudePlaceholder"
+      [disabled]="disabled"
+      [readonly]="readonly"
+      [autocomplete]="'off'"
+      [errorText]="longitudeError"
+      [(ngModel)]="longitude"
+      (ngModelChange)="onLongitudeInput($event)"
+    ></app-base-input>
+  </div>
+
+  <div *ngIf="showActionButtons" class="mt-4 flex flex-wrap gap-3">
+    <app-button
+      label="Use Current Location"
+      type="secondary"
+      [disabled]="disabled || readonly || !canUseBrowserGeolocation"
+      [loading]="capturingLocation"
+      loadingLabel="Locating..."
+      (pressed)="captureCurrentLocation()"
+    ></app-button>
+    <app-button
+      label="Clear Coordinates"
+      type="outline"
+      [disabled]="disabled || readonly || (!latitude.trim() && !longitude.trim())"
+      (pressed)="clearCoordinates()"
+    ></app-button>
+  </div>
+
+  <app-validation-message
+    [message]="coordinateError"
+    [className]="'mt-3 text-xs text-red-500'"
+  ></app-validation-message>
+  <app-validation-message
+    [message]="pickerError"
+    [className]="'mt-2 text-xs text-red-500'"
+  ></app-validation-message>
+  <p *ngIf="pickerMessage" class="mt-2 text-xs text-green-600 dark:text-green-400">{{ pickerMessage }}</p>
+</div>

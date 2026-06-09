@@ -137,7 +137,7 @@ async def test_save_guard_travel_policies_creates_records():
                 "included_radius_km": 10,
                 "rate_per_km": 0.45,
                 "max_auto_match_radius_km": 60,
-                "manual_review_over_km": 80,
+                "manual_review_over_km": 40,
             }
         ],
         current_user=SimpleNamespace(username="platformadmin"),
@@ -165,3 +165,82 @@ async def test_get_guard_travel_policies_seeds_defaults_when_empty():
     assert len(engine.saved) >= len(province_defaults)
     assert province_defaults[0]["included_radius_km"] == 10.0
     assert province_defaults[0]["rate_per_km"] == 0.45
+
+
+@pytest.mark.anyio
+async def test_save_guard_travel_policies_rejects_manual_review_over_auto_match_limit():
+    manager = object.__new__(BillingManager)
+    manager._engine = FakeEngine()
+
+    with pytest.raises(Exception) as exc_info:
+        await manager.save_guard_travel_policies(
+            [
+                {
+                    "region_code": "ON",
+                    "city_code": "",
+                    "included_radius_km": 10,
+                    "rate_per_km": 0.45,
+                    "max_auto_match_radius_km": 60,
+                    "manual_review_over_km": 80,
+                }
+            ],
+            current_user=SimpleNamespace(username="platformadmin"),
+        )
+
+    assert "Manual review distance cannot exceed max auto-match radius" in str(exc_info.value)
+
+
+def test_evaluate_broadcast_distance_marks_missing_distance_for_review():
+    policy = {
+        "max_auto_match_radius_km": 60,
+        "manual_review_over_km": 40,
+    }
+
+    result = BillingManager.evaluate_broadcast_distance(None, policy)
+
+    assert result == {
+        "outcome": "pending_review",
+        "reason_code": "distance_unverified",
+    }
+
+
+def test_evaluate_broadcast_distance_marks_far_candidates_outside_policy():
+    policy = {
+        "max_auto_match_radius_km": 60,
+        "manual_review_over_km": 40,
+    }
+
+    result = BillingManager.evaluate_broadcast_distance(75, policy)
+
+    assert result == {
+        "outcome": "outside_policy",
+        "reason_code": "outside_policy",
+    }
+
+
+def test_evaluate_broadcast_distance_marks_manual_review_band():
+    policy = {
+        "max_auto_match_radius_km": 60,
+        "manual_review_over_km": 40,
+    }
+
+    result = BillingManager.evaluate_broadcast_distance(45, policy)
+
+    assert result == {
+        "outcome": "pending_review",
+        "reason_code": "manual_review_distance",
+    }
+
+
+def test_evaluate_broadcast_distance_marks_within_policy_as_auto_broadcast():
+    policy = {
+        "max_auto_match_radius_km": 60,
+        "manual_review_over_km": 40,
+    }
+
+    result = BillingManager.evaluate_broadcast_distance(25, policy)
+
+    assert result == {
+        "outcome": "auto_broadcast",
+        "reason_code": "within_policy",
+    }

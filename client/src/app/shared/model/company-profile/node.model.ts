@@ -43,6 +43,9 @@ export interface TenantDataModel {
         id?: string | null;
         name?: string | null;
     } | null;
+    profile?: {
+        [key: string]: any;
+    };
 }
 
 export interface AlertAllIoc {

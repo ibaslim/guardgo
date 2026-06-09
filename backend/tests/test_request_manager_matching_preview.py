@@ -16,7 +16,7 @@ async def test_preview_matches_for_request_forwards_requested_window(monkeypatch
             captured["requested_start_at"] = payload.requested_start_at
             captured["requested_end_at"] = payload.requested_end_at
             captured["site_province"] = payload.site_address.province
-            return {"summary": {}, "results": []}
+            return type("PreviewResult", (), {"summary": {}, "results": []})()
 
     from orion.api.interactive.request_matching_manager.request_matching_manager import RequestMatchingManager
 

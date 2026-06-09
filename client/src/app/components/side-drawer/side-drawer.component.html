@@ -12,7 +12,7 @@
   ></div>
 
   <aside
-    class="absolute inset-y-0 right-0 w-full max-w-full transform transition-transform duration-500 ease-out will-change-transform"
+    class="absolute inset-y-0 right-0 w-full max-w-full transform transition-transform duration-500 ease-out will-change-transform sm:max-w-[36rem] md:max-w-none"
     [ngClass]="{
       'md:w-[35vw]': size === 'sm',
       'md:w-[45vw]': size === 'md',
@@ -26,7 +26,7 @@
     role="dialog"
     aria-modal="true"
   >
-    <div class="h-full flex flex-col bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl">
+    <div class="flex h-full flex-col bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl">
       <div class="shrink-0 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">

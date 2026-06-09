@@ -85,6 +85,30 @@ async def test_get_tenant_returns_404_when_missing(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_get_tenant_returns_empty_payload_for_platform_user_without_tenant_uuid(monkeypatch):
+    manager = object.__new__(TenantManager)
+    manager._engine = FakeEngine(None)
+    monkeypatch.setattr(TenantManager, "get_instance", staticmethod(lambda: manager))
+
+    current_user = SimpleNamespace(
+        username="ops1",
+        role=user_role.OPS_ADMIN,
+        tenant_uuid="",
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=_app(user_role.OPS_ADMIN, current_user)),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/api/tenant")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == ""
+    assert response.json()["tenant_type"] is None
+    assert response.json()["profile"] == {}
+
+
+@pytest.mark.anyio
 async def test_get_tenants_datatable_forwards_filters(monkeypatch):
     captured = {}
 
@@ -353,15 +377,70 @@ async def test_get_activity_logs_forbidden_for_client_admin(monkeypatch):
 
 @pytest.mark.anyio
 async def test_get_current_user_info_forwards_to_account_manager(monkeypatch):
-    class FakeManager:
-        async def get_node(self, current_user):
-            assert current_user.username == "tester"
-            return {"username": current_user.username, "role": str(current_user.role)}
+    from pathlib import Path
+    from cryptography.fernet import Fernet
 
-    monkeypatch.setattr(AccountManager, "get_instance", staticmethod(lambda: FakeManager()))
+    class FakeTenant:
+        def __init__(self):
+            self.id = "507f1f77bcf86cd799439011"
+            self.is_default = False
+            self.profile = {
+                "billing_method": {
+                    "method": "debit_card",
+                    "cardholder_name": "Tester",
+                    "last4": "4242",
+                    "expiry_month": "12",
+                    "expiry_year": "2030",
+                }
+            }
+            self.user_quota = 5
+            self.licenses = []
+            self.status = TenantStatus.ACTIVE
+            self.tenant_type = TenantType.GUARD
+            self.ownership_type = None
+            self.service_provider_tenant_id = None
 
-    async with AsyncClient(transport=ASGITransport(app=_app(user_role.CLIENT_ADMIN)), base_url="http://test") as client:
+    class FakeEngine:
+        def __init__(self, tenant):
+            self.tenant = tenant
+
+        async def find_one(self, model, *_args, **_kwargs):
+            if model is db_tenant_model:
+                return self.tenant
+            return None
+
+        async def count(self, *_args, **_kwargs):
+            return 1
+
+    class FakeKeyManager:
+        async def get_or_create_dek(self, *_args, **_kwargs):
+            return Fernet.generate_key()
+
+    current_user = SimpleNamespace(
+        id="user-1",
+        email="tester@example.com",
+        twofa_enabled=False,
+        username="tester",
+        full_name="Tester",
+        role=user_role.CLIENT_ADMIN,
+        status=UserStatus.ACTIVE,
+        subscription=True,
+        account_verify_at=None,
+        licenses=[],
+        tenant_uuid="507f1f77bcf86cd799439011",
+    )
+    manager = object.__new__(AccountManager)
+    manager._engine = FakeEngine(FakeTenant())
+    manager.IMAGE_DIR = Path("/tmp")
+    manager.TENANT_DIR = Path("/tmp")
+
+    monkeypatch.setattr(AccountManager, "get_instance", staticmethod(lambda: manager))
+    monkeypatch.setattr("orion.api.interactive.account_manager.account_manager.KeyManager.get_instance", staticmethod(lambda: FakeKeyManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.CLIENT_ADMIN, current_user)), base_url="http://test") as client:
         response = await client.get("/api/me")
 
     assert response.status_code == 200
-    assert response.json()["username"] == "tester"
+    data = response.json()
+    assert data["user"]["username"] == "tester"
+    assert data["tenant"]["profile"]["billing_method"]["last4"] == "4242"

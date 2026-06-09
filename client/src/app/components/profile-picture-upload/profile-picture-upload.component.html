@@ -1,6 +1,6 @@
-<div class="pt-2 flex flex-col md:flex-row items-start md:items-center gap-8">
+<div class="flex flex-col items-center gap-6 pt-2 text-center md:flex-row md:items-center md:gap-8 md:text-left">
     <!-- Profile Picture Preview -->
-    <div class="flex-shrink-0">
+    <div class="shrink-0">
         <div class="relative w-32 h-32">
             <!-- Placeholder (default state) -->
             <div class="w-full h-full rounded-full border-4 border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 flex items-center justify-center"
@@ -27,8 +27,8 @@
     </div>
 
     <!-- Upload Actions -->
-    <div class="flex-1 space-y-4">
-        <div class="flex flex-wrap gap-2">
+    <div class="w-full flex-1 space-y-4">
+        <div class="flex flex-wrap justify-center gap-2 md:justify-start">
             <!-- Upload Button -->
             <app-file-input
                 [label]="profilePictureUrl && !profilePictureUrl.includes('default') ? 'Change Photo' : 'Upload Photo'"

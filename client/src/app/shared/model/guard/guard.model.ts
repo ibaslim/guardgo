@@ -18,6 +18,8 @@ export interface Address {
   country: string;
   province?: string;
   postalCode: string;
+  latitude: string;
+  longitude: string;
 }
 
 export interface ContactPerson {
@@ -148,6 +150,9 @@ export interface GuardErrors {
   addressCountry?: string;
   addressProvince?: string;
   addressPostalCode?: string;
+  addressLatitude?: string;
+  addressLongitude?: string;
+  addressCoordinates?: string;
   identification?: string;
   licenseNumber?: string;
   issuingAuthority?: string;

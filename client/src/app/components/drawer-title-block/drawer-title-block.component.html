@@ -1,0 +1,10 @@
+<div [class]="containerClass">
+  <div [class]="contentClass">
+    <h3 *ngIf="title" [class]="titleClass">{{ title }}</h3>
+    <p *ngIf="subtitle" [class]="subtitleClass">{{ subtitle }}</p>
+  </div>
+
+  <div [class]="actionsClass">
+    <ng-content select="[drawer-heading-actions]"></ng-content>
+  </div>
+</div>

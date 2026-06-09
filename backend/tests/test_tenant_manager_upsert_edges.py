@@ -72,3 +72,26 @@ async def test_upsert_tenant_rejects_role_mismatch():
 
     assert exc.value.status_code == 401
     assert exc.value.detail == "You are not allowed to update this tenant"
+
+
+def test_validate_and_normalize_provider_operating_regions_requires_city_coordinates():
+    profile = {
+        "operating_regions": [
+            {
+                "country": "CA",
+                "region_code": "ON",
+                "city_entries": [
+                    {
+                        "city_code": "TORONTO",
+                        "coverage_radius_km": 15,
+                    }
+                ],
+            }
+        ]
+    }
+
+    with pytest.raises(HTTPException) as exc:
+        TenantManager._validate_and_normalize_provider_operating_regions(profile)
+
+    assert exc.value.status_code == 400
+    assert "Latitude and longitude are required" in str(exc.value.detail)

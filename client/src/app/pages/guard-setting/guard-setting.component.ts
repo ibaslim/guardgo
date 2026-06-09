@@ -15,6 +15,7 @@ import { PageComponent } from '../../components/page/page.component';
 import { ButtonComponent } from '../../components/button/button.component';
 import { StickyActionBarComponent } from '../../components/sticky-action-bar/sticky-action-bar.component';
 import { ErrorMessageComponent } from "../../components/error-message/error-message.component";
+import { GeoLocationPickerComponent } from '../../components/geo-location-picker/geo-location-picker.component';
 import { ProfilePictureUploadComponent } from '../../components/profile-picture-upload/profile-picture-upload.component';
 import { CardComponent } from '../../components/card/card.component';
 import { ClientPreferredGuardTypesComponent } from '../../components/client-preferred-guard-types/client-preferred-guard-types.component';
@@ -26,6 +27,9 @@ import { getIssuingAuthorityForProvince } from '../../shared/constants/provincia
 import { Guard, GuardErrors, IdentificationDocument, SecurityLicenseDocument, PoliceClearanceRecord, TrainingCertificate, WeeklyAvailability } from '../../shared/model/guard';
 import { readableTitle } from '../../shared/helpers/format.helper';
 import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared/helpers/distance.helper';
+import { GeoLocationSelection, buildGoogleMapsLocationUrl } from '../../shared/helpers/google-maps-address.helper';
+import { formatCoordinateInput, parseCoordinate } from '../../shared/helpers/location.helper';
+import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import {
   buildAlphabeticDummyTag,
   buildCaPhone,
@@ -59,7 +63,8 @@ import {
     ProfilePictureUploadComponent,
     CardComponent,
     ClientPreferredGuardTypesComponent,
-    AlertComponent
+    AlertComponent,
+    GeoLocationPickerComponent,
   ],
   templateUrl: './guard-setting.component.html',
   styleUrls: ['./guard-setting.component.css']
@@ -67,6 +72,9 @@ import {
 export class GuardSettingComponent implements OnInit, OnDestroy {
   readonly showDummyDataButton = isLocalhostForDummyData();
   managedByProviderName = '';
+  homeAddressMapUrl = '';
+  guardHomeLocationSelected = false;
+  guardHomeLocationStale = false;
 
   @Input() showPageWrapper: boolean = true;
   @Input() readonly: boolean = false;
@@ -297,7 +305,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       city: '',
       country: 'CA',
       province: '',
-      postalCode: ''
+      postalCode: '',
+      latitude: '',
+      longitude: '',
     },
     secondaryContact: {
       name: '',
@@ -431,7 +441,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   constructor(
     private apiService: ApiService,
     private router: Router,
-    private appService: AppService
+    private appService: AppService,
+    private addressConsistencyService: GoogleMapsAddressConsistencyService,
   ) { }
 
   ngOnInit(): void {
@@ -476,9 +487,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       return;
     }
 
-    if (this.guardFormModel.operationalRadius != null && Number.isFinite(this.guardFormModel.operationalRadius)) {
+    const operationalRadius = this.parseOperationalRadius(this.guardFormModel.operationalRadius);
+    if (operationalRadius != null) {
       this.guardFormModel.operationalRadius = this.convertDistanceBetweenUnits(
-        Number(this.guardFormModel.operationalRadius),
+        operationalRadius,
         this.selectedDistanceUnit,
         nextUnit
       );
@@ -494,10 +506,25 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       : Number(kmValue.toFixed(1));
   }
 
-  private toStorageKm(displayValue: number): number {
+  private toStorageKm(displayValue: number | string): number {
+    const parsedValue = this.parseOperationalRadius(displayValue);
+    if (parsedValue == null) {
+      throw new Error('Operational radius must be a valid number.');
+    }
     return this.selectedDistanceUnit === 'mi'
-      ? milesToKm(displayValue)
-      : Number(displayValue.toFixed(2));
+      ? milesToKm(parsedValue)
+      : Number(parsedValue.toFixed(2));
+  }
+
+  private parseOperationalRadius(value: unknown): number | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    if (typeof value === 'string' && !value.trim()) {
+      return null;
+    }
+    const parsedValue = Number(value);
+    return Number.isFinite(parsedValue) ? parsedValue : null;
   }
 
   private convertDistanceBetweenUnits(value: number, from: DistanceUnit, to: DistanceUnit): number {
@@ -528,6 +555,46 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     }
 
     return [...canonical, { value: current, label: current }];
+  }
+
+  getGuardHomeAddressSearchSummary(): string {
+    return [
+      this.guardFormModel.address.street,
+      this.getCityLabelForProvince(this.guardFormModel.address.province || '', this.guardFormModel.address.city),
+      this.guardFormModel.address.province,
+      this.guardFormModel.address.postalCode,
+      this.guardFormModel.address.country,
+    ]
+      .map((part) => String(part || '').trim())
+      .filter((part) => !!part)
+      .join(', ');
+  }
+
+  onGuardHomeLocationChange(selection: GeoLocationSelection): void {
+    if (selection.street) {
+      this.guardFormModel.address.street = selection.street;
+    }
+    if (selection.postalCode) {
+      this.guardFormModel.address.postalCode = selection.postalCode;
+    }
+    if (selection.countryCode || selection.countryName) {
+      this.guardFormModel.address.country = selection.countryCode || selection.countryName;
+    }
+    if (selection.provinceCode) {
+      this.guardFormModel.address.province = selection.provinceCode;
+    }
+    if (selection.provinceCode && selection.city) {
+      const resolvedCityCode = this.resolveCityCodeForProvince(selection.provinceCode, selection.city);
+      this.guardFormModel.address.city = resolvedCityCode || this.guardFormModel.address.city;
+    }
+    this.guardHomeLocationSelected = true;
+    this.guardHomeLocationStale = false;
+  }
+
+  markGuardAddressDirty(): void {
+    if (this.guardHomeLocationSelected) {
+      this.guardHomeLocationStale = true;
+    }
   }
 
   getPoliceClearanceCityOptions(record: PoliceClearanceRecord): { value: string; label: string }[] {
@@ -675,8 +742,17 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       city: resolvedAddressCity || rawAddressCity || this.getDefaultCityCodeForProvince(addressProvinceCode),
       country: rawAddress.country || 'CA',
       province: addressProvinceCode,
-      postalCode: rawAddress.postal_code || rawAddress.postalCode || ''
+      postalCode: rawAddress.postal_code || rawAddress.postalCode || '',
+      latitude: formatCoordinateInput(rawAddress.latitude),
+      longitude: formatCoordinateInput(rawAddress.longitude),
     };
+    const addressLatitude = parseCoordinate(formData.address.latitude);
+    const addressLongitude = parseCoordinate(formData.address.longitude);
+    this.homeAddressMapUrl = addressLatitude != null && addressLongitude != null
+      ? buildGoogleMapsLocationUrl(addressLatitude, addressLongitude)
+      : '';
+    this.guardHomeLocationSelected = !!(String(formData.address.latitude || '').trim() && String(formData.address.longitude || '').trim());
+    this.guardHomeLocationStale = false;
 
     const operationalRegionCode = (profile.operational_region_code || profile.operationalRegionCode || formData.address.province || '').toString().trim();
     const rawOperationalCity = (profile.operational_city_code || profile.operationalCityCode || formData.address.city || '').toString().trim();
@@ -1682,6 +1758,29 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       }
     }
 
+    const addressLatitude = parseCoordinate(this.guardFormModel.address.latitude);
+    const addressLongitude = parseCoordinate(this.guardFormModel.address.longitude);
+    const hasAddressLatitude = String(this.guardFormModel.address.latitude || '').trim() !== '';
+    const hasAddressLongitude = String(this.guardFormModel.address.longitude || '').trim() !== '';
+
+    if (!hasAddressLatitude && !hasAddressLongitude) {
+      this.guardErrors['addressCoordinates'] = 'Home coordinates are required. Select your home or base location on Google Maps.';
+    } else if (hasAddressLatitude !== hasAddressLongitude) {
+      this.guardErrors['addressCoordinates'] = 'Provide both latitude and longitude.';
+    }
+    if (hasAddressLatitude && addressLatitude === null) {
+      this.guardErrors['addressLatitude'] = 'Latitude must be a valid number.';
+    }
+    if (hasAddressLongitude && addressLongitude === null) {
+      this.guardErrors['addressLongitude'] = 'Longitude must be a valid number.';
+    }
+    if (addressLatitude !== null && (addressLatitude < -90 || addressLatitude > 90)) {
+      this.guardErrors['addressLatitude'] = 'Latitude must be between -90 and 90.';
+    }
+    if (addressLongitude !== null && (addressLongitude < -180 || addressLongitude > 180)) {
+      this.guardErrors['addressLongitude'] = 'Longitude must be between -180 and 180.';
+    }
+
     // Identification Documents - Minimum 2 required
     if (!this.guardFormModel.identification.documents ||
       this.guardFormModel.identification.documents.length < 2) {
@@ -2071,10 +2170,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     }
 
     // Operational Radius
+    const operationalRadius = this.parseOperationalRadius(this.guardFormModel.operationalRadius);
     if (
       this.guardFormModel.operationalRadius != null &&
-      (isNaN(this.guardFormModel.operationalRadius) ||
-        this.guardFormModel.operationalRadius < this.minimumOperationalRadiusDisplay)
+      (operationalRadius == null || operationalRadius < this.minimumOperationalRadiusDisplay)
     ) {
       this.guardErrors['operationalRadius'] = `Operational radius must be at least ${this.minimumOperationalRadiusText}.`;
     }
@@ -2138,12 +2237,17 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     }
   }
 
-  submitGuardForm(): void {
+  async submitGuardForm(): Promise<void> {
     if (!this.validateGuardForm() || this.isSubmitting) {
       return;
     }
 
     this.isSubmitting = true;
+    const addressConsistent = await this.validateGuardAddressConsistency();
+    if (!addressConsistent) {
+      this.isSubmitting = false;
+      return;
+    }
     this.guardErrors = {}; // Clear previous errors
 
     const identificationDocs = this.guardFormModel.identification.documents || [];
@@ -2163,7 +2267,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           city: this.getCityLabelForProvince(this.guardFormModel.address.province || '', this.guardFormModel.address.city),
           country: this.guardFormModel.address.country,
           province: this.guardFormModel.address.province || '',
-          postal_code: this.guardFormModel.address.postalCode
+          postal_code: this.guardFormModel.address.postalCode,
+          latitude: parseCoordinate(this.guardFormModel.address.latitude),
+          longitude: parseCoordinate(this.guardFormModel.address.longitude),
         },
         operational_region_code: this.guardFormModel.operationalRegionCode,
         operational_city_code: this.guardFormModel.operationalCityCode,
@@ -2264,8 +2370,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     payload.profile.contact = legacyContact;
 
     // Add operational radius if set
-    if (this.guardFormModel.operationalRadius != null) {
-      payload.profile.max_travel_radius_km = this.toStorageKm(this.guardFormModel.operationalRadius);
+    const operationalRadius = this.parseOperationalRadius(this.guardFormModel.operationalRadius);
+    if (operationalRadius != null) {
+      payload.profile.max_travel_radius_km = this.toStorageKm(operationalRadius);
     }
 
     // Determine desired post-submit tenant status. If user is completing onboarding, move to pending_activation.
@@ -2286,6 +2393,25 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           this.guardErrors['submit'] = err?.error?.detail || 'Failed to submit guard profile.';
         }
       });
+  }
+
+  private async validateGuardAddressConsistency(): Promise<boolean> {
+    const result = await this.addressConsistencyService.validate({
+      latitude: this.guardFormModel.address.latitude,
+      longitude: this.guardFormModel.address.longitude,
+      expectedCountryCode: this.guardFormModel.address.country,
+      expectedProvinceCode: this.guardFormModel.address.province,
+      expectedProvinceName: this.guardFormModel.address.province,
+      expectedCity: this.getCityLabelForProvince(this.guardFormModel.address.province || '', this.guardFormModel.address.city),
+      expectedPostalCode: this.guardFormModel.address.postalCode,
+    });
+
+    if (!result.ok) {
+      this.guardErrors['addressCoordinates'] = result.message || 'Home coordinates do not match the manual address.';
+      return false;
+    }
+
+    return true;
   }
 
   fillDummyData(): void {
@@ -2329,6 +2455,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       country: 'CA',
       province,
       postalCode: 'M5V 2T6',
+      latitude: '43.653200',
+      longitude: '-79.383200',
     };
     this.guardFormModel.secondaryContact = {
       name: `Local Contact ${nameTag}`,

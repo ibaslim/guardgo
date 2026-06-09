@@ -38,24 +38,24 @@ export class BigBannerComponent {
   // Card size: width & padding
   getSizeClass(): string {
     switch (this.size) {
-      case 'sm': return 'max-w-md p-4';
-      case 'md': return 'max-w-2xl p-8';
-      case 'lg': return 'max-w-4xl p-12';
-      case 'xl': return 'max-w-5xl p-16';
-      case 'full': return 'w-full h-full p-20';
-      default: return 'max-w-2xl p-8';
+      case 'sm': return 'max-w-md p-4 sm:p-5';
+      case 'md': return 'max-w-2xl p-5 sm:p-8';
+      case 'lg': return 'max-w-4xl p-6 sm:p-10 lg:p-12';
+      case 'xl': return 'max-w-5xl p-6 sm:p-10 lg:p-14';
+      case 'full': return 'w-full h-full p-5 sm:p-10 lg:p-16';
+      default: return 'max-w-2xl p-5 sm:p-8';
     }
   }
 
   // Title font size
   getTitleClass(): string {
     switch (this.size) {
-      case 'sm': return 'text-2xl';
-      case 'md': return 'text-4xl';
-      case 'lg': return 'text-5xl';
-      case 'xl': return 'text-6xl';
-      case 'full': return 'text-7xl';
-      default: return 'text-4xl';
+      case 'sm': return 'text-xl sm:text-2xl';
+      case 'md': return 'text-2xl sm:text-4xl';
+      case 'lg': return 'text-3xl sm:text-4xl lg:text-5xl';
+      case 'xl': return 'text-3xl sm:text-5xl lg:text-6xl';
+      case 'full': return 'text-4xl sm:text-6xl lg:text-7xl';
+      default: return 'text-2xl sm:text-4xl';
     }
   }
 
@@ -63,11 +63,11 @@ export class BigBannerComponent {
   getMessageClass(): string {
     switch (this.size) {
       case 'sm': return 'text-sm';
-      case 'md': return 'text-lg';
-      case 'lg': return 'text-xl';
-      case 'xl': return 'text-2xl';
-      case 'full': return 'text-3xl';
-      default: return 'text-lg';
+      case 'md': return 'text-base sm:text-lg';
+      case 'lg': return 'text-base sm:text-lg lg:text-xl';
+      case 'xl': return 'text-base sm:text-xl lg:text-2xl';
+      case 'full': return 'text-lg sm:text-2xl lg:text-3xl';
+      default: return 'text-base sm:text-lg';
     }
   }
 }

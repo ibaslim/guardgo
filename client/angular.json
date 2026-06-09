@@ -21,6 +21,9 @@
             "outputPath": "build",
             "baseHref": "/",
             "deployUrl": "/",
+            "allowedCommonJsDependencies": [
+              "qrcode"
+            ],
             "index": "src/index.html",
             "main": "src/main.ts",
             "polyfills": [

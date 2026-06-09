@@ -25,8 +25,8 @@ COPY pyproject.toml /app/pyproject.toml
 COPY README.md /app/s.md
 COPY docs/ /app/docs/
 COPY client/build/ /app/build/
-RUN test -d /app/build/assets
+COPY client/src/assets/data/ /app/asset_data/
+RUN test -f /app/asset_data/mail_template_data/mail_template.html
 
 # Expose FastAPI's application port
 EXPOSE 8070
-

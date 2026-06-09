@@ -1,0 +1,219 @@
+<app-page
+  title="My Invoices"
+  [subtitle]="pageSubtitle"
+  [contentClass]="'mx-auto max-w-6xl space-y-6'"
+>
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <app-summary-metric-card
+      label="Invoices Issued"
+      [value]="invoiceCount"
+    ></app-summary-metric-card>
+    <app-summary-metric-card
+      label="This Month's Expected Pay"
+      [value]="formatMoney(currentMonthExpectedPay)"
+    ></app-summary-metric-card>
+    <app-summary-metric-card
+      label="This Month's Planned Hours"
+      [value]="formatHours(currentMonthHours)"
+    ></app-summary-metric-card>
+    <app-summary-metric-card
+      label="Average Hourly Rate"
+      [value]="formatMoney(averageHourlyRate)"
+    ></app-summary-metric-card>
+  </div>
+
+  <app-section
+    [title]="'Invoice List'"
+    [subtitle]="'Each record shows only your payout-side share. Long-term scheduled coverage closes weekly; short-term jobs remain per request.'"
+  >
+    <span section-actions class="text-xs text-gray-400 dark:text-gray-500">
+      {{ invoiceCount }} invoice{{ invoiceCount === 1 ? '' : 's' }}
+    </span>
+
+    <div *ngIf="listLoading" class="space-y-3">
+      <div *ngFor="let _ of [1,2,3]" class="h-28 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800"></div>
+    </div>
+
+    <div *ngIf="!listLoading && !invoices.length" class="rounded-xl border border-dashed border-gray-200 px-5 py-10 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+      No invoices are available for your current coverage yet.
+    </div>
+
+    <div *ngIf="!listLoading && invoices.length" class="space-y-4">
+      <div *ngFor="let invoice of invoices" class="rounded-xl border border-gray-200 bg-white/70 p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900/50">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                {{ invoice.invoice_number }}
+              </span>
+              <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(invoice.invoice_status)">
+                {{ formatTokenLabel(invoice.invoice_status) }}
+              </span>
+              <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">
+                {{ formatTokenLabel(invoice.contract_type) }}
+              </span>
+            </div>
+            <div class="mt-3 text-base font-semibold text-gray-900 dark:text-gray-100">
+              {{ invoice.request_title || 'Coverage invoice' }}
+            </div>
+            <div class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ invoice.site_name || 'Site unavailable' }}
+            </div>
+            <div class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+              {{ invoice.billing_period_label || formatTokenLabel(invoice.billing_cycle) }}
+              <span *ngIf="invoice.coverage_status"> · {{ formatTokenLabel(invoice.coverage_status) }}</span>
+            </div>
+            <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+              Issued {{ formatDateTime(invoice.created_at) }}
+              <span *ngIf="invoice.updated_at"> · Updated {{ formatDateTime(invoice.updated_at) }}</span>
+            </div>
+          </div>
+
+          <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:w-[320px] lg:flex-none">
+            <app-summary-metric-card
+              label="Expected Payment"
+              [value]="formatMoney(invoice.estimated_amount, invoice.currency || 'CAD')"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Hourly Rate"
+              [value]="formatMoney(invoice.payout_hourly_rate, invoice.currency || 'CAD')"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Planned Hours"
+              [value]="formatHours(invoice.estimated_total_hours)"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Committed Positions"
+              [value]="invoice.committed_slots ?? '—'"
+            ></app-summary-metric-card>
+          </div>
+        </div>
+
+        <div class="mt-4 flex justify-end">
+          <a
+            class="inline-flex items-center justify-center rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 transition hover:bg-gray-50 dark:bg-gray-700 dark:text-white dark:ring-gray-500 dark:hover:bg-gray-600"
+            [attr.href]="'/dashboard/my-invoices?invoice=' + invoice.id"
+          >
+            View Invoice
+          </a>
+        </div>
+      </div>
+    </div>
+  </app-section>
+
+  <app-side-drawer [show]="showInvoiceDrawer" size="lg" (close)="closeInvoiceDrawer()">
+    <app-drawer-title-block
+      drawer-header
+      [title]="selectedInvoice?.invoice_number || 'Invoice detail'"
+      [subtitle]="(selectedInvoice?.request_title || 'Coverage invoice') + ' • ' + (selectedInvoice?.site_name || 'Site unavailable')"
+    ></app-drawer-title-block>
+
+    <div drawer-body class="space-y-5">
+      <div *ngIf="detailLoading" class="space-y-3">
+        <div class="h-16 animate-pulse rounded-md bg-gray-100 dark:bg-gray-800"></div>
+        <div class="h-16 animate-pulse rounded-md bg-gray-100 dark:bg-gray-800"></div>
+        <div class="h-40 animate-pulse rounded-md bg-gray-100 dark:bg-gray-800"></div>
+      </div>
+
+      <ng-container *ngIf="!detailLoading && selectedInvoice as invoice">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <app-summary-metric-card
+            label="Expected Payment"
+            [value]="formatMoney(invoice.estimated_amount, invoice.currency || 'CAD')"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Hourly Rate"
+            [value]="formatMoney(invoice.payout_hourly_rate, invoice.currency || 'CAD')"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Planned Hours"
+            [value]="formatHours(invoice.estimated_total_hours)"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Committed Positions"
+            [value]="invoice.committed_slots ?? '—'"
+          ></app-summary-metric-card>
+        </div>
+
+        <app-section
+          [title]="'Invoice Meta'"
+          [subtitle]="'Billing period and coverage state for this issued invoice.'"
+        >
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <app-summary-metric-card
+              label="Billing Period"
+              [value]="invoice.billing_period_label || '—'"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Invoice Status"
+              [value]="formatTokenLabel(invoice.invoice_status)"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Coverage Status"
+              [value]="formatTokenLabel(invoice.coverage_status)"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
+              label="Contract Type"
+              [value]="formatTokenLabel(invoice.contract_type)"
+            ></app-summary-metric-card>
+          </div>
+          <p *ngIf="invoice.note" class="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
+            {{ invoice.note }}
+          </p>
+        </app-section>
+
+        <app-section
+          [title]="'Line Items'"
+          [subtitle]="'Per-day payout lines for your committed coverage share.'"
+        >
+          <div *ngIf="!getInvoiceLineItems(invoice).length" class="text-sm text-gray-500 dark:text-gray-400">
+            No payout line items are available for this invoice.
+          </div>
+
+          <div *ngIf="getInvoiceLineItems(invoice).length" class="space-y-3">
+            <div *ngFor="let item of getInvoiceLineItems(invoice)" class="rounded-xl border border-gray-200 px-4 py-4 dark:border-gray-700">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {{ item.description || 'Coverage payout' }}
+                  </div>
+                  <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    {{ formatDate(item.service_date_local || null) }}
+                    <span *ngIf="item.metadata?.start_at_local && item.metadata?.end_at_local">
+                      · {{ formatDateTime(item.metadata?.start_at_local || null) }} to {{ formatDateTime(item.metadata?.end_at_local || null) }}
+                    </span>
+                  </div>
+                </div>
+                <div class="text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  {{ formatMoney(item.amount, invoice.currency || 'CAD') }}
+                </div>
+              </div>
+              <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <app-summary-metric-card
+                  label="Hours"
+                  [value]="formatHours(item.quantity)"
+                ></app-summary-metric-card>
+                <app-summary-metric-card
+                  label="Rate"
+                  [value]="formatMoney(item.unit_rate, invoice.currency || 'CAD')"
+                ></app-summary-metric-card>
+                <app-summary-metric-card
+                  label="Committed Positions"
+                  [value]="item.metadata?.committed_slots ?? '—'"
+                ></app-summary-metric-card>
+                <app-summary-metric-card
+                  label="Hours / Position"
+                  [value]="formatHours(item.metadata?.hours_per_position)"
+                ></app-summary-metric-card>
+              </div>
+            </div>
+          </div>
+        </app-section>
+      </ng-container>
+    </div>
+
+    <app-drawer-action-row drawer-footer>
+      <app-button label="Close" type="secondary" (pressed)="closeInvoiceDrawer()"></app-button>
+    </app-drawer-action-row>
+  </app-side-drawer>
+</app-page>
