@@ -25,8 +25,8 @@
                     </app-profile-picture-upload>
                 </ng-container>
                 <ng-container *ngIf="readonly">
-                    <div *ngIf="getProfileImageUrl(); else noProfilePic">
-                        <img [src]="getProfileImageUrl()" alt="Profile picture" class="w-32 h-32 rounded-full object-cover">
+                    <div *ngIf="getProfileImageUrl(); else noProfilePic" class="flex justify-center sm:justify-start">
+                        <img [src]="getProfileImageUrl()" alt="Profile picture" class="h-24 w-24 rounded-full object-cover sm:h-32 sm:w-32">
                     </div>
                     <ng-template #noProfilePic>
                         <p class="text-sm text-gray-600">No profile picture available.</p>

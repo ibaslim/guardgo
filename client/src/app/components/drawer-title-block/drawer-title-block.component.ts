@@ -13,9 +13,9 @@ import { Component, Input } from '@angular/core';
 export class DrawerTitleBlockComponent {
   @Input() title = '';
   @Input() subtitle = '';
-  @Input() containerClass = 'flex items-start justify-between gap-4';
+  @Input() containerClass = 'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between';
   @Input() contentClass = 'min-w-0 flex-1';
   @Input() titleClass = 'text-xl font-semibold text-gray-900 dark:text-gray-100';
-  @Input() subtitleClass = 'mt-1 text-xs text-gray-500 dark:text-gray-400';
-  @Input() actionsClass = 'shrink-0';
+  @Input() subtitleClass = 'mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400 sm:text-xs sm:leading-5';
+  @Input() actionsClass = 'shrink-0 self-start sm:self-auto';
 }

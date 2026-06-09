@@ -200,7 +200,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly listToolbarControlsFiveColumnClass =
     'grid grid-cols-1 gap-3 rounded-md bg-gray-50/70 p-3 sm:grid-cols-2 xl:grid-cols-5 xl:items-end dark:bg-gray-800/50';
   readonly listToolbarFooterClass = 'mt-4 flex flex-wrap items-center justify-between gap-3';
-  readonly requestToolbarSummaryFooterClass = 'mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4';
+  readonly requestToolbarSummaryFooterClass = 'mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4';
   loading = false;
   saving = false;
   jobsLoading = false;

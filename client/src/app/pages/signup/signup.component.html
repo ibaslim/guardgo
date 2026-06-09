@@ -1,11 +1,11 @@
 <div
   class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-200">
-  <div class="max-w-2xl w-full space-y-8">
+  <div class="w-full max-w-2xl space-y-6 sm:space-y-8">
     <!-- Header -->
     <div class="text-center space-y-4">
       <div class="flex justify-center">
         <img src="assets/images/shared/orion-Intelligence-logo.svg" width="120" height="80" alt="logo"
-          class="dark:brightness-200" />
+          class="max-w-[120px] dark:brightness-200" />
       </div>
       <div>
         <h2 class="text-3xl font-bold text-gray-900 dark:text-white">Create Account</h2>
@@ -16,7 +16,7 @@
     </div>
 
     <!-- Form -->
-    <form #signUpForm="ngForm" class="bg-white dark:bg-gray-800 shadow-lg rounded-2xl p-10 space-y-8"
+    <form #signUpForm="ngForm" class="space-y-8 rounded-2xl bg-white p-5 shadow-lg dark:bg-gray-800 sm:p-8 lg:p-10"
       (ngSubmit)="onSubmit(signUpForm)">
       <!-- Account Credentials Section -->
       <section class="space-y-5">

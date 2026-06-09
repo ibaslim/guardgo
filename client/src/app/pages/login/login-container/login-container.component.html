@@ -1,17 +1,17 @@
 <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-12 px-4 sm:px-6 lg:px-8 transition-colors duration-200" *ngIf="!twofaRequired">
-  <div class="max-w-md w-full space-y-8">
+  <div class="w-full max-w-md space-y-6 sm:space-y-8">
     <div>
       <div class="flex justify-center mb-6">
-        <img [src]="appService.getConfig().appSettings.logo_url ? '/api/s/static/system/logo' : 'assets/images/shared/orion-Intelligence-logo.svg'" width="120" height="80" alt="logo" class="dark:brightness-200" />
+        <img [src]="appService.getConfig().appSettings.logo_url ? '/api/s/static/system/logo' : 'assets/images/shared/orion-Intelligence-logo.svg'" width="120" height="80" alt="logo" class="max-w-[120px] dark:brightness-200" />
       </div>
-      <h2 class="mt-6 text-center text-4xl font-extrabold text-gray-900 dark:text-white">
+      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white sm:text-4xl">
         Sign in to your account
       </h2>
       <p class="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
         Welcome back to {{ appService.getConfig().appSettings.app_name || 'GuardGo' }}
       </p>
     </div>
-    <form #loginForm="ngForm" class="mt-8 space-y-6 bg-white dark:bg-gray-800 shadow-xl rounded-lg p-8" (ngSubmit)="onSubmit(loginForm)">
+    <form #loginForm="ngForm" class="mt-6 space-y-6 rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800 sm:mt-8 sm:p-8" (ngSubmit)="onSubmit(loginForm)">
       <div class="rounded-md shadow-sm space-y-4">
         <div>
           <app-base-input
@@ -35,7 +35,7 @@
         </div>
       </div>
 
-      <div class="flex items-center justify-between">
+      <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="text-sm">
           <a (click)="goToForgot()" class="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 cursor-pointer">
             Forgot your password?
@@ -50,15 +50,15 @@
       </div>
 
       <div *ngIf="errorMessage == 'verification pending'" class="rounded-md bg-red-50 dark:bg-red-900 p-4">
-        <div class="flex items-center justify-between">
-          <div class="flex">
-            <div class="ml-3">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex min-w-0">
+            <div class="sm:ml-3">
               <h3 class="text-sm font-medium text-red-800 dark:text-red-300">
                 {{ errorMessage }}
               </h3>
             </div>
           </div>
-          <button (click)="resendMail()" type="button" class="ml-3 px-3 py-1 bg-white dark:bg-gray-700 text-red-800 dark:text-red-300 text-sm font-medium rounded-md hover:bg-gray-50 dark:hover:bg-gray-600">
+          <button (click)="resendMail()" type="button" class="px-3 py-1 bg-white dark:bg-gray-700 text-red-800 dark:text-red-300 text-sm font-medium rounded-md hover:bg-gray-50 dark:hover:bg-gray-600">
             Resend mail
           </button>
         </div>
@@ -98,17 +98,17 @@
 
 
 <div *ngIf="twofaRequired" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-12 px-4 sm:px-6 lg:px-8">
-  <div class="max-w-md w-full space-y-6 bg-white dark:bg-gray-800 shadow-xl rounded-lg p-8">
+  <div class="w-full max-w-md space-y-6 rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800 sm:p-8">
     <div class="flex justify-center mb-4">
-      <img alt="logo" class="h-12 dark:brightness-200" src="assets/images/shared/home-logo.svg">
+      <img alt="logo" class="h-12 max-w-[120px] dark:brightness-200" src="assets/images/shared/home-logo.svg">
     </div>
 
     <div *ngIf="errorMessage" class="rounded-md bg-yellow-50 dark:bg-yellow-900 p-4">
       <p class="text-sm font-medium text-yellow-800 dark:text-yellow-300">{{ errorMessage }}</p>
     </div>
 
-    <div *ngIf="otpDataUrl" class="flex justify-center my-6">
-      <img [src]="otpDataUrl" alt="2FA QR" width="200" height="200" class="rounded-lg shadow-md">
+    <div *ngIf="otpDataUrl" class="my-6 flex justify-center">
+      <img [src]="otpDataUrl" alt="2FA QR" width="200" height="200" class="h-auto w-full max-w-[200px] rounded-lg shadow-md">
     </div>
 
     <p *ngIf="otpSecret" class="text-sm font-medium text-gray-700 dark:text-gray-300 text-center">

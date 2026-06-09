@@ -69,7 +69,7 @@
             </div>
           </div>
 
-          <div class="grid min-w-full grid-cols-2 gap-3 lg:min-w-[320px]">
+          <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:w-[320px] lg:flex-none">
             <app-summary-metric-card
               label="Expected Payment"
               [value]="formatMoney(invoice.estimated_amount, invoice.currency || 'CAD')"
@@ -116,7 +116,7 @@
       </div>
 
       <ng-container *ngIf="!detailLoading && selectedInvoice as invoice">
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <app-summary-metric-card
             label="Expected Payment"
             [value]="formatMoney(invoice.estimated_amount, invoice.currency || 'CAD')"
@@ -139,7 +139,7 @@
           [title]="'Invoice Meta'"
           [subtitle]="'Billing period and coverage state for this issued invoice.'"
         >
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <app-summary-metric-card
               label="Billing Period"
               [value]="invoice.billing_period_label || '—'"
@@ -188,7 +188,7 @@
                   {{ formatMoney(item.amount, invoice.currency || 'CAD') }}
                 </div>
               </div>
-              <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <app-summary-metric-card
                   label="Hours"
                   [value]="formatHours(item.quantity)"

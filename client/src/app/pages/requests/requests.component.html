@@ -527,72 +527,76 @@
           No visible shifts are currently generated for this month under the selected shift-status filter.
         </div>
 
-        <div class="grid grid-cols-7 gap-2">
-          <div
-            *ngFor="let label of shiftCalendarWeekdayLabels"
-            class="rounded-md bg-gray-50 px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 dark:bg-gray-800/70 dark:text-gray-400"
-          >
-            {{ label }}
-          </div>
-        </div>
-
-        <div class="mt-2 grid gap-2">
-          <div *ngFor="let week of shiftCalendarWeeks" class="grid grid-cols-7 gap-2">
-            <div
-              *ngFor="let day of week"
-              class="min-h-[9.5rem] rounded-lg border p-3 transition"
-              [class]="getShiftCalendarDayClasses(day)"
-              [class.cursor-pointer]="day.shifts.length === 1"
-              (click)="onShiftCalendarDayClick(day)"
-            >
-              <div class="flex items-start justify-between gap-2">
-                <div class="text-sm font-semibold">{{ day.dateNumber }}</div>
-                <span
-                  *ngIf="day.shifts.length"
-                  class="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-200"
-                >
-                  {{ day.shifts.length }}
-                </span>
-              </div>
-
-              <div class="mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                {{ getShiftCalendarCountLabel(day) }}
-              </div>
-
-              <div *ngIf="day.shifts.length" class="mt-3 space-y-2">
-                <button
-                  *ngFor="let shift of day.shifts | slice:0:2; trackBy: trackByShiftId"
-                  type="button"
-                  class="block w-full rounded-md border border-gray-200 bg-white/80 px-2.5 py-2 text-left text-xs text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900/80 dark:text-gray-200 dark:hover:border-blue-800 dark:hover:text-blue-300"
-                  (click)="openShiftDetails(shift); $event.stopPropagation()"
-                >
-                  <div class="break-words font-semibold">{{ getShiftRequestTitle(shift) }}</div>
-                  <div class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                    {{ formatBackendDateTime(shift.shift_start_at_utc) }}
-                  </div>
-                  <div class="mt-2 text-[11px] font-medium text-blue-700 dark:text-blue-300">
-                    Open shift details
-                  </div>
-                </button>
-
-                <button
-                  *ngIf="day.shifts.length > 1"
-                  type="button"
-                  class="text-left text-[11px] font-medium text-blue-700 transition hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200"
-                  (click)="focusShiftCalendarDate(day.isoDate); $event.stopPropagation()"
-                >
-                  View all {{ day.shifts.length }} shifts
-                </button>
-              </div>
-
-              <button
-                *ngIf="day.inCurrentMonth && !day.shifts.length"
-                type="button"
-                class="mt-4 text-left text-[11px] font-medium text-gray-500 transition hover:text-blue-700 dark:text-gray-400 dark:hover:text-blue-300"
-                (click)="focusShiftCalendarDate(day.isoDate); $event.stopPropagation()"
+        <div class="overflow-x-auto pb-1">
+          <div class="min-w-[42rem]">
+            <div class="grid grid-cols-7 gap-2">
+              <div
+                *ngFor="let label of shiftCalendarWeekdayLabels"
+                class="rounded-md bg-gray-50 px-3 py-2 text-center text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 dark:bg-gray-800/70 dark:text-gray-400"
               >
-                Filter list to this day
-              </button>
+                {{ label }}
+              </div>
+            </div>
+
+            <div class="mt-2 grid gap-2">
+              <div *ngFor="let week of shiftCalendarWeeks" class="grid grid-cols-7 gap-2">
+                <div
+                  *ngFor="let day of week"
+                  class="min-h-[9.5rem] rounded-lg border p-3 transition"
+                  [class]="getShiftCalendarDayClasses(day)"
+                  [class.cursor-pointer]="day.shifts.length === 1"
+                  (click)="onShiftCalendarDayClick(day)"
+                >
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="text-sm font-semibold">{{ day.dateNumber }}</div>
+                    <span
+                      *ngIf="day.shifts.length"
+                      class="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-950/40 dark:text-blue-200"
+                    >
+                      {{ day.shifts.length }}
+                    </span>
+                  </div>
+
+                  <div class="mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                    {{ getShiftCalendarCountLabel(day) }}
+                  </div>
+
+                  <div *ngIf="day.shifts.length" class="mt-3 space-y-2">
+                    <button
+                      *ngFor="let shift of day.shifts | slice:0:2; trackBy: trackByShiftId"
+                      type="button"
+                      class="block w-full rounded-md border border-gray-200 bg-white/80 px-2.5 py-2 text-left text-xs text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900/80 dark:text-gray-200 dark:hover:border-blue-800 dark:hover:text-blue-300"
+                      (click)="openShiftDetails(shift); $event.stopPropagation()"
+                    >
+                      <div class="break-words font-semibold">{{ getShiftRequestTitle(shift) }}</div>
+                      <div class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                        {{ formatBackendDateTime(shift.shift_start_at_utc) }}
+                      </div>
+                      <div class="mt-2 text-[11px] font-medium text-blue-700 dark:text-blue-300">
+                        Open shift details
+                      </div>
+                    </button>
+
+                    <button
+                      *ngIf="day.shifts.length > 1"
+                      type="button"
+                      class="text-left text-[11px] font-medium text-blue-700 transition hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-200"
+                      (click)="focusShiftCalendarDate(day.isoDate); $event.stopPropagation()"
+                    >
+                      View all {{ day.shifts.length }} shifts
+                    </button>
+                  </div>
+
+                  <button
+                    *ngIf="day.inCurrentMonth && !day.shifts.length"
+                    type="button"
+                    class="mt-4 text-left text-[11px] font-medium text-gray-500 transition hover:text-blue-700 dark:text-gray-400 dark:hover:text-blue-300"
+                    (click)="focusShiftCalendarDate(day.isoDate); $event.stopPropagation()"
+                  >
+                    Filter list to this day
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1388,7 +1392,7 @@
                   {{ pricing.rate_field === 'weekend_rate' ? 'Weekend Rate' : 'Standard Rate' }} · {{ pricing.currency || 'CAD' }}
                 </span>
               </div>
-              <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <div class="rounded-md bg-white p-3 shadow-sm dark:bg-gray-900/60">
                   <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Client Rate (Hourly)</p>
                   <p class="mt-1 text-sm font-bold text-gray-900 dark:text-gray-100">{{ formatMoney(pricing.client_hourly_quote) }}</p>
@@ -1427,7 +1431,7 @@
               <p class="text-sm text-blue-700 dark:text-blue-300">
                 {{ invoicing.invoice_note }}
               </p>
-              <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <div>
                   <p class="text-xs text-gray-500 dark:text-gray-400">Billing Cycle</p>
                   <p class="mt-0.5 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(invoicing.billing_cycle || '') }}</p>
@@ -1631,7 +1635,7 @@
         [titleClass]="drawerSectionTitleClass"
         [subtitleClass]="drawerSectionSubtitleClass"
       >
-        <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <app-summary-metric-card
             label="Client Rate (Hourly)"
             [value]="formatMoney(getPricingSnapshotForRequest(request).client_hourly_quote)"
@@ -1673,7 +1677,7 @@
         [titleClass]="drawerSectionTitleClass"
         [subtitleClass]="drawerSectionSubtitleClass"
       >
-        <div *ngIf="getJobPayoutAmount(viewerAssignment, request) != null; else noViewerPricingSnapshot" class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div *ngIf="getJobPayoutAmount(viewerAssignment, request) != null; else noViewerPricingSnapshot" class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <app-summary-metric-card
             label="Your Estimated Payment"
             [value]="formatOptionalMoney(getJobEstimatedPayoutTotal(viewerAssignment, request))"
@@ -1719,7 +1723,7 @@
         [titleClass]="drawerSectionTitleClass"
         [subtitleClass]="drawerSectionSubtitleClass"
       >
-        <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <app-summary-metric-card
             label="Guard Pay (Hourly)"
             [value]="formatMoney(getPricingSnapshotForRequest(request).guard_hourly_pay)"
@@ -1807,7 +1811,7 @@
                   <span *ngIf="invoice.billing_period_start_local && invoice.billing_period_end_local"> · {{ invoice.billing_period_start_local }} to {{ invoice.billing_period_end_local }}</span>
                 </div>
               </div>
-              <div class="grid grid-cols-2 gap-3 sm:min-w-[220px]">
+              <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 sm:w-auto lg:w-[220px] lg:flex-none">
                 <app-summary-metric-card
                   label="Client Rate"
                   [value]="formatMoney(invoice.client_hourly_quote)"
@@ -1961,7 +1965,7 @@
                   <span *ngIf="getInvoiceLineItemHoursPerPosition(item)"> · {{ getInvoiceLineItemHoursPerPosition(item) | number:'1.0-2' }} hr / position</span>
                 </div>
               </div>
-              <div class="grid grid-cols-2 gap-3 sm:min-w-[280px]">
+              <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 sm:w-auto lg:w-[280px] lg:flex-none">
                 <app-summary-metric-card label="Quantity" [value]="item.quantity != null ? (item.quantity | number:'1.0-2') : '0.00'" [containerClass]="metricCompactContainerClass" [valueClass]="metricCompactValueClass"></app-summary-metric-card>
                 <app-summary-metric-card label="Rate" [value]="formatMoney(item.unit_rate)" [containerClass]="metricCompactContainerClass" [valueClass]="metricCompactValueClass"></app-summary-metric-card>
                 <app-summary-metric-card label="Unit" [value]="item.unit || 'hour'" [containerClass]="metricCompactContainerClass" [valueClass]="metricCompactValueClass"></app-summary-metric-card>
@@ -3235,7 +3239,7 @@
           [titleClass]="drawerSectionTitleClass"
           [subtitleClass]="drawerSectionSubtitleClass"
         >
-          <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+          <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <app-summary-metric-card
               label="Your Rate (Hourly)"
               [value]="getJobPayoutLabel(job, pricingRequest)"
@@ -3449,7 +3453,7 @@
         [title]="'Projected Payment'"
         [subtitle]="'These estimates update as you change the number of positions you can cover.'"
       >
-        <div class="mt-3 grid grid-cols-2 gap-3">
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <app-summary-metric-card
             label="Your Estimated Payment"
             [value]="formatOptionalMoney(getJobEstimatedPayoutTotal(job, request, acceptJobForm.slotsCommitted))"

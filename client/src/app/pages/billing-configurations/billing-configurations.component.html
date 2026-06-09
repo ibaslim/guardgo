@@ -41,7 +41,7 @@
       </div>
 
       <div *ngIf="!guardLoading" class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <table class="min-w-[56rem] w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead>
             <tr class="bg-gray-50 dark:bg-gray-800">
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Location</th>
@@ -153,7 +153,7 @@
         </table>
       </div>
 
-      <div *ngIf="!guardLoading" class="flex items-center justify-between gap-2 pt-2">
+      <div *ngIf="!guardLoading" class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">
         <div class="flex flex-wrap gap-2">
           <app-button label="Expand All" type="secondary" (pressed)="expandAllRegions('guard-default', guardRates)"></app-button>
           <app-button label="Collapse All" type="secondary" (pressed)="collapseAllRegions('guard-default', guardRates)"></app-button>
@@ -206,7 +206,7 @@
         </div>
 
         <div *ngIf="!guardOverrideLoading && guardOverrideRates.length > 0" class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <table class="min-w-[56rem] w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead>
               <tr class="bg-gray-50 dark:bg-gray-800">
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Location</th>
@@ -318,7 +318,7 @@
           </table>
         </div>
 
-        <div *ngIf="!guardOverrideLoading && guardOverrideRates.length > 0" class="flex items-center justify-between gap-2 pt-2">
+        <div *ngIf="!guardOverrideLoading && guardOverrideRates.length > 0" class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">
           <div class="flex flex-wrap gap-2">
             <app-button label="Expand All" type="secondary" (pressed)="expandAllRegions('guard-override', guardOverrideRates)"></app-button>
             <app-button label="Collapse All" type="secondary" (pressed)="collapseAllRegions('guard-override', guardOverrideRates)"></app-button>
@@ -372,7 +372,7 @@
       </div>
 
       <div *ngIf="!providerDefaultLoading" class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <table class="min-w-[56rem] w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead>
             <tr class="bg-gray-50 dark:bg-gray-800">
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Location</th>
@@ -484,7 +484,7 @@
         </table>
       </div>
 
-      <div *ngIf="!providerDefaultLoading" class="flex items-center justify-between gap-2 pt-2">
+      <div *ngIf="!providerDefaultLoading" class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">
         <div class="flex flex-wrap gap-2">
           <app-button label="Expand All" type="secondary" (pressed)="expandAllRegions('provider-default', providerDefaultRates)"></app-button>
           <app-button label="Collapse All" type="secondary" (pressed)="collapseAllRegions('provider-default', providerDefaultRates)"></app-button>
@@ -537,7 +537,7 @@
         </div>
 
         <div *ngIf="!providerRatesLoading && providerRates.length > 0" class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <table class="min-w-[56rem] w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead>
               <tr class="bg-gray-50 dark:bg-gray-800">
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Location</th>
@@ -649,7 +649,7 @@
           </table>
         </div>
 
-        <div *ngIf="!providerRatesLoading && providerRates.length > 0" class="flex items-center justify-between gap-2 pt-2">
+        <div *ngIf="!providerRatesLoading && providerRates.length > 0" class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">
           <div class="flex flex-wrap gap-2">
             <app-button label="Expand All" type="secondary" (pressed)="expandAllRegions('provider-override', providerRates)"></app-button>
             <app-button label="Collapse All" type="secondary" (pressed)="collapseAllRegions('provider-override', providerRates)"></app-button>
@@ -700,7 +700,7 @@
       </div>
 
       <div *ngIf="!guardMarginLoading" class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <table class="min-w-[56rem] w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead>
             <tr class="bg-gray-50 dark:bg-gray-800">
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Location</th>
@@ -810,7 +810,7 @@
         </table>
       </div>
 
-      <div *ngIf="!guardMarginLoading" class="flex items-center justify-between gap-2 pt-2">
+      <div *ngIf="!guardMarginLoading" class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">
         <div class="flex flex-wrap gap-2">
           <app-button label="Expand All" type="secondary" (pressed)="expandAllRegions('guard-margin', guardMarginRates)"></app-button>
           <app-button label="Collapse All" type="secondary" (pressed)="collapseAllRegions('guard-margin', guardMarginRates)"></app-button>
@@ -844,7 +844,7 @@
       </div>
 
       <div *ngIf="!providerCommissionLoading" class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <table class="min-w-[56rem] w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead>
             <tr class="bg-gray-50 dark:bg-gray-800">
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Location</th>
@@ -954,7 +954,7 @@
         </table>
       </div>
 
-      <div *ngIf="!providerCommissionLoading" class="flex items-center justify-between gap-2 pt-2">
+      <div *ngIf="!providerCommissionLoading" class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">
         <div class="flex flex-wrap gap-2">
           <app-button label="Expand All" type="secondary" (pressed)="expandAllRegions('provider-commission', providerCommissionRates)"></app-button>
           <app-button label="Collapse All" type="secondary" (pressed)="collapseAllRegions('provider-commission', providerCommissionRates)"></app-button>
@@ -1055,7 +1055,7 @@
       </div>
 
       <div *ngIf="!guardTravelLoading" class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <table class="min-w-[64rem] w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead>
             <tr class="bg-gray-50 dark:bg-gray-800">
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Location</th>
@@ -1135,7 +1135,7 @@
         </table>
       </div>
 
-      <div *ngIf="!guardTravelLoading" class="flex items-center justify-between gap-2 pt-2">
+      <div *ngIf="!guardTravelLoading" class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">
         <div class="flex flex-wrap gap-2">
           <app-button label="Expand All" type="secondary" (pressed)="expandAllRegions('guard-travel', guardTravelPolicies)"></app-button>
           <app-button label="Collapse All" type="secondary" (pressed)="collapseAllRegions('guard-travel', guardTravelPolicies)"></app-button>
@@ -1200,7 +1200,7 @@
       </div>
 
       <div *ngIf="!providerTravelLoading" class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <table class="min-w-[64rem] w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead>
             <tr class="bg-gray-50 dark:bg-gray-800">
               <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider w-56">Location</th>
@@ -1280,7 +1280,7 @@
         </table>
       </div>
 
-      <div *ngIf="!providerTravelLoading" class="flex items-center justify-between gap-2 pt-2">
+      <div *ngIf="!providerTravelLoading" class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-start sm:justify-between">
         <div class="flex flex-wrap gap-2">
           <app-button label="Expand All" type="secondary" (pressed)="expandAllRegions('provider-travel', providerTravelPolicies)"></app-button>
           <app-button label="Collapse All" type="secondary" (pressed)="collapseAllRegions('provider-travel', providerTravelPolicies)"></app-button>

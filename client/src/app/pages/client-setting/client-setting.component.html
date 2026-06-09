@@ -17,8 +17,8 @@
                 </app-profile-picture-upload>
             </ng-container>
             <ng-container *ngIf="readonly">
-                <div *ngIf="getProfileImageUrl(); else noLogo">
-                    <img [src]="getProfileImageUrl()" alt="Company logo" class="w-32 h-32 object-contain">
+                <div *ngIf="getProfileImageUrl(); else noLogo" class="flex justify-center sm:justify-start">
+                    <img [src]="getProfileImageUrl()" alt="Company logo" class="h-24 w-24 object-contain sm:h-32 sm:w-32">
                 </div>
                 <ng-template #noLogo>
                     <p class="text-sm text-gray-600">No logo available.</p>

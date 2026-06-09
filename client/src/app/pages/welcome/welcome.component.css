@@ -8,6 +8,7 @@
 }
 
 .welcome-content {
+    width: 100%;
     max-width: 700px;
     margin: 0 auto;
     padding: 60px 40px;
@@ -46,6 +47,9 @@
 }
 
 .welcome-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: #57A5EB;
     border: none;
     border-radius: 8px;
@@ -62,6 +66,10 @@
 }
 
 @media (max-width: 768px) {
+    .welcome-container {
+        padding: 24px 16px;
+    }
+
     .welcome-content {
         padding: 40px 20px;
     }
@@ -86,6 +94,10 @@
 }
 
 @media (max-width: 480px) {
+    .welcome-content {
+        padding: 28px 8px;
+    }
+
     .welcome-heading {
         font-size: 20px;
     }
@@ -101,5 +113,10 @@
 
     .welcome-divider {
         width: 80px;
+    }
+
+    .welcome-button {
+        width: 100%;
+        padding: 12px 20px;
     }
 }

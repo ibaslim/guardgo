@@ -4,23 +4,23 @@
     <span *ngIf="required" class="text-red-500">*</span>
   </label>
 
-  <div class="flex gap-2">
+  <div class="flex flex-col gap-2 sm:flex-row">
     <!-- Country Code Selector -->
-    <div class="relative phone-country-dropdown">
-      <button type="button" (click)="toggleCountryDropdown()" [disabled]="disabled || disableCountrySelector" class="h-[38px] px-2 py-2 border border-gray-300 dark:border-gray-700 rounded-lg 
+    <div class="relative w-full phone-country-dropdown sm:w-auto">
+      <button type="button" (click)="toggleCountryDropdown()" [disabled]="disabled || disableCountrySelector" class="h-[38px] w-full min-w-0 px-2 py-2 border border-gray-300 dark:border-gray-700 rounded-lg 
            bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100
            hover:bg-gray-50 dark:hover:bg-gray-800
            shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none
            transition disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed
-           flex items-center justify-center gap-1.5 min-w-[85px]">
+           flex items-center justify-center gap-1.5 sm:min-w-[85px]">
         <span class="text-xl leading-none">{{ getSelectedCountryEmoji() }}</span>
         <span class="text-sm leading-none">{{ countryCode }}</span>
       </button>
 
       <!-- Country Dropdown -->
-      <div *ngIf="showCountryDropdown" class="absolute z-10 top-full left-0 mt-1 bg-white dark:bg-gray-900
+      <div *ngIf="showCountryDropdown" class="absolute z-10 top-full left-0 mt-1 w-full bg-white dark:bg-gray-900
                  border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg
-                 w-64 max-h-80 overflow-hidden">
+                 max-h-80 overflow-hidden sm:w-64">
 
         <!-- Search Input -->
         <div class="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
@@ -46,7 +46,7 @@
     </div>
 
     <!-- Phone Number Input -->
-    <div class="flex-1 relative">
+    <div class="relative flex-1">
       <input type="tel" [value]="formattedNumber || phoneNumber" (input)="onPhoneInputEvent($event)"
         (blur)="onTouched()" [disabled]="disabled" [placeholder]="placeholder" [required]="required" class="block w-full rounded-lg border border-gray-300 dark:border-gray-700
                bg-white dark:bg-gray-900 px-4 py-2 text-sm text-gray-900 dark:text-gray-100
