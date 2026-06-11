@@ -5,7 +5,7 @@ import '@angular/localize/init';
 
 const PLACEHOLDER_SRC = '/assets/images/shared/placeholder.svg';
 const AUTH_ICON_SRC = '/assets/images/shared/auth_dashboard_icon.svg';
-const SEARCH_LOGO_SRC = '/assets/images/shared/orion-Intelligence-logo.svg';
+const SEARCH_LOGO_SRC = '/assets/images/shared/guardgo-logo.svg';
 
 const preload = document.createElement('link');
 preload.rel = 'preload';
@@ -49,7 +49,6 @@ const mark = (img: HTMLImageElement) => {
     src.endsWith('Bg.webp') ||
     src.endsWith('hint.svg') ||
     src.endsWith('auth_dashboard_icon.svg') ||
-    src.includes('search_nav_logo.png') ||
     img.classList.contains('auth-wrapper__image')
   ) return;
   img.removeAttribute('alt');
@@ -74,26 +73,10 @@ new MutationObserver(ms => {
   }
 }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
 
-async function preloadAllImagesFromManifest() {
-  try {
-    const res = await fetch('assets/precache-manifest.json', { cache: 'no-cache' });
-    if (!res.ok) return;
-    const list: string[] = await res.json();
-    for (const href of list) {
-      const link = document.createElement('link');
-      link.rel = 'preload';
-      link.as = 'image';
-      link.href = new URL(href, document.baseURI).toString();
-      document.head.appendChild(link);
-    }
-  } catch {}
-}
-
 Promise.allSettled([
   preloadPlaceholder.decode(),
   preloadAuth.decode(),
   preloadSearch.decode()
 ]).finally(() => {
-  preloadAllImagesFromManifest().then();
   bootstrapApplication(AppComponent, appConfig).then();
 });

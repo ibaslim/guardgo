@@ -21,7 +21,7 @@ export class AuthService {
   ) {
     if (this.isAuthenticated()) {
       const needsSession = !this.appService.userSessionData().user.username && !this.appService.userSessionData().user.role && !this.appService.userSessionData().user.verificationDate;
-      if (needsSession) this.refreshToken().subscribe();
+      if (needsSession) this.refreshToken().subscribe({ error: () => undefined });
       this.startTokenRefresh();
     }
   }
