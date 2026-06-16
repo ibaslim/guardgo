@@ -2,7 +2,14 @@
   <div class="w-full max-w-md space-y-6 sm:space-y-8">
     <div>
       <div class="flex justify-center mb-6">
-        <img [src]="appService.getConfig().appSettings.logo_url ? '/api/s/static/system/logo' : 'assets/images/shared/orion-Intelligence-logo.svg'" width="120" height="80" alt="logo" class="max-w-[120px] dark:brightness-200" />
+        @if (appService.getConfig().appSettings.logo_url) {
+        <img src="/api/s/static/system/logo" width="120" height="80" alt="logo" class="max-w-[120px]" />
+        } @else {
+        <div>
+          <img src="assets/images/shared/guardgo-logo.svg" width="120" height="80" alt="logo" class="max-w-[120px] dark:hidden" />
+          <img src="assets/images/shared/guardgo-logo-dark.svg" width="120" height="80" alt="logo" class="hidden max-w-[120px] dark:block" />
+        </div>
+        }
       </div>
       <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white sm:text-4xl">
         Sign in to your account
@@ -100,7 +107,10 @@
 <div *ngIf="twofaRequired" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-12 px-4 sm:px-6 lg:px-8">
   <div class="w-full max-w-md space-y-6 rounded-lg bg-white p-5 shadow-xl dark:bg-gray-800 sm:p-8">
     <div class="flex justify-center mb-4">
-      <img alt="logo" class="h-12 max-w-[120px] dark:brightness-200" src="assets/images/shared/home-logo.svg">
+      <div>
+        <img alt="logo" class="h-12 max-w-[120px] dark:hidden" src="assets/images/shared/guardgo-logo.svg">
+        <img alt="logo" class="hidden h-12 max-w-[120px] dark:block" src="assets/images/shared/guardgo-logo-dark.svg">
+      </div>
     </div>
 
     <div *ngIf="errorMessage" class="rounded-md bg-yellow-50 dark:bg-yellow-900 p-4">

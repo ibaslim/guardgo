@@ -1,0 +1,19 @@
+<svg width="320" height="96" viewBox="0 0 320 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="guardgo-logo-title guardgo-logo-desc">
+  <title id="guardgo-logo-title">GuardGo</title>
+  <desc id="guardgo-logo-desc">GuardGo demo logo with a shield icon and wordmark.</desc>
+  <defs>
+    <linearGradient id="guardgo-shield" x1="20" y1="14" x2="76" y2="82" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#153B5C"/>
+      <stop offset="1" stop-color="#0F766E"/>
+    </linearGradient>
+    <linearGradient id="guardgo-accent" x1="34" y1="34" x2="62" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F59E0B"/>
+      <stop offset="1" stop-color="#FB7185"/>
+    </linearGradient>
+  </defs>
+  <path d="M48 8L79 20V45C79 63 66.5 78.3 48 84C29.5 78.3 17 63 17 45V20L48 8Z" fill="url(#guardgo-shield)"/>
+  <path d="M61.5 33.5L45 56L34 45" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="61.5" cy="33.5" r="6" fill="url(#guardgo-accent)"/>
+  <text x="100" y="45" fill="#0F172A" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="34" font-weight="800" letter-spacing="-0.02em">GuardGo</text>
+  <text x="100" y="68" fill="#475569" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14" font-weight="600" letter-spacing="0.18em">SECURITY OPERATIONS</text>
+</svg>

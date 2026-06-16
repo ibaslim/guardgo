@@ -41,7 +41,7 @@ export class NotificationsComponent implements OnInit {
         this.items = response.items || [];
         this.totalPages = Number(response.pagination?.total_pages || 0);
         this.totalItems = Number(response.pagination?.total_items || 0);
-        this.notificationsService.loadLatest(6).subscribe();
+        this.notificationsService.loadLatest(6).subscribe({ error: () => undefined });
       },
       error: (error) => {
         this.messageNotification.show(error?.error?.detail || 'Failed to load notifications', 'fail', 5000);
