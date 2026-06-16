@@ -1,10 +1,5 @@
 /* Minimal custom styles - using Tailwind for most styling */
 
-/* Dark mode adjustments for logo */
-html.dark img.dark\:brightness-200 {
-  filter: brightness(2);
-}
-
 /* Smooth transitions for theme switching */
 * {
   transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;

@@ -1,0 +1,17 @@
+<svg width="64" height="64" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="guardgo-favicon-shield" x1="20" y1="14" x2="76" y2="82" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#153B5C"/>
+      <stop offset="1" stop-color="#0F766E"/>
+    </linearGradient>
+    <linearGradient id="guardgo-favicon-accent" x1="34" y1="34" x2="62" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F59E0B"/>
+      <stop offset="1" stop-color="#FB7185"/>
+    </linearGradient>
+  </defs>
+  <rect x="10" y="10" width="76" height="76" rx="22" fill="#F8FAFC"/>
+  <rect x="10" y="10" width="76" height="76" rx="22" stroke="#CBD5E1" stroke-width="2"/>
+  <path d="M48 8L79 20V45C79 63 66.5 78.3 48 84C29.5 78.3 17 63 17 45V20L48 8Z" fill="url(#guardgo-favicon-shield)"/>
+  <path d="M61.5 33.5L45 56L34 45" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="61.5" cy="33.5" r="6" fill="url(#guardgo-favicon-accent)"/>
+</svg>
