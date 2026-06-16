@@ -1,425 +1,500 @@
-# Client Request and Broadcast Lifecycle
+# Client Request to Job and Schedule Lifecycle
 
-This document explains how a client request moves from draft to broadcast, how candidates receive offers, when platform admins must review a request, and what happens when a request changes over time.
+This is the main plain-language guide for the most important GuardGo workflow.
 
-The goal is to keep the workflow easy to understand for clients, platform admins, guards, and service providers.
+It explains how a client request turns into:
 
-## Purpose
+- a broadcast wave
+- accepted work
+- jobs for direct guards or service providers
+- schedules
+- shifts
+- shift slots
+- attendance activity
 
-The platform should allow a client to create a request for guards, publish it, notify matching candidates, collect acceptances, and keep the whole process auditable and controlled.
+Use this document before deep QA so the testing team does not mix up request records, offers, jobs, and shifts.
 
-This lifecycle also supports mixed fulfillment:
+If a term in this document feels too product-specific, read `docs/qa/testing-terms-glossary.md` first and then return here.
 
-- individual guards can accept a request
-- service providers can accept the same request at the same time
-- the request is considered filled when the required number of guard slots is covered
+## Why This Matters
 
-## Core Rules
+In this product, one business need can pass through several stages:
 
-- Broadcast is `in-app only`.
-- Broadcast notifications go to `tenant admins only`.
-- A request uses saved `matched_candidates` when a broadcast wave is created.
-- One request can be fulfilled by both `individual guards` and `service providers`.
-- A direct guard acceptance fills `1` slot.
-- A service provider acceptance fills the number of slots the provider commits to at acceptance time.
-- When all required slots are filled, remaining open offers stay visible but become non-actionable.
-- If capacity opens again later, the system creates a `fresh broadcast wave`. It does not reopen old offers.
-- A candidate who declined in an earlier wave can still receive a later wave for the same request.
-- Request details remain viewable even when the request is no longer actionable.
+1. the client asks for coverage
+2. the platform finds matching guards or providers
+3. offers are broadcast
+4. candidates accept
+5. the accepted work becomes scheduled execution
+6. the execution is tracked through shifts and attendance
 
-## Main Terms
+If QA treats these stages as the same thing, important defects get missed.
 
-- `Client Request`: the main staffing request created by the client.
-- `Broadcast Wave`: one notification run for a request at a specific point in time.
-- `Offer`: the actionable item sent to a candidate tenant for a specific wave.
-- `Accepted Assignment`: an offer that has been accepted and now counts toward staffing.
-- `Request Expiry`: the deadline chosen by the client for the request itself.
-- `Wave Expiry`: the deadline calculated by the system for one broadcast wave.
-- `Open Slots`: the number of remaining guard positions that still need coverage.
-- `Reconfirmation Required`: the state used when an already accepted assignment must confirm again after a material request change.
+## The Six Records QA Must Keep Separate
+
+- `Client Request`
+  The client's commercial demand for coverage.
+- `Broadcast Wave`
+  One round of offers sent for the request at a specific moment.
+- `Assignment` or `Job`
+  One guard or one service provider's work record for that request.
+- `Schedule Template`
+  The coverage pattern for the request, such as one day, daily range, or recurring weekdays.
+- `Shift`
+  One dated work instance created from the schedule.
+- `Shift Slot`
+  One guard position inside one shift.
+
+Simple way to remember this:
+
+- the request asks for coverage
+- the wave asks candidates to respond
+- the job records who committed
+- the schedule defines when work should happen
+- the shift is the calendar item
+- the slot is the actual guard position being worked
 
 ## Main Actors
 
-- `Client Tenant Admin`
-  - creates and manages the request
-  - publishes the request
-  - can request more coverage later
-  - can update allowed fields while the request is still active
+- `client_admin`
+  Creates the request, publishes it, updates it, adds coverage, and confirms arrivals.
+- `guard_admin`
+  Accepts direct-guard work and performs attendance for assigned direct slots.
+- `sp_admin`
+  Accepts provider work, commits slot count, and rosters named provider guards into provider-backed slots.
+- `admin`
+  Reviews blocked waves, oversees requests, can manually assign, and can handle operational exceptions.
+- `ops_admin`
+  Shares review and exception responsibilities with an operations focus.
 
-- `Platform Admin`
-  - can review requests that cannot be safely auto-broadcast
-  - can approve and release a blocked wave
-  - can return a request to the client for correction
+## One-Page Lifecycle Map
 
-- `Ops Admin`
-  - shares the same review visibility for broadcast review cases
-  - focuses on operational checks such as distance and location safety
+1. Client saves a draft request.
+2. Client publishes the request.
+3. The platform validates timing, geo, billing, and matching context.
+4. The request either:
+   - auto-broadcasts, or
+   - goes to review, or
+   - is blocked with a validation error
+5. One broadcast wave sends in-app offers to matching tenant admins.
+6. Direct guards or service providers accept or decline.
+7. Accepted work increases committed coverage.
+8. The request becomes `open`, `partially_filled`, or `filled`.
+9. The request either:
+   - uses a saved schedule, or
+   - uses an implicit one-time execution path based on the request window
+10. Shifts and slots are created for execution.
+11. Direct guards work named direct slots.
+12. Service providers roster named guards into provider-backed slots.
+13. Attendance is tracked through check-in, client confirmation, start, and check-out.
+14. If coverage breaks, the platform handles reconfirmation, additional coverage, or replacement waves.
 
-- `Guard Tenant Admin`
-  - receives offers for individual guard participation
-  - reviews request details and accepts or declines
+## Request Creation Requirements
 
-- `Service Provider Tenant Admin`
-  - receives offers for service-provider participation
-  - reviews request details and accepts or declines
-  - chooses how many slots the provider can cover when accepting
+The request is the source record. If it is wrong, every later stage is wrong too.
 
-## Request Lifecycle
+### Core fields
 
-### 1. Draft
-
-The client creates a request in draft mode.
-
-In draft mode, the client can prepare:
+The client request captures:
 
 - title
+- fulfillment mode
 - site details
 - requested guard type
-- requested time window
-- number of guards needed
-- special instructions
+- guards required
+- requested start and end
 - request expiry
+- special instructions
+- invoicing choices
 
-No candidate is notified at this stage.
+### Publish-time requirements
 
-### 2. Publish Request
+The system does not allow a request to publish unless the important business data is present.
 
-When the client is ready, the request is published.
+QA should verify that publish is blocked when any of these are missing or invalid:
 
-Publishing does two things:
+- requested start time
+- requested end time
+- request expiry
+- site latitude
+- site longitude
+- valid client billing setup
+- a valid future request expiry before the requested start
 
-1. freezes the current request revision for broadcast purposes
-2. creates the first broadcast wave if the request is safe to auto-broadcast
+### Fulfillment mode requirements
 
-If the request requires platform review, it moves into review instead of sending notifications immediately.
+The client chooses who is allowed to cover the work:
 
-### 3. Broadcast Wave
+- `Direct Guards Only`
+  Only direct guard candidates can receive the work.
+- `Service Provider Team Only`
+  Only service providers can receive the work.
+- `Guards Or Providers`
+  Both channels can receive the same request at the same time.
 
-Each wave uses the saved match snapshot from the request.
+This choice controls who can be matched, who gets offers, and what the later job model looks like.
 
-The wave sends in-app offers to:
+## Broadcast Requirements
 
-- matching individual guard tenants
-- matching service provider tenants
+Broadcast is the offer stage.
 
-Only `tenant admins` receive the notification.
+### Core rules
 
-Each candidate tenant receives at most one actionable offer per wave.
+- Broadcast is `in-app only`.
+- Broadcast notifications go to `tenant admins only`.
+- A wave uses the request's saved match snapshot at the time the wave is created.
+- One request can be fulfilled by direct guards, service providers, or both, depending on fulfillment mode.
+- One candidate tenant gets at most one actionable offer per wave.
+- Old offers stay visible for history even when they are no longer actionable.
 
-### 4. Candidate Response
+### Review rules
 
-The candidate opens the request details from the offer and then decides whether to respond.
+Publishing does not always send offers immediately.
 
-Possible outcomes:
+The request can go to manual review when the platform cannot safely auto-broadcast, for example:
 
-- `accept`
-- `decline`
-- `ignore until offer expires`
+- site geo is missing or unreliable
+- distance cannot be trusted
+- travel policy is missing
+- location data is ambiguous
+- the request crosses the manual review travel threshold
 
-Acceptances are wave-specific. A decline in one wave does not block future waves for the same request.
+When this happens:
 
-### 5. Partial Fill or Full Fill
+- the request staffing state becomes `pending_review`
+- no candidate receives an actionable offer yet
+- `admin` or `ops_admin` must either approve and broadcast or return the item to the client
 
-As acceptances come in, the system tracks open slots.
+### Request expiry vs wave expiry
 
-- if some slots are filled, the request becomes `partially filled`
-- if all slots are filled, the request becomes `filled`
+These are different things.
 
-When the request becomes fully filled:
+- `Request expiry`
+  Chosen by the client. It is the deadline for the request itself.
+- `Wave expiry`
+  Calculated by the system. It is the deadline for one offer round.
 
-- remaining open offers stay visible
-- those offers become non-actionable
-- candidates can still open the detail view
-- the detail page shows that all slots have already been filled
+Important rule:
 
-### 6. In Progress and Completion
+- a request can stay active while one old wave has already expired
+- a new wave can still be created later if the request is still valid and has open slots
 
-Once work begins, the request moves into execution.
+## Acceptance Rules
 
-Later, when the committed work is completed, the request can be closed as completed.
+The biggest QA risk in this module is treating direct-guard work and provider work as if they behave the same way.
 
-## Hybrid Fulfillment Rules
+They do not.
 
-One request can be fulfilled by both channels at the same time.
+| Topic | Direct guard job | Service provider job |
+| --- | --- | --- |
+| Who accepts | `guard_admin` | `sp_admin` |
+| What acceptance means | One named guard commits to work | One provider commits capacity |
+| Slot impact | Always fills `1` slot | Fills the committed slot count |
+| Named guard known at acceptance time | Yes | No, not yet |
+| Extra step before execution | No roster step | Provider must roster named guards into provider-backed slots |
+| Common QA mistake | forgetting it is already guard-specific | forgetting acceptance is not the same as named-guard assignment |
+
+### Direct guard job rules
+
+- A direct guard acceptance always commits exactly `1` slot.
+- The accepted job is already tied to that guard tenant.
+- When shifts are created, the direct guard appears on the direct slot automatically.
+- There is no provider roster step for direct work.
+
+### Service provider job rules
+
+- A service provider can accept more than one slot.
+- The provider chooses how many slots it is committing.
+- The provider cannot accept more slots than its available linked-guard capacity for the request window.
+- Acceptance means the provider organization committed the coverage.
+- Acceptance does not yet mean named guards have been chosen.
+- Named provider guards are assigned later through rostering.
+
+## Request Staffing States
+
+The request has a business lifecycle and a staffing lifecycle.
+
+### Request status
+
+The main request status can move through:
+
+- `draft`
+- `submitted`
+- `assigned`
+- `in_progress`
+- `cancelled`
+- `closed`
+
+### Staffing status
+
+The staffing status tells QA what is happening commercially:
+
+- `pending_review`
+- `review_returned`
+- `open`
+- `partially_filled`
+- `filled`
+- `expired`
 
 Example:
 
-- client needs `4` guards
-- `2` direct guards accept
-- one service provider accepts `2` slots
+- a request can be `submitted` and `partially_filled`
+- a request can be `submitted` and `filled`
+- a request can be `in_progress` while some shift slots are already underway
 
-The request is now fully filled.
+## Schedule Requirements
 
-Rules:
+The next major branch is whether the request uses explicit schedule setup or relies on the request window itself.
 
-- direct guard acceptance always fills exactly `1` slot
-- service provider acceptance fills the chosen committed slot count
-- the first accepted slots win
-- once the request reaches full capacity, remaining open offers are closed
+### Path 1: No explicit schedule yet
 
-## Visibility vs Actionability
+The system still needs execution records when committed work exists.
 
-The platform should separate whether a request can be seen from whether it can still be acted on.
+If a request has committed work but no saved schedule template:
+
+- the system can create an implicit one-time schedule
+- one execution shift is created from the request start and end
+- one or more slots are created inside that shift
+- attendance can still be tracked normally
+
+This path is important for one-off jobs that are accepted before a user creates a full schedule setup.
+
+QA should prove:
+
+- committed work still becomes an execution shift
+- the created shift uses the request window
+- the direct or provider slots match the committed coverage
+
+### Path 2: `one_time` schedule
 
 This means:
 
-- a request can stay visible after it is filled
-- a request can stay visible after it expires
-- an offer can stay visible after it is closed
-- action buttons appear only when the current state allows action
+- one shift instance
+- one coverage date
+- start and end local times
+- overnight work is allowed
 
-Examples:
+Commercial meaning:
 
-- `filled`: visible, but open offers cannot be accepted
-- `expired`: visible, but the client cannot edit the request
-- `wave expired`: visible, but that wave no longer accepts responses
+- this is the short-term schedule pattern
 
-## Update Types
+### Path 3: `date_range` schedule
 
-Not every client change should be treated the same way.
+This means:
 
-### Normal Update
+- one shift per day across a start and end date range
+- same local time window each day
+- future shifts are generated across the defined range
 
-Use a normal update when the job itself has not materially changed.
+Commercial meaning:
 
-Recommended fields:
+- this is treated as a long-term schedule pattern
 
-- `title`
-- `request_expires_at` while the request is still active
+### Path 4: `recurring_weekly` schedule
 
-Effect:
+This means:
 
-- no new broadcast wave
+- the client chooses weekdays such as Monday, Wednesday, and Friday
+- the system creates future shifts only on those days
+- the generation horizon controls how far ahead the shifts are created
+- overnight recurring work is supported
+
+Commercial meaning:
+
+- this is treated as a long-term schedule pattern
+
+### Shared schedule rules
+
+For explicit schedule setup, QA should verify:
+
+- timezone is required
+- local start and end times are respected
+- overnight windows are handled correctly
+- future shifts regenerate when the schedule changes
+- shift list and shift calendar stay aligned
+
+## Short-Term vs Long-Term Rules
+
+This area must be very clear for QA because the request form, schedule logic, and invoicing all touch it.
+
+### Client-side meaning
+
+- `short_term`
+  Charge per job.
+- `long_term`
+  Advance monthly invoicing with a monthly cutoff day.
+
+### Schedule-driven behavior
+
+When schedule setup is active, the contract type follows the coverage pattern:
+
+- `one_time` schedule => `short_term`
+- `date_range` schedule => `long_term`
+- `recurring_weekly` schedule => `long_term`
+
+So QA should not expect a repeating schedule to remain short-term once the schedule is driving the request.
+
+### Payout-side behavior
+
+For assignee-side invoices:
+
+- scheduled long-term coverage is grouped into weekly payout invoices
+- short-term work remains per job
+
+## How Shifts and Slots Are Built
+
+Each shift has a required slot count based on the request.
+
+Inside each shift:
+
+- direct-guard commitments create direct slots
+- provider commitments create provider-backed slots
+- any remaining uncovered demand stays as open slots
+
+Example:
+
+- request needs `4` guards
+- `1` direct guard accepted
+- `1` service provider accepted `2` slots
+- no one accepted the last slot yet
+
+Then each generated shift should show:
+
+- `1` direct slot already tied to the direct guard
+- `2` provider-backed reserved slots
+- `1` open slot
+
+## Provider Rostering Requirements
+
+Provider-backed execution is not complete at provider acceptance time.
+
+The provider still must roster named guards.
+
+QA should verify:
+
+- only provider-backed slots can be rostered
+- only the owning service provider can roster its slots
+- only active guards can be rostered
+- the guard must belong to that service provider
+- rostered slots show the named guard after save
+- the roster pattern can optionally be copied to future matching shifts
+
+## Execution and Attendance Rules
+
+For scheduled work, the execution truth is the shift slot, not the high-level request job.
+
+### Main attendance order
+
+1. guard checks in
+2. client confirms arrival
+3. guard starts shift
+4. guard checks out
+
+### Important execution rules
+
+- scheduled request jobs must use shift attendance actions instead of generic job-status start actions
+- client confirmation can be done one by one or in bulk
+- platform start override exists for some operational cases
+- site geo is required for normal check-in validation
+- time windows still matter for early check-in, start, and no-show logic
+
+## Update and Re-Broadcast Rules
+
+Not every request change means the same thing.
+
+### Normal update
+
+Use for changes that do not materially change the job.
+
+Typical examples:
+
+- title change
+- request expiry change while still active
+
+Expected effect:
+
+- no fresh wave
 - no reconfirmation
-- no reopening of old offers
 
-### Publish Update
+### Publish update
 
-Use this when the live job changed in a way that candidates must be told again.
+Use when already accepted candidates must review a meaningful change.
 
-Recommended triggers:
+Typical examples:
 
-- start time changes
-- end time changes
-- site or location changes
-- requested guard type changes
-- fulfillment mode changes
-- special instructions change in a candidate-meaningful way
-
-Effect:
-
-- creates a new request revision
-- creates a fresh broadcast wave
-- closes older open offers from the earlier wave
-- moves already accepted but not started assignments to `reconfirmation required`
-
-### Request Additional Coverage
-
-Use this when the job is still the same, but the client needs more guard capacity.
-
-Trigger:
-
-- only `guards_required` increases
-
-Effect:
-
-- existing accepted assignments stay intact
-- a fresh wave is created only for the extra open slots
-- no reconfirmation is needed
-
-### Capacity Reopened
-
-This is a system-triggered event, not a normal client action.
-
-It happens when a previously filled request becomes short again, for example:
-
-- an accepted candidate declines during reconfirmation
-- a provider reduces committed slots
-- an accepted assignment is cancelled before start
-
-Effect:
-
-- the system creates a fresh broadcast wave
-- older closed offers remain historical only
-
-## Expiry Rules
-
-The lifecycle uses two different expiry concepts.
-
-### Request Expiry
-
-`request_expires_at` is controlled by the client.
-
-Rules:
-
-- if the request is already expired, it cannot be edited
-- if the request is still active, the client can update the request expiry
-- changing only the request expiry does not force reconfirmation
-- an expired request remains viewable but becomes read-only
-
-### Wave Expiry
-
-`wave_expires_at` is controlled by the system.
-
-Rules:
-
-- each wave gets a response deadline
-- once the wave expires, its offers become non-actionable
-- if the request itself is still active and still has open slots, a new wave can be created later
-
-### Expiry Outcome
-
-If a request expires while only partially filled:
-
-- already accepted assignments remain valid
-- the unfilled portion dies
-- remaining open offers are closed
-- the request stays visible but cannot be edited
-
-If more staffing is needed after that, the client must create a new request or duplicate the old one.
-
-## Admin Review Criteria
-
-Platform review should happen only when the system cannot safely auto-broadcast the request.
-
-Review is available to both:
-
-- `admin`
-- `ops_admin`
-
-### Decision Table
-
-| Outcome | Criteria | Result |
-| --- | --- | --- |
-| `Auto-broadcast` | request is valid, site geo is usable, distance can be evaluated reliably, travel policy resolves correctly, and no condition crosses the manual review threshold | create the wave and notify matching tenant admins |
-| `Send to admin review` | missing or invalid site geo, failed geocoding, unreliable distance calculation, no applicable travel policy, ambiguous or incomplete location data, or distance crosses `manual_review_over_km` | hold the request for `admin` or `ops_admin` review before any candidate notification |
-| `Block with validation error` | request is already expired, invalid time range, request expiry is not in the future, request expiry is after shift start, or requested slot reduction would go below already accepted slots | reject the action immediately and require the client to correct the request |
-
-Requests in review are not rejected automatically. They are paused until a platform reviewer either approves the broadcast or returns the request to the client.
-
-## Travel Policy and Billing Interaction
-
-Travel policy is not only a pricing tool. It also affects whether the platform should auto-broadcast safely.
-
-Two separate checks are important:
-
-- `operational radius`
-  - can this candidate physically serve the site?
-
-- `travel policy`
-  - should the platform auto-broadcast this site distance, or should it be reviewed first?
-
-Recommended rule:
-
-- a candidate must pass operational capability checks
-- the request must also pass travel-policy-based broadcast safety checks
-
-This keeps operational matching and business control separate.
-
-## Candidate Offer Lifecycle
-
-An offer is the candidate-facing unit inside a wave.
-
-Recommended offer states:
-
-- `offered`
-- `accepted`
-- `reconfirmation required`
-- `declined`
-- `expired`
-- `closed because filled`
-- `superseded`
-- `in progress`
-- `completed`
-- `cancelled`
-
-Important behavior:
-
-- candidates can still open closed offers for history
-- only actionable offers show accept or decline buttons
-- if a later wave is created, the candidate can receive a new offer even after declining an older one
-
-## Reconfirmation Rules
-
-Reconfirmation is used when a material request update affects already accepted but not started work.
-
-Examples:
-
-- time changed
+- start time changed
+- end time changed
 - location changed
-- other important candidate-facing request details changed
+- guard type changed
+- fulfillment mode changed
+- important instructions changed
 
-Behavior:
+Expected effect:
 
-- accepted assignments move to `reconfirmation required`
-- the candidate reviews the updated details
-- the candidate can `reconfirm` or `decline`
-- if the candidate does nothing before the reconfirmation deadline, the slot can reopen for a fresh broadcast wave
+- request revision increases
+- old open offers are superseded
+- accepted but not started assignments become `reconfirmation_required`
+- a fresh wave can be created
 
-## Filled Request Behavior
+### Additional coverage
 
-When the request reaches full staffing:
+Use when the job is still the same but the client needs more positions.
 
-- the request remains visible
-- remaining open offers remain visible
-- those offers become non-actionable
-- the candidate sees a message such as:
-  - `All required slots have already been filled. This offer is no longer accepting responses.`
+Expected effect:
 
-If capacity later opens again:
+- existing accepted coverage stays intact
+- only the extra missing positions reopen
+- no reconfirmation is triggered just because demand increased
 
-- old offers are not reopened
+### Capacity reopened
+
+This is the system recovery path.
+
+Typical triggers:
+
+- a candidate declines during reconfirmation
+- a provider reduces committed slots
+- accepted coverage is cancelled before work starts
+
+Expected effect:
+
+- the request becomes short again
 - the system creates a fresh wave
-- the new wave can notify candidates again, including candidates who declined older waves
+- old historical offers are not reopened
 
-## Recommended User Actions In The UI
+## Minimum Deep-Coverage QA Scenarios
 
-### Client Actions
+At minimum, QA should test all of these:
 
-- `Save Draft`
-- `Publish Request`
-- `Publish Update`
-- `Request Additional Coverage`
-- `Cancel Request`
-- `Close Request`
+1. `Direct guard only`, one-off request, no explicit schedule at first
+   Prove the accepted work still becomes an execution shift and slot.
+2. `Hybrid` request with one direct guard and one provider
+   Prove slot math is correct and the request can be filled by both channels together.
+3. Provider acceptance above available linked-guard capacity
+   Prove the over-commit attempt is rejected.
+4. `one_time` schedule
+   Prove one shift is created and it behaves as short-term work.
+5. `date_range` schedule
+   Prove daily shifts are created and the request is treated as long-term.
+6. `recurring_weekly` overnight schedule
+   Prove selected weekdays and overnight timing are respected.
+7. Provider rostering on provider-backed slots
+   Prove named guards must still be assigned after provider acceptance.
+8. Publish update after acceptance
+   Prove reconfirmation is triggered.
+9. Additional coverage after partial or full staffing
+   Prove only extra demand reopens.
+10. Filled request later losing capacity
+   Prove a fresh wave is created rather than reopening old offers.
 
-### Platform Review Actions
+## Final QA Reminder
 
-- `Approve & Broadcast`
-- `Return to Client`
+The safest way to test this module is to think in this order:
 
-## Recommended Guardrails For Version 1
+1. Was the request valid?
+2. Was the correct audience broadcast?
+3. Did acceptance create the right committed coverage?
+4. Did that coverage become the right shift slots?
+5. Did provider work get rostered before execution?
+6. Did attendance happen on shift slots, not by bypassing the schedule?
 
-- Keep broadcast `in-app only`
-- Notify `tenant admins only`
-- Use platform-controlled pricing
-- Do not allow a free-form client-set offer price in version 1
-- Keep old offers visible for history
-- Use fresh waves instead of reopening old offers
-- Keep expired requests read-only
-
-## Simple End-To-End Example
-
-1. Client creates a request for `3` guards.
-2. Client publishes the request.
-3. The request passes auto-broadcast checks and wave `1` is created.
-4. Matching guard and service provider tenant admins receive in-app offers.
-5. One direct guard accepts `1` slot.
-6. One service provider accepts `2` slots.
-7. The request is now fully filled.
-8. Remaining open offers stay visible but become closed because the request is full.
-9. Later, the provider reduces commitment by `1` slot before start.
-10. The request becomes partially filled again.
-11. The system creates a fresh broadcast wave for the reopened slot.
-12. A candidate who declined wave `1` can still receive wave `2`.
-
-## Summary
-
-The request and broadcast lifecycle should be:
-
-- clear for the client
-- safe for operations
-- fair to candidates
-- easy to audit
-
-The most important design principle is that the platform should preserve history, avoid silent changes, and create fresh broadcast waves whenever the staffing reality changes in a meaningful way.
+If those six questions are answered clearly, the client request to job schedule lifecycle is being tested correctly.

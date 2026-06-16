@@ -4,7 +4,7 @@ This document explains how replacement coverage works after the current leave / 
 
 Related documents:
 
-- `docs/client-request-lifecycle-demo-guide.md`
+- `docs/client-request-broadcast-lifecycle.md`
 - `docs/shift-guard-leave-management.md`
 
 ## Main Principle
