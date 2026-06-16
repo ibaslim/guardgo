@@ -19,8 +19,6 @@ For exact attendance timing checks and strict expected status values, use the co
 Related documents:
 
 - `docs/client-request-broadcast-lifecycle.md`
-- `docs/request-broadcast-backend-contract.md`
-- `docs/request-shift-operations-backend-contract.md`
 - `docs/attendance-flow-strict-uat-script.md`
 
 ## Scope
