@@ -4,7 +4,7 @@ This document describes the current leave rule for shift execution.
 
 Related documents:
 
-- `docs/client-request-lifecycle-demo-guide.md`
+- `docs/client-request-broadcast-lifecycle.md`
 - `docs/request-shift-replacement-mechanism.md`
 
 ## Current Rule
