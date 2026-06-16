@@ -75,8 +75,8 @@ class TokenAuthProvider(AuthProvider):
 
     def get_admin_config(self, request: Request) -> AdminConfig:
         return AdminConfig(
-            app_title="Admin Panel",
-            logo_url="https://try.orionintelligence.org/assets/images/sidebar/search_nav_logo.png")
+            app_title="GuardGo Admin",
+            logo_url="/assets/images/shared/guardgo-mark.svg")
 
     def get_admin_user(self, request: Request) -> AdminUser:
         user = getattr(request.state, 'user', None)
@@ -110,7 +110,7 @@ async def get_current_user_from_cookie(request: Request):
 
 def setup_admin(engine: AIOEngine) -> Admin:
     admin = Admin(
-        engine=engine, title="Admin Panel", auth_provider=TokenAuthProvider(), base_url="/admin/")
+        engine=engine, title="GuardGo Admin", auth_provider=TokenAuthProvider(), base_url="/admin/")
 
     admin.add_view(UserAdminView(db_user_account, engine=engine, icon="fa fa-user-circle"))
     admin.add_view(TenantAdminView(db_tenant_model, engine=engine, icon="fa fa-link"))

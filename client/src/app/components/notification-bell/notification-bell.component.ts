@@ -27,12 +27,12 @@ export class NotificationBellComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     if (!this.canUseNotifications()) return;
-    this.notificationsService.loadLatest(6).subscribe();
+    this.notificationsService.loadLatest(6).subscribe({ error: () => undefined });
     this.refreshSubscription = interval(10000).subscribe(() => {
       if (document.visibilityState !== 'visible') {
         return;
       }
-      this.notificationsService.loadLatest(6).subscribe();
+      this.notificationsService.loadLatest(6).subscribe({ error: () => undefined });
     });
   }
 
@@ -46,7 +46,7 @@ export class NotificationBellComponent implements OnInit, OnDestroy {
     event.stopPropagation();
     this.isOpen = !this.isOpen;
     if (this.isOpen) {
-      this.notificationsService.loadLatest(6).subscribe();
+      this.notificationsService.loadLatest(6).subscribe({ error: () => undefined });
     }
   }
 
@@ -84,7 +84,7 @@ export class NotificationBellComponent implements OnInit, OnDestroy {
   markAllRead(event: Event): void {
     if (!this.canUseNotifications()) return;
     event.stopPropagation();
-    this.notificationsService.markAllRead().subscribe();
+    this.notificationsService.markAllRead().subscribe({ error: () => undefined });
   }
 
   viewAll(event: MouseEvent): void {
