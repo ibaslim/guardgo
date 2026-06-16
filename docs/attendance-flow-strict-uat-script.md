@@ -7,8 +7,7 @@ Use this when you want a strict click-by-click test, not the broader QA matrix.
 Related documents:
 
 - `docs/request-lifecycle-end-to-end-qa-plan.md`
-- `docs/client-request-lifecycle-demo-guide.md`
-- `docs/client-request-lifecycle-ux-guide.md`
+- `docs/client-request-broadcast-lifecycle.md`
 - `docs/request-shift-replacement-mechanism.md`
 
 ## 1. Test Rules
