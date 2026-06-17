@@ -3712,11 +3712,11 @@ class RequestManager:
         trigger: RequestWaveTrigger,
         increment_revision: bool,
     ) -> Dict[str, Any]:
-        self._validate_request_expiry(record.request_expires_at, record.requested_start_at, require_value=True)
         if record.requested_start_at is None or record.requested_end_at is None:
             raise HTTPException(status_code=400, detail="Requested start and end times are required before publishing")
-        self._validate_requested_window(record.requested_start_at, record.requested_end_at)
         self._validated_site_snapshot_coordinates(record.site_snapshot or {})
+        self._validate_requested_window(record.requested_start_at, record.requested_end_at)
+        self._validate_request_expiry(record.request_expires_at, record.requested_start_at, require_value=True)
 
         if increment_revision:
             record.request_revision = max(int(record.request_revision or 0) + 1, 1)
@@ -5074,7 +5074,10 @@ class RequestManager:
                 request_doc["has_schedule"] = str(request_doc.get("_id") or "") in active_schedule_request_ids
                 request_lookup[str(request_doc.get("_id"))] = self._request_snapshot(request_doc)
 
-        touched_request_ids = await self._auto_complete_elapsed_assignment_docs(docs, request_lookup, assignment_collection)
+        should_auto_complete_elapsed_jobs = role_value in {"guard_admin", "sp_admin"}
+        touched_request_ids: set[str] = set()
+        if should_auto_complete_elapsed_jobs:
+            touched_request_ids = await self._auto_complete_elapsed_assignment_docs(docs, request_lookup, assignment_collection)
         for request_id in touched_request_ids:
             if request_id not in request_lookup:
                 continue

@@ -5,7 +5,7 @@ from email.mime.multipart import MIMEMultipart
 
 from orion.helper_manager.env_handler import env_handler
 from orion.services.mongo_manager.mongo_controller import mongo_controller
-from orion.services.mongo_manager.shared_model.db_system_settings import db_system_model
+from orion.services.mongo_manager.shared_model.db_system_settings import AllowedKeys, db_system_model
 
 
 class mail_manager:
@@ -25,8 +25,8 @@ class mail_manager:
     async def process_app_variables(self, subject: str, body: str):
         engine = mongo_controller.get_instance().get_engine()
         record = await engine.find_one(
-            db_system_model, db_system_model.key == "app_name")
-        app_name = record.value if record and record.value else "Orion Intelligence"
+            db_system_model, db_system_model.key == AllowedKeys.APP_NAME)
+        app_name = record.value if record and record.value else "GuardGo"
 
         subject = subject.replace("appname", app_name)
         body = body.replace("appname", app_name)
