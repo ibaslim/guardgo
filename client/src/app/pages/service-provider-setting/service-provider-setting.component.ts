@@ -26,6 +26,7 @@ import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared
 import { GeoLocationSelection, buildGoogleMapsLocationUrl } from '../../shared/helpers/google-maps-address.helper';
 import { formatCoordinateInput, parseCoordinate } from '../../shared/helpers/location.helper';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
+import { TenantUpdateResponse } from '../../shared/model/tenant/tenant.model';
 import {
   buildAlphabeticDummyTag,
   buildSeededCaPhone,
@@ -1589,10 +1590,10 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     const isOnboarding = this.appService.userSessionData().tenant.has_onboarding;
     tenantUpdatePayload.status = isOnboarding ? 'pending_activation' : 'active';
 
-    this.apiService.put('tenant', tenantUpdatePayload).subscribe({
+    this.apiService.put<TenantUpdateResponse>('tenant', tenantUpdatePayload).subscribe({
       next: (response) => {
         console.log('Service provider profile submitted successfully', response);
-        const newStatus = isOnboarding ? 'pending_activation' : 'active';
+        const newStatus = String(response?.status || (isOnboarding ? 'pending_activation' : 'active')).toLowerCase();
         this.appService.setTenantStatus(newStatus, false);
         this.router.navigate(['/dashboard']);
       },

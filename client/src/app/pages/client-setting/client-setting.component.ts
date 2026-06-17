@@ -19,6 +19,7 @@ import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
+import { TenantUpdateResponse } from '../../shared/model/tenant/tenant.model';
 import {
   buildAlphabeticDummyTag,
   buildSeededCaPhone,
@@ -898,10 +899,10 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     const isOnboarding = this.appService.userSessionData().tenant.has_onboarding;
     tenantUpdatePayload.status = isOnboarding ? 'pending_activation' : 'active';
 
-    this.apiService.put('tenant', tenantUpdatePayload).subscribe({
+    this.apiService.put<TenantUpdateResponse>('tenant', tenantUpdatePayload).subscribe({
       next: (response) => {
         console.log('Client profile submitted successfully', response);
-        const newStatus = isOnboarding ? 'pending_activation' : 'active';
+        const newStatus = String(response?.status || (isOnboarding ? 'pending_activation' : 'active')).toLowerCase();
         this.appService.setTenantStatus(newStatus, false);
         this.router.navigate(['/dashboard']);
       },

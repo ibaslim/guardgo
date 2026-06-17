@@ -30,6 +30,7 @@ import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared
 import { GeoLocationSelection, buildGoogleMapsLocationUrl } from '../../shared/helpers/google-maps-address.helper';
 import { formatCoordinateInput, parseCoordinate } from '../../shared/helpers/location.helper';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
+import { TenantUpdateResponse } from '../../shared/model/tenant/tenant.model';
 import {
   buildAlphabeticDummyTag,
   buildCaPhone,
@@ -2379,12 +2380,12 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     const isOnboarding = this.appService.userSessionData().tenant.has_onboarding;
     payload.status = isOnboarding ? 'pending_activation' : 'active';
 
-    this.apiService.put('tenant', payload)
+    this.apiService.put<TenantUpdateResponse>('tenant', payload)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
           this.isSubmitting = false;
-          const newStatus = isOnboarding ? 'pending_activation' : 'active';
+          const newStatus = String(response?.status || (isOnboarding ? 'pending_activation' : 'active')).toLowerCase();
           this.appService.setTenantStatus(newStatus, false);
           this.router.navigate(['/dashboard']);
         },

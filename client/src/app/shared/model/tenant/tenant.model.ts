@@ -29,3 +29,19 @@ export interface TenantModel {
   quota_exceeded?: boolean;
   email?: string;
 }
+
+export interface TenantUpdateResponse {
+  message: string;
+  id: string;
+  tenant_type?: string;
+  status?: string;
+  approvals_required?: number;
+  approvals_done?: number;
+  approvals_remaining?: number;
+  profile?: Record<string, unknown>;
+  tenant?: {
+    name?: string;
+    iocs?: IocCategory[];
+  };
+  alerts?: unknown[];
+}
