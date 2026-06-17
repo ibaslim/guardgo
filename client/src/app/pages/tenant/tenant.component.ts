@@ -1,7 +1,7 @@
 import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgIf, NgFor, NgSwitch, NgSwitchCase, CommonModule } from '@angular/common';
-import { TenantModel, TenantStatusValues } from '../../shared/model/tenant/tenant.model';
+import { TenantModel, TenantStatusValues, TenantUpdateResponse } from '../../shared/model/tenant/tenant.model';
 import { search_filter_labels } from '../../shared/constants/shared-enums';
 import { Router } from '@angular/router';
 import { ApiService } from '../../shared/services/api.service';
@@ -115,7 +115,7 @@ export class TenantComponent implements OnInit {
     });
     this.appService.set('entityfilterCategories', this.categories);
 
-    this.apiService.put<any>('tenant', filteredOnboardingData).subscribe({
+    this.apiService.put<TenantUpdateResponse>('tenant', filteredOnboardingData).subscribe({
       next: (res) => {
         this.appService.userSessionData.update(state => {
           if (!state) return state;
@@ -131,7 +131,8 @@ export class TenantComponent implements OnInit {
             iocs: (res.tenant?.iocs ?? this.appService.tenantData().iocs) || []
           });
 
-          this.appService.setOnboardingStatus(false);
+          const nextStatus = String(res?.status || state.tenant.status || '').toLowerCase();
+          this.appService.setTenantStatus(nextStatus, false);
           this.router.navigate(['/dashboard']).then();
 
           return updated;
