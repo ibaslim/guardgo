@@ -62,7 +62,7 @@ export class SelectInputComponent implements ControlValueAccessor {
   @Input() placeholder = '';
   @Input() disabled = false;
   @Input() required = false;
-  @Input() searchable = false;
+  @Input() searchable = true;
   @Input() name = '';
     @Input() helperText: string = '';
     @Input() errorText: string = '';

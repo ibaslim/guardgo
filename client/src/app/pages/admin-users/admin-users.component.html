@@ -27,7 +27,7 @@
         <div class="w-full md:w-[200px]">
           <div class="mt-1">
             <app-select-input [options]="roleFilterOptions" [(ngModel)]="roleFilter"
-              (ngModelChange)="onRoleFilterChange($event)" [searchable]="false" placeholder="Role"
+              (ngModelChange)="onRoleFilterChange($event)" [searchable]="true" placeholder="Role"
               aria-label="Role filter"></app-select-input>
           </div>
         </div>
@@ -35,7 +35,7 @@
         <div class="w-full md:w-[200px]">
           <div class="mt-1">
             <app-select-input [options]="statusFilterOptions" [(ngModel)]="statusFilter"
-              (ngModelChange)="onStatusFilterChange($event)" [searchable]="false" placeholder="Status"
+              (ngModelChange)="onStatusFilterChange($event)" [searchable]="true" placeholder="Status"
               aria-label="Status filter"></app-select-input>
           </div>
         </div>
@@ -44,7 +44,7 @@
           <div class="mt-1">
             <app-select-input
               [options]="[{ label: '10', value: 10 }, { label: '25', value: 25 }, { label: '50', value: 50 }, { label: '100', value: 100 }]"
-              [(ngModel)]="rows" (ngModelChange)="onPageSizeChange($event)" [searchable]="false" placeholder="Rows"
+              [(ngModel)]="rows" (ngModelChange)="onPageSizeChange($event)" [searchable]="true" placeholder="Rows"
               aria-label="Rows per page"></app-select-input>
           </div>
         </div>
@@ -172,7 +172,7 @@
     </app-base-input>
 
     <app-select-input label="Role" name="platformAdminRole" [options]="roleOptions" [(ngModel)]="createForm.role"
-      [required]="true" [searchable]="false" [errorText]="createFormErrors['role'] || ''">
+      [required]="true" [searchable]="true" [errorText]="createFormErrors['role'] || ''">
     </app-select-input>
   </div>
 
@@ -189,10 +189,10 @@
 <app-modal [show]="showEditModal" title="Edit Admin User" size="lg" (close)="closeEditModal()">
   <div class="grid grid-cols-1 gap-4 sm:gap-5">
     <app-select-input label="Role" name="editPlatformAdminRole" [options]="roleOptions" [(ngModel)]="editForm.role"
-      [required]="true" [searchable]="false" [errorText]="editFormErrors['role'] || ''">
+      [required]="true" [searchable]="true" [errorText]="editFormErrors['role'] || ''">
     </app-select-input>
     <app-select-input label="Status" name="editPlatformAdminStatus" [options]="statusOptions" [(ngModel)]="editForm.status"
-      [required]="true" [searchable]="false" [errorText]="editFormErrors['status'] || ''">
+      [required]="true" [searchable]="true" [errorText]="editFormErrors['status'] || ''">
     </app-select-input>
     <app-base-input *ngIf="editForm.status === 'blocked' || editForm.status === 'deleted'"
       label="Reason" name="editPlatformAdminStatusReason" [(ngModel)]="editForm.status_reason"
