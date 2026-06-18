@@ -39,7 +39,7 @@ export class MultiselectInputComponent implements ControlValueAccessor {
   @Input() errorText: string = '';
   @Input() disabled = false;
   @Input() required = false;
-  @Input() searchable = false;
+  @Input() searchable = true;
   @Input() name = '';
 
   value: any[] = [];

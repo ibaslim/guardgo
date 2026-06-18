@@ -5,6 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 
 import { ButtonComponent } from '../../components/button/button.component';
+import { SelectInputComponent } from '../../components/form/select-input/select-input.component';
 import { DrawerActionRowComponent } from '../../components/drawer-action-row/drawer-action-row.component';
 import { DrawerTitleBlockComponent } from '../../components/drawer-title-block/drawer-title-block.component';
 import { PageComponent } from '../../components/page/page.component';
@@ -23,6 +24,7 @@ import { RequestService } from '../../shared/services/request.service';
     FormsModule,
     PageComponent,
     SectionComponent,
+    SelectInputComponent,
     ButtonComponent,
     SideDrawerComponent,
     DrawerTitleBlockComponent,
@@ -50,6 +52,11 @@ export class PlatformPayoutInvoicesComponent implements OnInit, OnDestroy {
   listLoading = false;
   detailLoading = false;
   readonly listRows = 100;
+  readonly assigneeTenantTypeOptions = [
+    { label: 'All assignees', value: '' },
+    { label: 'Guards', value: 'guard' },
+    { label: 'Service Providers', value: 'service_provider' },
+  ];
   keyword = '';
   assigneeTenantType = '';
 

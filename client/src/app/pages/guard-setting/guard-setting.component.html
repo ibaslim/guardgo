@@ -403,7 +403,7 @@
                             <app-select-input label="License Type" [name]="'securityLicenseType_' + i"
                                 [(ngModel)]="license.licenseType" [options]="securityLicenseTypeOptions"
                                 placeholder="-- Select License Type --" [required]="i === 0"
-                                [searchable]="false" [disabled]="readonly"></app-select-input>
+                                [searchable]="true" [disabled]="readonly"></app-select-input>
                             <app-error-message
                                 [errorMessage]="guardErrors['security_license_' + license.id + '_licenseType'] || null"></app-error-message>
                         </div>

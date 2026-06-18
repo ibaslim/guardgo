@@ -52,14 +52,12 @@
         placeholder="Search by invoice, request, site, or assignee"
         class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
       />
-      <select
+      <app-select-input
         [(ngModel)]="assigneeTenantType"
-        class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
-      >
-        <option value="">All assignees</option>
-        <option value="guard">Guards</option>
-        <option value="service_provider">Service Providers</option>
-      </select>
+        [options]="assigneeTenantTypeOptions"
+        placeholder="All assignees"
+        [searchable]="true"
+      ></app-select-input>
       <button
         type="button"
         (click)="applyFilters()"

@@ -29,14 +29,14 @@
     <div *ngIf="!isSpAdmin()" class="w-full md:w-[200px]">
       <div class="mt-1">
         <app-select-input [options]="tenantTypeOptions" [(ngModel)]="tenant_type"
-          (ngModelChange)="onTenantTypeChange($event)" [searchable]="false" placeholder="Type"
+          (ngModelChange)="onTenantTypeChange($event)" [searchable]="true" placeholder="Type"
           aria-label="Tenant type"></app-select-input>
       </div>
     </div>
     <div *ngIf="!isSpAdmin()" class="w-full md:w-[200px]">
       <div class="mt-1">
         <app-select-input [options]="tenantStatusOptions" [(ngModel)]="tenant_status"
-          (ngModelChange)="onTenantStatusChange($event)" [searchable]="false" placeholder="Status"
+          (ngModelChange)="onTenantStatusChange($event)" [searchable]="true" placeholder="Status"
           aria-label="Tenant status"></app-select-input>
       </div>
     </div>
@@ -44,7 +44,7 @@
       <div class="mt-1">
         <app-select-input
           [options]="[{ label: '10', value: 10 }, { label: '25', value: 25 }, { label: '50', value: 50 }, { label: '100', value: 100 }]"
-          [(ngModel)]="rows" (ngModelChange)="onPageSizeChange($event)" [searchable]="false" placeholder="Rows"
+          [(ngModel)]="rows" (ngModelChange)="onPageSizeChange($event)" [searchable]="true" placeholder="Rows"
           aria-label="Rows per page"></app-select-input>
       </div>
     </div>
