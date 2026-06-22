@@ -367,12 +367,12 @@ export class TenantsComponent implements OnInit {
       { loadingScope: this.spRowActionScope(row, 'activate') }
     ).subscribe({
       next: res => {
-        this.notification.show(res?.message || 'Activation request submitted', 'success', 4000);
+        this.notification.show(res?.message || 'Guard status updated', 'success', 4000);
         this.submittingSpAction = false;
         this.loadPage(this.page);
       },
       error: err => {
-        this.notification.show(err?.error?.detail || 'Failed to submit activation request', 'fail', 6000);
+        this.notification.show(err?.error?.detail || 'Failed to update guard status', 'fail', 6000);
         this.submittingSpAction = false;
       }
     });
@@ -408,16 +408,38 @@ export class TenantsComponent implements OnInit {
       { loadingScope: this.spRowActionScope(row, 'deactivate') }
     ).subscribe({
       next: res => {
-        this.notification.show(res?.message || 'Deactivation request submitted', 'success', 4000);
+        this.notification.show(res?.message || 'Guard status updated', 'success', 4000);
         this.submittingSpAction = false;
         this.closeDeactivateReasonModal();
         this.loadPage(this.page);
       },
       error: err => {
-        this.notification.show(err?.error?.detail || 'Failed to submit deactivation request', 'fail', 6000);
+        this.notification.show(err?.error?.detail || 'Failed to update guard status', 'fail', 6000);
         this.submittingSpAction = false;
       }
     });
+  }
+
+  isServiceProviderOwnedGuard(tenant: any): boolean {
+    const tenantType = String(tenant?.tenant_type || tenant?.type || '').trim().toLowerCase();
+    const ownership = String(tenant?.ownership_type || '').trim().toLowerCase();
+    return tenantType === 'guard' && ownership === 'service_provider';
+  }
+
+  spActivateLabel(row: any): string {
+    const status = String(row?.status || '').trim().toLowerCase();
+    return status === 'pending_activation' ? 'Approve Guard' : 'Activate Guard';
+  }
+
+  spActivateAriaLabel(row: any): string {
+    const status = String(row?.status || '').trim().toLowerCase();
+    return status === 'pending_activation' ? 'Approve guard' : 'Activate guard';
+  }
+
+  canAdminApproveTenant(): boolean {
+    if (!this.isAdmin() || this.isSpAdmin()) return false;
+    if (!this.tenantDetail || this.tenantDetail?.status === 'active') return false;
+    return !this.isServiceProviderOwnedGuard(this.tenantDetail);
   }
 
   private parseInviteExpiry(row: any): Date | null {

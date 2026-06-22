@@ -134,14 +134,14 @@
         (pressed)="$event.stopPropagation(); openTenant(row)">
         <app-icon icon name="eye" [size]="18"></app-icon>
       </app-button>
-      <app-button *ngIf="isSpAdmin() && canRequestActivate(row)" type="primary" size="sm" label="Request Activate"
-        [iconOnly]="true" [customClass]="'p-1 rounded ml-1'" ariaLabel="Request activate guard"
+      <app-button *ngIf="isSpAdmin() && canRequestActivate(row)" type="primary" size="sm" [label]="spActivateLabel(row)"
+        [iconOnly]="true" [customClass]="'p-1 rounded ml-1'" [ariaLabel]="spActivateAriaLabel(row)"
         [loadingScope]="spRowActionScope(row, 'activate')"
         (pressed)="$event.stopPropagation(); requestActivate(row)">
         <app-icon icon name="toggle-right" [size]="18"></app-icon>
       </app-button>
-      <app-button *ngIf="isSpAdmin() && canRequestDeactivate(row)" type="warning" size="sm" label="Request Deactivate"
-        [iconOnly]="true" [customClass]="'p-1 rounded ml-1'" ariaLabel="Request deactivate guard"
+      <app-button *ngIf="isSpAdmin() && canRequestDeactivate(row)" type="warning" size="sm" label="Deactivate Guard"
+        [iconOnly]="true" [customClass]="'p-1 rounded ml-1'" ariaLabel="Deactivate guard"
         [loadingScope]="spRowActionScope(row, 'deactivate')"
         (pressed)="$event.stopPropagation(); openDeactivateReasonModal(row)">
         <app-icon icon name="toggle-left" [size]="18"></app-icon>
@@ -228,7 +228,7 @@
   <div drawer-footer>
     <div class="flex justify-end items-center gap-2">
       <ng-container *ngIf="isAdmin() && !isSpAdmin()">
-        <app-button *ngIf="tenantDetail?.status !== 'active'" size="sm" type="primary" [label]="(tenantDetail?.status === 'inactive' || tenantDetail?.status === 'banned') ? 'Re-activate' : 'Approve'"
+        <app-button *ngIf="canAdminApproveTenant()" size="sm" type="primary" [label]="(tenantDetail?.status === 'inactive' || tenantDetail?.status === 'banned') ? 'Re-activate' : 'Approve'"
           [customClass]="'px-3 py-1 text-sm'" ariaLabel="Approve tenant" [loadingScope]="statusScope" (pressed)="confirmChange('verify')"></app-button>
         <app-button *ngIf="tenantDetail?.status === 'active'" size="sm" type="warning" label="Deactivate"
           [customClass]="'px-3 py-1 text-sm'" ariaLabel="Deactivate tenant" [loadingScope]="statusScope" (pressed)="confirmChange('deactivate')"></app-button>
