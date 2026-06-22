@@ -57,6 +57,7 @@ import {
   ShiftSlotSummary,
 } from '../../shared/model/request/client-request.model';
 import { formatBackendDateTime } from '../../shared/helpers/format.helper';
+import { extractCoordinatesFromMapUrl } from '../../shared/helpers/location.helper';
 import { AppService } from '../../services/core/app/app.service';
 import { normalizeRole } from '../../shared/helpers/access-control.helper';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
@@ -83,6 +84,7 @@ interface SavedClientSiteRecord {
     longitude: string;
   };
   hasCoordinates: boolean;
+  coordinatesDerivedFromMapUrl: boolean;
 }
 
 interface RequestClientTenantOption {
@@ -1150,8 +1152,88 @@ export class RequestsComponent implements OnInit, OnDestroy {
     });
   }
 
+  private mapSavedClientSites(profileSource: any): { reusableSites: SavedClientSiteRecord[]; missingGeoCount: number } {
+    const profile = profileSource?.profile || profileSource || {};
+    const rawSites = Array.isArray(profile?.sites) ? profile.sites : [];
+    let missingGeoCount = 0;
+
+    const reusableSites: SavedClientSiteRecord[] = rawSites.reduce((acc: SavedClientSiteRecord[], rawSite: any, index: number) => {
+      const siteAddress = rawSite?.site_address || rawSite?.siteAddress || {};
+      const googleMapsUrl = String(rawSite?.google_maps_url || rawSite?.googleMapsUrl || '').trim();
+      const rawLatitudeText = siteAddress?.latitude != null ? String(siteAddress.latitude) : '';
+      const rawLongitudeText = siteAddress?.longitude != null ? String(siteAddress.longitude) : '';
+      const derivedCoordinates = (!rawLatitudeText || !rawLongitudeText) && googleMapsUrl
+        ? extractCoordinatesFromMapUrl(googleMapsUrl)
+        : null;
+      const latitudeText = rawLatitudeText || (derivedCoordinates ? String(derivedCoordinates[0]) : '');
+      const longitudeText = rawLongitudeText || (derivedCoordinates ? String(derivedCoordinates[1]) : '');
+      const hasCoordinates = this.parseCoordinate(latitudeText) !== null && this.parseCoordinate(longitudeText) !== null;
+      if (!hasCoordinates) {
+        missingGeoCount += 1;
+      }
+
+      acc.push({
+        index,
+        siteId: String(rawSite?.site_id || rawSite?.siteId || '').trim(),
+        siteName: String(rawSite?.site_name || rawSite?.siteName || '').trim(),
+        siteManagerContact: String(rawSite?.site_manager_contact || rawSite?.siteManagerContact || '').trim(),
+        managerEmail: String(rawSite?.manager_email || rawSite?.managerEmail || '').trim(),
+        numberOfGuardsRequired: rawSite?.number_of_guards_required ?? rawSite?.numberOfGuardsRequired ?? null,
+        siteType: String(rawSite?.site_type || rawSite?.siteType || '').trim(),
+        googleMapsUrl,
+        siteAddress: {
+          street: String(siteAddress?.street || '').trim(),
+          city: String(siteAddress?.city || '').trim(),
+          country: String(siteAddress?.country || 'CA').trim() || 'CA',
+          province: String(siteAddress?.province || '').trim(),
+          postalCode: String(siteAddress?.postal_code || siteAddress?.postalCode || '').trim(),
+          latitude: latitudeText,
+          longitude: longitudeText,
+        },
+        hasCoordinates,
+        coordinatesDerivedFromMapUrl: Boolean(derivedCoordinates && !rawLatitudeText && !rawLongitudeText),
+      });
+      return acc;
+    }, []);
+
+    return { reusableSites, missingGeoCount };
+  }
+
+  private applyMappedClientSites(reusableSites: SavedClientSiteRecord[], missingGeoCount: number): void {
+    this.clientSavedSites = reusableSites;
+    this.savedClientSitesMissingGeoCount = missingGeoCount;
+
+    if (this.requestFormMode === 'create' && this.requestSiteSourceMode === 'saved') {
+      if (!this.selectedSavedSiteIndex && this.clientSavedSites.length) {
+        const defaultSite = this.clientSavedSites.find((site) => site.hasCoordinates) || this.clientSavedSites[0];
+        this.selectedSavedSiteIndex = String(defaultSite.index);
+      }
+      const selectedSite = this.selectedSavedClientSite;
+      if (selectedSite) {
+        this.applySavedSiteToRequestForm(selectedSite);
+      }
+    }
+  }
+
+  private seedClientSitesFromCurrentSession(): void {
+    if (this.tenantType !== 'client' || this.isPlatformAdmin) {
+      return;
+    }
+
+    const sessionProfile = this.appService.userSessionData()?.tenant?.profile;
+    if (!sessionProfile) {
+      return;
+    }
+
+    const { reusableSites, missingGeoCount } = this.mapSavedClientSites(sessionProfile);
+    if (!reusableSites.length && !missingGeoCount) {
+      return;
+    }
+    this.applyMappedClientSites(reusableSites, missingGeoCount);
+  }
+
   loadClientSites(options?: { silent?: boolean; tenantId?: string }): void {
-    if (!this.isClientAdmin && !this.isPlatformAdmin) {
+    if (this.tenantType !== 'client' && !this.isPlatformAdmin) {
       this.clientSavedSites = [];
       this.savedClientSitesMissingGeoCount = 0;
       return;
@@ -1165,6 +1247,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
 
     const endpoint = this.isPlatformAdmin ? `request-client-tenants/${targetTenantId}` : 'tenant';
+    const hadExistingSites = this.clientSavedSites.length > 0 || this.savedClientSitesMissingGeoCount > 0;
     this.api.get<any>(endpoint, {
       loadingMode: options?.silent ? 'silent' : undefined,
     }).subscribe({
@@ -1172,58 +1255,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
         if (this.isPlatformAdmin) {
           this.selectedRequestClientTenantLabel = String(response?.label || this.requestClientTenantOptions.find((option) => option.value === targetTenantId)?.label || targetTenantId).trim();
         }
-        const profile = response?.profile || response || {};
-        const rawSites = Array.isArray(profile?.sites) ? profile.sites : [];
-        let missingGeoCount = 0;
-        const reusableSites: SavedClientSiteRecord[] = rawSites.reduce((acc: SavedClientSiteRecord[], rawSite: any, index: number) => {
-          const siteAddress = rawSite?.site_address || rawSite?.siteAddress || {};
-          const latitudeText = siteAddress?.latitude != null ? String(siteAddress.latitude) : '';
-          const longitudeText = siteAddress?.longitude != null ? String(siteAddress.longitude) : '';
-          const hasCoordinates = this.parseCoordinate(latitudeText) !== null && this.parseCoordinate(longitudeText) !== null;
-          if (!hasCoordinates) {
-            missingGeoCount += 1;
-            return acc;
-          }
-
-          acc.push({
-            index,
-            siteId: String(rawSite?.site_id || rawSite?.siteId || '').trim(),
-            siteName: String(rawSite?.site_name || rawSite?.siteName || '').trim(),
-            siteManagerContact: String(rawSite?.site_manager_contact || rawSite?.siteManagerContact || '').trim(),
-            managerEmail: String(rawSite?.manager_email || rawSite?.managerEmail || '').trim(),
-            numberOfGuardsRequired: rawSite?.number_of_guards_required ?? rawSite?.numberOfGuardsRequired ?? null,
-            siteType: String(rawSite?.site_type || rawSite?.siteType || '').trim(),
-            googleMapsUrl: String(rawSite?.google_maps_url || rawSite?.googleMapsUrl || '').trim(),
-            siteAddress: {
-              street: String(siteAddress?.street || '').trim(),
-              city: String(siteAddress?.city || '').trim(),
-              country: String(siteAddress?.country || 'CA').trim() || 'CA',
-              province: String(siteAddress?.province || '').trim(),
-              postalCode: String(siteAddress?.postal_code || siteAddress?.postalCode || '').trim(),
-              latitude: latitudeText,
-              longitude: longitudeText,
-            },
-            hasCoordinates,
-          });
-          return acc;
-        }, []);
-
-        this.clientSavedSites = reusableSites;
-        this.savedClientSitesMissingGeoCount = missingGeoCount;
-
-        if (this.requestFormMode === 'create' && this.requestSiteSourceMode === 'saved') {
-          if (!this.selectedSavedSiteIndex && this.clientSavedSites.length) {
-            this.selectedSavedSiteIndex = String(this.clientSavedSites[0].index);
-          }
-          const selectedSite = this.selectedSavedClientSite;
-          if (selectedSite) {
-            this.applySavedSiteToRequestForm(selectedSite);
-          }
-        }
+        const { reusableSites, missingGeoCount } = this.mapSavedClientSites(response);
+        this.applyMappedClientSites(reusableSites, missingGeoCount);
       },
       error: () => {
-        this.clientSavedSites = [];
-        this.savedClientSitesMissingGeoCount = 0;
+        if (!hadExistingSites) {
+          this.clientSavedSites = [];
+          this.savedClientSitesMissingGeoCount = 0;
+        }
         if (this.isPlatformAdmin) {
           this.selectedRequestClientTenantLabel = this.requestClientTenantOptions.find((option) => option.value === targetTenantId)?.label || '';
         }
@@ -1951,6 +1990,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
     if (this.requestSiteSourceMode === 'saved' && !this.selectedSavedSiteIndex) {
       this.requestErrors['savedSite'] = 'Select a saved client site.';
+    } else if (this.requestSiteSourceMode === 'saved' && this.selectedSavedClientSite && !this.selectedSavedClientSite.hasCoordinates) {
+      this.requestErrors['coordinates'] = 'The selected saved client site is missing coordinates. Update it in Client Settings or switch to Manual Site Entry.';
     }
     if (!this.requestForm.siteName.trim()) {
       this.requestErrors['siteName'] = 'Site name is required.';
@@ -2304,6 +2345,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
     this.saving = true;
     const payload = this.buildRequestPayload();
+    const shouldRefreshSavedSites = this.requestSiteSourceMode === 'manual';
 
     if (this.requestFormMode === 'create') {
       const shouldPersistSchedule = this.shouldPersistInlineSchedule();
@@ -2321,6 +2363,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
           const finishCreate = (message: string, tone: 'success' | 'fail' = 'success') => {
             this.saving = false;
             this.notification.show(message, tone, 4000);
+            if (shouldRefreshSavedSites) {
+              this.loadClientSites({ silent: true, tenantId: this.isPlatformAdmin ? this.selectedRequestClientTenantId : undefined });
+            }
             this.closeRequestFormDrawer();
             this.loadRequests(1);
           };
@@ -2381,6 +2426,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
         next: (response) => {
           this.saving = false;
           this.notification.show(response.message || 'Request update published', 'success', 3500);
+          if (shouldRefreshSavedSites) {
+            this.loadClientSites({ silent: true, tenantId: this.isPlatformAdmin ? this.selectedRequestClientTenantId : undefined });
+          }
           this.closeRequestFormDrawer();
           this.loadRequests(this.page);
           if (this.canReviewBroadcastWaves) {
@@ -2400,6 +2448,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
         const finishUpdate = (message: string, tone: 'success' | 'fail' = 'success') => {
           this.saving = false;
           this.notification.show(message, tone, 3500);
+          if (shouldRefreshSavedSites) {
+            this.loadClientSites({ silent: true, tenantId: this.isPlatformAdmin ? this.selectedRequestClientTenantId : undefined });
+          }
           this.closeRequestFormDrawer();
           this.loadRequests(this.page);
         };
@@ -2419,6 +2470,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
           if (!commit) {
             this.saving = false;
             this.notification.show('Request draft updated', 'success', 3500);
+            if (shouldRefreshSavedSites) {
+              this.loadClientSites({ silent: true, tenantId: this.isPlatformAdmin ? this.selectedRequestClientTenantId : undefined });
+            }
             this.closeRequestFormDrawer();
             this.loadRequests(this.page);
             return;
@@ -2502,6 +2556,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.editingRequestId = '';
     this.resetForm();
     this.loadRequestClientTenants({ silent: true });
+    this.seedClientSitesFromCurrentSession();
     this.loadClientSites({ silent: true });
     this.showRequestFormDrawer = true;
   }
@@ -6123,7 +6178,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   get canUseSavedSiteMode(): boolean {
-    return this.clientSavedSites.length > 0 || this.requestSiteSourceMode === 'saved';
+    if (this.requestSiteSourceMode === 'saved') {
+      return true;
+    }
+    return this.requestFormMode === 'create' && (this.tenantType === 'client' || this.isPlatformAdmin);
   }
 
   get requestClientTenantDisplayValue(): string {
@@ -6138,21 +6196,23 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   get requestSiteSourceOptions(): Array<{ value: RequestSiteSourceMode; label: string }> {
-    const options: Array<{ value: RequestSiteSourceMode; label: string }> = [
-      { value: 'manual', label: 'Manual Site Entry' },
-    ];
     if (this.canUseSavedSiteMode) {
-      options.unshift({ value: 'saved', label: 'Saved Client Site' });
+      return [
+        { value: 'saved', label: 'Saved Client Site' },
+        { value: 'manual', label: 'Manual Site Entry' },
+      ];
     }
-    return options;
+
+    return [{ value: 'manual', label: 'Manual Site Entry' }];
   }
 
   get savedClientSiteOptions(): Array<{ value: string; label: string }> {
     return this.clientSavedSites.map((site) => {
       const locality = [site.siteAddress.city, site.siteAddress.province].filter(Boolean).join(', ');
+      const baseLabel = locality ? `${site.siteName} • ${locality}` : site.siteName;
       return {
         value: String(site.index),
-        label: locality ? `${site.siteName} • ${locality}` : site.siteName,
+        label: site.hasCoordinates ? baseLabel : `${baseLabel} • Coordinates needed`,
       };
     });
   }
@@ -6201,7 +6261,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   onRequestSiteSourceModeChange(nextMode: RequestSiteSourceMode | string): void {
-    const normalizedMode = String(nextMode || '').trim().toLowerCase() === 'saved' && this.canUseSavedSiteMode
+    const normalizedMode = String(nextMode || '').trim().toLowerCase() === 'saved'
       ? 'saved'
       : 'manual';
     this.requestSiteSourceMode = normalizedMode;
@@ -6211,8 +6271,13 @@ export class RequestsComponent implements OnInit, OnDestroy {
     delete this.requestErrors['longitude'];
 
     if (normalizedMode === 'saved') {
+      if (!this.clientSavedSites.length && !this.savedClientSitesMissingGeoCount) {
+        this.seedClientSitesFromCurrentSession();
+        this.loadClientSites({ silent: true, tenantId: this.isPlatformAdmin ? this.selectedRequestClientTenantId : undefined });
+      }
       if (!this.selectedSavedSiteIndex && this.clientSavedSites.length) {
-        this.selectedSavedSiteIndex = String(this.clientSavedSites[0].index);
+        const defaultSite = this.clientSavedSites.find((site) => site.hasCoordinates) || this.clientSavedSites[0];
+        this.selectedSavedSiteIndex = String(defaultSite.index);
       }
       const selectedSite = this.selectedSavedClientSite;
       if (selectedSite) {

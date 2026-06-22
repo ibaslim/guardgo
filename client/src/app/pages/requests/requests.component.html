@@ -915,16 +915,41 @@
         <div class="space-y-5">
           <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div class="flex flex-col">
-              <app-select-input
-                label="Site Source"
-                [name]="'requestSiteSourceDrawer'"
-                [(ngModel)]="requestSiteSourceMode"
-                [options]="requestSiteSourceOptions"
-                [helperText]="requestFormMode === 'create'
+              <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">Site Source</label>
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  class="rounded-xl border px-4 py-3 text-left transition"
+                  [ngClass]="requestSiteSourceMode === 'saved'
+                    ? 'border-blue-500 bg-blue-50 text-blue-900 shadow-sm dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-100'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-blue-200 hover:bg-blue-50/60 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-blue-900 dark:hover:bg-gray-800/80'"
+                  (click)="onRequestSiteSourceModeChange('saved')"
+                >
+                  <div class="text-sm font-semibold">Saved Client Site</div>
+                  <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Reuse an operational site already saved on the client profile.
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  class="rounded-xl border px-4 py-3 text-left transition"
+                  [ngClass]="requestSiteSourceMode === 'manual'
+                    ? 'border-blue-500 bg-blue-50 text-blue-900 shadow-sm dark:border-blue-400 dark:bg-blue-950/40 dark:text-blue-100'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-blue-200 hover:bg-blue-50/60 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-blue-900 dark:hover:bg-gray-800/80'"
+                  (click)="onRequestSiteSourceModeChange('manual')"
+                >
+                  <div class="text-sm font-semibold">Manual Site Entry</div>
+                  <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Enter a one-off site address and coordinates for this request.
+                  </div>
+                </button>
+              </div>
+              <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                {{ requestFormMode === 'create'
                   ? 'Saved sites reuse the client account site profile with locked coordinates. Manual entry is best for one-off or temporary sites.'
-                  : 'This request keeps the captured site snapshot. You can still review whether it originated from a saved site or manual entry.'"
-                (ngModelChange)="onRequestSiteSourceModeChange($event)"
-              ></app-select-input>
+                  : 'This request keeps the captured site snapshot. You can still review whether it originated from a saved site or manual entry.' }}
+              </p>
             </div>
 
             <div class="flex flex-col" *ngIf="requestSiteSourceMode === 'saved'">
@@ -936,8 +961,8 @@
                 [disabled]="!savedClientSiteOptions.length"
                 [required]="requestFormMode === 'create'"
                 [helperText]="savedClientSiteOptions.length
-                  ? 'Only saved sites with valid coordinates are listed here.'
-                  : 'No geo-ready saved sites are currently available for reuse.'"
+                  ? 'Saved client sites appear here. Any site marked Coordinates needed must be updated before the request can be submitted.'
+                  : 'No saved client sites are currently available for reuse.'"
                 [errorText]="requestErrors['savedSite'] || ''"
                 (ngModelChange)="onSavedSiteSelectionChange($event)"
               ></app-select-input>
@@ -955,16 +980,16 @@
           <app-banner
             *ngIf="requestFormMode === 'create' && (!isPlatformAdmin || selectedRequestClientTenantId) && !clientSavedSites.length"
             tone="neutral"
-            title="No Reusable Saved Sites Yet"
-            message="Create or update client profile sites with valid coordinates first, then they will appear here for request reuse."
+            title="No Saved Client Sites Yet"
+            message="Create or update client profile sites first, then they will appear here for request reuse."
             [showIcon]="false"
           ></app-banner>
 
           <app-banner
             *ngIf="requestFormMode === 'create' && savedClientSitesMissingGeoCount > 0"
             tone="warning"
-            title="Some Saved Sites Were Omitted"
-            [message]="savedClientSitesMissingGeoCount + ' saved site' + (savedClientSitesMissingGeoCount === 1 ? ' is' : 's are') + ' missing coordinates and cannot be reused until geo data is added.'"
+            title="Some Saved Sites Need Coordinates"
+            [message]="savedClientSitesMissingGeoCount + ' saved site' + (savedClientSitesMissingGeoCount === 1 ? ' is' : 's are') + ' missing stored coordinates. Those sites can be selected, but they need geo data before the request can be submitted.'"
             [showIcon]="false"
           ></app-banner>
         </div>
@@ -1242,17 +1267,33 @@
       </app-section>
 
       <app-section
-        *ngIf="requestSiteSourceMode === 'manual'"
-        [title]="'Site Coordinates'"
-        [subtitle]="'Matching, travel checks, and geofence logic use these coordinates as the operational source of truth.'"
+        [title]="requestSiteSourceMode === 'saved' ? 'Saved Site Map' : 'Site Coordinates'"
+        [subtitle]="requestSiteSourceMode === 'saved'
+          ? 'This map mirrors the selected saved client site so the request location is immediately visible.'
+          : 'Matching, travel checks, and geofence logic use these coordinates as the operational source of truth.'"
       >
+        <app-banner
+          *ngIf="requestSiteSourceMode === 'saved' && selectedSavedClientSite && !selectedSavedClientSite.hasCoordinates"
+          class="mb-4 block"
+          tone="warning"
+          title="Saved Site Needs Geo Data"
+          message="This client site was found, but it does not have usable coordinates yet. Update the site in Client Settings or switch to Manual Site Entry for this request."
+          [showIcon]="false"
+        ></app-banner>
+
         <app-geo-location-picker
-          title="Site Location"
-          helperText="Search the site in realtime with Google Maps, click the map, or capture the current device location. These coordinates are required and are the source of truth for matching."
+          [title]="requestSiteSourceMode === 'saved' ? 'Saved Site Location' : 'Site Location'"
+          [helperText]="requestSiteSourceMode === 'saved'
+            ? 'The selected saved client site is shown here exactly as it will be used for this request.'
+            : 'Search the site in realtime with Google Maps, click the map, or capture the current device location. These coordinates are required and are the source of truth for matching.'"
           [showMapUrl]="true"
           [(mapUrl)]="requestForm.googleMapsUrl"
           [(latitude)]="requestForm.latitude"
           [(longitude)]="requestForm.longitude"
+          [readonly]="requestSiteSourceMode === 'saved'"
+          [showSearchInput]="requestSiteSourceMode !== 'saved'"
+          [showCoordinateInputs]="requestSiteSourceMode !== 'saved'"
+          [showActionButtons]="requestSiteSourceMode !== 'saved'"
           [latitudeError]="requestErrors['latitude'] || ''"
           [longitudeError]="requestErrors['longitude'] || ''"
           [coordinateError]="requestErrors['coordinates'] || ''"
