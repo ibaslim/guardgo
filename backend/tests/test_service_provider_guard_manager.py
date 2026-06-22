@@ -73,16 +73,23 @@ async def test_sp_deactivate_request_requires_reason():
 
 
 @pytest.mark.anyio
-async def test_sp_activate_request_creates_pending_request(monkeypatch):
+async def test_sp_activate_request_directly_approves_pending_guard(monkeypatch):
     guard = db_tenant_model(
         tenant_type=TenantType.GUARD,
         profile={},
-        status=TenantStatus.INACTIVE,
+        status=TenantStatus.PENDING_ACTIVATION,
+        approvals_required=2,
+        approval_actors=[],
         ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
         service_provider_tenant_id="507f1f77bcf86cd799439011",
     )
     manager = object.__new__(TenantManager)
     manager._engine = FakeEngine(guard)
+
+    async def _noop_post_change(*_args, **_kwargs):
+        return None
+
+    manager._post_status_change = _noop_post_change
 
     from orion.api.interactive.activity_manager.activity_manager import ActivityManager
     monkeypatch.setattr(ActivityManager, "get_instance", staticmethod(lambda: FakeActivityManager()))
@@ -97,9 +104,50 @@ async def test_sp_activate_request_creates_pending_request(monkeypatch):
         ),
     )
 
-    assert result["message"] == "Status request submitted"
+    assert result["message"] == "Tenant activated"
     assert result["requested_action"] == "activate"
+    assert result["status"] == "active"
+    assert result["approvals_required"] == 1
+    assert result["approvals_done"] == 1
+    assert guard.status == TenantStatus.ACTIVE
     assert len(manager._engine.saved) == 1
+
+
+@pytest.mark.anyio
+async def test_sp_deactivate_request_directly_deactivates_guard(monkeypatch):
+    guard = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        profile={},
+        status=TenantStatus.ACTIVE,
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+        service_provider_tenant_id="507f1f77bcf86cd799439011",
+    )
+    manager = object.__new__(TenantManager)
+    manager._engine = FakeEngine(guard)
+
+    async def _noop_post_change(*_args, **_kwargs):
+        return None
+
+    manager._post_status_change = _noop_post_change
+
+    from orion.api.interactive.activity_manager.activity_manager import ActivityManager
+    monkeypatch.setattr(ActivityManager, "get_instance", staticmethod(lambda: FakeActivityManager()))
+
+    result = await manager.request_guard_status_change(
+        str(guard.id),
+        ServiceProviderGuardStatusRequestPayload(action="deactivate", reason="Offboarded"),
+        current_user=SimpleNamespace(
+            username="spadmin1",
+            role=user_role.SP_ADMIN,
+            tenant_uuid="507f1f77bcf86cd799439011",
+        ),
+    )
+
+    assert result["message"] == "Tenant status updated"
+    assert result["requested_action"] == "deactivate"
+    assert result["status"] == "inactive"
+    assert result["reason"] == "Offboarded"
+    assert guard.status == TenantStatus.INACTIVE
 
 
 @pytest.mark.anyio

@@ -74,8 +74,38 @@ class TenantManager:
         return value
 
     @staticmethod
+    def _is_service_provider_owned_guard(tenant: Optional[db_tenant_model]) -> bool:
+        if not tenant:
+            return False
+        if getattr(tenant, "tenant_type", None) != TenantType.GUARD:
+            return False
+        ownership_type = str(getattr(getattr(tenant, "ownership_type", None), "value", getattr(tenant, "ownership_type", None)) or "").strip().lower()
+        provider_tenant_id = str(getattr(tenant, "service_provider_tenant_id", "") or "").strip()
+        return ownership_type == GuardOwnershipType.SERVICE_PROVIDER.value and bool(provider_tenant_id)
+
+    @classmethod
+    def _required_approval_count_for_tenant(cls, tenant: Optional[db_tenant_model]) -> int:
+        return 1 if cls._is_service_provider_owned_guard(tenant) else 2
+
+    @classmethod
+    def _reset_pending_activation_approval_state(cls, tenant: db_tenant_model) -> None:
+        tenant.approval_actors = []
+        tenant.approvals_required = cls._required_approval_count_for_tenant(tenant)
+
+    @classmethod
+    def _can_service_provider_approve_guard(cls, tenant: db_tenant_model, current_user: Any) -> bool:
+        if not cls._is_service_provider_owned_guard(tenant):
+            return False
+        role_value = normalize_role_value(getattr(current_user, "role", ""))
+        if role_value != user_role.SP_ADMIN.value:
+            return False
+        actor_provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
+        owner_provider_tenant_id = str(getattr(tenant, "service_provider_tenant_id", "") or "").strip()
+        return bool(actor_provider_tenant_id) and actor_provider_tenant_id == owner_provider_tenant_id
+
+    @staticmethod
     def _approvals_summary(tenant: db_tenant_model) -> Dict[str, Any]:
-        required = int(getattr(tenant, "approvals_required", 2) or 2)
+        required = TenantManager._required_approval_count_for_tenant(tenant)
         actors = list(dict.fromkeys(getattr(tenant, "approval_actors", []) or []))
         done = len(actors)
         remaining = max(required - done, 0)
@@ -425,8 +455,7 @@ class TenantManager:
 
         if previous_status == TenantStatus.ONBOARDING:
             tenant.status = TenantStatus.PENDING_ACTIVATION
-            tenant.approval_actors = []
-            tenant.approvals_required = max(int(getattr(tenant, "approvals_required", 2) or 2), 2)
+            self._reset_pending_activation_approval_state(tenant)
 
         await self._engine.save(tenant)
 
@@ -615,8 +644,7 @@ class TenantManager:
                     tenant.approval_actors = []
                 else:
                     tenant.status = TenantStatus.PENDING_ACTIVATION
-                    tenant.approval_actors = []
-                    tenant.approvals_required = max(int(getattr(tenant, "approvals_required", 2) or 2), 2)
+                    self._reset_pending_activation_approval_state(tenant)
 
         tenant.updated_at = datetime.utcnow()
         if data.verified and not tenant.verified_date:
@@ -657,8 +685,14 @@ class TenantManager:
             raise HTTPException(status_code=400, detail="Tenant is not pending activation")
 
         tenant.status = TenantStatus.PENDING_ACTIVATION
-        tenant.approvals_required = max(int(getattr(tenant, "approvals_required", 2) or 2), 2)
+        tenant.approvals_required = self._required_approval_count_for_tenant(tenant)
         existing_actors = list(dict.fromkeys(getattr(tenant, "approval_actors", []) or []))
+
+        if self._is_service_provider_owned_guard(tenant):
+            if not self._can_service_provider_approve_guard(tenant, current_user):
+                raise HTTPException(status_code=403, detail="Only the owning service provider can approve this guard")
+        elif normalize_role_value(actor_role) not in {user_role.ADMIN.value, user_role.COMPLIANCE_ADMIN.value}:
+            raise HTTPException(status_code=403, detail="Only platform admins can approve this tenant")
 
         if actor_username in existing_actors:
             summary = self._approvals_summary(tenant)
@@ -735,8 +769,7 @@ class TenantManager:
             tenant.verified_date = datetime.utcnow()
 
         if target_status_enum == TenantStatus.PENDING_ACTIVATION:
-            tenant.approvals_required = max(int(getattr(tenant, "approvals_required", 2) or 2), 2)
-            tenant.approval_actors = []
+            self._reset_pending_activation_approval_state(tenant)
 
         await self._engine.save(tenant)
 
@@ -1507,51 +1540,41 @@ class TenantManager:
         if action == GuardStatusAction.DEACTIVATE and not reason:
             raise HTTPException(status_code=400, detail="Reason is required for deactivation request")
 
-        existing_pending = await self._engine.find_one(
-            GuardStatusChangeRequest,
-            (GuardStatusChangeRequest.guard_tenant_id == guard_tenant_id)
-            & (GuardStatusChangeRequest.status == GuardStatusRequestStatus.PENDING),
-        )
-        if existing_pending:
-            raise HTTPException(status_code=400, detail="A pending status request already exists for this guard")
-
-        now = datetime.now(timezone.utc)
-        status_request = GuardStatusChangeRequest(
-            guard_tenant_id=guard_tenant_id,
-            service_provider_tenant_id=provider_tenant_id,
-            requested_action=action,
-            reason=reason,
-            status=GuardStatusRequestStatus.PENDING,
-            requested_by_user_id=str(getattr(current_user, "id", "") or "") if hasattr(current_user, "id") else None,
-            requested_by_username=getattr(current_user, "username", None),
-            created_at=now,
-            updated_at=now,
-        )
-        await self._engine.save(status_request)
+        if action == GuardStatusAction.ACTIVATE:
+            current_status = self._normalized_status_value(guard.status)
+            if current_status == TenantStatus.PENDING_ACTIVATION.value:
+                result = await self.approve_tenant_activation(guard_tenant_id, current_user=current_user)
+            else:
+                result = await self.set_tenant_status(guard_tenant_id, TenantStatus.ACTIVE, current_user=current_user)
+        else:
+            result = await self.set_tenant_status(guard_tenant_id, TenantStatus.INACTIVE, current_user=current_user)
 
         await ActivityManager.get_instance().log_event(
             module="tenant",
             entity_type="guard",
             entity_id=guard_tenant_id,
-            action="status_change_requested",
-            actor_id=status_request.requested_by_user_id,
-            actor_username=status_request.requested_by_username,
+            action="status_changed_by_service_provider",
+            actor_id=str(getattr(current_user, "id", "") or "") if hasattr(current_user, "id") else None,
+            actor_username=getattr(current_user, "username", None),
             actor_role=getattr(current_user, "role", None),
             reason=reason,
             metadata={
-                "request_id": str(status_request.id),
                 "requested_action": action.value,
                 "service_provider_tenant_id": provider_tenant_id,
             },
         )
 
         return {
-            "message": "Status request submitted",
-            "request_id": str(status_request.id),
+            "message": result.get("message") or "Tenant status updated",
             "guard_tenant_id": guard_tenant_id,
             "requested_action": action.value,
-            "status": GuardStatusRequestStatus.PENDING.value,
+            "status": result.get("status"),
             "reason": reason,
+            "verified": result.get("verified"),
+            "verified_date": result.get("verified_date"),
+            "approvals_done": result.get("approvals_done"),
+            "approvals_required": result.get("approvals_required"),
+            "approvals_remaining": result.get("approvals_remaining"),
         }
 
     async def list_guard_status_requests(self, page: int = 1, rows: int = 20) -> Dict[str, Any]:

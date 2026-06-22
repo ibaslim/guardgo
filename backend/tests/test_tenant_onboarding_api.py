@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from configs.app_dependency import get_current_role, get_current_status, get_current_user
 from orion.api.interactive.tenant_manager.tenant_manager import TenantManager
 from orion.services.mongo_manager.shared_model.db_auth_models import UserStatus, user_role
-from orion.services.mongo_manager.shared_model.db_tenant_model import TenantStatus, TenantType, db_tenant_model
+from orion.services.mongo_manager.shared_model.db_tenant_model import GuardOwnershipType, TenantStatus, TenantType, db_tenant_model
 from routes.tenant_routes import tenant_routes
 
 
@@ -133,4 +133,47 @@ async def test_client_becomes_active_without_approval_on_first_update(monkeypatc
     assert data["status"] == TenantStatus.ACTIVE.value
     assert tenant.status == TenantStatus.ACTIVE
     assert tenant.verified is True
+    assert tenant.approval_actors == []
+
+
+@pytest.mark.anyio
+async def test_service_provider_owned_guard_uses_single_approval_on_first_update(monkeypatch):
+    tenant = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        profile={},
+        status=TenantStatus.ONBOARDING,
+        approvals_required=2,
+        approval_actors=["someone"],
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+        service_provider_tenant_id="507f1f77bcf86cd799439011",
+    )
+    fake_engine = FakeEngine(tenant)
+    manager = object.__new__(TenantManager)
+    manager._engine = fake_engine
+
+    async def _noop_post_change(*_args, **_kwargs):
+        return None
+
+    manager._post_status_change = _noop_post_change
+    monkeypatch.setattr(TenantManager, "get_instance", staticmethod(lambda: manager))
+
+    current_user = SimpleNamespace(
+        tenant_uuid=str(tenant.id),
+        role=user_role.GUARD_ADMIN,
+        username="guardadmin1",
+    )
+    app = _build_app(current_user)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.put(
+            "/api/tenant",
+            json=_tenant_payload(TenantType.GUARD, TenantStatus.PENDING_ACTIVATION),
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == TenantStatus.PENDING_ACTIVATION.value
+    assert data["approvals_required"] == 1
+    assert tenant.status == TenantStatus.PENDING_ACTIVATION
+    assert tenant.approvals_required == 1
     assert tenant.approval_actors == []

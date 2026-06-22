@@ -1,10 +1,11 @@
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from orion.api.interactive.tenant_manager.tenant_manager import TenantManager
 from orion.services.mongo_manager.shared_model.db_auth_models import user_role
-from orion.services.mongo_manager.shared_model.db_tenant_model import TenantStatus, TenantType, db_tenant_model
+from orion.services.mongo_manager.shared_model.db_tenant_model import GuardOwnershipType, TenantStatus, TenantType, db_tenant_model
 
 
 class FakeEngine:
@@ -50,6 +51,71 @@ async def test_approve_tenant_activation_requires_two_distinct_approvals():
     assert second["approvals_done"] == 2
     assert tenant.status == TenantStatus.ACTIVE
     assert tenant.verified is True
+
+
+@pytest.mark.anyio
+async def test_service_provider_guard_activation_requires_single_owner_approval():
+    tenant = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        profile={},
+        status=TenantStatus.PENDING_ACTIVATION,
+        approvals_required=2,
+        approval_actors=[],
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+        service_provider_tenant_id="507f1f77bcf86cd799439011",
+    )
+    engine = FakeEngine(tenant)
+    manager = object.__new__(TenantManager)
+    manager._engine = engine
+
+    async def _noop_post_change(*_args, **_kwargs):
+        return None
+
+    manager._post_status_change = _noop_post_change
+
+    approver = SimpleNamespace(
+        username="spadmin1",
+        role=user_role.SP_ADMIN,
+        tenant_uuid="507f1f77bcf86cd799439011",
+    )
+
+    result = await manager.approve_tenant_activation(str(tenant.id), current_user=approver)
+
+    assert result["status"] == TenantStatus.ACTIVE
+    assert result["approvals_done"] == 1
+    assert result["approvals_required"] == 1
+    assert tenant.status == TenantStatus.ACTIVE
+    assert tenant.verified is True
+
+
+@pytest.mark.anyio
+async def test_platform_admin_cannot_approve_service_provider_owned_guard():
+    tenant = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        profile={},
+        status=TenantStatus.PENDING_ACTIVATION,
+        approvals_required=2,
+        approval_actors=[],
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+        service_provider_tenant_id="507f1f77bcf86cd799439011",
+    )
+    engine = FakeEngine(tenant)
+    manager = object.__new__(TenantManager)
+    manager._engine = engine
+
+    async def _noop_post_change(*_args, **_kwargs):
+        return None
+
+    manager._post_status_change = _noop_post_change
+
+    with pytest.raises(HTTPException) as exc:
+        await manager.approve_tenant_activation(
+            str(tenant.id),
+            current_user=SimpleNamespace(username="admin1", role=user_role.ADMIN, tenant_uuid="admin-tenant"),
+        )
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "Only the owning service provider can approve this guard"
 
 
 @pytest.mark.anyio
