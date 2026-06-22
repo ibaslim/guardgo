@@ -2967,6 +2967,81 @@ class RequestManager:
             },
         }
 
+    def _request_site_profile_entry_signature(self, site_entry: Dict[str, Any]) -> tuple[Any, ...]:
+        site_address = cast(Dict[str, Any], site_entry.get("site_address") or {})
+        latitude = self._as_float(site_address.get("latitude"))
+        longitude = self._as_float(site_address.get("longitude"))
+        return (
+            self._normalize_text(site_entry.get("site_name")),
+            self._normalize_text(site_address.get("street")),
+            self._normalize_text(site_address.get("city")),
+            self._normalize_text(site_address.get("province")),
+            self._normalize_text(site_address.get("country")),
+            self._normalize_text(site_address.get("postal_code") or site_address.get("postalCode")),
+            round(latitude, 6) if latitude is not None else None,
+            round(longitude, 6) if longitude is not None else None,
+        )
+
+    async def _persist_manual_request_site_for_client(
+        self,
+        client_tenant: db_tenant_model,
+        site_snapshot: Dict[str, Any],
+    ) -> None:
+        if str(site_snapshot.get("site_source") or "").strip().lower() != "request":
+            return
+
+        profile = dict(client_tenant.profile) if isinstance(getattr(client_tenant, "profile", None), dict) else {}
+        existing_sites_raw = profile.get("sites")
+        existing_sites = list(existing_sites_raw) if isinstance(existing_sites_raw, list) else []
+
+        site_address = cast(Dict[str, Any], site_snapshot.get("site_address") or {})
+        new_site_entry: Dict[str, Any] = {
+            "site_id": str(site_snapshot.get("site_id") or f"request-site-{ObjectId()}"),
+            "site_name": str(site_snapshot.get("site_name") or "").strip(),
+            "site_manager_contact": str(site_snapshot.get("site_manager_contact") or "").strip() or None,
+            "manager_email": str(site_snapshot.get("manager_email") or "").strip() or None,
+            "number_of_guards_required": site_snapshot.get("number_of_guards_required"),
+            "site_type": str(site_snapshot.get("site_type") or "").strip() or None,
+            "google_maps_url": str(site_snapshot.get("google_maps_url") or "").strip() or None,
+            "site_address": {
+                "street": str(site_address.get("street") or "").strip(),
+                "city": str(site_address.get("city") or "").strip(),
+                "country": str(site_address.get("country") or "CA").strip() or "CA",
+                "province": str(site_address.get("province") or "").strip(),
+                "postal_code": str(site_address.get("postal_code") or site_address.get("postalCode") or "").strip(),
+                "latitude": self._as_float(site_address.get("latitude")),
+                "longitude": self._as_float(site_address.get("longitude")),
+            },
+        }
+        new_signature = self._request_site_profile_entry_signature(new_site_entry)
+        changed = False
+
+        for existing_site in existing_sites:
+            if not isinstance(existing_site, dict):
+                continue
+            if self._request_site_profile_entry_signature(existing_site) != new_signature:
+                continue
+
+            for field in ("site_name", "site_manager_contact", "manager_email", "site_type", "google_maps_url"):
+                if not existing_site.get(field) and new_site_entry.get(field):
+                    existing_site[field] = new_site_entry[field]
+                    changed = True
+            if not existing_site.get("site_id") and new_site_entry.get("site_id"):
+                existing_site["site_id"] = new_site_entry["site_id"]
+                changed = True
+            if changed:
+                profile["sites"] = existing_sites
+                client_tenant.profile = profile
+                client_tenant.updated_at = datetime.utcnow()
+                await self._engine.save(client_tenant)
+            return
+
+        existing_sites.append(new_site_entry)
+        profile["sites"] = existing_sites
+        client_tenant.profile = profile
+        client_tenant.updated_at = datetime.utcnow()
+        await self._engine.save(client_tenant)
+
     def _validated_site_snapshot_coordinates(
         self,
         site_snapshot: Dict[str, Any],
@@ -3841,6 +3916,7 @@ class RequestManager:
             updated_at=now,
         )
         saved = await self._engine.save(record)
+        await self._persist_manual_request_site_for_client(client_tenant, site_snapshot)
 
         await NotificationManager.get_instance().create_for_tenant_admin_users(
             tenant_id=str(client_tenant.id),
@@ -3979,6 +4055,9 @@ class RequestManager:
         await self._refresh_request_matching(record, max_results)
         record.updated_at = datetime.utcnow()
         await self._engine.save(record)
+        if str((record.site_snapshot or {}).get("site_source") or "").strip().lower() == "request":
+            client_tenant = await self._get_active_client_tenant_by_id(record.client_tenant_id)
+            await self._persist_manual_request_site_for_client(client_tenant, record.site_snapshot or {})
         from orion.api.interactive.request_shift_manager.request_shift_manager import RequestShiftManager
 
         await RequestShiftManager.get_instance().sync_shift_slots_for_request(record)
@@ -4527,6 +4606,9 @@ class RequestManager:
         await self._mark_assignments_reconfirmation_required(record)
         record.updated_at = datetime.utcnow()
         await self._engine.save(record)
+        if str((record.site_snapshot or {}).get("site_source") or "").strip().lower() == "request":
+            client_tenant = await self._get_active_client_tenant_by_id(record.client_tenant_id)
+            await self._persist_manual_request_site_for_client(client_tenant, record.site_snapshot or {})
         await self._sync_request_runtime_state(record)
 
         return await self._publish_existing_request(

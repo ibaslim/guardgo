@@ -1423,6 +1423,90 @@ async def test_create_request_requires_client_billing_method(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_create_request_manual_site_is_saved_to_client_profile(monkeypatch):
+    manager = object.__new__(RequestManager)
+    engine = FakeEngine()
+    manager._engine = engine
+
+    client_tenant = SimpleNamespace(
+        id=ObjectId("507f1f77bcf86cd799439099"),
+        profile={
+            "billing_method": {
+                "method": "credit_card",
+                "cardholder_name": "Client Ops",
+                "last4": "4242",
+                "expiry_month": "12",
+                "expiry_year": "2030",
+            },
+            "sites": [],
+        },
+    )
+
+    async def _resolve_request_client_tenant(*_args, **_kwargs):
+        return client_tenant
+
+    async def _preview_matches(*_args, **_kwargs):
+        return {"summary": {"eligible_count": 0}, "results": []}
+
+    async def _build_request_pricing_and_invoicing(**_kwargs):
+        return {
+            "pricing_snapshot": {"client_hourly_quote": 28},
+            "invoicing_snapshot": {"contract_type": "short_term"},
+        }
+
+    async def _write_activity(*_args, **_kwargs):
+        return None
+
+    manager._resolve_request_client_tenant = _resolve_request_client_tenant
+    manager._preview_matches_for_request = _preview_matches
+    manager._build_request_pricing_and_invoicing = _build_request_pricing_and_invoicing
+    manager._write_activity = _write_activity
+
+    class _FakeNotificationManager:
+        async def create_for_tenant_admin_users(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(NotificationManager, "get_instance", staticmethod(lambda: _FakeNotificationManager()))
+
+    payload = ClientRequestCreatePayload(
+        title="Manual Site Request",
+        fulfillment_mode="individual_only",
+        guards_required=2,
+        commit=False,
+        site={
+            "site_name": "Temporary Coverage Site",
+            "site_manager_contact": "Ops Desk",
+            "manager_email": "ops@example.com",
+            "site_type": "event",
+            "google_maps_url": "https://maps.google.com/?q=43.6532,-79.3832",
+            "site_address": {
+                "street": "100 Main St",
+                "city": "Toronto",
+                "country": "CA",
+                "province": "ON",
+                "postal_code": "M5H 2N2",
+                "latitude": 43.6532,
+                "longitude": -79.3832,
+            },
+        },
+    )
+
+    result = await manager.create_request(
+        payload=payload,
+        current_user=SimpleNamespace(id="user-1", username="clientadmin", role="client_admin", tenant_uuid=str(client_tenant.id)),
+    )
+
+    assert result["item"]["site_snapshot"]["site_source"] == "request"
+    assert len(client_tenant.profile["sites"]) == 1
+    saved_site = client_tenant.profile["sites"][0]
+    assert saved_site["site_name"] == "Temporary Coverage Site"
+    assert saved_site["manager_email"] == "ops@example.com"
+    assert saved_site["site_address"]["latitude"] == 43.6532
+    assert len(engine.saved) == 2
+    assert getattr(engine.saved[0], "client_tenant_id", "") == str(client_tenant.id)
+
+
+@pytest.mark.anyio
 async def test_preview_request_pricing_returns_mock_snapshots():
     manager = object.__new__(RequestManager)
 
