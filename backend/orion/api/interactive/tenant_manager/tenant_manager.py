@@ -1,7 +1,6 @@
 import re
 import secrets
 import threading
-from copy import deepcopy
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta, timezone
@@ -30,7 +29,6 @@ from orion.api.interactive.tenant_manager.models.tenant_profile_update import Te
 from orion.api.interactive.tenant_manager.models.service_provider_guard_models import (
     ServiceProviderGuardInviteRequest,
     ServiceProviderGuardStatusRequestPayload,
-    ServiceProviderGuardOperationalCoveragePayload,
     GuardStatusRequestDecisionPayload,
     GuardServiceProviderLinkPayload,
     GuardServiceProviderUnlinkPayload,
@@ -50,6 +48,7 @@ from configs.metadata_constants import CANADIAN_PROVINCE_OPTIONS, CANADIAN_CITIE
 class TenantManager:
     __instance = None
     __lock = threading.Lock()
+    MAX_FILES_PER_UPLOAD_OPTION = 2
 
     @staticmethod
     def get_instance():
@@ -104,80 +103,6 @@ class TenantManager:
         actor_provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
         owner_provider_tenant_id = str(getattr(tenant, "service_provider_tenant_id", "") or "").strip()
         return bool(actor_provider_tenant_id) and actor_provider_tenant_id == owner_provider_tenant_id
-
-    @staticmethod
-    def _guard_operational_coverage_snapshot(profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-        data = profile or {}
-        radius = data.get("max_travel_radius_km")
-        try:
-            normalized_radius = round(float(radius), 2) if radius not in [None, ""] else None
-        except Exception:
-            normalized_radius = None
-
-        return {
-            "operational_region_code": TenantManager._normalize_code(data.get("operational_region_code")),
-            "operational_city_code": str(data.get("operational_city_code") or "").strip().upper(),
-            "max_travel_radius_km": normalized_radius,
-        }
-
-    @staticmethod
-    def _guard_weekly_availability_snapshot(profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-        data = profile or {}
-        weekly_availability = data.get("weekly_availability")
-        return deepcopy(weekly_availability) if isinstance(weekly_availability, dict) else {}
-
-    @classmethod
-    def _guard_weekly_availability_is_complete(cls, weekly_availability: Any) -> bool:
-        if not isinstance(weekly_availability, dict):
-            return False
-
-        for day_ranges in weekly_availability.values():
-            if not isinstance(day_ranges, list):
-                continue
-            for entry in day_ranges:
-                if not isinstance(entry, dict):
-                    continue
-                start = str(entry.get("start") or "").strip()
-                end = str(entry.get("end") or "").strip()
-                if start and end:
-                    return True
-        return False
-
-    @classmethod
-    def _ensure_service_provider_guard_managed_profile_ready(cls, tenant: db_tenant_model) -> None:
-        profile = dict(getattr(tenant, "profile", None) or {})
-        coverage = cls._guard_operational_coverage_snapshot(profile)
-        if (
-            not coverage.get("operational_region_code")
-            or not coverage.get("operational_city_code")
-            or coverage.get("max_travel_radius_km") is None
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Service-provider-owned guards must have operational province, city, and radius "
-                    "configured by the owning service provider before approval"
-                ),
-            )
-
-        normalized_profile = cls._validate_and_normalize_profile_for_tenant_type(
-            TenantType.GUARD,
-            deepcopy(profile),
-        )
-        if not cls._guard_weekly_availability_is_complete(normalized_profile.get("weekly_availability")):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Service-provider-owned guards must have weekly availability configured by the owning "
-                    "service provider before approval"
-                ),
-            )
-
-    @classmethod
-    def _self_managed_guard_can_mutate_operational_coverage(cls, tenant: db_tenant_model, current_user: Any) -> bool:
-        if not cls._is_service_provider_owned_guard(tenant):
-            return True
-        return normalize_role_value(getattr(current_user, "role", "")) == user_role.SP_ADMIN.value
 
     @staticmethod
     def _approvals_summary(tenant: db_tenant_model) -> Dict[str, Any]:
@@ -259,19 +184,9 @@ class TenantManager:
         return str(by_label.get(raw.lower()) or "")
 
     @classmethod
-    def _validate_and_normalize_guard_operational_city(
-        cls,
-        profile: Dict[str, Any],
-        *,
-        allow_missing: bool = False,
-    ) -> None:
+    def _validate_and_normalize_guard_operational_city(cls, profile: Dict[str, Any]) -> None:
         region_code = cls._normalize_code(profile.get("operational_region_code"))
         city_code = cls._resolve_city_code(region_code, profile.get("operational_city_code")) if region_code else ""
-
-        if allow_missing and not region_code and not city_code:
-            profile.pop("operational_region_code", None)
-            profile.pop("operational_city_code", None)
-            return
 
         if not region_code:
             raise HTTPException(status_code=400, detail="Guard operational province is required")
@@ -289,30 +204,6 @@ class TenantManager:
 
         profile["operational_region_code"] = region_code
         profile["operational_city_code"] = city_code
-
-    @classmethod
-    def _validate_and_normalize_guard_operational_radius(
-        cls,
-        profile: Dict[str, Any],
-        *,
-        allow_missing: bool = False,
-    ) -> None:
-        raw_radius = profile.get("max_travel_radius_km")
-        if raw_radius in [None, ""]:
-            if allow_missing:
-                profile.pop("max_travel_radius_km", None)
-                return
-            raise HTTPException(status_code=400, detail="Guard operational radius is required")
-
-        try:
-            radius_km = round(float(raw_radius), 2)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Guard operational radius must be a valid number")
-
-        if radius_km < 1:
-            raise HTTPException(status_code=400, detail="Guard operational radius must be at least 1 km")
-
-        profile["max_travel_radius_km"] = radius_km
 
     @classmethod
     def _validate_and_normalize_provider_operating_regions(cls, profile: Dict[str, Any]) -> None:
@@ -450,25 +341,33 @@ class TenantManager:
         profile["operating_regions"] = normalized_regions
 
     @classmethod
-    def _validate_and_normalize_profile_for_tenant_type(
-        cls,
-        tenant_type: TenantType,
-        profile: Dict[str, Any],
-        *,
-        allow_missing_guard_operational_coverage: bool = False,
-    ) -> Dict[str, Any]:
+    def _validate_profile_upload_limits(cls, tenant_type: TenantType, profile: Dict[str, Any]) -> None:
+        def assert_limit(value: Any, label: str) -> None:
+            if isinstance(value, list) and len(value) > cls.MAX_FILES_PER_UPLOAD_OPTION:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"A maximum of {cls.MAX_FILES_PER_UPLOAD_OPTION} {label} is allowed.",
+                )
+
+        if tenant_type == TenantType.GUARD:
+            identification = profile.get("identification")
+            if isinstance(identification, dict):
+                assert_limit(identification.get("documents"), "identification documents")
+            assert_limit(profile.get("security_licenses"), "security licenses")
+            assert_limit(profile.get("police_clearances"), "police clearances")
+            assert_limit(profile.get("training_certificates"), "training certificates")
+        elif tenant_type == TenantType.SERVICE_PROVIDER:
+            assert_limit(profile.get("security_licenses"), "security licenses")
+
+    @classmethod
+    def _validate_and_normalize_profile_for_tenant_type(cls, tenant_type: TenantType, profile: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(profile, dict):
             return profile
 
+        cls._validate_profile_upload_limits(tenant_type, profile)
+
         if tenant_type == TenantType.GUARD:
-            cls._validate_and_normalize_guard_operational_city(
-                profile,
-                allow_missing=allow_missing_guard_operational_coverage,
-            )
-            cls._validate_and_normalize_guard_operational_radius(
-                profile,
-                allow_missing=allow_missing_guard_operational_coverage,
-            )
+            cls._validate_and_normalize_guard_operational_city(profile)
         elif tenant_type == TenantType.SERVICE_PROVIDER:
             cls._validate_and_normalize_provider_operating_regions(profile)
 
@@ -688,22 +587,6 @@ class TenantManager:
         update_payload = data.dump_selected() or {}
         existing_profile = tenant.profile or {}
         merged = TenantManager._deep_merge(existing_profile, update_payload)
-        if (
-            tenant.tenant_type == TenantType.GUARD
-            and not self._self_managed_guard_can_mutate_operational_coverage(tenant, current_user)
-        ):
-            existing_coverage = self._guard_operational_coverage_snapshot(existing_profile)
-            requested_coverage = self._guard_operational_coverage_snapshot(merged)
-            existing_weekly_availability = self._guard_weekly_availability_snapshot(existing_profile)
-            requested_weekly_availability = self._guard_weekly_availability_snapshot(merged)
-            if requested_coverage != existing_coverage or requested_weekly_availability != existing_weekly_availability:
-                raise HTTPException(
-                    status_code=403,
-                    detail=(
-                        "Operational region, radius, and weekly availability for service-provider guards "
-                        "can only be updated by the owning service provider"
-                    ),
-                )
         merged = TenantManager._validate_and_normalize_profile_for_tenant_type(tenant.tenant_type, merged)
 
         tenant.profile = merged
@@ -766,35 +649,9 @@ class TenantManager:
         # Merge profile (only for non-legacy types)
         if data.profile is not None:
             # Ensure profile type matches tenant_type
-            existing = deepcopy(tenant.profile or {})
-            merged = TenantManager._deep_merge(deepcopy(existing), data.profile)
-
-            if (
-                is_update
-                and tenant.tenant_type == TenantType.GUARD
-                and not self._self_managed_guard_can_mutate_operational_coverage(tenant, current_user)
-            ):
-                existing_coverage = self._guard_operational_coverage_snapshot(existing)
-                requested_coverage = self._guard_operational_coverage_snapshot(merged)
-                existing_weekly_availability = self._guard_weekly_availability_snapshot(existing)
-                requested_weekly_availability = self._guard_weekly_availability_snapshot(merged)
-                if requested_coverage != existing_coverage or requested_weekly_availability != existing_weekly_availability:
-                    raise HTTPException(
-                        status_code=403,
-                        detail=(
-                            "Operational region, radius, and weekly availability for service-provider guards "
-                            "can only be updated by the owning service provider"
-                        ),
-                    )
-                allow_missing_guard_operational_coverage = not any(existing_coverage.values())
-            else:
-                allow_missing_guard_operational_coverage = False
-
-            merged = TenantManager._validate_and_normalize_profile_for_tenant_type(
-                tenant.tenant_type,
-                merged,
-                allow_missing_guard_operational_coverage=allow_missing_guard_operational_coverage,
-            )
+            existing = tenant.profile or {}
+            merged = TenantManager._deep_merge(existing, data.profile)
+            merged = TenantManager._validate_and_normalize_profile_for_tenant_type(tenant.tenant_type, merged)
             tenant.profile = merged
 
         if is_update and not is_platform_admin:
@@ -856,7 +713,6 @@ class TenantManager:
         if self._is_service_provider_owned_guard(tenant):
             if not self._can_service_provider_approve_guard(tenant, current_user):
                 raise HTTPException(status_code=403, detail="Only the owning service provider can approve this guard")
-            self._ensure_service_provider_guard_managed_profile_ready(tenant)
         elif normalize_role_value(actor_role) not in {user_role.ADMIN.value, user_role.COMPLIANCE_ADMIN.value}:
             raise HTTPException(status_code=403, detail="Only platform admins can approve this tenant")
 
@@ -1128,12 +984,6 @@ class TenantManager:
         if not guard or guard.tenant_type != TenantType.GUARD:
             raise HTTPException(status_code=404, detail="Guard tenant not found")
         return guard
-
-    async def _get_tenant(self, tenant_id: str) -> db_tenant_model | None:
-        try:
-            return await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(tenant_id))
-        except Exception:
-            return None
 
     def _is_owned_by_service_provider(self, guard: db_tenant_model, service_provider_tenant_id: str) -> bool:
         return (
@@ -1661,99 +1511,6 @@ class TenantManager:
         if not self._is_owned_by_service_provider(guard, provider_tenant_id):
             raise HTTPException(status_code=403, detail="Guard does not belong to your service provider")
         return await self._serialize_tenant(guard)
-
-    async def update_service_provider_guard_operational_coverage(
-        self,
-        guard_tenant_id: str,
-        payload: ServiceProviderGuardOperationalCoveragePayload,
-        current_user,
-    ) -> Dict[str, Any]:
-        provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
-        guard = await self._get_guard_tenant(guard_tenant_id)
-        if not self._is_owned_by_service_provider(guard, provider_tenant_id):
-            raise HTTPException(status_code=403, detail="Guard does not belong to your service provider")
-
-        provider = await self._get_tenant(provider_tenant_id)
-        if not provider or getattr(provider, "tenant_type", None) != TenantType.SERVICE_PROVIDER:
-            raise HTTPException(status_code=404, detail="Service provider not found")
-
-        normalized_provider_profile = dict(provider.profile or {})
-        self._validate_and_normalize_provider_operating_regions(normalized_provider_profile)
-        operating_regions = normalized_provider_profile.get("operating_regions") or []
-
-        target_region_code = self._normalize_code(payload.operational_region_code)
-        target_city_code = self._resolve_city_code(target_region_code, payload.operational_city_code)
-        if not target_region_code or not target_city_code:
-            raise HTTPException(status_code=400, detail="Operational province and city are required")
-
-        matched_city_entry = None
-        for region in operating_regions:
-            if self._normalize_code(region.get("region_code")) != target_region_code:
-                continue
-            for city_entry in region.get("city_entries") or []:
-                if str(city_entry.get("city_code") or "").strip().upper() == target_city_code:
-                    matched_city_entry = city_entry
-                    break
-            if matched_city_entry:
-                break
-
-        if not matched_city_entry:
-            raise HTTPException(
-                status_code=400,
-                detail="The selected operational region must belong to the service provider coverage map",
-            )
-
-        provider_city_radius = matched_city_entry.get("coverage_radius_km")
-        try:
-            provider_city_radius_km = round(float(provider_city_radius), 2) if provider_city_radius is not None else None
-        except Exception:
-            provider_city_radius_km = None
-
-        if provider_city_radius_km is not None and payload.max_travel_radius_km > provider_city_radius_km:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Guard operational radius cannot exceed the service provider coverage radius "
-                    f"for {target_city_code} ({provider_city_radius_km} km)"
-                ),
-            )
-
-        profile = dict(guard.profile or {})
-        profile["operational_region_code"] = target_region_code
-        profile["operational_city_code"] = target_city_code
-        profile["max_travel_radius_km"] = payload.max_travel_radius_km
-        if payload.weekly_availability is not None:
-            profile["weekly_availability"] = deepcopy(payload.weekly_availability)
-        profile = self._validate_and_normalize_profile_for_tenant_type(TenantType.GUARD, profile)
-
-        guard.profile = profile
-        guard.updated_at = datetime.utcnow()
-        await self._engine.save(guard)
-
-        await ActivityManager.get_instance().log_event(
-            module="tenant",
-            entity_type="guard",
-            entity_id=guard_tenant_id,
-            action="operational_coverage_updated_by_service_provider",
-            actor_id=str(getattr(current_user, "id", "") or "") if hasattr(current_user, "id") else None,
-            actor_username=getattr(current_user, "username", None),
-            actor_role=getattr(current_user, "role", None),
-            metadata={
-                "service_provider_tenant_id": provider_tenant_id,
-                "operational_region_code": target_region_code,
-                "operational_city_code": target_city_code,
-                "max_travel_radius_km": payload.max_travel_radius_km,
-                "weekly_availability_updated": payload.weekly_availability is not None,
-            },
-        )
-
-        serialized = await self._serialize_tenant(guard)
-        serialized["message"] = (
-            "Guard operational coverage and weekly availability updated"
-            if payload.weekly_availability is not None
-            else "Guard operational coverage updated"
-        )
-        return serialized
 
     async def delete_expired_pending_guard_invite(self, guard_tenant_id: str, current_user) -> Dict[str, Any]:
         provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()

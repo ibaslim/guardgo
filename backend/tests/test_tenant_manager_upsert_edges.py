@@ -95,3 +95,31 @@ def test_validate_and_normalize_provider_operating_regions_requires_city_coordin
 
     assert exc.value.status_code == 400
     assert "Latitude and longitude are required" in str(exc.value.detail)
+
+
+@pytest.mark.parametrize(
+    ("profile", "detail"),
+    [
+        ({"identification": {"documents": [{}, {}, {}]}}, "identification documents"),
+        ({"security_licenses": [{}, {}, {}]}, "security licenses"),
+        ({"police_clearances": [{}, {}, {}]}, "police clearances"),
+        ({"training_certificates": [{}, {}, {}]}, "training certificates"),
+    ],
+)
+def test_guard_profile_rejects_more_than_two_files_per_upload_option(profile, detail):
+    with pytest.raises(HTTPException) as exc:
+        TenantManager._validate_profile_upload_limits(TenantType.GUARD, profile)
+
+    assert exc.value.status_code == 400
+    assert detail in str(exc.value.detail)
+
+
+def test_service_provider_profile_rejects_more_than_two_security_licenses():
+    with pytest.raises(HTTPException) as exc:
+        TenantManager._validate_profile_upload_limits(
+            TenantType.SERVICE_PROVIDER,
+            {"security_licenses": [{}, {}, {}]},
+        )
+
+    assert exc.value.status_code == 400
+    assert "security licenses" in str(exc.value.detail)

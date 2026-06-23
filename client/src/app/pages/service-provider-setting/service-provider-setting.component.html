@@ -9,7 +9,7 @@
 </ng-template>
 
 <ng-template #formContent>
-    <form (ngSubmit)="submitProviderForm()" class="space-y-8">
+    <form #settingsForm (ngSubmit)="submitProviderForm()" class="space-y-8">
         <app-section title="Logo" subtitle="Used on proposals and client-facing materials.">
             <ng-container *ngIf="!readonly">
                 <app-profile-picture-upload [maxSizeKb]="500" [title]="'Company Logo'"
@@ -315,7 +315,9 @@
 
             <div class="flex justify-center pt-4" *ngIf="!readonly">
                 <app-button label="+ Add Security License" type="secondary" [htmlType]="'button'"
-                    [customClass]="'rounded-lg'" (click)="addSecurityLicense()">
+                    [customClass]="'rounded-lg'"
+                    [disabled]="providerFormModel.securityLicenses.length >= maxFilesPerUploadOption"
+                    (click)="addSecurityLicense()">
                 </app-button>
             </div>
         </app-section>

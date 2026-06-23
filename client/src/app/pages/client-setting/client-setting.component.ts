@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -20,6 +20,8 @@ import { AppService } from '../../services/core/app/app.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import { TenantUpdateResponse } from '../../shared/model/tenant/tenant.model';
+import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
+import { scrollToFirstFormError } from '../../shared/helpers/form-error-navigation.helper';
 import {
   buildAlphabeticDummyTag,
   buildSeededCaPhone,
@@ -110,6 +112,7 @@ interface Client {
   styleUrl: './client-setting.component.css'
 })
 export class ClientSettingComponent implements OnInit, OnDestroy {
+  @ViewChild('settingsForm') settingsForm?: ElementRef<HTMLFormElement>;
   readonly showDummyDataButton = isLocalhostForDummyData();
   readonly billingExpiryMonthOptions = Array.from({ length: 12 }, (_, index) => {
     const month = String(index + 1).padStart(2, '0');
@@ -182,7 +185,13 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     private router: Router,
     private appService: AppService,
     private addressConsistencyService: GoogleMapsAddressConsistencyService,
+    private notification: MessageNotificationService,
   ) { }
+
+  private showValidationFeedback(): void {
+    this.notification.error('Please correct the highlighted fields before saving.');
+    scrollToFirstFormError(this.settingsForm?.nativeElement);
+  }
 
   ngOnInit(): void {
     this.loadClientMetadata(() => {
@@ -822,10 +831,12 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     }
 
     if (!this.validateClientForm()) {
+      this.showValidationFeedback();
       return;
     }
 
     if (!(await this.validateSiteAddressConsistency())) {
+      this.showValidationFeedback();
       return;
     }
 
