@@ -91,6 +91,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.role === 'sp_admin' && this.tenantType === 'service_provider';
   }
 
+  get isClient(): boolean {
+    return this.role === 'client_admin' && this.tenantType === 'client';
+  }
+
   get isGuard(): boolean {
     return this.role === 'guard_admin' && this.tenantType === 'guard';
   }
@@ -101,6 +105,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     if (this.isServiceProvider) {
       return 'Live view of your incoming offers, committed coverage, issued invoices, and provider team capacity.';
+    }
+    if (this.isClient) {
+      return 'Operational view of your open requests, active staffing, and the next scheduled shift workload across your sites.';
     }
     return 'Live view of your offers, accepted work, upcoming shifts, and issued payout-side invoices.';
   }
@@ -152,6 +159,31 @@ export class DashboardComponent implements OnInit, OnDestroy {
           label: "This Month's Pay",
           value: this.formatMoney(this.currentMonthInvoiceTotal),
           helperText: `${this.currentMonthInvoiceHours} planned hours`,
+        },
+      ];
+    }
+
+    if (this.isClient) {
+      return [
+        {
+          label: 'Open Requests',
+          value: this.openRequests.length,
+          helperText: `${this.pendingReviewRequests.length} pending review`,
+        },
+        {
+          label: 'Active Jobs',
+          value: this.activeJobs.length,
+          helperText: `${this.inProgressJobs.length} already in progress`,
+        },
+        {
+          label: 'Upcoming Shifts (7d)',
+          value: this.upcomingShifts.length,
+          helperText: `${this.partiallyStaffedShifts.length} not fully staffed`,
+        },
+        {
+          label: 'Coverage Risk',
+          value: this.coverageRiskRequests.length + this.partiallyStaffedShifts.length,
+          helperText: 'Requests or shifts still missing coverage',
         },
       ];
     }
@@ -235,6 +267,35 @@ export class DashboardComponent implements OnInit, OnDestroy {
           actionLabel: 'Open My Invoices',
           actionRoute: '/dashboard/my-invoices',
           items: this.invoiceItems,
+        },
+      ];
+    }
+
+    if (this.isClient) {
+      return [
+        {
+          title: 'Requests Needing Attention',
+          subtitle: 'Demand that still needs review or additional staffing coverage.',
+          emptyMessage: 'No requests currently need staffing attention.',
+          actionLabel: 'Open Requests',
+          actionRoute: '/dashboard/requests?tab=requests',
+          items: this.platformAttentionItems,
+        },
+        {
+          title: 'Upcoming Shift Operations',
+          subtitle: 'The next scheduled shift workload across your client requests.',
+          emptyMessage: 'No shifts are scheduled in the next 7 days.',
+          actionLabel: 'Open Shifts',
+          actionRoute: '/dashboard/requests?tab=shifts',
+          items: this.platformShiftItems,
+        },
+        {
+          title: 'Recent Job Activity',
+          subtitle: 'The most recently updated assignment records tied to your requests.',
+          emptyMessage: 'No job activity has been recorded yet.',
+          actionLabel: 'Open Jobs',
+          actionRoute: '/dashboard/requests?tab=jobs',
+          items: this.platformJobItems,
         },
       ];
     }
@@ -419,6 +480,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.shifts = response.shifts.items || [];
           this.myInvoices = response.myInvoices.items || [];
           this.providerGuards = response.providerGuards.items || [];
+          this.loading = false;
+        },
+        error: () => {
+          this.loading = false;
+        },
+      }));
+      return;
+    }
+
+    if (this.isClient) {
+      this.subscriptions.add(forkJoin({
+        requests: this.requestService.listRequests(1, rows, '', '', '', '', { loadingMode: 'global' }),
+        jobs: this.requestService.listJobs(1, rows, '', '', { loadingMode: 'global' }),
+        shifts: this.requestService.listShifts(1, rows, '', '', today, nextWeek, { loadingMode: 'global' }),
+      }).subscribe({
+        next: (response) => {
+          this.requests = response.requests.items || [];
+          this.jobs = response.jobs.items || [];
+          this.shifts = response.shifts.items || [];
           this.loading = false;
         },
         error: () => {
