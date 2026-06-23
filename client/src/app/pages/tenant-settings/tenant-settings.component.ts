@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, EventEmitter, OnInit, OnDestroy, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -30,6 +30,8 @@ export class TenantSettingsComponent implements OnInit, OnDestroy {
   @Input() showPageWrapper: boolean = true;
   @Input() tenantDataInput: any = null;
   @Input() readonly: boolean = false;
+  @Input() allowProviderOperationalCoverageEdit: boolean = false;
+  @Output() managedOperationalCoverageUpdated = new EventEmitter<void>();
   private destroy$ = new Subject<void>();
 
   tenantType: 'guard' | 'client' | 'service_provider' | 'admin' | null = null;

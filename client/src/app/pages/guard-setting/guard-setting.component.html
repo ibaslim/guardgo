@@ -71,13 +71,28 @@
 
                 <div class="flex flex-col">
                     <app-select-input label="Distance Unit" [name]="'distanceUnit'" [(ngModel)]="selectedDistanceUnit"
-                        [options]="distanceUnitOptions" [disabled]="readonly" (ngModelChange)="onDistanceUnitChange($event)">
+                        [options]="distanceUnitOptions" [disabled]="readonly && !isProviderOperationalCoverageEditMode" (ngModelChange)="onDistanceUnitChange($event)">
                     </app-select-input>
                 </div>
                 <div class="flex flex-col">
-                    <app-base-input [label]="operationalRadiusLabel" name="operationalRadius" type="number"
-                        [(ngModel)]="guardFormModel.operationalRadius" [min]="minimumOperationalRadiusDisplay" [disabled]="readonly"></app-base-input>
-                    <p class="text-xs sm:text-xs text-gray-500 mt-2">Leave blank if you are location-flexible. Minimum {{ minimumOperationalRadiusText }}.</p>
+                    <ng-container *ngIf="isProviderOperationalCoverageEditMode; else standardOperationalRadius">
+                        <app-base-input [label]="operationalRadiusLabel" name="operationalRadius" type="number"
+                            [(ngModel)]="providerCoverageForm.operationalRadius" [min]="minimumOperationalRadiusDisplay" [disabled]="!canEditOperationalCoverage"></app-base-input>
+                    </ng-container>
+                    <ng-template #standardOperationalRadius>
+                        <app-base-input [label]="operationalRadiusLabel" name="operationalRadius" type="number"
+                            [(ngModel)]="guardFormModel.operationalRadius" [min]="minimumOperationalRadiusDisplay" [disabled]="!canEditOperationalCoverage"></app-base-input>
+                    </ng-template>
+                    <p class="text-xs sm:text-xs text-gray-500 mt-2">
+                        {{ isProviderOperationalCoverageEditMode
+                          ? 'Defaults to the service provider city coverage radius, but you can adjust it before saving.'
+                          : isOperationalCoverageLocked
+                          ? 'This operational radius is assigned and managed by your service provider.'
+                          : 'Leave blank if you are location-flexible. Minimum ' + minimumOperationalRadiusText + '.' }}
+                    </p>
+                    <p class="text-xs sm:text-xs text-sky-700 mt-1" *ngIf="isProviderOperationalCoverageEditMode && selectedProviderManagedCityRadiusKm != null">
+                        Provider default for this city: {{ selectedProviderManagedCityRadiusKm }} km.
+                    </p>
                     <app-error-message [errorMessage]="guardErrors.operationalRadius || null"></app-error-message>
                 </div>
             </div>
@@ -143,22 +158,75 @@
         </app-section>
 
         <app-section title="Operational region" subtitle="Where you actively accept and prioritize shifts.">
+            <app-alert
+                *ngIf="isOperationalCoverageLocked || isProviderOperationalCoverageEditMode"
+                type="info"
+                [closable]="false"
+                [message]="operationalCoverageAlertMessage">
+            </app-alert>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="flex flex-col">
-                    <app-select-input label="Operational Province" [name]="'operationalRegionCode'"
-                        [(ngModel)]="guardFormModel.operationalRegionCode" [options]="provinceOptions"
-                        placeholder="-- Select Province --" [required]="true" [searchable]="true"
-                        (ngModelChange)="onOperationalRegionChange($event)" [disabled]="readonly">
-                    </app-select-input>
+                    <ng-container *ngIf="isProviderOperationalCoverageEditMode; else standardOperationalProvince">
+                        <label class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                            Operational Province<span class="text-red-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <select
+                                class="block w-full appearance-none rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2 text-left text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
+                                [name]="'providerOperationalRegionCode'"
+                                [(ngModel)]="providerCoverageForm.operationalRegionCode"
+                                (ngModelChange)="onProviderCoverageRegionSelect($event)"
+                                [disabled]="!canEditOperationalCoverage">
+                                <option value="">-- Select Province --</option>
+                                <option *ngFor="let option of providerManagedOperationalProvinceOptions" [value]="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </select>
+                            <svg class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                    </ng-container>
+                    <ng-template #standardOperationalProvince>
+                        <app-select-input label="Operational Province" [name]="'operationalRegionCode'"
+                            [(ngModel)]="guardFormModel.operationalRegionCode" [options]="operationalProvinceOptions"
+                            placeholder="-- Select Province --" [required]="true" [searchable]="true"
+                            (ngModelChange)="onOperationalRegionChange($event)" [disabled]="!canEditOperationalCoverage">
+                        </app-select-input>
+                    </ng-template>
                     <app-error-message [errorMessage]="guardErrors.operationalRegionCode || null"></app-error-message>
                 </div>
 
                 <div class="flex flex-col">
-                    <app-select-input label="Operational City" [name]="'operationalCityCode'"
-                        [(ngModel)]="guardFormModel.operationalCityCode" [options]="getOperationalCityOptions()"
-                        placeholder="-- Select City --" [required]="true" [searchable]="true"
-                        [disabled]="readonly || !guardFormModel.operationalRegionCode">
-                    </app-select-input>
+                    <ng-container *ngIf="isProviderOperationalCoverageEditMode; else standardOperationalCity">
+                        <label class="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+                            Operational City<span class="text-red-500">*</span>
+                        </label>
+                        <div class="relative">
+                            <select
+                                class="block w-full appearance-none rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2 text-left text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:cursor-not-allowed"
+                                [name]="'providerOperationalCityCode'"
+                                [(ngModel)]="providerCoverageForm.operationalCityCode"
+                                (ngModelChange)="onProviderCoverageCitySelect($event)"
+                                [disabled]="!canEditOperationalCoverage || !providerCoverageForm.operationalRegionCode">
+                                <option value="">-- Select City --</option>
+                                <option *ngFor="let option of providerCoverageCityOptions" [value]="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </select>
+                            <svg class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </div>
+                    </ng-container>
+                    <ng-template #standardOperationalCity>
+                        <app-select-input label="Operational City" [name]="'operationalCityCode'"
+                            [(ngModel)]="guardFormModel.operationalCityCode" [options]="getOperationalCityOptions()"
+                            placeholder="-- Select City --" [required]="true" [searchable]="true"
+                            (ngModelChange)="onOperationalCityChange($event)"
+                            [disabled]="!canEditOperationalCoverage || !guardFormModel.operationalRegionCode">
+                        </app-select-input>
+                    </ng-template>
                     <app-error-message [errorMessage]="guardErrors.operationalCityCode || null"></app-error-message>
                 </div>
             </div>
@@ -676,9 +744,15 @@
 
         <app-section title="Weekly Availability" subtitle="Set preferred shift windows."
             containerClass="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/60 shadow-sm p-4 sm:p-6 space-y-4 sm:space-y-6">
+            <app-alert
+                *ngIf="isWeeklyAvailabilityLocked || isProviderOperationalCoverageEditMode"
+                type="info"
+                [closable]="false"
+                [message]="weeklyAvailabilityAlertMessage">
+            </app-alert>
 
             <app-weekly-availability label="Weekly Availability" name="availability"
-                [(ngModel)]="guardFormModel.weeklyAvailability" [disabled]="readonly">
+                [(ngModel)]="guardFormModel.weeklyAvailability" [disabled]="!canEditWeeklyAvailability">
             </app-weekly-availability>
 
             <!-- Add error message if validation fails -->
@@ -690,16 +764,20 @@
             <app-error-message [errorMessage]="guardErrors.submit"></app-error-message>
         </div>
 
-        <app-sticky-action-bar *ngIf="!readonly" [message]="'Save to continue onboarding.'">
-            <app-button *ngIf="showDummyDataButton" [label]="'Fill Dummy Data'" type="secondary"
+        <app-sticky-action-bar *ngIf="!readonly || isProviderOperationalCoverageEditMode" [message]="isProviderOperationalCoverageEditMode ? 'Save the service-provider-managed operational coverage and weekly availability for this guard.' : 'Save to continue onboarding.'">
+            <app-button *ngIf="showDummyDataButton && !isProviderOperationalCoverageEditMode" [label]="'Fill Dummy Data'" type="secondary"
                 [htmlType]="'button'" [disabled]="isSubmitting" [fullWidth]="true" size="lg"
                 [customClass]="'w-full md:w-auto rounded-lg'" (pressed)="fillDummyData()">
+            </app-button>
+            <app-button *ngIf="isProviderOperationalCoverageEditMode" [label]="isSubmitting ? 'Saving...' : 'Save Availability & Coverage'" type="primary"
+                [htmlType]="'submit'" [disabled]="isSubmitting" [fullWidth]="true" size="lg"
+                [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>
             <app-button *ngIf="!isEditMode" [label]="isSubmitting ? 'Submitting...' : 'Submit'" type="primary"
                 [htmlType]="'submit'" [disabled]="isSubmitting" [fullWidth]="true" size="lg"
                 [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>
-            <app-button *ngIf="isEditMode" [label]="isSubmitting ? 'Saving...' : 'Save Changes'" type="success"
+            <app-button *ngIf="isEditMode && !isProviderOperationalCoverageEditMode" [label]="isSubmitting ? 'Saving...' : 'Save Changes'" type="success"
                 [htmlType]="'submit'" [disabled]="isSubmitting" [fullWidth]="true" size="lg"
                 [customClass]="'w-full md:w-auto rounded-lg'">
             </app-button>

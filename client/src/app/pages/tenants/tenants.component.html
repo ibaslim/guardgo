@@ -195,7 +195,13 @@
           ></app-tenant-admin-user-summary>
         </div>
       </div>
-      <app-tenant-settings [tenantDataInput]="tenantDetail" [readonly]="true" [showPageWrapper]="false"></app-tenant-settings>
+      <app-tenant-settings
+        [tenantDataInput]="tenantDetail"
+        [readonly]="true"
+        [showPageWrapper]="false"
+        (managedOperationalCoverageUpdated)="onManagedOperationalCoverageUpdated()"
+        [allowProviderOperationalCoverageEdit]="isManagedServiceProviderGuardDetail()">
+      </app-tenant-settings>
     </div>
     <ng-template #loadingDetail>
       <div class="space-y-6 py-2">

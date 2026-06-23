@@ -351,21 +351,23 @@ class RequestMatchingManager:
         payload: RequestMatchingPreviewPayload,
         *,
         allow_provider_owned: bool = False,
+        provider_operating_regions: Optional[List[Dict[str, Any]]] = None,
     ) -> RequestMatchCandidate:
         request_address = payload.site_address
         request_country = self._normalize_country_code(request_address.country)
         request_province = self._normalize_region_code(request_address.province, request_country)
+        normalized_ownership = str(getattr(ownership_type, "value", ownership_type) or "").strip().lower()
+        is_provider_owned = normalized_ownership == GuardOwnershipType.SERVICE_PROVIDER.value
 
         home_address = profile.get("home_address") if isinstance(profile.get("home_address"), dict) else {}
         home_country = self._normalize_country_code(home_address.get("country") or request_country)
         province = self._normalize_region_code(
-            profile.get("operational_region_code") or home_address.get("province"),
+            profile.get("operational_region_code") if is_provider_owned else (profile.get("operational_region_code") or home_address.get("province")),
             home_country,
         )
-        city = self._first_non_empty_string([
-            profile.get("operational_city_code"),
-            home_address.get("city"),
-        ])
+        city = self._first_non_empty_string(
+            [profile.get("operational_city_code")] if is_provider_owned else [profile.get("operational_city_code"), home_address.get("city")]
+        )
 
         max_radius_km = self._as_float(profile.get("max_travel_radius_km"))
         lat = self._as_float(home_address.get("latitude"))
@@ -386,9 +388,13 @@ class RequestMatchingManager:
             radius_mi=km_to_miles(max_radius_km) if max_radius_km is not None else None,
         )
 
-        normalized_ownership = str(getattr(ownership_type, "value", ownership_type) or "").strip().lower()
-        if not allow_provider_owned and normalized_ownership == GuardOwnershipType.SERVICE_PROVIDER.value:
+        if not allow_provider_owned and is_provider_owned:
             candidate.reason_code = "ownership_excluded"
+            candidate.distance_source = "province_fallback"
+            return candidate
+
+        if is_provider_owned and (not province or not city or max_radius_km is None):
+            candidate.reason_code = "managed_profile_incomplete"
             candidate.distance_source = "province_fallback"
             return candidate
 
@@ -419,6 +425,33 @@ class RequestMatchingManager:
             candidate.distance_source = "province_fallback"
             return candidate
 
+        if allow_provider_owned:
+            operational_city = self._normalize_text(profile.get("operational_city_code"))
+            provider_anchor_found = False
+            for region in provider_operating_regions or []:
+                if not isinstance(region, dict):
+                    continue
+                region_country = self._normalize_country_code(region.get("country") or request_country)
+                region_code = self._normalize_region_code(region.get("region_code") or region.get("province"), region_country)
+                if region_code != province:
+                    continue
+                for city_entry in region.get("city_entries") or []:
+                    if not isinstance(city_entry, dict):
+                        continue
+                    city_code = self._normalize_text(city_entry.get("city_code"))
+                    city_name = self._normalize_text(city_entry.get("city"))
+                    if operational_city and operational_city not in {city_code, city_name}:
+                        continue
+                    provider_lat = self._as_float(city_entry.get("latitude"))
+                    provider_lon = self._as_float(city_entry.get("longitude"))
+                    if provider_lat is not None and provider_lon is not None:
+                        lat = provider_lat
+                        lon = provider_lon
+                        provider_anchor_found = True
+                        break
+                if provider_anchor_found:
+                    break
+
         if None in [lat, lon, req_lat, req_lon]:
             candidate.reason_code = "missing_geo"
             candidate.distance_source = "province_fallback"
@@ -443,11 +476,17 @@ class RequestMatchingManager:
     def _provider_guard_capacity_from_tenants(
         self,
         provider_tenant_id: str,
+        provider_profile: Dict[str, Any],
         guards: List[db_tenant_model],
         payload: RequestMatchingPreviewPayload,
         reserved_guard_count: int = 0,
     ) -> Dict[str, int]:
         normalized_provider_id = str(provider_tenant_id or "").strip()
+        provider_operating_regions = (
+            provider_profile.get("operating_regions")
+            if isinstance(provider_profile.get("operating_regions"), list)
+            else []
+        )
         linked_guards = [
             guard
             for guard in guards
@@ -463,6 +502,7 @@ class RequestMatchingManager:
                 profile,
                 payload,
                 allow_provider_owned=True,
+                provider_operating_regions=provider_operating_regions,
             )
             if candidate.eligible:
                 eligible_guard_count += 1
@@ -786,6 +826,7 @@ class RequestMatchingManager:
                 if best_candidate.eligible:
                     provider_capacity = self._provider_guard_capacity_from_tenants(
                         tenant_id,
+                        profile,
                         provider_guards_by_provider_id.get(tenant_id, []),
                         payload,
                         reserved_guard_count=provider_reserved_capacity_by_provider_id.get(tenant_id, 0),
