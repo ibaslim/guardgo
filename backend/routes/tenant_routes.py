@@ -9,6 +9,7 @@ from orion.api.interactive.resource_manager.resource_manager import ResourceMana
 from orion.api.interactive.tenant_manager.models.tenant_param_model import tenant_param_model
 from orion.api.interactive.tenant_manager.models.service_provider_guard_models import (
     ServiceProviderGuardInviteRequest,
+    ServiceProviderGuardOperationalCoveragePayload,
     ServiceProviderGuardStatusRequestPayload,
     GuardStatusRequestDecisionPayload,
     GuardServiceProviderLinkPayload,
@@ -591,6 +592,24 @@ async def get_service_provider_guard_details(
     current_user=Depends(get_current_user),
 ):
     return await TenantManager.get_instance().get_service_provider_guard(guard_tenant_id, current_user)
+
+
+@tenant_routes.put(
+    "/api/sp/guards/{guard_tenant_id}/operational-coverage",
+    summary="Update managed guard operational coverage",
+    status_code=200,
+    dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
+)
+async def update_service_provider_guard_operational_coverage(
+    guard_tenant_id: str,
+    payload: ServiceProviderGuardOperationalCoveragePayload,
+    current_user=Depends(get_current_user),
+):
+    return await TenantManager.get_instance().update_service_provider_guard_operational_coverage(
+        guard_tenant_id,
+        payload,
+        current_user,
+    )
 
 
 @tenant_routes.delete(

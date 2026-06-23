@@ -288,6 +288,12 @@ export class TenantsComponent implements OnInit {
     return role === 'sp_admin';
   }
 
+  isManagedServiceProviderGuardDetail(): boolean {
+    return this.isSpAdmin()
+      && String(this.tenantDetail?.tenant_type || '').toLowerCase() === 'guard'
+      && String(this.tenantDetail?.ownership_type || '').toLowerCase() === 'service_provider';
+  }
+
   isSuperAdmin(): boolean {
     const rawRole = String(this.appService.userSessionData()?.user?.role || '').trim().toLowerCase();
     const role = rawRole.includes('.') ? (rawRole.split('.').pop() || '') : rawRole;
@@ -577,6 +583,21 @@ export class TenantsComponent implements OnInit {
   onCloseDrawer() {
     this.cancelTenantDetailFlow();
     this.router.navigate(['/dashboard/tenants']).then();
+  }
+
+  onManagedOperationalCoverageUpdated() {
+    if (!this.tenantDetail || !this.isManagedServiceProviderGuardDetail()) {
+      return;
+    }
+
+    const id = this.tenantDetail.id || this.tenantDetail._id;
+    if (!id) {
+      return;
+    }
+
+    this.tenantDetailLoading = true;
+    this.loadTenantById(id);
+    this.loadPage(this.page);
   }
 
   openTenantLogs(row: any) {
