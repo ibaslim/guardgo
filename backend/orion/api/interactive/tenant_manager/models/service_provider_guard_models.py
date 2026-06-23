@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
@@ -45,3 +45,23 @@ class GuardServiceProviderLinkPayload(BaseModel):
 
 class GuardServiceProviderUnlinkPayload(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
+
+
+class ServiceProviderGuardOperationalCoveragePayload(BaseModel):
+    operational_region_code: str = Field(min_length=2, max_length=50)
+    operational_city_code: str = Field(min_length=1, max_length=100)
+    max_travel_radius_km: float = Field(gt=0, description="Operational radius in kilometers.")
+    weekly_availability: Optional[Dict[str, Any]] = None
+
+    @field_validator("operational_region_code", "operational_city_code")
+    @classmethod
+    def normalize_code_fields(cls, value: str) -> str:
+        return str(value or "").strip()
+
+    @field_validator("max_travel_radius_km")
+    @classmethod
+    def normalize_radius(cls, value: float) -> float:
+        normalized = round(float(value), 2)
+        if normalized < 1:
+            raise ValueError("max_travel_radius_km must be at least 1")
+        return normalized

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, OnInit, OnDestroy } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, OnDestroy, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -22,6 +22,7 @@ import { ClientPreferredGuardTypesComponent } from '../../components/client-pref
 import { AlertComponent } from '../../components/alert/alert.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
+import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { getIssuingAuthorityForProvince } from '../../shared/constants/provincial-authorities.constants';
 import { Guard, GuardErrors, IdentificationDocument, SecurityLicenseDocument, PoliceClearanceRecord, TrainingCertificate, WeeklyAvailability } from '../../shared/model/guard';
@@ -70,17 +71,37 @@ import {
   templateUrl: './guard-setting.component.html',
   styleUrls: ['./guard-setting.component.css']
 })
-export class GuardSettingComponent implements OnInit, OnDestroy {
+export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
   readonly showDummyDataButton = isLocalhostForDummyData();
   managedByProviderName = '';
   homeAddressMapUrl = '';
   guardHomeLocationSelected = false;
   guardHomeLocationStale = false;
+  private providerManagedOperatingRegions: any[] = [];
+  private providerManagedOperatingRegionsLoaded = false;
+  providerCoverageProvinceOptions: { value: string; label: string }[] = [];
+  providerCoverageCityOptions: { value: string; label: string }[] = [];
+  private providerCoverageRegions: Array<{
+    value: string;
+    label: string;
+    cityOptions: Array<{ value: string; label: string; radiusKm: number | null }>;
+  }> = [];
+  providerCoverageForm: {
+    operationalRegionCode: string;
+    operationalCityCode: string;
+    operationalRadius: number | null;
+  } = {
+    operationalRegionCode: '',
+    operationalCityCode: '',
+    operationalRadius: null,
+  };
 
   @Input() showPageWrapper: boolean = true;
   @Input() readonly: boolean = false;
   @Input() guardData?: Guard;
   @Input() profileTenantId?: string;
+  @Input() allowProviderOperationalCoverageEdit: boolean = false;
+  @Output() managedOperationalCoverageUpdated = new EventEmitter<void>();
 
   isEditMode = false;
 
@@ -382,6 +403,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
 
   guardErrors: GuardErrors = {};
   isSubmitting = false;
+  private guardMetadataLoaded = false;
   private destroy$ = new Subject<void>();
   private lastAutoLegalName = '';
   private _cachedProfileImageUrl: string | null = null;
@@ -404,7 +426,57 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   trainingCertificateUploadErrors: Record<string, string> = {};
 
   get showServiceProviderInfo(): boolean {
-    return !this.readonly && !!this.serviceProviderDisplayName;
+    return !this.readonly && !this.isProviderOperationalCoverageEditMode && !!this.serviceProviderDisplayName;
+  }
+
+  get isOperationalCoverageLocked(): boolean {
+    return !this.isProviderOperationalCoverageEditMode && !this.readonly && !!this.serviceProviderDisplayName;
+  }
+
+  get isWeeklyAvailabilityLocked(): boolean {
+    return !this.isProviderOperationalCoverageEditMode && !this.readonly && !!this.serviceProviderDisplayName;
+  }
+
+  get isProviderOperationalCoverageEditMode(): boolean {
+    return this.readonly && this.allowProviderOperationalCoverageEdit;
+  }
+
+  get canEditOperationalCoverage(): boolean {
+    return this.isProviderOperationalCoverageEditMode || !this.isOperationalCoverageLocked;
+  }
+
+  get canEditWeeklyAvailability(): boolean {
+    return this.isProviderOperationalCoverageEditMode || !this.isWeeklyAvailabilityLocked;
+  }
+
+  get operationalCoverageAlertMessage(): string {
+    if (this.isProviderOperationalCoverageEditMode) {
+      return "You are editing this guard's operational region and radius as the owning service provider.";
+    }
+    return `Operational region and radius for this guard are managed by service provider: ${this.serviceProviderDisplayName || ''}`;
+  }
+
+  get weeklyAvailabilityAlertMessage(): string {
+    if (this.isProviderOperationalCoverageEditMode) {
+      return "You are editing this guard's weekly availability as the owning service provider.";
+    }
+    return `Weekly availability for this guard is managed by service provider: ${this.serviceProviderDisplayName || ''}`;
+  }
+
+  get providerManagedOperationalProvinceOptions(): { value: string; label: string }[] {
+    return this.providerCoverageProvinceOptions;
+  }
+
+  get selectedProviderManagedCityRadiusKm(): number | null {
+    const selectedRegion = String(this.providerCoverageForm.operationalRegionCode || '').trim().toUpperCase();
+    const selectedCity = String(this.providerCoverageForm.operationalCityCode || '').trim().toUpperCase();
+    if (!selectedRegion || !selectedCity) {
+      return null;
+    }
+
+    const region = this.providerCoverageRegions.find(entry => entry.value === selectedRegion);
+    const cityEntry = region?.cityOptions.find(entry => entry.value === selectedCity);
+    return cityEntry?.radiusKm ?? null;
   }
 
   get serviceProviderDisplayName(): string {
@@ -428,13 +500,28 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           const ownershipType = String(response?.ownership_type || '').trim().toLowerCase();
           const providerName = String(response?.service_provider?.name || '').trim();
           const providerId = String(response?.service_provider?.id || response?.service_provider_tenant_id || '').trim();
+          const operatingRegions = Array.isArray(response?.profile?.operating_regions)
+            ? response.profile.operating_regions
+            : [];
+
+          this.providerManagedOperatingRegionsLoaded = true;
+          this.providerManagedOperatingRegions = tenantType === 'service_provider' ? operatingRegions : [];
+          this.hydrateProviderCoverageRegions(this.providerManagedOperatingRegions);
 
           this.managedByProviderName = tenantType === 'guard' && ownershipType === 'service_provider'
             ? (providerName || providerId)
             : '';
+
+          if (this.isProviderOperationalCoverageEditMode) {
+            this.initializeProviderCoverageForm();
+            this.seedProviderManagedOperationalCoverageDefaults();
+          }
         },
         error: () => {
           this.managedByProviderName = '';
+          this.providerManagedOperatingRegionsLoaded = true;
+          this.providerManagedOperatingRegions = [];
+          this.hydrateProviderCoverageRegions([]);
         }
       });
   }
@@ -444,6 +531,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     private router: Router,
     private appService: AppService,
     private addressConsistencyService: GoogleMapsAddressConsistencyService,
+    private notification: MessageNotificationService,
   ) { }
 
   ngOnInit(): void {
@@ -453,12 +541,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     this.selectedDistanceUnit = preferredUnit === 'mi' ? 'mi' : 'km';
 
     this.loadGuardMetadata(() => {
-      if (this.guardData && this.hasGuardData(this.guardData)) {
-        this.guardFormModel = this.transformBackendDataToForm(this.guardData);
-        this.isEditMode = true;
-      } else {
-        this.isEditMode = false;
+      this.guardMetadataLoaded = true;
+      if (this.providerManagedOperatingRegionsLoaded) {
+        this.hydrateProviderCoverageRegions(this.providerManagedOperatingRegions);
       }
+      this.hydrateGuardFormFromInput();
 
       // If a profileTenantId is provided (viewing another tenant), ensure any profile-specific data can be shown
       if (this.profileTenantId) {
@@ -468,6 +555,33 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       this.ensureCanadaDocumentDefaults();
       this.lastAutoLegalName = this.guardFormModel.name || '';
     });
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.guardMetadataLoaded) {
+      return;
+    }
+
+    if (changes['guardData'] || changes['readonly'] || changes['allowProviderOperationalCoverageEdit']) {
+      this.hydrateGuardFormFromInput();
+    }
+  }
+
+  private hydrateGuardFormFromInput(): void {
+    if (this.guardData) {
+      this.guardFormModel = this.transformBackendDataToForm(this.guardData);
+      this.isEditMode = true;
+    } else {
+      this.isEditMode = false;
+    }
+
+    if (this.isProviderOperationalCoverageEditMode) {
+      if (this.providerManagedOperatingRegionsLoaded) {
+        this.hydrateProviderCoverageRegions(this.providerManagedOperatingRegions);
+      }
+      this.initializeProviderCoverageForm();
+      this.seedProviderManagedOperationalCoverageDefaults();
+    }
   }
 
   get operationalRadiusLabel(): string {
@@ -488,13 +602,22 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const operationalRadius = this.parseOperationalRadius(this.guardFormModel.operationalRadius);
+    const operationalRadius = this.parseOperationalRadius(
+      this.isProviderOperationalCoverageEditMode
+        ? this.providerCoverageForm.operationalRadius
+        : this.guardFormModel.operationalRadius
+    );
     if (operationalRadius != null) {
-      this.guardFormModel.operationalRadius = this.convertDistanceBetweenUnits(
+      const convertedRadius = this.convertDistanceBetweenUnits(
         operationalRadius,
         this.selectedDistanceUnit,
         nextUnit
       );
+      if (this.isProviderOperationalCoverageEditMode) {
+        this.providerCoverageForm.operationalRadius = convertedRadius;
+      } else {
+        this.guardFormModel.operationalRadius = convertedRadius;
+      }
     }
 
     this.selectedDistanceUnit = nextUnit;
@@ -528,6 +651,34 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     return Number.isFinite(parsedValue) ? parsedValue : null;
   }
 
+  private validateWeeklyAvailabilitySection(): void {
+    const hasAtLeastOneDay = Object.keys(this.guardFormModel.weeklyAvailability).some(
+      day => this.guardFormModel.weeklyAvailability[day].enabled
+    );
+
+    if (!hasAtLeastOneDay) {
+      this.guardErrors['weeklyAvailability'] = 'Please select at least one day of availability.';
+      return;
+    }
+
+    let hasIncompleteRanges = false;
+
+    Object.keys(this.guardFormModel.weeklyAvailability).forEach(day => {
+      const dayData = this.guardFormModel.weeklyAvailability[day];
+
+      if (dayData.enabled) {
+        const hasCompleteRange = dayData.timeRanges.some(range => range.start && range.end);
+        if (!hasCompleteRange) {
+          hasIncompleteRanges = true;
+        }
+      }
+    });
+
+    if (hasIncompleteRanges) {
+      this.guardErrors['weeklyAvailability'] = 'Please complete time ranges for all selected days.';
+    }
+  }
+
   private convertDistanceBetweenUnits(value: number, from: DistanceUnit, to: DistanceUnit): number {
     if (from === to) {
       return value;
@@ -536,10 +687,16 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   getOperationalCityOptions(): { value: string; label: string }[] {
-    if (!this.guardFormModel.operationalRegionCode) {
+    const selectedRegionCode = this.isProviderOperationalCoverageEditMode
+      ? this.providerCoverageForm.operationalRegionCode
+      : this.guardFormModel.operationalRegionCode;
+    if (!selectedRegionCode) {
       return [];
     }
-    return this.canadianCitiesByProvinceOptions[this.guardFormModel.operationalRegionCode] || [];
+    if (this.isProviderOperationalCoverageEditMode) {
+      return this.providerCoverageCityOptions;
+    }
+    return this.canadianCitiesByProvinceOptions[selectedRegionCode] || [];
   }
 
   getAddressCityOptions(): { value: string; label: string }[] {
@@ -632,12 +789,192 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   onOperationalRegionChange(nextRegionCode: string): void {
-    this.guardFormModel.operationalRegionCode = nextRegionCode;
+    const normalizedRegionCode = String(nextRegionCode || '').trim().toUpperCase();
+    if (this.isProviderOperationalCoverageEditMode) {
+      this.providerCoverageForm.operationalRegionCode = normalizedRegionCode;
+      this.syncProviderCoverageCityOptions();
+      if (this.selectedProviderManagedCityRadiusKm != null) {
+        this.providerCoverageForm.operationalRadius = this.toDisplayDistance(this.selectedProviderManagedCityRadiusKm);
+      }
+      return;
+    } else {
+      this.guardFormModel.operationalRegionCode = normalizedRegionCode;
+    }
+
     const options = this.getOperationalCityOptions();
     const isCurrentCityValid = options.some(city => city.value === this.guardFormModel.operationalCityCode);
     if (!isCurrentCityValid) {
-      this.guardFormModel.operationalCityCode = '';
+      this.guardFormModel.operationalCityCode = options[0]?.value || '';
     }
+  }
+
+  onOperationalCityChange(nextCityCode: string): void {
+    const normalizedCityCode = String(nextCityCode || '').trim().toUpperCase();
+    if (this.isProviderOperationalCoverageEditMode) {
+      this.providerCoverageForm.operationalCityCode = normalizedCityCode;
+      if (this.selectedProviderManagedCityRadiusKm != null) {
+        this.providerCoverageForm.operationalRadius = this.toDisplayDistance(this.selectedProviderManagedCityRadiusKm);
+      }
+      return;
+    }
+
+    this.guardFormModel.operationalCityCode = normalizedCityCode;
+  }
+
+  get operationalProvinceOptions(): { value: string; label: string }[] {
+    return this.isProviderOperationalCoverageEditMode
+      ? this.providerManagedOperationalProvinceOptions
+      : this.provinceOptions;
+  }
+
+  private getProviderManagedOperatingRegions(): any[] {
+    if (this.providerManagedOperatingRegionsLoaded) {
+      return this.providerManagedOperatingRegions;
+    }
+
+    const raw = this.appService.userSessionData()?.tenant?.profile?.['operating_regions'];
+    return Array.isArray(raw) ? raw : [];
+  }
+
+  private seedProviderManagedOperationalCoverageDefaults(): void {
+    const currentRegion = String(this.providerCoverageForm.operationalRegionCode || '').trim().toUpperCase();
+    const currentCity = String(this.providerCoverageForm.operationalCityCode || '').trim().toUpperCase();
+    const hasRadius = this.parseOperationalRadius(this.providerCoverageForm.operationalRadius) != null;
+    const regionOptions = this.providerManagedOperationalProvinceOptions;
+
+    if (!currentRegion && regionOptions.length) {
+      this.providerCoverageForm.operationalRegionCode = regionOptions[0].value;
+    }
+
+    this.syncProviderCoverageCityOptions();
+    const cityOptions = this.providerCoverageCityOptions;
+    if (!currentCity && cityOptions.length) {
+      this.providerCoverageForm.operationalCityCode = cityOptions[0].value;
+    }
+
+    if (!hasRadius && this.selectedProviderManagedCityRadiusKm != null) {
+      this.providerCoverageForm.operationalRadius = this.toDisplayDistance(this.selectedProviderManagedCityRadiusKm);
+    }
+  }
+
+  private initializeProviderCoverageForm(): void {
+    this.providerCoverageForm = {
+      operationalRegionCode: String(this.guardFormModel.operationalRegionCode || '').trim().toUpperCase(),
+      operationalCityCode: String(this.guardFormModel.operationalCityCode || '').trim().toUpperCase(),
+      operationalRadius: this.parseOperationalRadius(this.guardFormModel.operationalRadius),
+    };
+  }
+
+  onProviderCoverageRegionSelect(nextRegionCode: string): void {
+    this.onOperationalRegionChange(nextRegionCode);
+  }
+
+  onProviderCoverageCitySelect(nextCityCode: string): void {
+    this.onOperationalCityChange(nextCityCode);
+  }
+
+  private syncProviderCoverageCityOptions(): void {
+    const selectedRegion = String(this.providerCoverageForm.operationalRegionCode || '').trim().toUpperCase();
+    const region = this.providerCoverageRegions.find(entry => entry.value === selectedRegion);
+    this.providerCoverageCityOptions = region
+      ? region.cityOptions.map(city => ({ value: city.value, label: city.label }))
+      : [];
+
+    const hasCurrentCity = this.providerCoverageCityOptions.some(
+      city => city.value === this.providerCoverageForm.operationalCityCode
+    );
+    if (!hasCurrentCity) {
+      this.providerCoverageForm.operationalCityCode = this.providerCoverageCityOptions[0]?.value || '';
+    }
+  }
+
+  private hydrateProviderCoverageRegions(rawRegions: any[]): void {
+    const normalizedRegions = Array.isArray(rawRegions) ? rawRegions : [];
+    this.providerCoverageRegions = normalizedRegions
+      .map((region: any) => {
+        const regionCode = String(region?.region_code || region?.province || '').trim().toUpperCase();
+        const regionLabel = this.provinceOptions.find(option => option.value === regionCode)?.label
+          || String(region?.region_label || region?.province || regionCode).trim()
+          || regionCode;
+        if (!regionCode) {
+          return null;
+        }
+
+        const canonicalCityOptions = this.canadianCitiesByProvinceOptions[regionCode] || [];
+        const firstCityByProvince = canonicalCityOptions[0]?.value || '';
+        const defaultRadiusValue = Number(region?.coverage_radius_km ?? region?.coverageRadiusKm);
+        const defaultRadiusKm = Number.isFinite(defaultRadiusValue) ? defaultRadiusValue : null;
+        const cityEntries = Array.isArray(region?.city_entries) ? region.city_entries : [];
+        const cityCodes = Array.isArray(region?.city_codes) ? region.city_codes : [];
+        const mappedFromEntries = cityEntries
+          .map((entry: any) => {
+            const cityCode = this.resolveCityCodeForProvince(
+              regionCode,
+              entry?.city_code || entry?.cityCode || entry?.city || ''
+            );
+            if (!cityCode) {
+              return null;
+            }
+            const cityLabel = canonicalCityOptions.find(option => option.value === cityCode)?.label
+              || String(entry?.city || cityCode).trim()
+              || cityCode;
+            const radiusValue = Number(entry?.coverage_radius_km ?? entry?.coverageRadiusKm);
+            return cityCode
+              ? {
+                  value: cityCode,
+                  label: cityLabel,
+                  radiusKm: Number.isFinite(radiusValue) ? radiusValue : defaultRadiusKm,
+                }
+              : null;
+          })
+          .filter((entry: { value: string; label: string; radiusKm: number | null } | null): entry is { value: string; label: string; radiusKm: number | null } => !!entry);
+
+        let mappedCities = mappedFromEntries.length
+          ? mappedFromEntries
+          : cityCodes
+              .map((code: any, index: number) => {
+                const cityCode = this.resolveCityCodeForProvince(regionCode, code);
+                const cityLabel = canonicalCityOptions.find(option => option.value === cityCode)?.label || cityCode;
+                return cityCode
+                  ? {
+                      value: cityCode,
+                      label: cityLabel,
+                      radiusKm: defaultRadiusKm,
+                    }
+                  : null;
+              })
+              .filter((entry: { value: string; label: string; radiusKm: number | null } | null): entry is { value: string; label: string; radiusKm: number | null } => !!entry);
+
+        if (!mappedCities.length) {
+          const legacyCityCode = this.resolveCityCodeForProvince(regionCode, region?.city || '');
+          if (legacyCityCode) {
+            mappedCities = [{
+              value: legacyCityCode,
+              label: canonicalCityOptions.find(option => option.value === legacyCityCode)?.label || legacyCityCode,
+              radiusKm: defaultRadiusKm,
+            }];
+          } else if (firstCityByProvince) {
+            mappedCities = [{
+              value: firstCityByProvince,
+              label: canonicalCityOptions.find(option => option.value === firstCityByProvince)?.label || firstCityByProvince,
+              radiusKm: defaultRadiusKm,
+            }];
+          }
+        }
+
+        return {
+          value: regionCode,
+          label: regionLabel,
+          cityOptions: mappedCities,
+        };
+      })
+      .filter((region: { value: string; label: string; cityOptions: Array<{ value: string; label: string; radiusKm: number | null }> } | null): region is { value: string; label: string; cityOptions: Array<{ value: string; label: string; radiusKm: number | null }> } => !!region);
+
+    this.providerCoverageProvinceOptions = this.providerCoverageRegions.map(region => ({
+      value: region.value,
+      label: region.label,
+    }));
+    this.syncProviderCoverageCityOptions();
   }
 
   onPoliceClearanceProvinceChange(record: PoliceClearanceRecord, nextProvinceCode: string): void {
@@ -1044,6 +1381,37 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     }
 
     return formData;
+  }
+
+  private applyRefreshedGuardDetail(response: any): void {
+    const nextGuardData = response?.profile || response;
+    if (!nextGuardData) {
+      return;
+    }
+
+    this.guardData = nextGuardData as Guard;
+    this.hydrateGuardFormFromInput();
+  }
+
+  private refreshManagedGuardDetailAfterCoverageSave(
+    tenantId: string,
+    fallbackResponse: any,
+    successMessage: string,
+  ): void {
+    this.apiService.get<any>(`sp/guards/${tenantId}`, { loadingMode: 'silent' })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (detailResponse) => {
+          this.applyRefreshedGuardDetail(detailResponse);
+          this.managedOperationalCoverageUpdated.emit();
+          this.notification.show(successMessage, 'success', 4000);
+        },
+        error: () => {
+          this.applyRefreshedGuardDetail(fallbackResponse);
+          this.managedOperationalCoverageUpdated.emit();
+          this.notification.show(successMessage, 'success', 4000);
+        }
+      });
   }
 
   hasGuardData(data: Guard): boolean {
@@ -2171,56 +2539,34 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     }
 
     // Operational Radius
-    const operationalRadius = this.parseOperationalRadius(this.guardFormModel.operationalRadius);
-    if (
-      this.guardFormModel.operationalRadius != null &&
-      (operationalRadius == null || operationalRadius < this.minimumOperationalRadiusDisplay)
-    ) {
-      this.guardErrors['operationalRadius'] = `Operational radius must be at least ${this.minimumOperationalRadiusText}.`;
-    }
-
-    if (!this.guardFormModel.operationalRegionCode) {
-      this.guardErrors['operationalRegionCode'] = 'Operational province is required.';
-    } else {
-      const validProvinces = this.provinceOptions.map(p => p.value);
-      if (validProvinces.length && !validProvinces.includes(this.guardFormModel.operationalRegionCode)) {
-        this.guardErrors['operationalRegionCode'] = 'Please select a valid operational province.';
+    if (!this.isOperationalCoverageLocked) {
+      const operationalRadius = this.parseOperationalRadius(this.guardFormModel.operationalRadius);
+      if (
+        this.guardFormModel.operationalRadius != null &&
+        (operationalRadius == null || operationalRadius < this.minimumOperationalRadiusDisplay)
+      ) {
+        this.guardErrors['operationalRadius'] = `Operational radius must be at least ${this.minimumOperationalRadiusText}.`;
       }
-    }
 
-    const operationalCityOptions = this.getOperationalCityOptions();
-    if (!this.guardFormModel.operationalCityCode) {
-      this.guardErrors['operationalCityCode'] = 'Operational city is required.';
-    } else if (operationalCityOptions.length && !operationalCityOptions.some(c => c.value === this.guardFormModel.operationalCityCode)) {
-      this.guardErrors['operationalCityCode'] = 'Please select a valid operational city.';
-    }
-
-    // Weekly Availability validation
-    const hasAtLeastOneDay = Object.keys(this.guardFormModel.weeklyAvailability).some(
-      day => this.guardFormModel.weeklyAvailability[day].enabled
-    );
-
-    if (!hasAtLeastOneDay) {
-      this.guardErrors['weeklyAvailability'] = 'Please select at least one day of availability.';
-    } else {
-      // Validate that enabled days have at least one complete time range
-      let hasIncompleteRanges = false;
-
-      Object.keys(this.guardFormModel.weeklyAvailability).forEach(day => {
-        const dayData = this.guardFormModel.weeklyAvailability[day];
-
-        if (dayData.enabled) {
-          const hasCompleteRange = dayData.timeRanges.some(range => range.start && range.end);
-
-          if (!hasCompleteRange) {
-            hasIncompleteRanges = true;
-          }
+      if (!this.guardFormModel.operationalRegionCode) {
+        this.guardErrors['operationalRegionCode'] = 'Operational province is required.';
+      } else {
+        const validProvinces = this.provinceOptions.map(p => p.value);
+        if (validProvinces.length && !validProvinces.includes(this.guardFormModel.operationalRegionCode)) {
+          this.guardErrors['operationalRegionCode'] = 'Please select a valid operational province.';
         }
-      });
-
-      if (hasIncompleteRanges) {
-        this.guardErrors['weeklyAvailability'] = 'Please complete time ranges for all selected days.';
       }
+
+      const operationalCityOptions = this.getOperationalCityOptions();
+      if (!this.guardFormModel.operationalCityCode) {
+        this.guardErrors['operationalCityCode'] = 'Operational city is required.';
+      } else if (operationalCityOptions.length && !operationalCityOptions.some(c => c.value === this.guardFormModel.operationalCityCode)) {
+        this.guardErrors['operationalCityCode'] = 'Please select a valid operational city.';
+      }
+    }
+
+    if (this.canEditWeeklyAvailability) {
+      this.validateWeeklyAvailabilitySection();
     }
 
     return Object.keys(this.guardErrors).length === 0;
@@ -2239,6 +2585,63 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
   }
 
   async submitGuardForm(): Promise<void> {
+    if (this.isProviderOperationalCoverageEditMode) {
+      const tenantId = String(this.profileTenantId || '').trim();
+      if (!tenantId) {
+        this.guardErrors['submit'] = 'Guard profile identifier is missing.';
+        return;
+      }
+
+      this.guardErrors = {};
+      const operationalRadius = this.parseOperationalRadius(this.providerCoverageForm.operationalRadius);
+      if (!this.providerCoverageForm.operationalRegionCode) {
+        this.guardErrors['operationalRegionCode'] = 'Operational province is required.';
+      }
+      const operationalCityOptions = this.getOperationalCityOptions();
+      if (!this.providerCoverageForm.operationalCityCode) {
+        this.guardErrors['operationalCityCode'] = 'Operational city is required.';
+      } else if (operationalCityOptions.length && !operationalCityOptions.some(c => c.value === this.providerCoverageForm.operationalCityCode)) {
+        this.guardErrors['operationalCityCode'] = 'Please select a valid operational city.';
+      }
+      if (operationalRadius == null || operationalRadius < this.minimumOperationalRadiusDisplay) {
+        this.guardErrors['operationalRadius'] = `Operational radius must be at least ${this.minimumOperationalRadiusText}.`;
+      }
+      if (this.canEditWeeklyAvailability) {
+        this.validateWeeklyAvailabilitySection();
+      }
+      if (Object.keys(this.guardErrors).length > 0) {
+        return;
+      }
+      if (operationalRadius == null) {
+        return;
+      }
+
+      const radiusKm = operationalRadius;
+      this.isSubmitting = true;
+      this.apiService.put<any>(`sp/guards/${tenantId}/operational-coverage`, {
+        operational_region_code: this.providerCoverageForm.operationalRegionCode,
+        operational_city_code: this.providerCoverageForm.operationalCityCode,
+        max_travel_radius_km: this.toStorageKm(radiusKm),
+        weekly_availability: this.mapWeeklyAvailabilityToBackend(this.guardFormModel.weeklyAvailability),
+      })
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (response) => {
+            this.isSubmitting = false;
+            this.refreshManagedGuardDetailAfterCoverageSave(
+              tenantId,
+              response,
+              response?.message || 'Guard operational settings updated',
+            );
+          },
+          error: (err) => {
+            this.isSubmitting = false;
+            this.guardErrors['submit'] = err?.error?.detail || 'Failed to update guard managed settings.';
+          }
+        });
+      return;
+    }
+
     if (!this.validateGuardForm() || this.isSubmitting) {
       return;
     }
@@ -2272,8 +2675,6 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           latitude: parseCoordinate(this.guardFormModel.address.latitude),
           longitude: parseCoordinate(this.guardFormModel.address.longitude),
         },
-        operational_region_code: this.guardFormModel.operationalRegionCode,
-        operational_city_code: this.guardFormModel.operationalCityCode,
         identification: {
           ...(primaryIdentification?.documentType && { id_type: primaryIdentification.documentType }),
           ...(primaryIdentification?.number && { id_number: primaryIdentification.number }),
@@ -2338,10 +2739,17 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
           ...(cert.existingFileSize != null && { document_file_size: cert.existingFileSize })
         })),
         preferred_guard_types: this.guardFormModel.preferredGuardTypes,
-        // UPDATED - Use new mapping function
-        weekly_availability: this.mapWeeklyAvailabilityToBackend(this.guardFormModel.weeklyAvailability),
       }
     };
+
+    if (!this.isOperationalCoverageLocked) {
+      payload.profile.operational_region_code = this.guardFormModel.operationalRegionCode;
+      payload.profile.operational_city_code = this.guardFormModel.operationalCityCode;
+    }
+
+    if (!this.isWeeklyAvailabilityLocked) {
+      payload.profile.weekly_availability = this.mapWeeklyAvailabilityToBackend(this.guardFormModel.weeklyAvailability);
+    }
 
     // Add phone numbers if present
     if (this.guardFormModel.mobilePhone?.e164) {
@@ -2371,9 +2779,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy {
     payload.profile.contact = legacyContact;
 
     // Add operational radius if set
-    const operationalRadius = this.parseOperationalRadius(this.guardFormModel.operationalRadius);
-    if (operationalRadius != null) {
-      payload.profile.max_travel_radius_km = this.toStorageKm(operationalRadius);
+    if (!this.isOperationalCoverageLocked) {
+      const operationalRadius = this.parseOperationalRadius(this.guardFormModel.operationalRadius);
+      if (operationalRadius != null) {
+        payload.profile.max_travel_radius_km = this.toStorageKm(operationalRadius);
+      }
     }
 
     // Determine desired post-submit tenant status. If user is completing onboarding, move to pending_activation.

@@ -142,6 +142,8 @@ def _linked_provider_guard(
     home_latitude=43.6532,
     home_longitude=-79.3832,
     max_travel_radius_km=15,
+    operational_region_code="ON",
+    operational_city_code="Toronto",
 ):
     return db_tenant_model(
         tenant_type=TenantType.GUARD,
@@ -156,8 +158,8 @@ def _linked_provider_guard(
                 "latitude": home_latitude,
                 "longitude": home_longitude,
             },
-            "operational_region_code": "ON",
-            "operational_city_code": "Toronto",
+            "operational_region_code": operational_region_code,
+            "operational_city_code": operational_city_code,
             "max_travel_radius_km": max_travel_radius_km,
             "weekly_availability": weekly_availability
             if weekly_availability is not None
@@ -595,6 +597,82 @@ async def test_preview_matches_prefers_provider_city_entry_coordinates_over_head
 
 
 @pytest.mark.anyio
+async def test_preview_matches_provider_capacity_uses_managed_operational_city_not_guard_home_address():
+    provider = _provider_tenant()
+    manager = object.__new__(RequestMatchingManager)
+    manager._engine = FakeEngine([
+        provider,
+        _linked_provider_guard(
+            str(provider.id),
+            home_latitude=49.2827,
+            home_longitude=-123.1207,
+            max_travel_radius_km=20,
+            operational_city_code="Toronto",
+        ),
+    ])
+
+    result = await manager.preview_matches(
+        RequestMatchingPreviewPayload(
+            target_type="service_provider",
+            site_address=MatchAddress(
+                country="CA",
+                province="ON",
+                city="Toronto",
+                latitude=43.6532,
+                longitude=-79.3832,
+            ),
+            requested_start_at=datetime(2026, 4, 27, 10, 0),
+            requested_end_at=datetime(2026, 4, 27, 12, 0),
+        )
+    )
+
+    assert result.summary["eligible_count"] == 1
+    assert len(result.results) == 1
+    assert result.results[0].eligible is True
+    assert result.results[0].reason_code == "within_radius"
+    assert result.results[0].linked_guard_count == 1
+    assert result.results[0].eligible_guard_count == 1
+    assert result.results[0].available_guard_count == 1
+
+
+@pytest.mark.anyio
+async def test_preview_matches_provider_capacity_excludes_incomplete_provider_managed_guard_settings():
+    provider = _provider_tenant()
+    manager = object.__new__(RequestMatchingManager)
+    manager._engine = FakeEngine([
+        provider,
+        _linked_provider_guard(
+            str(provider.id),
+            max_travel_radius_km=None,
+            operational_region_code="",
+            operational_city_code="",
+            weekly_availability={},
+        ),
+    ])
+
+    result = await manager.preview_matches(
+        RequestMatchingPreviewPayload(
+            target_type="service_provider",
+            site_address=MatchAddress(
+                country="CA",
+                province="ON",
+                city="Toronto",
+                latitude=43.6532,
+                longitude=-79.3832,
+            ),
+            requested_start_at=datetime(2026, 4, 27, 10, 0),
+            requested_end_at=datetime(2026, 4, 27, 12, 0),
+        )
+    )
+
+    assert result.summary["eligible_count"] == 0
+    assert len(result.results) == 1
+    assert result.results[0].eligible is False
+    assert result.results[0].eligible_guard_count == 0
+    assert result.results[0].available_guard_count == 0
+
+
+@pytest.mark.anyio
 async def test_preview_matches_respects_requested_guard_type_for_guards():
     manager = object.__new__(RequestMatchingManager)
     manager._engine = FakeEngine([
@@ -651,6 +729,7 @@ async def test_preview_matches_uses_best_provider_city_entry_when_request_city_d
             home_latitude=49.2827,
             home_longitude=-123.1207,
             max_travel_radius_km=20,
+            operational_city_code="Vancouver",
         ),
     ])
 

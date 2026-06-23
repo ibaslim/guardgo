@@ -177,3 +177,114 @@ async def test_service_provider_owned_guard_uses_single_approval_on_first_update
     assert tenant.status == TenantStatus.PENDING_ACTIVATION
     assert tenant.approvals_required == 1
     assert tenant.approval_actors == []
+
+
+@pytest.mark.anyio
+async def test_service_provider_owned_guard_cannot_self_update_operational_coverage(monkeypatch):
+    tenant = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        profile={
+            "operational_region_code": "ON",
+            "operational_city_code": "TORONTO",
+            "max_travel_radius_km": 15,
+        },
+        status=TenantStatus.ACTIVE,
+        approvals_required=1,
+        approval_actors=[],
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+        service_provider_tenant_id="507f1f77bcf86cd799439011",
+    )
+    fake_engine = FakeEngine(tenant)
+    manager = object.__new__(TenantManager)
+    manager._engine = fake_engine
+
+    async def _noop_post_change(*_args, **_kwargs):
+        return None
+
+    manager._post_status_change = _noop_post_change
+    monkeypatch.setattr(TenantManager, "get_instance", staticmethod(lambda: manager))
+
+    current_user = SimpleNamespace(
+        tenant_uuid=str(tenant.id),
+        role=user_role.GUARD_ADMIN,
+        username="guardadmin1",
+    )
+    app = _build_app(current_user)
+
+    payload = _tenant_payload(TenantType.GUARD, TenantStatus.ACTIVE)
+    payload["profile"] = {
+        "operational_region_code": "BC",
+        "operational_city_code": "VANCOUVER",
+        "max_travel_radius_km": 30,
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.put("/api/tenant", json=payload)
+
+    assert response.status_code == 403
+    assert "can only be updated by the owning service provider" in response.json()["detail"]
+    assert tenant.profile["operational_region_code"] == "ON"
+    assert tenant.profile["operational_city_code"] == "TORONTO"
+    assert tenant.profile["max_travel_radius_km"] == 15
+
+
+@pytest.mark.anyio
+async def test_service_provider_owned_guard_cannot_self_update_weekly_availability(monkeypatch):
+    tenant = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        profile={
+            "operational_region_code": "ON",
+            "operational_city_code": "TORONTO",
+            "max_travel_radius_km": 15,
+            "weekly_availability": {
+                "Monday": [{"start": "09:00", "end": "17:00"}],
+                "Tuesday": [],
+                "Wednesday": [],
+                "Thursday": [],
+                "Friday": [],
+                "Saturday": [],
+                "Sunday": [],
+            },
+        },
+        status=TenantStatus.ACTIVE,
+        approvals_required=1,
+        approval_actors=[],
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+        service_provider_tenant_id="507f1f77bcf86cd799439011",
+    )
+    fake_engine = FakeEngine(tenant)
+    manager = object.__new__(TenantManager)
+    manager._engine = fake_engine
+
+    async def _noop_post_change(*_args, **_kwargs):
+        return None
+
+    manager._post_status_change = _noop_post_change
+    monkeypatch.setattr(TenantManager, "get_instance", staticmethod(lambda: manager))
+
+    current_user = SimpleNamespace(
+        tenant_uuid=str(tenant.id),
+        role=user_role.GUARD_ADMIN,
+        username="guardadmin1",
+    )
+    app = _build_app(current_user)
+
+    payload = _tenant_payload(TenantType.GUARD, TenantStatus.ACTIVE)
+    payload["profile"] = {
+        "weekly_availability": {
+            "Monday": [{"start": "12:00", "end": "20:00"}],
+            "Tuesday": [],
+            "Wednesday": [],
+            "Thursday": [],
+            "Friday": [],
+            "Saturday": [],
+            "Sunday": [],
+        },
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.put("/api/tenant", json=payload)
+
+    assert response.status_code == 403
+    assert "weekly availability" in response.json()["detail"]
+    assert tenant.profile["weekly_availability"]["Monday"][0]["start"] == "09:00"

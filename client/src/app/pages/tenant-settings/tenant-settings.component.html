@@ -13,6 +13,8 @@
             [showPageWrapper]="false" 
             [guardData]="tenantData?.profile || tenantData"
             [profileTenantId]="tenantData?.id"
+            [allowProviderOperationalCoverageEdit]="allowProviderOperationalCoverageEdit"
+            (managedOperationalCoverageUpdated)="managedOperationalCoverageUpdated.emit()"
             [readonly]="readonly">
         </app-guard-setting>
 
