@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -17,9 +17,11 @@ import { GeoLocationPickerComponent } from '../../components/geo-location-picker
 import { ProfilePictureUploadComponent } from '../../components/profile-picture-upload/profile-picture-upload.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
+import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import { TenantUpdateResponse } from '../../shared/model/tenant/tenant.model';
+import { scrollToFirstFormError } from '../../shared/helpers/form-error-navigation.helper';
 import {
   buildAlphabeticDummyTag,
   buildSeededCaPhone,
@@ -124,6 +126,7 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
   @Input() readonly: boolean = false;
   @Input() clientData?: Client;
   @Input() profileTenantId?: string;
+  @ViewChild('settingsForm') settingsForm?: ElementRef<HTMLFormElement>;
 
   clientFormModel: Client = {
     legalEntityName: '',
@@ -182,7 +185,13 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     private router: Router,
     private appService: AppService,
     private addressConsistencyService: GoogleMapsAddressConsistencyService,
+    private notification: MessageNotificationService,
   ) { }
+
+  private showValidationFeedback(): void {
+    this.notification.error('Please correct the highlighted fields before saving.');
+    scrollToFirstFormError(this.settingsForm?.nativeElement);
+  }
 
   ngOnInit(): void {
     this.loadClientMetadata(() => {
@@ -822,10 +831,12 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     }
 
     if (!this.validateClientForm()) {
+      this.showValidationFeedback();
       return;
     }
 
     if (!(await this.validateSiteAddressConsistency())) {
+      this.showValidationFeedback();
       return;
     }
 
@@ -904,6 +915,7 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
         console.log('Client profile submitted successfully', response);
         const newStatus = String(response?.status || (isOnboarding ? 'pending_activation' : 'active')).toLowerCase();
         this.appService.setTenantStatus(newStatus, false);
+        this.notification.success('Data saved successfully.');
         this.router.navigate(['/dashboard']);
       },
       error: (err) => {

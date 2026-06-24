@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
@@ -20,6 +20,7 @@ import { CardComponent } from '../../components/card/card.component';
 import { ClientPreferredGuardTypesComponent } from '../../components/client-preferred-guard-types/client-preferred-guard-types.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
+import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { getIssuingAuthorityForProvince } from '../../shared/constants/provincial-authorities.constants';
 import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared/helpers/distance.helper';
@@ -27,6 +28,7 @@ import { GeoLocationSelection, buildGoogleMapsLocationUrl } from '../../shared/h
 import { formatCoordinateInput, parseCoordinate } from '../../shared/helpers/location.helper';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import { TenantUpdateResponse } from '../../shared/model/tenant/tenant.model';
+import { scrollToFirstFormError } from '../../shared/helpers/form-error-navigation.helper';
 import {
   buildAlphabeticDummyTag,
   buildSeededCaPhone,
@@ -150,6 +152,7 @@ interface ServiceProvider {
 })
 export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   readonly showDummyDataButton = isLocalhostForDummyData();
+  readonly maxFilesPerUploadOption = 2;
   headOfficeMapUrl = '';
   providerHeadOfficeLocationSelected = false;
   providerHeadOfficeLocationStale = false;
@@ -158,6 +161,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   @Input() readonly: boolean = false;
   @Input() providerData?: ServiceProvider;
   @Input() profileTenantId?: string;
+  @ViewChild('settingsForm') settingsForm?: ElementRef<HTMLFormElement>;
 
   providerFormModel: ServiceProvider = {
     legalCompanyName: '',
@@ -244,7 +248,13 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     private router: Router,
     private appService: AppService,
     private addressConsistencyService: GoogleMapsAddressConsistencyService,
+    private notification: MessageNotificationService,
   ) { }
+
+  private showValidationFeedback(): void {
+    this.notification.error('Please correct the highlighted fields before saving.');
+    scrollToFirstFormError(this.settingsForm?.nativeElement);
+  }
 
   ngOnInit(): void {
     const preferredUnit = this.appService.getConfig().localSettings.distanceUnit;
@@ -903,6 +913,10 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   }
 
   addSecurityLicense(): void {
+    if (this.providerFormModel.securityLicenses.length >= this.maxFilesPerUploadOption) {
+      return;
+    }
+
     this.providerFormModel.securityLicenses.push({
       licenseNumber: '',
       licenseType: '',
@@ -1138,6 +1152,8 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     // Security Licenses
     if (!this.providerFormModel.securityLicenses || this.providerFormModel.securityLicenses.length === 0) {
       this.providerErrors.securityLicenses = 'At least one security license is required.';
+    } else if (this.providerFormModel.securityLicenses.length > this.maxFilesPerUploadOption) {
+      this.providerErrors.securityLicenses = `You can upload a maximum of ${this.maxFilesPerUploadOption} security licenses.`;
     } else {
       this.providerFormModel.securityLicenses.forEach((license, index) => {
         const id = license.id || `idx_${index}`;
@@ -1425,11 +1441,13 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     }
 
     if (!this.validateProviderForm()) {
+      this.showValidationFeedback();
       return;
     }
 
     const addressConsistent = await this.validateProviderHeadOfficeAddressConsistency();
     if (!addressConsistent) {
+      this.showValidationFeedback();
       return;
     }
 
@@ -1595,6 +1613,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
         console.log('Service provider profile submitted successfully', response);
         const newStatus = String(response?.status || (isOnboarding ? 'pending_activation' : 'active')).toLowerCase();
         this.appService.setTenantStatus(newStatus, false);
+        this.notification.success('Data saved successfully.');
         this.router.navigate(['/dashboard']);
       },
       error: (err) => {

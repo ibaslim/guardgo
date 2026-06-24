@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, OnInit, OnDestroy, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnInit, OnDestroy, OnChanges, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -32,6 +32,7 @@ import { GeoLocationSelection, buildGoogleMapsLocationUrl } from '../../shared/h
 import { formatCoordinateInput, parseCoordinate } from '../../shared/helpers/location.helper';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import { TenantUpdateResponse } from '../../shared/model/tenant/tenant.model';
+import { scrollToFirstFormError } from '../../shared/helpers/form-error-navigation.helper';
 import {
   buildAlphabeticDummyTag,
   buildCaPhone,
@@ -73,6 +74,7 @@ import {
 })
 export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
   readonly showDummyDataButton = isLocalhostForDummyData();
+  readonly maxFilesPerUploadOption = 2;
   managedByProviderName = '';
   homeAddressMapUrl = '';
   guardHomeLocationSelected = false;
@@ -102,6 +104,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
   @Input() profileTenantId?: string;
   @Input() allowProviderOperationalCoverageEdit: boolean = false;
   @Output() managedOperationalCoverageUpdated = new EventEmitter<void>();
+  @ViewChild('settingsForm') settingsForm?: ElementRef<HTMLFormElement>;
 
   isEditMode = false;
 
@@ -533,6 +536,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
     private addressConsistencyService: GoogleMapsAddressConsistencyService,
     private notification: MessageNotificationService,
   ) { }
+
+  private showValidationFeedback(): void {
+    this.notification.error('Please correct the highlighted fields before saving.');
+    scrollToFirstFormError(this.settingsForm?.nativeElement);
+  }
 
   ngOnInit(): void {
     this.loadServiceProviderInfo();
@@ -1440,6 +1448,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
     if (this.readonly) {
       return;
     }
+
+    if (this.guardFormModel.identification.documents.length >= this.maxFilesPerUploadOption) {
+      return;
+    }
+
     const newIndex = this.guardFormModel.identification.documents.length;
     const newDoc: IdentificationDocument = {
       documentType: '',
@@ -1575,6 +1588,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
     if (this.readonly) {
       return;
     }
+
+    if (this.guardFormModel.securityLicenses.length >= this.maxFilesPerUploadOption) {
+      return;
+    }
+
     const newIndex = this.guardFormModel.securityLicenses.length;
     const newLicense: SecurityLicenseDocument = {
       fullLegalName: this.guardFormModel.name || '',
@@ -1696,6 +1714,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
     if (this.readonly) {
       return;
     }
+
+    if (this.guardFormModel.policeClearances.length >= this.maxFilesPerUploadOption) {
+      return;
+    }
+
     const newIndex = this.guardFormModel.policeClearances.length;
     const newRecord: PoliceClearanceRecord = {
       issuingAuthorityType: '',
@@ -1812,6 +1835,11 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
     if (this.readonly) {
       return;
     }
+
+    if (this.guardFormModel.trainingCertificates.length >= this.maxFilesPerUploadOption) {
+      return;
+    }
+
     const newIndex = this.guardFormModel.trainingCertificates.length;
     const newCert: TrainingCertificate = {
       certificateName: '',
@@ -2157,6 +2185,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
       this.guardErrors['identification'] =
         'At least 2 identification documents are required.';
     }
+    else if (this.guardFormModel.identification.documents.length > this.maxFilesPerUploadOption) {
+      this.guardErrors['identification'] =
+        `You can upload a maximum of ${this.maxFilesPerUploadOption} identification documents.`;
+    }
     else {
 
       this.guardFormModel.identification.documents.forEach((doc, index) => {
@@ -2243,6 +2275,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
     if (isCanadian) {
       if (!this.guardFormModel.securityLicenses || this.guardFormModel.securityLicenses.length === 0) {
         this.guardErrors['securityLicenses'] = 'At least one security license is required.';
+      } else if (this.guardFormModel.securityLicenses.length > this.maxFilesPerUploadOption) {
+        this.guardErrors['securityLicenses'] = `You can upload a maximum of ${this.maxFilesPerUploadOption} security licenses.`;
       } else {
         this.guardFormModel.securityLicenses.forEach((license, index) => {
           if (!license.id) {
@@ -2361,6 +2395,8 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
       // Police Clearances
       if (!this.guardFormModel.policeClearances || this.guardFormModel.policeClearances.length === 0) {
         this.guardErrors['policeClearances'] = 'At least one police clearance is required.';
+      } else if (this.guardFormModel.policeClearances.length > this.maxFilesPerUploadOption) {
+        this.guardErrors['policeClearances'] = `You can upload a maximum of ${this.maxFilesPerUploadOption} police clearances.`;
       } else {
         this.guardFormModel.policeClearances.forEach((record, index) => {
           if (!record.id) {
@@ -2433,7 +2469,9 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
       }
 
       // Training certificates are completely optional
-      if (this.guardFormModel.trainingCertificates && this.guardFormModel.trainingCertificates.length > 0) {
+      if (this.guardFormModel.trainingCertificates && this.guardFormModel.trainingCertificates.length > this.maxFilesPerUploadOption) {
+        this.guardErrors['trainingCertificates'] = `You can upload a maximum of ${this.maxFilesPerUploadOption} training certificates.`;
+      } else if (this.guardFormModel.trainingCertificates && this.guardFormModel.trainingCertificates.length > 0) {
         this.guardFormModel.trainingCertificates.forEach((cert) => {
           if (!cert.id) {
             return;
@@ -2610,6 +2648,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
         this.validateWeeklyAvailabilitySection();
       }
       if (Object.keys(this.guardErrors).length > 0) {
+        this.showValidationFeedback();
         return;
       }
       if (operationalRadius == null) {
@@ -2642,7 +2681,12 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
       return;
     }
 
-    if (!this.validateGuardForm() || this.isSubmitting) {
+    if (this.readonly || this.isSubmitting) {
+      return;
+    }
+
+    if (!this.validateGuardForm()) {
+      this.showValidationFeedback();
       return;
     }
 
@@ -2650,6 +2694,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
     const addressConsistent = await this.validateGuardAddressConsistency();
     if (!addressConsistent) {
       this.isSubmitting = false;
+      this.showValidationFeedback();
       return;
     }
     this.guardErrors = {}; // Clear previous errors
@@ -2797,6 +2842,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
           this.isSubmitting = false;
           const newStatus = String(response?.status || (isOnboarding ? 'pending_activation' : 'active')).toLowerCase();
           this.appService.setTenantStatus(newStatus, false);
+          this.notification.success('Data saved successfully.');
           this.router.navigate(['/dashboard']);
         },
         error: (err) => {

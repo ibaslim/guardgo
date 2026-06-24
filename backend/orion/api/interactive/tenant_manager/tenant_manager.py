@@ -50,6 +50,7 @@ from configs.metadata_constants import CANADIAN_PROVINCE_OPTIONS, CANADIAN_CITIE
 class TenantManager:
     __instance = None
     __lock = threading.Lock()
+    MAX_FILES_PER_UPLOAD_OPTION = 2
 
     @staticmethod
     def get_instance():
@@ -460,6 +461,8 @@ class TenantManager:
         if not isinstance(profile, dict):
             return profile
 
+        cls._validate_profile_upload_limits(tenant_type, profile)
+
         if tenant_type == TenantType.GUARD:
             cls._validate_and_normalize_guard_operational_city(
                 profile,
@@ -473,6 +476,28 @@ class TenantManager:
             cls._validate_and_normalize_provider_operating_regions(profile)
 
         return profile
+
+    @classmethod
+    def _validate_profile_upload_limits(cls, tenant_type: TenantType, profile: Dict[str, Any]) -> None:
+        max_files = cls.MAX_FILES_PER_UPLOAD_OPTION
+
+        def ensure_limit(value: Any, label: str) -> None:
+            if isinstance(value, list) and len(value) > max_files:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"You can upload a maximum of {max_files} {label}.",
+                )
+
+        if tenant_type == TenantType.GUARD:
+            identification = profile.get("identification")
+            if isinstance(identification, dict):
+                ensure_limit(identification.get("documents"), "identification documents")
+
+            ensure_limit(profile.get("security_licenses"), "security licenses")
+            ensure_limit(profile.get("police_clearances"), "police clearances")
+            ensure_limit(profile.get("training_certificates"), "training certificates")
+        elif tenant_type == TenantType.SERVICE_PROVIDER:
+            ensure_limit(profile.get("security_licenses"), "security licenses")
 
     @staticmethod
     async def _dek(tenant_id: str) -> bytes:

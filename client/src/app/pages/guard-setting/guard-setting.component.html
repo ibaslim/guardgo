@@ -9,7 +9,7 @@
 </ng-template>
 
 <ng-template #formContent>
-    <form (ngSubmit)="submitGuardForm()" class="space-y-8">
+    <form #settingsForm (ngSubmit)="submitGuardForm()" class="space-y-8">
         <app-alert
             *ngIf="showServiceProviderInfo"
             type="info"
@@ -421,6 +421,7 @@
              guardFormModel.identification.documents.length > 0
              ? 'Add Another Document'
              : 'Add Document')" type="secondary" htmlType="button" customClass="rounded-lg"
+                    [disabled]="guardFormModel.identification.documents.length >= maxFilesPerUploadOption"
                     (click)="addIdentificationDocument()">
                 </app-button>
 
@@ -537,7 +538,8 @@
 
             <div class="flex justify-center pt-4" *ngIf="!readonly">
                 <app-button label="+ Add Security License" type="secondary" [htmlType]="'button'"
-                    [customClass]="'rounded-lg'" (click)="addSecurityLicense()">
+                    [customClass]="'rounded-lg'" [disabled]="guardFormModel.securityLicenses.length >= maxFilesPerUploadOption"
+                    (click)="addSecurityLicense()">
                 </app-button>
             </div>
         </app-section>
@@ -642,7 +644,8 @@
 
             <div class="flex justify-center pt-4" *ngIf="!readonly">
                 <app-button label="+ Add Police Clearance" type="secondary" [htmlType]="'button'"
-                    [customClass]="'rounded-lg'" (click)="addPoliceClearance()">
+                    [customClass]="'rounded-lg'" [disabled]="guardFormModel.policeClearances.length >= maxFilesPerUploadOption"
+                    (click)="addPoliceClearance()">
                 </app-button>
             </div>
         </app-section>
@@ -737,7 +740,8 @@
 
             <div class="flex justify-center pt-4" *ngIf="!readonly">
                 <app-button label="+ Add Training Certificate" type="secondary" [htmlType]="'button'"
-                    [customClass]="'rounded-lg'" (click)="addTrainingCertificate()">
+                    [customClass]="'rounded-lg'" [disabled]="guardFormModel.trainingCertificates.length >= maxFilesPerUploadOption"
+                    (click)="addTrainingCertificate()">
                 </app-button>
             </div>
         </app-section>

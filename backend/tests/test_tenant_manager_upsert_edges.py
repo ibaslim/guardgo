@@ -95,3 +95,36 @@ def test_validate_and_normalize_provider_operating_regions_requires_city_coordin
 
     assert exc.value.status_code == 400
     assert "Latitude and longitude are required" in str(exc.value.detail)
+
+
+def test_validate_and_normalize_guard_profile_rejects_more_than_two_uploads():
+    profile = {
+        "identification": {
+            "documents": [{}, {}, {}],
+        },
+    }
+
+    with pytest.raises(HTTPException) as exc:
+        TenantManager._validate_and_normalize_profile_for_tenant_type(
+            TenantType.GUARD,
+            profile,
+            allow_missing_guard_operational_coverage=True,
+        )
+
+    assert exc.value.status_code == 400
+    assert "maximum of 2 identification documents" in str(exc.value.detail)
+
+
+def test_validate_and_normalize_service_provider_profile_rejects_more_than_two_uploads():
+    profile = {
+        "security_licenses": [{}, {}, {}],
+    }
+
+    with pytest.raises(HTTPException) as exc:
+        TenantManager._validate_and_normalize_profile_for_tenant_type(
+            TenantType.SERVICE_PROVIDER,
+            profile,
+        )
+
+    assert exc.value.status_code == 400
+    assert "maximum of 2 security licenses" in str(exc.value.detail)

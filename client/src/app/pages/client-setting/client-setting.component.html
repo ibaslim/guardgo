@@ -9,7 +9,7 @@
 </ng-template>
 
 <ng-template #formContent>
-    <form (ngSubmit)="submitClientForm()" class="space-y-8">
+    <form #settingsForm (ngSubmit)="submitClientForm()" class="space-y-8">
         <app-section title="Logo" subtitle="Used on invoices and client-facing materials.">
             <ng-container *ngIf="!readonly">
                 <app-profile-picture-upload [maxSizeKb]="500" [title]="'Company Logo'"
