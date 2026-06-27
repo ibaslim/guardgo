@@ -49,6 +49,14 @@ export const normalizeRole = (role: string | undefined | null): string => {
   return rawRole.includes('.') ? (rawRole.split('.').pop() || '') : rawRole;
 };
 
+export const isServiceProviderOwnedGuardTenant = (
+  tenant: { tenant_type?: string | null; ownership_type?: string | null } | undefined | null
+): boolean => {
+  const tenantType = String(tenant?.tenant_type || '').trim().toLowerCase();
+  const ownershipType = String(tenant?.ownership_type || '').trim().toLowerCase();
+  return tenantType === 'guard' && ownershipType === 'service_provider';
+};
+
 export const canAccessPolicy = (
   policy: AccessPolicy,
   role: string | undefined | null,

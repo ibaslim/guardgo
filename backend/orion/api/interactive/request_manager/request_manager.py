@@ -63,7 +63,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     ShiftSlotRecord,
     ShiftSlotStatus,
 )
-from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus, TenantType
+from orion.services.mongo_manager.shared_model.db_tenant_model import GuardOwnershipType, db_tenant_model, TenantStatus, TenantType
 
 
 PLATFORM_WRITE_ROLES = {
@@ -4172,6 +4172,9 @@ class RequestManager:
         session_tenant = await self._get_session_tenant(current_user)
 
         if role_value == "guard_admin" and session_tenant.tenant_type == TenantType.GUARD:
+            ownership_type = str(getattr(session_tenant, "ownership_type", "") or "").strip().lower()
+            if ownership_type == GuardOwnershipType.SERVICE_PROVIDER.value:
+                raise HTTPException(status_code=403, detail="Payout invoices are managed by the service provider")
             return {
                 "tenant_id": str(session_tenant.id),
                 "assignee_tenant_type": RequestTargetType.GUARD.value,

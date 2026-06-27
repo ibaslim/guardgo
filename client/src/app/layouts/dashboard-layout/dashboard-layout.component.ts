@@ -7,7 +7,7 @@ import { Router, RouterModule } from '@angular/router';
 import { AuthService } from "../../services/authetication/auth.service";
 import { AppService } from "../../services/core/app/app.service";
 import { ThemeService } from "../../services/theme/theme.service";
-import { AccessPolicy, canAccessPolicy } from '../../shared/helpers/access-control.helper';
+import { AccessPolicy, canAccessPolicy, isServiceProviderOwnedGuardTenant } from '../../shared/helpers/access-control.helper';
 
 type DashboardLink = {
   label: string;
@@ -149,7 +149,11 @@ export class DashboardLayoutComponent implements OnInit {
     if (link.hidden) return false;
     const rawRole = String(this.appService.userSessionData()?.user?.role || '').trim().toLowerCase();
     const role = rawRole.includes('.') ? (rawRole.split('.').pop() || '') : rawRole;
+    const tenant = this.appService.userSessionData()?.tenant;
     if (Array.isArray(link.roles) && link.roles.length > 0 && !link.roles.includes(role)) {
+      return false;
+    }
+    if (link.route === '/dashboard/my-invoices' && isServiceProviderOwnedGuardTenant(tenant)) {
       return false;
     }
     if (link.route === '/dashboard/tenants' && role === 'sp_admin') {
