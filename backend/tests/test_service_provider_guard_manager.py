@@ -20,13 +20,19 @@ from orion.services.mongo_manager.shared_model.db_tenant_model import (
 
 
 class FakeEngine:
-    def __init__(self, guard):
+    def __init__(self, guard, provider=None):
         self.guard = guard
+        self.provider = provider
         self.saved = []
 
     async def find_one(self, model, *_args, **_kwargs):
         if model is db_tenant_model:
-            return self.guard
+            query_text = " ".join(str(arg) for arg in _args)
+            if self.provider and str(self.provider.id) in query_text:
+                return self.provider
+            if self.guard and str(self.guard.id) in query_text:
+                return self.guard
+            return self.provider or self.guard
         if model is GuardStatusChangeRequest:
             return None
         return None
@@ -44,11 +50,11 @@ class FakeActivityManager:
 
 
 class FakeInviteEngine:
-    def __init__(self):
+    def __init__(self, *, provider_status=TenantStatus.ACTIVE):
         self.provider = db_tenant_model(
             tenant_type=TenantType.SERVICE_PROVIDER,
             profile={"name": "SP One"},
-            status=TenantStatus.ACTIVE,
+            status=provider_status,
         )
         self.saved = []
         self.deleted = []
@@ -77,6 +83,11 @@ async def test_sp_deactivate_request_requires_reason():
 
 @pytest.mark.anyio
 async def test_sp_activate_request_directly_approves_pending_guard(monkeypatch):
+    provider = db_tenant_model(
+        tenant_type=TenantType.SERVICE_PROVIDER,
+        profile={"name": "SP One"},
+        status=TenantStatus.ACTIVE,
+    )
     guard = db_tenant_model(
         tenant_type=TenantType.GUARD,
         profile={
@@ -97,10 +108,15 @@ async def test_sp_activate_request_directly_approves_pending_guard(monkeypatch):
         approvals_required=2,
         approval_actors=[],
         ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
-        service_provider_tenant_id="507f1f77bcf86cd799439011",
+        service_provider_tenant_id=str(provider.id),
     )
     manager = object.__new__(TenantManager)
-    manager._engine = FakeEngine(guard)
+    manager._engine = FakeEngine(guard, provider=provider)
+
+    async def _fake_get_guard_tenant(_guard_id):
+        return guard
+
+    manager._get_guard_tenant = _fake_get_guard_tenant
 
     async def _noop_post_change(*_args, **_kwargs):
         return None
@@ -116,7 +132,7 @@ async def test_sp_activate_request_directly_approves_pending_guard(monkeypatch):
         current_user=SimpleNamespace(
             username="spadmin1",
             role=user_role.SP_ADMIN,
-            tenant_uuid="507f1f77bcf86cd799439011",
+            tenant_uuid=str(provider.id),
         ),
     )
 
@@ -131,6 +147,11 @@ async def test_sp_activate_request_directly_approves_pending_guard(monkeypatch):
 
 @pytest.mark.anyio
 async def test_sp_activate_request_requires_managed_fields_before_approval(monkeypatch):
+    provider = db_tenant_model(
+        tenant_type=TenantType.SERVICE_PROVIDER,
+        profile={"name": "SP One"},
+        status=TenantStatus.ACTIVE,
+    )
     guard = db_tenant_model(
         tenant_type=TenantType.GUARD,
         profile={},
@@ -138,10 +159,15 @@ async def test_sp_activate_request_requires_managed_fields_before_approval(monke
         approvals_required=2,
         approval_actors=[],
         ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
-        service_provider_tenant_id="507f1f77bcf86cd799439011",
+        service_provider_tenant_id=str(provider.id),
     )
     manager = object.__new__(TenantManager)
-    manager._engine = FakeEngine(guard)
+    manager._engine = FakeEngine(guard, provider=provider)
+
+    async def _fake_get_guard_tenant(_guard_id):
+        return guard
+
+    manager._get_guard_tenant = _fake_get_guard_tenant
 
     async def _noop_post_change(*_args, **_kwargs):
         return None
@@ -158,7 +184,7 @@ async def test_sp_activate_request_requires_managed_fields_before_approval(monke
             current_user=SimpleNamespace(
                 username="spadmin1",
                 role=user_role.SP_ADMIN,
-                tenant_uuid="507f1f77bcf86cd799439011",
+                tenant_uuid=str(provider.id),
             ),
         )
 
@@ -168,15 +194,25 @@ async def test_sp_activate_request_requires_managed_fields_before_approval(monke
 
 @pytest.mark.anyio
 async def test_sp_deactivate_request_directly_deactivates_guard(monkeypatch):
+    provider = db_tenant_model(
+        tenant_type=TenantType.SERVICE_PROVIDER,
+        profile={"name": "SP One"},
+        status=TenantStatus.ACTIVE,
+    )
     guard = db_tenant_model(
         tenant_type=TenantType.GUARD,
         profile={},
         status=TenantStatus.ACTIVE,
         ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
-        service_provider_tenant_id="507f1f77bcf86cd799439011",
+        service_provider_tenant_id=str(provider.id),
     )
     manager = object.__new__(TenantManager)
-    manager._engine = FakeEngine(guard)
+    manager._engine = FakeEngine(guard, provider=provider)
+
+    async def _fake_get_guard_tenant(_guard_id):
+        return guard
+
+    manager._get_guard_tenant = _fake_get_guard_tenant
 
     async def _noop_post_change(*_args, **_kwargs):
         return None
@@ -192,7 +228,7 @@ async def test_sp_deactivate_request_directly_deactivates_guard(monkeypatch):
         current_user=SimpleNamespace(
             username="spadmin1",
             role=user_role.SP_ADMIN,
-            tenant_uuid="507f1f77bcf86cd799439011",
+            tenant_uuid=str(provider.id),
         ),
     )
 
@@ -248,6 +284,25 @@ async def test_sp_invite_rolls_back_when_mail_fails(monkeypatch):
     assert "Failed to send invite email" in exc.value.detail
     assert len(engine.saved) == 1
     assert len(engine.deleted) == 2
+
+
+@pytest.mark.anyio
+async def test_sp_invite_requires_active_service_provider():
+    manager = object.__new__(TenantManager)
+    manager._engine = FakeInviteEngine(provider_status=TenantStatus.PENDING_ACTIVATION)
+
+    with pytest.raises(HTTPException) as exc:
+        await manager.invite_guard_for_service_provider(
+            SimpleNamespace(email="new.guard@example.com"),
+            current_user=SimpleNamespace(
+                username="spadmin1",
+                role=user_role.SP_ADMIN,
+                tenant_uuid="507f1f77bcf86cd799439011",
+            ),
+        )
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "Pending approval"
 
 
 @pytest.mark.anyio

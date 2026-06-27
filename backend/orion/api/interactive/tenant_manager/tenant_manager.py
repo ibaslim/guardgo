@@ -105,6 +105,18 @@ class TenantManager:
         owner_provider_tenant_id = str(getattr(tenant, "service_provider_tenant_id", "") or "").strip()
         return bool(actor_provider_tenant_id) and actor_provider_tenant_id == owner_provider_tenant_id
 
+    @classmethod
+    def _assert_service_provider_guard_management_allowed(cls, provider: Optional[db_tenant_model]) -> None:
+        if not provider or getattr(provider, "tenant_type", None) != TenantType.SERVICE_PROVIDER:
+            raise HTTPException(status_code=403, detail="Only service providers can manage guards")
+
+        normalized_status = cls._normalized_status_value(getattr(provider, "status", None))
+        if normalized_status == TenantStatus.ACTIVE.value:
+            return
+        if normalized_status == TenantStatus.PENDING_ACTIVATION.value:
+            raise HTTPException(status_code=403, detail="Pending approval")
+        raise HTTPException(status_code=403, detail="Only active service providers can manage guards")
+
     @staticmethod
     def _guard_operational_coverage_snapshot(profile: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         data = profile or {}
@@ -1495,8 +1507,7 @@ class TenantManager:
             raise HTTPException(status_code=400, detail="Invalid service provider association")
 
         provider = await self._engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(provider_tenant_id))
-        if not provider or provider.tenant_type != TenantType.SERVICE_PROVIDER:
-            raise HTTPException(status_code=403, detail="Only service providers can invite guards")
+        self._assert_service_provider_guard_management_allowed(provider)
 
         email = str(data.email).strip().lower()
         existing_email_user = await self._engine.find_one(db_user_account, db_user_account.email == email)
@@ -1601,6 +1612,9 @@ class TenantManager:
         if not provider_tenant_id:
             raise HTTPException(status_code=400, detail="Invalid service provider association")
 
+        provider = await self._get_tenant(provider_tenant_id)
+        self._assert_service_provider_guard_management_allowed(provider)
+
         guards = await self._engine.find(
             db_tenant_model,
             (db_tenant_model.tenant_type == TenantType.GUARD)
@@ -1657,6 +1671,8 @@ class TenantManager:
 
     async def get_service_provider_guard(self, guard_tenant_id: str, current_user) -> Dict[str, Any]:
         provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
+        provider = await self._get_tenant(provider_tenant_id)
+        self._assert_service_provider_guard_management_allowed(provider)
         guard = await self._get_guard_tenant(guard_tenant_id)
         if not self._is_owned_by_service_provider(guard, provider_tenant_id):
             raise HTTPException(status_code=403, detail="Guard does not belong to your service provider")
@@ -1669,13 +1685,11 @@ class TenantManager:
         current_user,
     ) -> Dict[str, Any]:
         provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
+        provider = await self._get_tenant(provider_tenant_id)
+        self._assert_service_provider_guard_management_allowed(provider)
         guard = await self._get_guard_tenant(guard_tenant_id)
         if not self._is_owned_by_service_provider(guard, provider_tenant_id):
             raise HTTPException(status_code=403, detail="Guard does not belong to your service provider")
-
-        provider = await self._get_tenant(provider_tenant_id)
-        if not provider or getattr(provider, "tenant_type", None) != TenantType.SERVICE_PROVIDER:
-            raise HTTPException(status_code=404, detail="Service provider not found")
 
         normalized_provider_profile = dict(provider.profile or {})
         self._validate_and_normalize_provider_operating_regions(normalized_provider_profile)
@@ -1757,6 +1771,8 @@ class TenantManager:
 
     async def delete_expired_pending_guard_invite(self, guard_tenant_id: str, current_user) -> Dict[str, Any]:
         provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
+        provider = await self._get_tenant(provider_tenant_id)
+        self._assert_service_provider_guard_management_allowed(provider)
         guard = await self._get_guard_tenant(guard_tenant_id)
         if not self._is_owned_by_service_provider(guard, provider_tenant_id):
             raise HTTPException(status_code=403, detail="Guard does not belong to your service provider")
@@ -1796,6 +1812,8 @@ class TenantManager:
         current_user,
     ) -> Dict[str, Any]:
         provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
+        provider = await self._get_tenant(provider_tenant_id)
+        self._assert_service_provider_guard_management_allowed(provider)
         guard = await self._get_guard_tenant(guard_tenant_id)
         if not self._is_owned_by_service_provider(guard, provider_tenant_id):
             raise HTTPException(status_code=403, detail="Guard does not belong to your service provider")

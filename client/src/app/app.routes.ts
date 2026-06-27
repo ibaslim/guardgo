@@ -127,12 +127,12 @@ export const routes: Routes = [
       {
         path: 'tenants/:id',
         loadComponent: () => import('./pages/tenants').then(m => m.TenantsComponent),
-        canActivate: [onboardingGuard]
+        canActivate: [onboardingGuard, pendingVerificationGuard]
       },
       {
         path: 'tenants',
         loadComponent: () => import('./pages/tenants').then(m => m.TenantsComponent),
-        canActivate: [onboardingGuard]
+        canActivate: [onboardingGuard, pendingVerificationGuard]
       },
       {
         path: 'billing-configurations',
