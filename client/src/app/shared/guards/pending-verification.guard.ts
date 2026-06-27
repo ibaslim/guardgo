@@ -1,10 +1,12 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { AppService } from '../../services/core/app/app.service';
+import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
 
 export const pendingVerificationGuard: CanActivateFn = (route, state) => {
   const appService = inject(AppService);
   const router = inject(Router);
+  const notification = inject(MessageNotificationService);
 
   const sessionData = appService.userSessionData();
   const tenantStatus = sessionData?.tenant?.status?.toLowerCase();
@@ -17,6 +19,7 @@ export const pendingVerificationGuard: CanActivateFn = (route, state) => {
 
   if (tenantStatus === 'pending_activation') {
     if (isPendingRoute) return true;
+    notification.warning('Pending approval', 3000);
     return router.createUrlTree(['/dashboard/pending-verification']);
   }
 
