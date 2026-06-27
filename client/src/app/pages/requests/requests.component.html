@@ -1710,7 +1710,7 @@
       </app-section>
 
       <app-section
-        *ngIf="isGuardOrProvider && getViewerAssignment(request) as viewerAssignment"
+        *ngIf="canShowPayoutViewsForCurrentUser && getViewerAssignment(request) as viewerAssignment"
         [title]="'Payment Snapshot'"
         [subtitle]="'Your estimated payout for this offer based on the saved request window.'"
         [containerClass]="drawerSectionContainerClass"
@@ -3272,7 +3272,7 @@
 
       <ng-container *ngIf="getJobPricingRequestContext(job, selectedJobRequest) as pricingRequest">
         <app-section
-          *ngIf="(isGuardAdmin || isProviderAdmin) && getJobPayoutAmount(job, pricingRequest) != null"
+          *ngIf="canShowPayoutViewsForCurrentUser && getJobPayoutAmount(job, pricingRequest) != null"
           [title]="'Payment Estimate'"
           [subtitle]="'Your estimated payout for this offer based on the saved request window.'"
           [containerClass]="drawerSectionContainerClass"
@@ -3490,7 +3490,7 @@
       </div>
 
       <app-section
-        *ngIf="getAcceptJobPricingRequestContext(job) as request"
+        *ngIf="canShowPayoutViewsForCurrentUser && getAcceptJobPricingRequestContext(job) as request"
         [title]="'Projected Payment'"
         [subtitle]="'These estimates update as you change the number of positions you can cover.'"
       >

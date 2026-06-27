@@ -1,8 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
+import { AppService } from '../../services/core/app/app.service';
 import { formatBackendDateTime, readableTitle } from '../../shared/helpers/format.helper';
+import { isServiceProviderOwnedGuardTenant } from '../../shared/helpers/access-control.helper';
 import { ClientRequestItem, RequestAssignmentItem, RequestAssignmentStatus, RequestPricingSnapshot } from '../../shared/model/request/client-request.model';
 import { BannerComponent } from '../banner/banner.component';
 import { ButtonComponent } from '../button/button.component';
@@ -34,6 +36,8 @@ type RequestInsight = {
   templateUrl: './request-list-card.component.html',
 })
 export class RequestListCardComponent {
+  private readonly appService = inject(AppService);
+
   @Input({ required: true }) request!: ClientRequestItem;
   @Input() canEdit = false;
   @Input() canPublishUpdate = false;
@@ -383,7 +387,11 @@ export class RequestListCardComponent {
   }
 
   get canShowViewerPricing(): boolean {
-    return Boolean(this.viewerAssignment && this.viewerPayoutHourly != null);
+    return !this.isServiceProviderOwnedGuard && Boolean(this.viewerAssignment && this.viewerPayoutHourly != null);
+  }
+
+  get isServiceProviderOwnedGuard(): boolean {
+    return isServiceProviderOwnedGuardTenant(this.appService.userSessionData()?.tenant);
   }
 
   get viewerCommittedSlots(): number {

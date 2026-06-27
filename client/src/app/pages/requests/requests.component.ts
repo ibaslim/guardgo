@@ -59,7 +59,7 @@ import {
 import { formatBackendDateTime } from '../../shared/helpers/format.helper';
 import { extractCoordinatesFromMapUrl } from '../../shared/helpers/location.helper';
 import { AppService } from '../../services/core/app/app.service';
-import { normalizeRole } from '../../shared/helpers/access-control.helper';
+import { isServiceProviderOwnedGuardTenant, normalizeRole } from '../../shared/helpers/access-control.helper';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import { LoadingFeedbackService } from '../../shared/services/loading-feedback.service';
 
@@ -735,6 +735,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   get isGuardOrProvider(): boolean {
     return this.isGuardAdmin || (this.role === 'sp_admin' && this.tenantType === 'service_provider');
+  }
+
+  get isServiceProviderOwnedGuard(): boolean {
+    return isServiceProviderOwnedGuardTenant(this.appService.userSessionData()?.tenant);
+  }
+
+  get canShowPayoutViewsForCurrentUser(): boolean {
+    return this.isProviderAdmin || (this.isGuardAdmin && !this.isServiceProviderOwnedGuard);
   }
 
   get currentTenantId(): string {
@@ -2271,6 +2279,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   getJobPayoutAmount(job: RequestAssignmentItem, request: PricingRequestContext | null): number | null {
+    if (!this.canShowPayoutViewsForCurrentUser) {
+      return null;
+    }
     const pricing = this.getPricingSnapshotForRequest(request);
     const payout = job.assignee_tenant_type === 'service_provider'
       ? Number(pricing.provider_hourly_pay)
@@ -2279,6 +2290,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   getJobCompanyTakeAmount(job: RequestAssignmentItem, request: PricingRequestContext | null): number | null {
+    if (!this.canShowPayoutViewsForCurrentUser) {
+      return null;
+    }
     const pricing = this.getPricingSnapshotForRequest(request);
     if (job.assignee_tenant_type === 'service_provider') {
       const commission = Number(pricing.provider_company_commission);

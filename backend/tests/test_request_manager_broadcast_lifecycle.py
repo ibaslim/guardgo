@@ -34,7 +34,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     ShiftInstanceRecord,
     ShiftSlotRecord,
 )
-from orion.services.mongo_manager.shared_model.db_tenant_model import TenantType
+from orion.services.mongo_manager.shared_model.db_tenant_model import GuardOwnershipType, TenantType
 
 
 class FakeEngine:
@@ -476,6 +476,24 @@ async def test_list_my_invoices_returns_guard_payout_share():
     assert result["items"][0]["estimated_total_hours"] == 8.0
     assert result["items"][0]["estimated_amount"] == 200.0
     assert result["items"][0]["committed_slots"] == 1
+
+
+@pytest.mark.anyio
+async def test_service_provider_owned_guard_cannot_access_my_invoices():
+    manager = object.__new__(RequestManager)
+    manager._get_session_tenant = lambda _user: _async_return(SimpleNamespace(
+        id="guard-tenant-2",
+        tenant_type=TenantType.GUARD,
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER.value,
+    ))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await manager._get_assignee_invoice_scope(
+            current_user=SimpleNamespace(role="guard_admin", tenant_uuid="guard-tenant-2"),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Payout invoices are managed by the service provider"
 
 
 @pytest.mark.anyio
