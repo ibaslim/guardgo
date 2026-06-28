@@ -649,6 +649,119 @@
   </app-card>
 
   <app-card
+    *ngIf="activeTab === 'leave'"
+    [showHeader]="false"
+    [containerClass]="'mt-3 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
+    [bodyClass]="'p-0'"
+  >
+    <app-list-toolbar
+      [title]="plannedLeaveListTitle"
+      [subtitle]="plannedLeaveListSubtitle"
+      [controlsClass]="listToolbarControlsFourColumnClass"
+      [showFooter]="true"
+    >
+      <div toolbar-controls class="contents">
+        <app-select-input label="Leave Status" [name]="'plannedLeaveStatusFilter'" [(ngModel)]="plannedLeaveStatusFilter" [options]="plannedLeaveStatusOptions"></app-select-input>
+        <app-select-input
+          *ngIf="canReviewPlannedLeave"
+          label="Guard For Quota"
+          [name]="'plannedLeaveQuotaGuardFilter'"
+          [(ngModel)]="selectedLeaveQuotaTargetGuardId"
+          [options]="guardLeaveQuotaTargetOptions"
+          [disabled]="isScopeLoading(plannedLeaveQuotaTargetsScope)"
+        ></app-select-input>
+        <div *ngIf="!isGuardAdmin && !canReviewPlannedLeave" class="sm:col-span-2"></div>
+        <app-filter-action-bar (apply)="loadPlannedLeaves(1)" (clear)="plannedLeaveStatusFilter = ''; loadPlannedLeaves(1)"></app-filter-action-bar>
+      </div>
+      <div toolbar-footer class="flex flex-wrap gap-3">
+        <app-button *ngIf="canRequestPlannedLeave" label="Request Planned Leave" type="primary" (pressed)="openPlannedLeaveRequestDrawer()"></app-button>
+        <app-button
+          *ngIf="canReviewPlannedLeave"
+          label="Manage Leave Quota"
+          type="secondary"
+          [disabled]="!selectedLeaveQuotaTargetGuardId"
+          (pressed)="openPlannedLeavePolicyDrawer(selectedLeaveQuotaTargetGuardId)"
+        ></app-button>
+      </div>
+    </app-list-toolbar>
+
+    <div *ngIf="isGuardAdmin && guardLeaveBalance" class="grid grid-cols-1 gap-3 border-t border-gray-100 px-4 py-4 sm:grid-cols-3 dark:border-gray-800">
+      <app-summary-metric-card label="Allocated Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_allocated_days) + ' days'"></app-summary-metric-card>
+      <app-summary-metric-card label="Used Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_used_days) + ' days'"></app-summary-metric-card>
+      <app-summary-metric-card label="Remaining Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_remaining_days) + ' days'"></app-summary-metric-card>
+    </div>
+
+    <app-list-state-panel *ngIf="isScopeLoading(plannedLeaveListScope)" mode="loading" [loadingRows]="3"></app-list-state-panel>
+
+    <app-list-state-panel
+      *ngIf="!isScopeLoading(plannedLeaveListScope) && !plannedLeaves.length"
+      mode="empty"
+      icon="clock"
+      title="No planned leave requests"
+      message="Future paid and unpaid leave requests will appear here once guards start submitting them."
+    ></app-list-state-panel>
+
+    <div *ngIf="!isScopeLoading(plannedLeaveListScope) && plannedLeaves.length" class="divide-y divide-gray-100 dark:divide-gray-800">
+      <app-record-list-item *ngFor="let item of plannedLeaves; trackBy: trackByPlannedLeaveId">
+        <div record-badges>
+          <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(item.request_status)">
+            {{ formatTokenLabel(item.request_status) }}
+          </span>
+          <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+            {{ formatTokenLabel(item.leave_type) }}
+          </span>
+          <span class="text-xs text-gray-400 dark:text-gray-500">
+            {{ formatBackendDateTime(item.start_at_utc) }} to {{ formatBackendDateTime(item.end_at_utc) }}
+          </span>
+        </div>
+
+        <h3 record-title class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          {{ isGuardAdmin ? 'My planned leave request' : ('Guard ' + item.guard_tenant_id) }}
+        </h3>
+
+        <div record-meta>
+          <span *ngFor="let meta of getPlannedLeaveMetaItems(item)">{{ meta }}</span>
+        </div>
+
+        <div record-actions class="flex flex-wrap gap-2">
+          <app-button
+            *ngIf="canApprovePlannedLeaveItem(item)"
+            label="Approve"
+            type="primary"
+            (pressed)="openPlannedLeaveDecisionDrawer(item, 'approve')"
+          ></app-button>
+          <app-button
+            *ngIf="canRejectPlannedLeaveItem(item)"
+            label="Reject"
+            type="danger"
+            (pressed)="openPlannedLeaveDecisionDrawer(item, 'reject')"
+          ></app-button>
+          <app-button
+            *ngIf="canCancelPlannedLeaveItem(item)"
+            label="Cancel"
+            type="secondary"
+            (pressed)="openPlannedLeaveDecisionDrawer(item, 'cancel')"
+          ></app-button>
+          <app-button
+            *ngIf="canReviewPlannedLeave && item.guard_tenant_id && (isProviderAdmin || item.ownership_type !== 'service_provider')"
+            label="Edit Leave Quota"
+            type="secondary"
+            (pressed)="openPlannedLeavePolicyDrawer(item.guard_tenant_id)"
+          ></app-button>
+        </div>
+      </app-record-list-item>
+    </div>
+
+    <app-pagination-footer
+      *ngIf="!isScopeLoading(plannedLeaveListScope)"
+      [page]="plannedLeavePage"
+      [totalPages]="plannedLeaveTotalPages"
+      [pages]="buildPaginationPages(plannedLeavePage, plannedLeaveTotalPages)"
+      (pageChange)="loadPlannedLeaves($event)"
+    ></app-pagination-footer>
+  </app-card>
+
+  <app-card
     *ngIf="activeTab === 'exceptions'"
     [showHeader]="false"
     [containerClass]="'mt-3 rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
@@ -1395,22 +1508,10 @@
                 [(ngModel)]="requestForm.invoiceContractType"
                 [options]="invoiceContractTypeOptions"
                 [disabled]="isInvoiceContractScheduleDriven"
-                [helperText]="isInvoiceContractScheduleDriven ? 'Contract type is derived from the coverage pattern: one-day schedules are short-term, repeating schedules are long-term.' : 'Short-term charges per job. Long-term triggers monthly advance invoicing.'"
+                [helperText]="isInvoiceContractScheduleDriven ? 'Contract type is derived from the coverage pattern: one-day schedules are short-term, repeating schedules are long-term.' : 'Short-term charges per job. Long-term triggers weekly advance invoicing after the first full-coverage commitment.'"
                 [errorText]="requestErrors['invoiceContractType'] || ''"
                 (ngModelChange)="onInvoiceContractTypeChange()"
               ></app-select-input>
-            </div>
-
-            <div class="flex flex-col" *ngIf="isLongTermInvoiceContract">
-              <app-base-input
-                label="Monthly Cutoff Day"
-                name="invoiceCutoffDayDrawer"
-                type="number"
-                [(ngModel)]="requestForm.invoiceCutoffDay"
-                [min]="1"
-                [errorText]="requestErrors['invoiceCutoffDay'] || ''"
-                [helperText]="'Day of month the invoice is issued (1–28).'"
-              ></app-base-input>
             </div>
 
             <div class="flex flex-col md:col-span-2">
@@ -1461,7 +1562,7 @@
                 </div>
               </div>
               <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                Pricing preview only. Client payment capture is mocked for now, but issued invoices follow the saved request window or monthly schedule. Location: {{ pricing.location?.province || '—' }}, {{ pricing.location?.city || '—' }}.
+                Pricing preview only. Client payment capture is mocked for now, but issued invoices follow the saved request window or the active weekly schedule plan. Location: {{ pricing.location?.province || '—' }}, {{ pricing.location?.city || '—' }}.
               </p>
             </div>
           </ng-container>
@@ -1476,10 +1577,6 @@
                 <div>
                   <p class="text-xs text-gray-500 dark:text-gray-400">Billing Cycle</p>
                   <p class="mt-0.5 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ formatTokenLabel(invoicing.billing_cycle || '') }}</p>
-                </div>
-                <div *ngIf="invoicing.monthly_cutoff_day != null">
-                  <p class="text-xs text-gray-500 dark:text-gray-400">Monthly Cutoff</p>
-                  <p class="mt-0.5 text-sm font-semibold text-gray-900 dark:text-gray-100">Day {{ invoicing.monthly_cutoff_day }}</p>
                 </div>
                 <div *ngIf="invoicing.invoice_recipient_email">
                   <p class="text-xs text-gray-500 dark:text-gray-400">Invoice Email</p>
@@ -1670,7 +1767,7 @@
       <app-section
         *ngIf="isClientAdmin && getPricingSnapshotForRequest(request).client_hourly_quote"
         [title]="'Pricing Snapshot'"
-        [subtitle]="'Saved client pricing with mocked payment capture and invoice settings tied to the request or monthly schedule.'"
+        [subtitle]="'Saved client pricing with mocked payment capture and invoice settings tied to the request or weekly schedule.'"
         [containerClass]="drawerSectionContainerClass"
         [headerClass]="drawerSectionHeaderClass"
         [titleClass]="drawerSectionTitleClass"
@@ -1809,7 +1906,7 @@
       <app-section
         *ngIf="canViewRequestInvoices"
         [title]="'Invoice History'"
-        [subtitle]="'Persisted invoices generated from one-time jobs and advance monthly schedules.'"
+        [subtitle]="'Persisted invoices generated from one-time jobs and weekly advance schedules.'"
         [containerClass]="drawerSectionContainerClass"
         [headerClass]="drawerSectionHeaderClass"
         [titleClass]="drawerSectionTitleClass"
@@ -1848,7 +1945,6 @@
                 <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
                   {{ formatBackendDateTime(invoice.created_at) }}
                   <span *ngIf="invoice.invoice_recipient_email"> · {{ invoice.invoice_recipient_email }}</span>
-                  <span *ngIf="invoice.monthly_cutoff_day != null"> · Cutoff day {{ invoice.monthly_cutoff_day }}</span>
                   <span *ngIf="invoice.billing_period_start_local && invoice.billing_period_end_local"> · {{ invoice.billing_period_start_local }} to {{ invoice.billing_period_end_local }}</span>
                 </div>
               </div>
@@ -1967,7 +2063,6 @@
           <app-summary-metric-card label="Invoice Email" [value]="invoice.invoice_recipient_email || 'Not set'"></app-summary-metric-card>
           <app-summary-metric-card label="Billing Cycle" [value]="formatTokenLabel(invoice.billing_cycle || 'per_request')"></app-summary-metric-card>
           <app-summary-metric-card label="Charge Timing" [value]="formatTokenLabel(invoice.charge_timing || 'on_the_go')"></app-summary-metric-card>
-          <app-summary-metric-card *ngIf="invoice.monthly_cutoff_day != null" label="Monthly Cutoff" [value]="'Day ' + invoice.monthly_cutoff_day"></app-summary-metric-card>
           <app-summary-metric-card label="Email Delivery" [value]="formatTokenLabel(invoice.email_delivery_status || 'not_requested')"></app-summary-metric-card>
           <app-summary-metric-card label="Issued By" [value]="invoice.created_by_username || 'system'"></app-summary-metric-card>
         </div>
@@ -1976,7 +2071,7 @@
 
       <app-section
         [title]="'Line Items'"
-        [subtitle]="'Each scheduled day is listed separately for monthly invoices.'"
+        [subtitle]="'Each scheduled day is listed separately for weekly advance invoices.'"
         [containerClass]="drawerSectionContainerClass"
         [headerClass]="drawerSectionHeaderClass"
         [titleClass]="drawerSectionTitleClass"
@@ -2581,7 +2676,7 @@
         [headerClass]="drawerSectionHeaderClass"
         [titleClass]="drawerSectionTitleClass"
         [subtitleClass]="drawerSectionSubtitleClass"
-        [subtitle]="'This applies only to the selected shift and is only allowed in the final 2 hours before the scheduled start time.'"
+        [subtitle]="'This applies only to the selected shift and is only allowed inside the configured pre-start window before the scheduled start time.'"
       >
         <div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <app-base-input
@@ -2735,6 +2830,149 @@
     </app-drawer-action-row>
   </app-side-drawer>
 
+  <app-side-drawer [show]="showPlannedLeaveRequestDrawer" size="lg" (close)="closePlannedLeaveRequestDrawer()">
+    <app-drawer-title-block
+      drawer-header
+      title="Request Planned Leave"
+      subtitle="Submit a future paid or unpaid leave request for approval."
+    ></app-drawer-title-block>
+
+    <div drawer-body class="space-y-5">
+      <div *ngIf="guardLeaveBalance" class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <app-summary-metric-card label="Allocated Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_allocated_days) + ' days'"></app-summary-metric-card>
+        <app-summary-metric-card label="Used Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_used_days) + ' days'"></app-summary-metric-card>
+        <app-summary-metric-card label="Remaining Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_remaining_days) + ' days'"></app-summary-metric-card>
+      </div>
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <app-select-input
+          label="Leave Type"
+          [name]="'plannedLeaveType'"
+          [(ngModel)]="plannedLeaveForm.leaveType"
+          [options]="plannedLeaveTypeOptions"
+        ></app-select-input>
+        <div></div>
+        <app-base-input
+          label="Leave Start"
+          type="datetime-local"
+          name="plannedLeaveStartAt"
+          [(ngModel)]="plannedLeaveForm.startAt"
+          [required]="true"
+          [errorText]="plannedLeaveErrors['startAt'] || ''"
+        ></app-base-input>
+        <app-base-input
+          label="Leave End"
+          type="datetime-local"
+          name="plannedLeaveEndAt"
+          [(ngModel)]="plannedLeaveForm.endAt"
+          [required]="true"
+          [errorText]="plannedLeaveErrors['endAt'] || ''"
+        ></app-base-input>
+        <div class="sm:col-span-2">
+          <app-textarea
+            label="Reason"
+            name="plannedLeaveReason"
+            [(ngModel)]="plannedLeaveForm.reason"
+            [helperText]="'Optional context for the approving platform or service provider admin.'"
+          ></app-textarea>
+        </div>
+      </div>
+    </div>
+
+    <app-drawer-action-row drawer-footer>
+      <app-button label="Close" type="secondary" (pressed)="closePlannedLeaveRequestDrawer()"></app-button>
+      <app-button label="Submit Leave Request" type="primary" [loadingScope]="'requests:leave:create'" (pressed)="submitPlannedLeaveRequest()"></app-button>
+    </app-drawer-action-row>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showPlannedLeaveDecisionDrawer" size="md" (close)="closePlannedLeaveDecisionDrawer()">
+    <app-drawer-title-block
+      drawer-header
+      *ngIf="selectedPlannedLeave as item"
+      [title]="plannedLeaveDecisionForm.action === 'approve' ? 'Approve Planned Leave' : plannedLeaveDecisionForm.action === 'reject' ? 'Reject Planned Leave' : 'Cancel Planned Leave'"
+      [subtitle]="formatBackendDateTime(item.start_at_utc) + ' to ' + formatBackendDateTime(item.end_at_utc)"
+    ></app-drawer-title-block>
+
+    <div drawer-body *ngIf="selectedPlannedLeave as item" class="space-y-5">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <app-summary-metric-card label="Guard" [value]="item.guard_tenant_id"></app-summary-metric-card>
+        <app-summary-metric-card label="Leave Type" [value]="formatTokenLabel(item.leave_type)"></app-summary-metric-card>
+      </div>
+      <app-textarea
+        label="Decision Note"
+        name="plannedLeaveDecisionNote"
+        [(ngModel)]="plannedLeaveDecisionForm.note"
+        [helperText]="'Optional reviewer note for the guard.'"
+      ></app-textarea>
+    </div>
+
+    <app-drawer-action-row drawer-footer *ngIf="selectedPlannedLeave as item">
+      <app-button label="Close" type="secondary" (pressed)="closePlannedLeaveDecisionDrawer()"></app-button>
+      <app-button
+        [label]="plannedLeaveDecisionForm.action === 'approve' ? 'Confirm Approval' : plannedLeaveDecisionForm.action === 'reject' ? 'Confirm Rejection' : 'Confirm Cancellation'"
+        [type]="plannedLeaveDecisionForm.action === 'approve' ? 'primary' : plannedLeaveDecisionForm.action === 'reject' ? 'danger' : 'secondary'"
+        [loadingScope]="plannedLeaveDecisionForm.action === 'approve' ? 'requests:leave:approve:' + item.id : plannedLeaveDecisionForm.action === 'reject' ? 'requests:leave:reject:' + item.id : 'requests:leave:cancel:' + item.id"
+        (pressed)="submitPlannedLeaveDecision()"
+      ></app-button>
+    </app-drawer-action-row>
+  </app-side-drawer>
+
+  <app-side-drawer [show]="showPlannedLeavePolicyDrawer" size="lg" (close)="closePlannedLeavePolicyDrawer()">
+    <app-drawer-title-block
+      drawer-header
+      title="Edit Leave Quota"
+      [subtitle]="selectedPlannedLeavePolicyGuardId || 'Guard leave quota'"
+    ></app-drawer-title-block>
+
+    <div drawer-body class="space-y-5">
+      <div *ngIf="guardLeaveBalance" class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <app-summary-metric-card label="Allocated Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_allocated_days) + ' days'"></app-summary-metric-card>
+        <app-summary-metric-card label="Used Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_used_days) + ' days'"></app-summary-metric-card>
+        <app-summary-metric-card label="Remaining Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_remaining_days) + ' days'"></app-summary-metric-card>
+      </div>
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <app-base-input
+          label="Annual Paid Leave Days"
+          type="number"
+          name="plannedLeaveAnnualPaid"
+          [(ngModel)]="plannedLeavePolicyForm.annualPaidLeaveDays"
+          [errorText]="plannedLeavePolicyErrors['annualPaidLeaveDays'] || ''"
+        ></app-base-input>
+        <app-base-input
+          label="Annual Unpaid Leave Days"
+          type="number"
+          name="plannedLeaveAnnualUnpaid"
+          [(ngModel)]="plannedLeavePolicyForm.annualUnpaidLeaveDays"
+          [errorText]="plannedLeavePolicyErrors['annualUnpaidLeaveDays'] || ''"
+        ></app-base-input>
+        <app-base-input
+          label="Carry Forward Days"
+          type="number"
+          name="plannedLeaveCarryForward"
+          [(ngModel)]="plannedLeavePolicyForm.carryForwardDays"
+          [errorText]="plannedLeavePolicyErrors['carryForwardDays'] || ''"
+        ></app-base-input>
+        <app-base-input
+          label="Effective From"
+          type="date"
+          name="plannedLeaveEffectiveFrom"
+          [(ngModel)]="plannedLeavePolicyForm.effectiveFrom"
+        ></app-base-input>
+      </div>
+    </div>
+
+    <app-drawer-action-row drawer-footer>
+      <app-button label="Close" type="secondary" (pressed)="closePlannedLeavePolicyDrawer()"></app-button>
+      <app-button
+        label="Save Quota"
+        type="primary"
+        [loadingScope]="'requests:leave:policy:' + selectedPlannedLeavePolicyGuardId"
+        (pressed)="submitPlannedLeavePolicy()"
+      ></app-button>
+    </app-drawer-action-row>
+  </app-side-drawer>
+
   <app-side-drawer [show]="showRosterDrawer" size="lg" (close)="closeRosterDrawer()">
     <app-drawer-title-block
       drawer-header
@@ -2784,13 +3022,30 @@
           [metaItems]="getRosterSlotMetaItems(slot)"
           [containerClass]="'rounded-md border border-gray-100 p-4 dark:border-gray-800'"
         >
-          <app-select-input
-            label="Assigned Guard"
-            [name]="'roster-slot-' + slot.id"
-            [(ngModel)]="rosterSelections[slot.id]"
-            [options]="getProviderGuardOptions()"
-            placeholder="Select provider guard"
-          ></app-select-input>
+          <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200" [attr.for]="'roster-slot-' + slot.id">
+            Assigned Guard
+          </label>
+          <div class="relative">
+            <select
+              class="block w-full appearance-none rounded-lg border border-gray-300 bg-white px-4 py-2 pr-10 text-sm text-gray-900 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+              [id]="'roster-slot-' + slot.id"
+              [name]="'roster-slot-' + slot.id"
+              [(ngModel)]="rosterSelections[slot.id]"
+            >
+              <option value="">Select provider guard</option>
+              <option
+                *ngFor="let guard of providerGuards; trackBy: trackByProviderGuardId"
+                [value]="guard.id"
+              >
+                {{ guard.name || guard.id }}{{ guard.email ? (' • ' + guard.email) : '' }}
+              </option>
+            </select>
+            <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </span>
+          </div>
         </app-shift-slot-card>
       </div>
 
@@ -3473,13 +3728,13 @@
 
       <div>
         <app-base-input
-          label="Guard Positions You Can Cover"
+          [label]="getAcceptJobSlotsLabel(job)"
           name="acceptJobSlotsCommitted"
           type="number"
           [(ngModel)]="acceptJobForm.slotsCommitted"
-          [min]="1"
+          [min]="getAcceptJobMinimumCommittedSlots(job)"
           [required]="true"
-          [helperText]="'Enter how many guard positions your service provider can cover for this request.'"
+          [helperText]="getAcceptJobSlotsHelperText(job)"
           [errorText]="acceptJobErrors['slotsCommitted'] || ''"
         ></app-base-input>
       </div>
@@ -3489,10 +3744,18 @@
         <div class="h-16 animate-pulse rounded-md bg-gray-100 dark:bg-gray-800"></div>
       </div>
 
+      <div *ngIf="!isScopeLoading(acceptJobRequestScope) && getAcceptJobPricingRequestContext(job) as request" class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <app-summary-metric-card label="Currently Committed" [value]="getJobCommittedSlots(job)"></app-summary-metric-card>
+        <app-summary-metric-card label="Request Still Open" [value]="getJobOpenSlots(job)"></app-summary-metric-card>
+        <app-summary-metric-card label="Request Total" [value]="request.guards_required || 0"></app-summary-metric-card>
+      </div>
+
       <app-section
         *ngIf="canShowPayoutViewsForCurrentUser && getAcceptJobPricingRequestContext(job) as request"
         [title]="'Projected Payment'"
-        [subtitle]="'These estimates update as you change the number of positions you can cover.'"
+        [subtitle]="canIncreaseProviderCoverage(job)
+          ? 'These estimates update as you increase your provider coverage commitment.'
+          : 'These estimates update as you change the number of positions you can cover.'"
       >
         <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <app-summary-metric-card
@@ -3524,7 +3787,7 @@
 
     <app-drawer-action-row drawer-footer *ngIf="selectedAcceptJob as job">
       <app-button label="Close" type="secondary" (pressed)="closeAcceptJobDrawer()"></app-button>
-      <app-button label="Confirm Offer Acceptance" type="primary" [loadingScope]="getJobUpdateScope(job.id)" (pressed)="submitAcceptJob()"></app-button>
+      <app-button [label]="getAcceptJobSubmitLabel(job)" type="primary" [loadingScope]="getJobUpdateScope(job.id)" (pressed)="submitAcceptJob()"></app-button>
     </app-drawer-action-row>
   </app-side-drawer>
 

@@ -13,7 +13,7 @@ import { SectionComponent } from '../../components/section/section.component';
 import { SideDrawerComponent } from '../../components/side-drawer/side-drawer.component';
 import { SummaryMetricCardComponent } from '../../components/summary-metric-card/summary-metric-card.component';
 import { formatBackendDateTime } from '../../shared/helpers/format.helper';
-import { MyInvoiceLineItem, PlatformPayoutInvoiceItem } from '../../shared/model/request/client-request.model';
+import { MyInvoiceLineItem, PlatformPayoutInvoiceItem, RequestPayoutAdjustmentItem } from '../../shared/model/request/client-request.model';
 import { RequestService } from '../../shared/services/request.service';
 
 @Component({
@@ -40,7 +40,13 @@ export class PlatformPayoutInvoicesComponent implements OnInit, OnDestroy {
     invoice_count?: number;
     total_client_revenue?: number;
     total_payout?: number;
+    total_baseline_payout?: number;
+    total_payout_adjustments?: number;
+    draft_payout_adjustment_count?: number;
+    approved_payout_adjustment_count?: number;
+    voided_payout_adjustment_count?: number;
     total_platform_earning?: number;
+    total_baseline_platform_earning?: number;
     total_hours?: number;
     total_guard_payout?: number;
     total_provider_payout?: number;
@@ -51,6 +57,8 @@ export class PlatformPayoutInvoicesComponent implements OnInit, OnDestroy {
   showInvoiceDrawer = false;
   listLoading = false;
   detailLoading = false;
+  adjustmentSubmitting = false;
+  adjustmentActingId = '';
   readonly listRows = 100;
   readonly assigneeTenantTypeOptions = [
     { label: 'All assignees', value: '' },
@@ -59,6 +67,9 @@ export class PlatformPayoutInvoicesComponent implements OnInit, OnDestroy {
   ];
   keyword = '';
   assigneeTenantType = '';
+  adjustmentAmount: number | null = null;
+  adjustmentReason = '';
+  editingAdjustmentId = '';
 
   private readonly subscriptions = new Subscription();
 
@@ -95,6 +106,22 @@ export class PlatformPayoutInvoicesComponent implements OnInit, OnDestroy {
 
   get totalPlatformEarning(): number {
     return Number(this.summary?.total_platform_earning || 0);
+  }
+
+  get totalPayoutAdjustments(): number {
+    return Number(this.summary?.total_payout_adjustments || 0);
+  }
+
+  get draftPayoutAdjustmentCount(): number {
+    return Number(this.summary?.draft_payout_adjustment_count || 0);
+  }
+
+  get approvedPayoutAdjustmentCount(): number {
+    return Number(this.summary?.approved_payout_adjustment_count || 0);
+  }
+
+  get voidedPayoutAdjustmentCount(): number {
+    return Number(this.summary?.voided_payout_adjustment_count || 0);
   }
 
   get totalHours(): number {
@@ -156,6 +183,7 @@ export class PlatformPayoutInvoicesComponent implements OnInit, OnDestroy {
 
   openInvoice(invoice: PlatformPayoutInvoiceItem): void {
     this.selectedInvoice = invoice;
+    this.resetAdjustmentForm();
     this.showInvoiceDrawer = true;
     void this.router.navigate([], {
       relativeTo: this.route,
@@ -176,6 +204,127 @@ export class PlatformPayoutInvoicesComponent implements OnInit, OnDestroy {
 
   getInvoiceLineItems(invoice: PlatformPayoutInvoiceItem | null): MyInvoiceLineItem[] {
     return invoice?.line_items || [];
+  }
+
+  get canAdjustSelectedInvoice(): boolean {
+    return this.canAdjustInvoice(this.selectedInvoice);
+  }
+
+  canAdjustInvoice(invoice: PlatformPayoutInvoiceItem | null | undefined): boolean {
+    if (!invoice) {
+      return false;
+    }
+    return String(invoice.assignee_tenant_type || '').trim().toLowerCase() === 'service_provider'
+      && String(invoice.request_fulfillment_mode || '').trim().toLowerCase() === 'hybrid';
+  }
+
+  submitAdjustment(): void {
+    const invoice = this.selectedInvoice;
+    if (!this.canAdjustInvoice(invoice) || !invoice?.id) {
+      return;
+    }
+    const amount = Number(this.adjustmentAmount);
+    const reason = String(this.adjustmentReason || '').trim();
+    if (!Number.isFinite(amount) || amount === 0 || !reason) {
+      return;
+    }
+
+    this.adjustmentSubmitting = true;
+    const request$ = this.editingAdjustmentId
+      ? this.requestService.updatePlatformPayoutAdjustment(
+          this.editingAdjustmentId,
+          { amount, reason },
+          { loadingMode: 'global' },
+        )
+      : this.requestService.createPlatformPayoutAdjustment(
+          invoice.id,
+          { amount, reason },
+          { loadingMode: 'global' },
+        );
+
+    request$.subscribe({
+      next: (response) => {
+        this.selectedInvoice = response;
+        this.resetAdjustmentForm();
+        this.adjustmentSubmitting = false;
+        this.loadInvoices();
+      },
+      error: () => {
+        this.adjustmentSubmitting = false;
+      },
+    });
+  }
+
+  isDraftAdjustment(adjustment: RequestPayoutAdjustmentItem | null | undefined): boolean {
+    return String(adjustment?.adjustment_status || '').trim().toLowerCase() === 'draft';
+  }
+
+  isApprovedAdjustment(adjustment: RequestPayoutAdjustmentItem | null | undefined): boolean {
+    return String(adjustment?.adjustment_status || '').trim().toLowerCase() === 'approved';
+  }
+
+  isVoidedAdjustment(adjustment: RequestPayoutAdjustmentItem | null | undefined): boolean {
+    return String(adjustment?.adjustment_status || '').trim().toLowerCase() === 'voided';
+  }
+
+  startAdjustmentEdit(adjustment: RequestPayoutAdjustmentItem): void {
+    if (!this.isDraftAdjustment(adjustment)) {
+      return;
+    }
+    this.editingAdjustmentId = String(adjustment.id || '').trim();
+    this.adjustmentAmount = Number(adjustment.amount || 0) || null;
+    this.adjustmentReason = String(adjustment.reason || '').trim();
+  }
+
+  cancelAdjustmentEdit(): void {
+    this.resetAdjustmentForm();
+  }
+
+  approveAdjustment(adjustmentId: string): void {
+    const normalizedId = String(adjustmentId || '').trim();
+    if (!normalizedId || this.adjustmentActingId) {
+      return;
+    }
+    this.adjustmentActingId = normalizedId;
+    this.requestService.approvePlatformPayoutAdjustment(
+      normalizedId,
+      {},
+      { loadingMode: 'global' },
+    ).subscribe({
+      next: (response) => {
+        this.selectedInvoice = response;
+        this.adjustmentActingId = '';
+        this.loadInvoices();
+      },
+      error: () => {
+        this.adjustmentActingId = '';
+      },
+    });
+  }
+
+  voidAdjustment(adjustmentId: string): void {
+    const normalizedId = String(adjustmentId || '').trim();
+    if (!normalizedId || this.adjustmentActingId) {
+      return;
+    }
+    this.adjustmentActingId = normalizedId;
+    this.requestService.voidPlatformPayoutAdjustment(
+      normalizedId,
+      {},
+      { loadingMode: 'global' },
+    ).subscribe({
+      next: (response) => {
+        this.selectedInvoice = response;
+        if (this.editingAdjustmentId === normalizedId) {
+          this.resetAdjustmentForm();
+        }
+        this.adjustmentActingId = '';
+        this.loadInvoices();
+      },
+      error: () => {
+        this.adjustmentActingId = '';
+      },
+    });
   }
 
   formatMoney(value: number | string | null | undefined, currency = 'CAD'): string {
@@ -248,6 +397,20 @@ export class PlatformPayoutInvoicesComponent implements OnInit, OnDestroy {
     return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200';
   }
 
+  getAdjustmentStatusClasses(value: string | null | undefined): string {
+    const token = String(value || '').trim().toLowerCase();
+    if (token === 'approved') {
+      return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200';
+    }
+    if (token === 'draft') {
+      return 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200';
+    }
+    if (token === 'voided') {
+      return 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-200';
+    }
+    return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200';
+  }
+
   private handleRouteParams(params: Record<string, any>): void {
     const invoiceId = String(params['invoice'] || '').trim();
     if (!invoiceId) {
@@ -270,6 +433,7 @@ export class PlatformPayoutInvoicesComponent implements OnInit, OnDestroy {
     this.requestService.getPlatformPayoutInvoice(invoiceId, { loadingMode: 'global' }).subscribe({
       next: (response) => {
         this.selectedInvoice = response;
+        this.resetAdjustmentForm();
         this.detailLoading = false;
       },
       error: () => {
@@ -282,5 +446,13 @@ export class PlatformPayoutInvoicesComponent implements OnInit, OnDestroy {
     this.showInvoiceDrawer = false;
     this.selectedInvoice = null;
     this.detailLoading = false;
+    this.resetAdjustmentForm();
+  }
+
+  private resetAdjustmentForm(): void {
+    this.adjustmentAmount = null;
+    this.adjustmentReason = '';
+    this.adjustmentSubmitting = false;
+    this.editingAdjustmentId = '';
   }
 }

@@ -29,6 +29,9 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     BroadcastReviewReasonCode,
     ClientRequestCreatePayload,
     ClientRequestRecord,
+    GuardPlannedLeaveRecord,
+    GuardPlannedLeaveStatus,
+    GuardPlannedLeaveType,
     ClientRequestSoftDeletePayload,
     ClientRequestStatusUpdatePayload,
     ClientRequestUpdatePayload,
@@ -46,6 +49,10 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestInvoiceStatus,
     RequestInvoiceTrigger,
     RequestLockReason,
+    RequestPayoutAdjustmentCreatePayload,
+    RequestPayoutAdjustmentDecisionPayload,
+    RequestPayoutAdjustmentRecord,
+    RequestPayoutAdjustmentUpdatePayload,
     RequestPublishPayload,
     RequestPublishUpdatePayload,
     RequestPricingPreviewPayload,
@@ -108,6 +115,14 @@ AUTO_COMPLETE_ELAPSED_ASSIGNMENT_STATUSES = {
 }
 
 _FINANCE_SNAPSHOT_UNSET = object()
+PAYOUT_ADJUSTMENT_STATUS_DRAFT = "draft"
+PAYOUT_ADJUSTMENT_STATUS_APPROVED = "approved"
+PAYOUT_ADJUSTMENT_STATUS_VOIDED = "voided"
+PAYOUT_ADJUSTMENT_ALLOWED_STATUSES = {
+    PAYOUT_ADJUSTMENT_STATUS_DRAFT,
+    PAYOUT_ADJUSTMENT_STATUS_APPROVED,
+    PAYOUT_ADJUSTMENT_STATUS_VOIDED,
+}
 
 
 class RequestManager:
@@ -268,6 +283,80 @@ class RequestManager:
         return RequestFulfillmentMode.INDIVIDUAL_ONLY
 
     @staticmethod
+    def _pricing_strategy_for_mode(fulfillment_mode: RequestFulfillmentMode) -> str:
+        if fulfillment_mode == RequestFulfillmentMode.SERVICE_PROVIDER_ONLY:
+            return "provider_baseline"
+        return "guard_baseline"
+
+    @classmethod
+    def _serialize_payout_adjustment(
+        cls,
+        record: RequestPayoutAdjustmentRecord | Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if isinstance(record, dict):
+            return {
+                "id": str(record.get("_id") or record.get("id") or ""),
+                "payout_invoice_id": str(record.get("payout_invoice_id") or "").strip(),
+                "request_id": str(record.get("request_id") or "").strip(),
+                "assignee_tenant_id": str(record.get("assignee_tenant_id") or "").strip(),
+                "assignee_tenant_type": str(record.get("assignee_tenant_type") or "").strip(),
+                "currency": str(record.get("currency") or "CAD").strip() or "CAD",
+                "amount": cls._as_float(record.get("amount")),
+                "reason": str(record.get("reason") or "").strip(),
+                "adjustment_status": cls._normalize_payout_adjustment_status(record.get("adjustment_status")),
+                "status_note": str(record.get("status_note") or "").strip() or None,
+                "created_by_user_id": str(record.get("created_by_user_id") or "").strip() or None,
+                "created_by_username": str(record.get("created_by_username") or "").strip() or None,
+                "approved_by_user_id": str(record.get("approved_by_user_id") or "").strip() or None,
+                "approved_by_username": str(record.get("approved_by_username") or "").strip() or None,
+                "approved_at": record.get("approved_at"),
+                "voided_by_user_id": str(record.get("voided_by_user_id") or "").strip() or None,
+                "voided_by_username": str(record.get("voided_by_username") or "").strip() or None,
+                "voided_at": record.get("voided_at"),
+                "updated_by_user_id": str(record.get("updated_by_user_id") or "").strip() or None,
+                "updated_by_username": str(record.get("updated_by_username") or "").strip() or None,
+                "created_at": record.get("created_at"),
+                "updated_at": record.get("updated_at"),
+            }
+
+        return {
+            "id": str(record.id),
+            "payout_invoice_id": str(record.payout_invoice_id or "").strip(),
+            "request_id": str(record.request_id or "").strip(),
+            "assignee_tenant_id": str(record.assignee_tenant_id or "").strip(),
+            "assignee_tenant_type": str(record.assignee_tenant_type or "").strip(),
+            "currency": str(record.currency or "CAD").strip() or "CAD",
+            "amount": cls._as_float(record.amount),
+            "reason": str(record.reason or "").strip(),
+            "adjustment_status": cls._normalize_payout_adjustment_status(record.adjustment_status),
+            "status_note": str(record.status_note or "").strip() or None,
+            "created_by_user_id": str(record.created_by_user_id or "").strip() or None,
+            "created_by_username": str(record.created_by_username or "").strip() or None,
+            "approved_by_user_id": str(record.approved_by_user_id or "").strip() or None,
+            "approved_by_username": str(record.approved_by_username or "").strip() or None,
+            "approved_at": record.approved_at,
+            "voided_by_user_id": str(record.voided_by_user_id or "").strip() or None,
+            "voided_by_username": str(record.voided_by_username or "").strip() or None,
+            "voided_at": record.voided_at,
+            "updated_by_user_id": str(record.updated_by_user_id or "").strip() or None,
+            "updated_by_username": str(record.updated_by_username or "").strip() or None,
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+        }
+
+    @staticmethod
+    def _normalize_payout_adjustment_status(value: Any) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized in PAYOUT_ADJUSTMENT_ALLOWED_STATUSES:
+            return normalized
+        return PAYOUT_ADJUSTMENT_STATUS_APPROVED
+
+    @staticmethod
+    def _normalize_optional_note(value: Any) -> Optional[str]:
+        normalized = str(value or "").strip()
+        return normalized or None
+
+    @staticmethod
     def _allowed_assignment_transition(current_status: RequestAssignmentStatus, next_status: RequestAssignmentStatus) -> bool:
         allowed = {
             RequestAssignmentStatus.OFFERED: {RequestAssignmentStatus.ACCEPTED, RequestAssignmentStatus.DECLINED},
@@ -276,6 +365,29 @@ class RequestManager:
             RequestAssignmentStatus.IN_PROGRESS: {RequestAssignmentStatus.COMPLETED, RequestAssignmentStatus.CANCELLED},
         }
         return next_status in allowed.get(current_status, set())
+
+    @classmethod
+    def _is_provider_request_scope_assignment(cls, assignment: RequestAssignmentRecord | Dict[str, Any]) -> bool:
+        assignee_type = cls._enum_value(
+            assignment.get("assignee_tenant_type") if isinstance(assignment, dict) else getattr(assignment, "assignee_tenant_type", None)
+        )
+        return (
+            assignee_type == RequestTargetType.SERVICE_PROVIDER.value
+            and cls._assignment_scope_value(assignment) == RequestAssignmentScope.REQUEST.value
+        )
+
+    @classmethod
+    def _allows_provider_coverage_increase_transition(
+        cls,
+        assignment: RequestAssignmentRecord | Dict[str, Any],
+        current_status: RequestAssignmentStatus,
+        next_status: RequestAssignmentStatus,
+    ) -> bool:
+        return (
+            current_status == RequestAssignmentStatus.ACCEPTED
+            and next_status == RequestAssignmentStatus.ACCEPTED
+            and cls._is_provider_request_scope_assignment(assignment)
+        )
 
     @staticmethod
     def _allowed_request_status_transition(current_status: RequestStatus, next_status: RequestStatus) -> bool:
@@ -420,6 +532,7 @@ class RequestManager:
 
         invoicing_snapshot = doc.get("invoicing_snapshot") if isinstance(doc.get("invoicing_snapshot"), dict) else {}
         finance_snapshot = await self._build_request_pricing_and_invoicing(
+            fulfillment_mode=self._resolve_fulfillment_mode_from_record(doc),
             site_snapshot=doc.get("site_snapshot") or {},
             requested_start_at=self._as_datetime(doc.get("requested_start_at")),
             requested_end_at=self._as_datetime(doc.get("requested_end_at")),
@@ -934,6 +1047,7 @@ class RequestManager:
         cls,
         invoice_record: RequestInvoiceRecord | Dict[str, Any],
         *,
+        assignee_tenant_id: str,
         assignee_tenant_type: str,
         committed_slots: int,
         coverage_status: str = "",
@@ -946,10 +1060,17 @@ class RequestManager:
             committed_slots=max(int(committed_slots or 1), 1),
             assignee_tenant_type=assignee_tenant_type,
         )
+        payout_invoice_id = cls._short_term_assignee_invoice_id(
+            request_invoice_id=str(base["id"] or "").strip(),
+            assignee_tenant_id=assignee_tenant_id,
+            assignee_tenant_type=assignee_tenant_type,
+        )
         return {
-            "id": base["id"],
+            "id": payout_invoice_id,
             "request_id": base["request_id"],
             "invoice_number": base["invoice_number"],
+            "source_request_invoice_id": base["id"],
+            "source_request_invoice_number": base["invoice_number"],
             "request_title": request_title,
             "site_name": site_name,
             "assignee_tenant_type": assignee_tenant_type,
@@ -971,6 +1092,93 @@ class RequestManager:
             "created_at": base["created_at"],
             "updated_at": base["updated_at"],
         }
+
+    @classmethod
+    def _short_term_assignee_invoice_id(
+        cls,
+        *,
+        request_invoice_id: str,
+        assignee_tenant_id: str,
+        assignee_tenant_type: str,
+    ) -> str:
+        return (
+            f"payout:{str(assignee_tenant_type or '').strip().lower()}:"
+            f"{str(assignee_tenant_id or '').strip()}:"
+            f"{str(request_invoice_id or '').strip()}"
+        )
+
+    async def _list_payout_adjustments_for_invoice_ids(
+        self,
+        payout_invoice_ids: List[str],
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        normalized_ids = [
+            str(invoice_id or "").strip()
+            for invoice_id in payout_invoice_ids
+            if str(invoice_id or "").strip()
+        ]
+        if not normalized_ids:
+            return {}
+
+        adjustment_collection = self._engine.get_collection(RequestPayoutAdjustmentRecord)
+        adjustment_docs = await adjustment_collection.find({
+            "payout_invoice_id": {"$in": normalized_ids},
+        }).sort("created_at", 1).to_list(length=None)
+
+        lookup: Dict[str, List[Dict[str, Any]]] = {}
+        for doc in adjustment_docs:
+            payout_invoice_id = str(doc.get("payout_invoice_id") or "").strip()
+            if not payout_invoice_id:
+                continue
+            lookup.setdefault(payout_invoice_id, []).append(self._serialize_payout_adjustment(doc))
+        return lookup
+
+    @classmethod
+    def _apply_payout_adjustments_to_invoice_item(
+        cls,
+        item: Dict[str, Any],
+        adjustments: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        enriched = dict(item)
+        baseline_amount = cls._as_float(item.get("estimated_amount"))
+        baseline_rate = cls._as_float(item.get("payout_hourly_rate"))
+        total_hours = cls._as_float(item.get("estimated_total_hours"))
+        currency = str(item.get("currency") or "CAD").strip() or "CAD"
+
+        serialized_adjustments = [cls._serialize_payout_adjustment(adjustment) for adjustment in adjustments or []]
+        approved_adjustments = [
+            adjustment for adjustment in serialized_adjustments
+            if cls._normalize_payout_adjustment_status(adjustment.get("adjustment_status")) == PAYOUT_ADJUSTMENT_STATUS_APPROVED
+        ]
+        adjustment_total = round(sum(float(cls._as_float(adjustment.get("amount")) or 0.0) for adjustment in approved_adjustments), 2)
+        actual_amount = round((baseline_amount or 0.0) + adjustment_total, 2) if baseline_amount is not None or serialized_adjustments else baseline_amount
+        draft_adjustment_count = sum(
+            1 for adjustment in serialized_adjustments
+            if cls._normalize_payout_adjustment_status(adjustment.get("adjustment_status")) == PAYOUT_ADJUSTMENT_STATUS_DRAFT
+        )
+        voided_adjustment_count = sum(
+            1 for adjustment in serialized_adjustments
+            if cls._normalize_payout_adjustment_status(adjustment.get("adjustment_status")) == PAYOUT_ADJUSTMENT_STATUS_VOIDED
+        )
+
+        if actual_amount is not None and total_hours is not None and total_hours > 0:
+            effective_rate = round(actual_amount / total_hours, 2)
+        else:
+            effective_rate = baseline_rate
+
+        enriched.update({
+            "currency": currency,
+            "baseline_estimated_amount": baseline_amount,
+            "baseline_payout_hourly_rate": baseline_rate,
+            "payout_adjustment_total": adjustment_total,
+            "payout_adjustment_count": len(approved_adjustments),
+            "payout_adjustment_draft_count": draft_adjustment_count,
+            "payout_adjustment_voided_count": voided_adjustment_count,
+            "payout_adjustment_registry_count": len(serialized_adjustments),
+            "payout_adjustments": serialized_adjustments,
+            "estimated_amount": actual_amount,
+            "payout_hourly_rate": effective_rate,
+        })
+        return enriched
 
     @staticmethod
     def _week_bounds(anchor: date) -> tuple[date, date]:
@@ -1066,6 +1274,41 @@ class RequestManager:
         )
 
     @classmethod
+    def _interval_overlap_hours(
+        cls,
+        start_a: Optional[datetime],
+        end_a: Optional[datetime],
+        start_b: Optional[datetime],
+        end_b: Optional[datetime],
+    ) -> float:
+        normalized_start_a = cls._as_datetime(start_a)
+        normalized_end_a = cls._as_datetime(end_a)
+        normalized_start_b = cls._as_datetime(start_b)
+        normalized_end_b = cls._as_datetime(end_b)
+        if not normalized_start_a or not normalized_end_a or not normalized_start_b or not normalized_end_b:
+            return 0.0
+        if normalized_end_a <= normalized_start_a or normalized_end_b <= normalized_start_b:
+            return 0.0
+        overlap_start = max(normalized_start_a, normalized_start_b)
+        overlap_end = min(normalized_end_a, normalized_end_b)
+        if overlap_end <= overlap_start:
+            return 0.0
+        return round(max((overlap_end - overlap_start).total_seconds() / 3600.0, 0.0), 2)
+
+    @classmethod
+    def _item_billing_period_bounds(cls, item: Dict[str, Any]) -> tuple[Optional[date], Optional[date]]:
+        start_local = cls._as_date(item.get("billing_period_start_local"))
+        end_local = cls._as_date(item.get("billing_period_end_local"))
+        return start_local, end_local
+
+    @classmethod
+    def _billing_period_contains_service_date(cls, item: Dict[str, Any], service_date_local: date) -> bool:
+        period_start, period_end = cls._item_billing_period_bounds(item)
+        if not period_start or not period_end:
+            return False
+        return period_start <= service_date_local <= period_end
+
+    @classmethod
     def _build_weekly_assignee_line_item(
         cls,
         *,
@@ -1101,6 +1344,7 @@ class RequestManager:
         request_ids: List[str],
         assignment_map: Dict[str, Dict[str, Any]],
         request_lookup: Dict[str, Dict[str, Any]],
+        assignee_tenant_id: str,
         assignee_tenant_type: str,
     ) -> List[Dict[str, Any]]:
         if not request_ids:
@@ -1110,22 +1354,164 @@ class RequestManager:
         invoice_docs = await invoice_collection.find({
             "request_id": {"$in": request_ids},
         }).sort("created_at", -1).to_list(length=None)
-
-        items: List[Dict[str, Any]] = []
+        latest_invoice_by_request: Dict[str, Dict[str, Any]] = {}
         for invoice_doc in invoice_docs:
             request_id = str(invoice_doc.get("request_id") or "").strip()
+            if request_id and request_id not in latest_invoice_by_request:
+                latest_invoice_by_request[request_id] = invoice_doc
+
+        shift_collection = self._engine.get_collection(ShiftInstanceRecord)
+        slot_collection = self._engine.get_collection(ShiftSlotRecord)
+        shift_docs = await shift_collection.find({
+            "request_id": {"$in": request_ids},
+        }).to_list(length=None)
+        slot_docs = await slot_collection.find({
+            "request_id": {"$in": request_ids},
+        }).to_list(length=None)
+
+        shift_lookup = {
+            str(shift_doc.get("_id") or "").strip(): shift_doc
+            for shift_doc in shift_docs
+            if str(shift_doc.get("_id") or "").strip()
+        }
+
+        grouped: Dict[str, Dict[str, Any]] = {}
+        for slot_doc in slot_docs:
+            request_id = str(slot_doc.get("request_id") or "").strip()
             assignment_summary = assignment_map.get(request_id)
-            if not assignment_summary:
+            source_invoice = latest_invoice_by_request.get(request_id)
+            request_summary = request_lookup.get(request_id, {})
+            if not assignment_summary or not source_invoice or not request_summary:
+                continue
+            current_assignee_tenant_id = str(assignment_summary.get("assignee_tenant_id") or assignee_tenant_id or "").strip()
+            if not current_assignee_tenant_id:
+                continue
+            if assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER.value:
+                if str(slot_doc.get("service_provider_tenant_id") or "").strip() != current_assignee_tenant_id:
+                    continue
+            else:
+                if str(slot_doc.get("assigned_guard_tenant_id") or "").strip() != current_assignee_tenant_id:
+                    continue
+            if self._as_datetime(slot_doc.get("completed_at")) is None:
                 continue
 
-            request_summary = request_lookup.get(request_id, {})
+            shift_id = str(slot_doc.get("shift_instance_id") or "").strip()
+            shift_doc = shift_lookup.get(shift_id)
+            if not shift_doc:
+                continue
+
+            try:
+                service_date_local = date.fromisoformat(str(shift_doc.get("shift_date_local") or "").strip())
+            except Exception:
+                continue
+
+            payout_hourly_rate = self._as_float(
+                request_summary.get("provider_hourly_pay")
+                if assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER.value
+                else request_summary.get("guard_hourly_pay")
+            )
+            if payout_hourly_rate is None:
+                continue
+
+            duration_hours = self._shift_slot_duration_hours(slot_doc, shift_doc)
+            if duration_hours is None or duration_hours <= 0:
+                continue
+
+            timezone_name = str(shift_doc.get("timezone") or request_summary.get("timezone") or "UTC").strip() or "UTC"
+            tzinfo = self._safe_zoneinfo(timezone_name)
+            group = grouped.setdefault(request_id, {
+                "request_id": request_id,
+                "source_invoice": source_invoice,
+                "request_title": str(request_summary.get("title") or "").strip() or "Coverage payout",
+                "site_name": str(request_summary.get("site_name") or "").strip(),
+                "currency": str(request_summary.get("currency") or "CAD"),
+                "request_guards_required": max(int(request_summary.get("guards_required") or 1), 1),
+                "committed_slots": max(int(assignment_summary.get("committed_slots") or 1), 1),
+                "assignee_tenant_id": current_assignee_tenant_id,
+                "coverage_status": self._rollup_assignee_assignment_status(set(assignment_summary.get("statuses") or set())),
+                "payout_hourly_rate": round(payout_hourly_rate, 2),
+                "completed_at_latest": None,
+                "line_groups": {},
+            })
+
+            line_key = str(shift_doc.get("_id") or "").strip() or service_date_local.isoformat()
+            line_group = group["line_groups"].setdefault(line_key, {
+                "service_date_local": service_date_local,
+                "total_hours": 0.0,
+                "completed_slots": 0,
+                "local_start": None,
+                "local_end": None,
+                "completed_at_latest": None,
+            })
+            line_group["total_hours"] += float(duration_hours)
+            line_group["completed_slots"] += 1
+
+            local_start = self._localize_utc_datetime(
+                slot_doc.get("actual_start_at") or slot_doc.get("started_at") or shift_doc.get("shift_start_at_utc"),
+                tzinfo,
+            )
+            local_end = self._localize_utc_datetime(
+                slot_doc.get("actual_end_at") or slot_doc.get("checked_out_at") or slot_doc.get("completed_at") or shift_doc.get("shift_end_at_utc"),
+                tzinfo,
+            )
+            if local_start and (line_group["local_start"] is None or local_start < line_group["local_start"]):
+                line_group["local_start"] = local_start
+            if local_end and (line_group["local_end"] is None or local_end > line_group["local_end"]):
+                line_group["local_end"] = local_end
+
+            completed_at = self._as_datetime(slot_doc.get("completed_at"))
+            if completed_at and (line_group["completed_at_latest"] is None or completed_at > line_group["completed_at_latest"]):
+                line_group["completed_at_latest"] = completed_at
+            if completed_at and (group["completed_at_latest"] is None or completed_at > group["completed_at_latest"]):
+                group["completed_at_latest"] = completed_at
+
+        items: List[Dict[str, Any]] = []
+        for request_id, group in grouped.items():
+            line_items: List[Dict[str, Any]] = []
+            total_hours = 0.0
+            total_amount = 0.0
+            ordered_line_groups = sorted(
+                group["line_groups"].values(),
+                key=lambda item: item["service_date_local"],
+            )
+            for line_group in ordered_line_groups:
+                line_item = self._build_weekly_assignee_line_item(
+                    request_title=group["request_title"],
+                    service_date_local=line_group["service_date_local"],
+                    payout_hourly_rate=group["payout_hourly_rate"],
+                    total_hours=round(float(line_group["total_hours"]), 2),
+                    completed_slots=int(line_group["completed_slots"] or 0),
+                    request_guards_required=group["request_guards_required"],
+                    local_start=line_group["local_start"],
+                    local_end=line_group["local_end"],
+                )
+                line_items.append(line_item)
+                total_hours += float(line_item["quantity"] or 0.0)
+                total_amount += float(line_item["amount"] or 0.0)
+
+            if not line_items:
+                continue
+
+            source_invoice = dict(group["source_invoice"])
+            source_invoice["line_items"] = line_items
+            source_invoice["estimated_total_hours"] = round(total_hours, 2)
+            if assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER.value:
+                source_invoice["estimated_provider_payout"] = round(total_amount, 2)
+            else:
+                source_invoice["estimated_guard_payout"] = round(total_amount, 2)
+            completed_at_latest = group["completed_at_latest"] or self._as_datetime(source_invoice.get("updated_at")) or datetime.utcnow()
+            source_invoice["created_at"] = completed_at_latest
+            source_invoice["updated_at"] = completed_at_latest
+            source_invoice["note"] = "Payout invoice generated from completed one-time coverage based on actual attendance hours."
+
             items.append(self._serialize_assignee_invoice(
-                invoice_doc,
+                source_invoice,
+                assignee_tenant_id=str(group["assignee_tenant_id"] or "").strip(),
                 assignee_tenant_type=assignee_tenant_type,
-                committed_slots=int(assignment_summary.get("committed_slots") or 1),
-                coverage_status=self._rollup_assignee_assignment_status(set(assignment_summary.get("statuses") or set())),
-                request_title=str(request_summary.get("title") or "").strip(),
-                site_name=str(request_summary.get("site_name") or "").strip(),
+                committed_slots=int(group["committed_slots"] or 1),
+                coverage_status=str(group["coverage_status"] or "").strip(),
+                request_title=str(group["request_title"] or "").strip(),
+                site_name=str(group["site_name"] or "").strip(),
             ))
 
         return items
@@ -1294,12 +1680,14 @@ class RequestManager:
                     billing_period_start_local=billing_period_start_local,
                 ),
                 "request_id": group["request_id"],
-                "invoice_number": self._weekly_assignee_invoice_number(
-                    request_id=group["request_id"],
-                    assignee_tenant_id=assignee_tenant_id,
-                    billing_period_start_local=billing_period_start_local,
-                ),
-                "request_title": group["request_title"],
+            "invoice_number": self._weekly_assignee_invoice_number(
+                request_id=group["request_id"],
+                assignee_tenant_id=assignee_tenant_id,
+                billing_period_start_local=billing_period_start_local,
+            ),
+            "source_request_invoice_id": None,
+            "source_request_invoice_number": None,
+            "request_title": group["request_title"],
                 "site_name": group["site_name"],
                 "assignee_tenant_type": assignee_tenant_type,
                 "coverage_status": RequestAssignmentStatus.COMPLETED.value,
@@ -1322,6 +1710,220 @@ class RequestManager:
             })
 
         return items
+
+    async def _build_direct_guard_paid_leave_adjustments(
+        self,
+        *,
+        assignee_tenant_id: str,
+        assignment_map: Dict[str, Dict[str, Any]],
+        request_lookup: Dict[str, Dict[str, Any]],
+        items: List[Dict[str, Any]],
+    ) -> tuple[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+        request_ids = [
+            str(request_id or "").strip()
+            for request_id in assignment_map.keys()
+            if str(request_id or "").strip()
+        ]
+        if not assignee_tenant_id or not request_ids:
+            return items, {}
+
+        leave_collection = self._engine.get_collection(GuardPlannedLeaveRecord)
+        leave_docs = await leave_collection.find({
+            "guard_tenant_id": assignee_tenant_id,
+            "request_status": GuardPlannedLeaveStatus.APPROVED.value,
+            "leave_type": GuardPlannedLeaveType.PAID.value,
+        }).to_list(length=None)
+        if not leave_docs:
+            return items, {}
+
+        shift_collection = self._engine.get_collection(ShiftInstanceRecord)
+        slot_collection = self._engine.get_collection(ShiftSlotRecord)
+        invoice_collection = self._engine.get_collection(RequestInvoiceRecord)
+        shift_docs = await shift_collection.find({
+            "request_id": {"$in": request_ids},
+        }).to_list(length=None)
+        slot_docs = await slot_collection.find({
+            "request_id": {"$in": request_ids},
+        }).to_list(length=None)
+        invoice_docs = await invoice_collection.find({
+            "request_id": {"$in": request_ids},
+        }).sort("created_at", -1).to_list(length=None)
+
+        shift_lookup = {
+            str(shift_doc.get("_id") or "").strip(): shift_doc
+            for shift_doc in shift_docs
+            if str(shift_doc.get("_id") or "").strip()
+        }
+        latest_invoice_by_request: Dict[str, Dict[str, Any]] = {}
+        for invoice_doc in invoice_docs:
+            request_id = str(invoice_doc.get("request_id") or "").strip()
+            if request_id and request_id not in latest_invoice_by_request:
+                latest_invoice_by_request[request_id] = invoice_doc
+
+        item_lookup = {
+            str(item.get("id") or "").strip(): item
+            for item in items
+            if str(item.get("id") or "").strip()
+        }
+        adjustment_lookup: Dict[str, List[Dict[str, Any]]] = {}
+
+        for slot_doc in slot_docs:
+            if str(slot_doc.get("assigned_guard_tenant_id") or "").strip() != assignee_tenant_id:
+                continue
+            request_id = str(slot_doc.get("request_id") or "").strip()
+            request_summary = request_lookup.get(request_id, {})
+            assignment_summary = assignment_map.get(request_id, {})
+            if not request_summary or not assignment_summary:
+                continue
+
+            shift_id = str(slot_doc.get("shift_instance_id") or "").strip()
+            shift_doc = shift_lookup.get(shift_id)
+            if not shift_doc:
+                continue
+
+            shift_start = self._as_datetime(shift_doc.get("shift_start_at_utc"))
+            shift_end = self._as_datetime(shift_doc.get("shift_end_at_utc"))
+            try:
+                service_date_local = date.fromisoformat(str(shift_doc.get("shift_date_local") or "").strip())
+            except Exception:
+                continue
+            if not shift_start or not shift_end or shift_end <= shift_start:
+                continue
+
+            payout_hourly_rate = self._as_float(request_summary.get("guard_hourly_pay"))
+            if payout_hourly_rate is None or payout_hourly_rate <= 0:
+                continue
+
+            actual_start = self._as_datetime(slot_doc.get("actual_start_at") or slot_doc.get("started_at"))
+            actual_end = self._as_datetime(slot_doc.get("actual_end_at") or slot_doc.get("checked_out_at") or slot_doc.get("completed_at"))
+
+            for leave_doc in leave_docs:
+                leave_start = self._as_datetime(leave_doc.get("start_at_utc"))
+                leave_end = self._as_datetime(leave_doc.get("end_at_utc"))
+                scheduled_leave_hours = self._interval_overlap_hours(shift_start, shift_end, leave_start, leave_end)
+                if scheduled_leave_hours <= 0:
+                    continue
+                worked_leave_hours = self._interval_overlap_hours(actual_start, actual_end, leave_start, leave_end)
+                adjustment_hours = round(max(scheduled_leave_hours - worked_leave_hours, 0.0), 2)
+                if adjustment_hours <= 0:
+                    continue
+
+                contract_type = str(request_summary.get("contract_type") or "").strip().lower() or "short_term"
+                committed_slots = max(int(assignment_summary.get("committed_slots") or 1), 1)
+                coverage_status = self._rollup_assignee_assignment_status(set(assignment_summary.get("statuses") or set()))
+                created_at = (
+                    self._as_datetime(leave_doc.get("approved_at"))
+                    or self._as_datetime(leave_doc.get("updated_at"))
+                    or self._as_datetime(leave_doc.get("created_at"))
+                    or datetime.utcnow()
+                )
+                currency = str(request_summary.get("currency") or "CAD").strip() or "CAD"
+
+                if contract_type == "long_term":
+                    week_start, week_end = self._week_bounds(service_date_local)
+                    payout_invoice_id = self._weekly_assignee_invoice_id(
+                        request_id=request_id,
+                        assignee_tenant_id=assignee_tenant_id,
+                        assignee_tenant_type=RequestTargetType.GUARD.value,
+                        billing_period_start_local=week_start.isoformat(),
+                    )
+                    if payout_invoice_id not in item_lookup:
+                        placeholder = {
+                            "id": payout_invoice_id,
+                            "request_id": request_id,
+                            "invoice_number": self._weekly_assignee_invoice_number(
+                                request_id=request_id,
+                                assignee_tenant_id=assignee_tenant_id,
+                                billing_period_start_local=week_start.isoformat(),
+                            ),
+                            "source_request_invoice_id": None,
+                            "source_request_invoice_number": None,
+                            "request_title": str(request_summary.get("title") or "").strip() or "Coverage payout",
+                            "site_name": str(request_summary.get("site_name") or "").strip(),
+                            "assignee_tenant_type": RequestTargetType.GUARD.value,
+                            "coverage_status": coverage_status,
+                            "contract_type": "long_term",
+                            "billing_cycle": "weekly",
+                            "charge_timing": "weekly_cutoff",
+                            "billing_period_start_local": week_start.isoformat(),
+                            "billing_period_end_local": week_end.isoformat(),
+                            "billing_period_label": f"{week_start.strftime('%b %d, %Y')} - {week_end.strftime('%b %d, %Y')}",
+                            "currency": currency,
+                            "committed_slots": committed_slots,
+                            "payout_hourly_rate": round(payout_hourly_rate, 2),
+                            "estimated_total_hours": 0.0,
+                            "estimated_amount": 0.0,
+                            "invoice_status": RequestInvoiceStatus.ISSUED.value,
+                            "line_items": [],
+                            "note": "Payout invoice created from approved paid leave for scheduled coverage.",
+                            "created_at": created_at,
+                            "updated_at": created_at,
+                        }
+                        items.append(placeholder)
+                        item_lookup[payout_invoice_id] = placeholder
+                else:
+                    source_invoice = latest_invoice_by_request.get(request_id)
+                    if not source_invoice:
+                        continue
+                    source_invoice_id = str(source_invoice.get("_id") or source_invoice.get("id") or "").strip()
+                    if not source_invoice_id:
+                        continue
+                    payout_invoice_id = self._short_term_assignee_invoice_id(
+                        request_invoice_id=source_invoice_id,
+                        assignee_tenant_id=assignee_tenant_id,
+                        assignee_tenant_type=RequestTargetType.GUARD.value,
+                    )
+                    if payout_invoice_id not in item_lookup:
+                        placeholder = {
+                            "id": payout_invoice_id,
+                            "request_id": request_id,
+                            "invoice_number": str(source_invoice.get("invoice_number") or "").strip(),
+                            "source_request_invoice_id": source_invoice_id,
+                            "source_request_invoice_number": str(source_invoice.get("invoice_number") or "").strip(),
+                            "request_title": str(request_summary.get("title") or "").strip() or "Coverage payout",
+                            "site_name": str(request_summary.get("site_name") or "").strip(),
+                            "assignee_tenant_type": RequestTargetType.GUARD.value,
+                            "coverage_status": coverage_status,
+                            "contract_type": "short_term",
+                            "billing_cycle": str(source_invoice.get("billing_cycle") or "per_request").strip() or "per_request",
+                            "charge_timing": str(source_invoice.get("charge_timing") or "on_the_go").strip() or "on_the_go",
+                            "billing_period_start_local": str(source_invoice.get("billing_period_start_local") or "").strip() or None,
+                            "billing_period_end_local": str(source_invoice.get("billing_period_end_local") or "").strip() or None,
+                            "billing_period_label": str(source_invoice.get("billing_period_label") or "").strip() or None,
+                            "currency": currency,
+                            "committed_slots": committed_slots,
+                            "payout_hourly_rate": round(payout_hourly_rate, 2),
+                            "estimated_total_hours": 0.0,
+                            "estimated_amount": 0.0,
+                            "invoice_status": str(source_invoice.get("invoice_status") or RequestInvoiceStatus.ISSUED.value).strip(),
+                            "line_items": [],
+                            "note": "Payout invoice created from approved paid leave for one-time coverage.",
+                            "created_at": created_at,
+                            "updated_at": created_at,
+                        }
+                        items.append(placeholder)
+                        item_lookup[payout_invoice_id] = placeholder
+
+                item = item_lookup.get(payout_invoice_id)
+                if item and not self._billing_period_contains_service_date(item, service_date_local):
+                    continue
+
+                adjustment_lookup.setdefault(payout_invoice_id, []).append({
+                    "id": f"planned-leave:{str(leave_doc.get('_id') or leave_doc.get('id') or '')}:{str(slot_doc.get('_id') or '')}",
+                    "payout_invoice_id": payout_invoice_id,
+                    "request_id": request_id,
+                    "assignee_tenant_id": assignee_tenant_id,
+                    "assignee_tenant_type": RequestTargetType.GUARD.value,
+                    "currency": currency,
+                    "amount": round(payout_hourly_rate * adjustment_hours, 2),
+                    "reason": f"Approved paid leave coverage for {service_date_local.isoformat()}",
+                    "created_by_user_id": str(leave_doc.get("approved_by_user_id") or "").strip() or None,
+                    "created_by_username": str(leave_doc.get("approved_by_username") or "").strip() or None,
+                    "created_at": created_at,
+                    "updated_at": created_at,
+                })
+
+        return items, adjustment_lookup
 
     async def _build_assignee_invoice_items(
         self,
@@ -1370,6 +1972,7 @@ class RequestManager:
             request_ids=short_term_request_ids,
             assignment_map=assignment_map,
             request_lookup=request_lookup,
+            assignee_tenant_id=assignee_tenant_id,
             assignee_tenant_type=assignee_tenant_type,
         )
         items.extend(await self._build_long_term_assignee_weekly_invoice_items(
@@ -1379,6 +1982,26 @@ class RequestManager:
             assignee_tenant_id=assignee_tenant_id,
             assignee_tenant_type=assignee_tenant_type,
         ))
+        leave_adjustment_lookup: Dict[str, List[Dict[str, Any]]] = {}
+        if assignee_tenant_type == RequestTargetType.GUARD.value:
+            items, leave_adjustment_lookup = await self._build_direct_guard_paid_leave_adjustments(
+                assignee_tenant_id=assignee_tenant_id,
+                assignment_map=assignment_map,
+                request_lookup=request_lookup,
+                items=items,
+            )
+        adjustment_lookup = await self._list_payout_adjustments_for_invoice_ids([
+            str(item.get("id") or "").strip()
+            for item in items
+        ])
+        items = [
+            self._apply_payout_adjustments_to_invoice_item(
+                item,
+                adjustment_lookup.get(str(item.get("id") or "").strip(), [])
+                + leave_adjustment_lookup.get(str(item.get("id") or "").strip(), []),
+            )
+            for item in items
+        ]
         items.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
         return items
 
@@ -1421,6 +2044,7 @@ class RequestManager:
                 "title": str(doc.get("title") or "").strip(),
                 "site_name": str((doc.get("site_snapshot") or {}).get("site_name") or "").strip(),
                 "timezone": str(doc.get("timezone") or "").strip() or "UTC",
+                "fulfillment_mode": self._resolve_fulfillment_mode_from_record(doc).value,
                 "currency": str(pricing_snapshot.get("currency") or "CAD"),
                 "contract_type": self._normalize_invoice_contract_type(invoicing_snapshot.get("contract_type")),
                 "client_hourly_quote": pricing_snapshot.get("client_hourly_quote"),
@@ -1461,6 +2085,13 @@ class RequestManager:
     ) -> Optional[Dict[str, Any]]:
         if not candidate_invoices:
             return None
+
+        source_request_invoice_id = str(item.get("source_request_invoice_id") or "").strip()
+        if source_request_invoice_id:
+            for candidate in candidate_invoices:
+                candidate_id = str(candidate.get("_id") or candidate.get("id") or "").strip()
+                if candidate_id == source_request_invoice_id:
+                    return candidate
 
         normalized_invoice_number = str(item.get("invoice_number") or "").strip()
         if normalized_invoice_number:
@@ -1508,11 +2139,15 @@ class RequestManager:
             else request_summary.get("client_hourly_quote")
         )
         payout_hourly_rate = cls._as_float(enriched.get("payout_hourly_rate"))
+        baseline_payout_hourly_rate = cls._as_float(enriched.get("baseline_payout_hourly_rate")) or payout_hourly_rate
         total_hours = cls._as_float(enriched.get("estimated_total_hours"))
         payout_total = cls._as_float(enriched.get("estimated_amount"))
+        baseline_payout_total = cls._as_float(enriched.get("baseline_estimated_amount")) or payout_total
+        payout_adjustment_total = cls._as_float(enriched.get("payout_adjustment_total")) or 0.0
 
         estimated_client_revenue = round(client_hourly_quote * total_hours, 2) if client_hourly_quote is not None and total_hours is not None else None
         estimated_platform_earning = round(estimated_client_revenue - payout_total, 2) if estimated_client_revenue is not None and payout_total is not None else None
+        baseline_platform_earning = round(estimated_client_revenue - baseline_payout_total, 2) if estimated_client_revenue is not None and baseline_payout_total is not None else None
         platform_cut_hourly_rate = round(max(client_hourly_quote - payout_hourly_rate, 0.0), 2) if client_hourly_quote is not None and payout_hourly_rate is not None else None
         platform_margin_percent = round((estimated_platform_earning / estimated_client_revenue) * 100, 2) if estimated_client_revenue and estimated_platform_earning is not None else None
 
@@ -1522,16 +2157,26 @@ class RequestManager:
             or ""
         ).strip()
         contract_type = str(enriched.get("contract_type") or request_summary.get("contract_type") or "").strip()
-        reporting_basis = "attendance_realized_hours" if str(enriched.get("billing_cycle") or "").strip() == "weekly" else "request_invoice_estimate"
+        fulfillment_mode = str(request_summary.get("fulfillment_mode") or "").strip()
+        reporting_basis = (
+            "attendance_realized_hours"
+            if contract_type in {"short_term", "long_term"}
+            else "request_invoice_estimate"
+        )
 
         enriched.update({
             "client_tenant_id": request_client_tenant_id or None,
             "client_label": client_label or request_client_tenant_id or None,
+            "request_fulfillment_mode": fulfillment_mode or None,
             "client_hourly_quote": client_hourly_quote,
             "estimated_client_revenue": estimated_client_revenue,
+            "baseline_estimated_platform_earning": baseline_platform_earning,
             "estimated_platform_earning": estimated_platform_earning,
             "platform_cut_hourly_rate": platform_cut_hourly_rate,
             "platform_margin_percent": platform_margin_percent,
+            "baseline_payout_hourly_rate": baseline_payout_hourly_rate,
+            "baseline_estimated_amount": baseline_payout_total,
+            "payout_adjustment_total": round(payout_adjustment_total, 2),
             "linked_client_invoice_id": serialized_invoice.get("id"),
             "linked_client_invoice_number": serialized_invoice.get("invoice_number"),
             "linked_client_invoice_status": serialized_invoice.get("invoice_status"),
@@ -1551,24 +2196,39 @@ class RequestManager:
     def _build_platform_payout_summary(cls, items: List[Dict[str, Any]]) -> Dict[str, Any]:
         total_client_revenue = 0.0
         total_payout = 0.0
+        total_baseline_payout = 0.0
+        total_payout_adjustments = 0.0
         total_platform_earning = 0.0
+        total_baseline_platform_earning = 0.0
         total_hours = 0.0
         total_guard_payout = 0.0
         total_provider_payout = 0.0
         total_guard_earning = 0.0
         total_provider_earning = 0.0
+        draft_adjustment_count = 0
+        approved_adjustment_count = 0
+        voided_adjustment_count = 0
 
         for item in items:
             client_revenue = float(cls._as_float(item.get("estimated_client_revenue")) or 0.0)
             payout = float(cls._as_float(item.get("estimated_amount")) or 0.0)
+            baseline_payout = float(cls._as_float(item.get("baseline_estimated_amount")) or payout)
+            payout_adjustment = float(cls._as_float(item.get("payout_adjustment_total")) or 0.0)
             earning = float(cls._as_float(item.get("estimated_platform_earning")) or 0.0)
+            baseline_earning = float(cls._as_float(item.get("baseline_estimated_platform_earning")) or earning)
             hours = float(cls._as_float(item.get("estimated_total_hours")) or 0.0)
             tenant_type = str(item.get("assignee_tenant_type") or "").strip().lower()
 
             total_client_revenue += client_revenue
             total_payout += payout
+            total_baseline_payout += baseline_payout
+            total_payout_adjustments += payout_adjustment
             total_platform_earning += earning
+            total_baseline_platform_earning += baseline_earning
             total_hours += hours
+            draft_adjustment_count += int(item.get("payout_adjustment_draft_count") or 0)
+            approved_adjustment_count += int(item.get("payout_adjustment_count") or 0)
+            voided_adjustment_count += int(item.get("payout_adjustment_voided_count") or 0)
 
             if tenant_type == RequestTargetType.SERVICE_PROVIDER.value:
                 total_provider_payout += payout
@@ -1582,13 +2242,19 @@ class RequestManager:
             "invoice_count": len(items),
             "total_client_revenue": round(total_client_revenue, 2),
             "total_payout": round(total_payout, 2),
+            "total_baseline_payout": round(total_baseline_payout, 2),
+            "total_payout_adjustments": round(total_payout_adjustments, 2),
             "total_platform_earning": round(total_platform_earning, 2),
+            "total_baseline_platform_earning": round(total_baseline_platform_earning, 2),
             "total_hours": round(total_hours, 2),
             "total_guard_payout": round(total_guard_payout, 2),
             "total_provider_payout": round(total_provider_payout, 2),
             "total_guard_earning": round(total_guard_earning, 2),
             "total_provider_earning": round(total_provider_earning, 2),
             "platform_margin_percent": margin_percent,
+            "draft_payout_adjustment_count": draft_adjustment_count,
+            "approved_payout_adjustment_count": approved_adjustment_count,
+            "voided_payout_adjustment_count": voided_adjustment_count,
         }
 
     async def _collect_platform_assignee_invoice_scopes(self) -> List[Dict[str, Any]]:
@@ -1662,6 +2328,17 @@ class RequestManager:
         record = await self._engine.find_one(RequestAssignmentRecord, RequestAssignmentRecord.id == object_id)
         if not record:
             raise HTTPException(status_code=404, detail="Assignment not found")
+        return record
+
+    async def _get_payout_adjustment_or_404(self, adjustment_id: str) -> RequestPayoutAdjustmentRecord:
+        try:
+            object_id = ObjectId(adjustment_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid payout adjustment id")
+
+        record = await self._engine.find_one(RequestPayoutAdjustmentRecord, RequestPayoutAdjustmentRecord.id == object_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="Payout adjustment not found")
         return record
 
     async def _get_client_tenant(self, current_user):
@@ -1830,6 +2507,7 @@ class RequestManager:
         )
 
         finance_snapshot = await self._build_request_pricing_and_invoicing(
+            fulfillment_mode=self._resolve_fulfillment_mode_from_record(record),
             site_snapshot=record.site_snapshot or {},
             requested_start_at=record.requested_start_at,
             requested_end_at=record.requested_end_at,
@@ -1873,6 +2551,8 @@ class RequestManager:
             return RequestInvoiceTrigger.ADDITIONAL_COVERAGE
         if normalized == RequestInvoiceTrigger.SCHEDULE_UPDATED.value:
             return RequestInvoiceTrigger.SCHEDULE_UPDATED
+        if normalized == RequestInvoiceTrigger.WEEKLY_ADVANCE.value:
+            return RequestInvoiceTrigger.WEEKLY_ADVANCE
         if normalized == RequestInvoiceTrigger.MONTHLY_ADVANCE.value:
             return RequestInvoiceTrigger.MONTHLY_ADVANCE
         return RequestInvoiceTrigger.INITIAL_PUBLISH
@@ -1906,6 +2586,18 @@ class RequestManager:
         return month_start, next_month_start - timedelta(days=1)
 
     @staticmethod
+    def _shift_week(anchor: date, weeks: int = 1) -> date:
+        return anchor + timedelta(days=max(int(weeks or 0), 0) * 7)
+
+    @staticmethod
+    def _week_bounds_from_schedule_anchor(schedule_start: date, target_date: date) -> tuple[date, date]:
+        effective_target = max(schedule_start, target_date)
+        days_since_start = max((effective_target - schedule_start).days, 0)
+        week_offset = days_since_start // 7
+        week_start = schedule_start + timedelta(days=week_offset * 7)
+        return week_start, week_start + timedelta(days=6)
+
+    @staticmethod
     def _parse_invoice_local_time(field_name: str, value: Any) -> time:
         try:
             return datetime.strptime(str(value or "").strip(), "%H:%M").time()
@@ -1924,9 +2616,9 @@ class RequestManager:
         period_token = ""
         if billing_period_start_local:
             try:
-                period_token = date.fromisoformat(billing_period_start_local).strftime("%Y%m")
+                period_token = date.fromisoformat(billing_period_start_local).strftime("%Y%m%d")
             except Exception:
-                period_token = billing_period_start_local.replace("-", "")[:6]
+                period_token = billing_period_start_local.replace("-", "")[:8]
         if not period_token:
             period_token = issued_at.strftime("%Y%m%d")
         return f"INV-{period_token}-{request_token}"
@@ -2066,24 +2758,97 @@ class RequestManager:
             current += timedelta(days=1)
         return results
 
-    def _build_long_term_invoice_details(
+    async def _list_request_invoices_for_contract(
+        self,
+        *,
+        request_id: str,
+        contract_type: str,
+    ) -> List[RequestInvoiceRecord]:
+        if not hasattr(self._engine, "find"):
+            return [
+                item
+                for item in list(getattr(self._engine, "saved", []) or [])
+                if isinstance(item, RequestInvoiceRecord)
+                and str(getattr(item, "request_id", "") or "").strip() == str(request_id)
+                and str(getattr(item, "contract_type", "") or "").strip() == str(contract_type)
+            ]
+        return await self._engine.find(
+            RequestInvoiceRecord,
+            (RequestInvoiceRecord.request_id == str(request_id))
+            & (RequestInvoiceRecord.contract_type == str(contract_type)),
+        )
+
+    @staticmethod
+    def _request_has_full_accepted_coverage(record: ClientRequestRecord) -> bool:
+        return int(getattr(record, "accepted_slots", 0) or 0) >= max(int(getattr(record, "guards_required", 1) or 1), 1)
+
+    async def _resolve_long_term_invoice_period(
         self,
         record: ClientRequestRecord,
         *,
         schedule_record: RequestScheduleTemplateRecord,
-        cutoff_day: int,
+        trigger: RequestInvoiceTrigger,
+    ) -> Optional[tuple[date, date]]:
+        try:
+            schedule_start = date.fromisoformat(str(getattr(schedule_record, "start_date_local", "") or "").strip())
+        except Exception:
+            return None
+        schedule_end_raw = str(getattr(schedule_record, "end_date_local", "") or "").strip()
+        schedule_end = date.fromisoformat(schedule_end_raw) if schedule_end_raw else schedule_start
+        if schedule_end < schedule_start:
+            return None
+
+        tzinfo = self._resolve_invoice_timezone(record, schedule_record)
+        today_local = datetime.now(tzinfo).date()
+        if today_local > schedule_end:
+            return None
+
+        current_week_start, _current_week_end = self._week_bounds_from_schedule_anchor(
+            schedule_start,
+            max(today_local, schedule_start),
+        )
+        target_week_start = current_week_start
+
+        if trigger == RequestInvoiceTrigger.WEEKLY_ADVANCE:
+            existing_invoices = await self._list_request_invoices_for_contract(
+                request_id=str(record.id),
+                contract_type="long_term",
+            )
+            current_week_key = current_week_start.isoformat()
+            current_week_exists = any(
+                str(getattr(invoice, "billing_period_start_local", "") or "").strip() == current_week_key
+                for invoice in existing_invoices
+            )
+            if today_local >= current_week_start and current_week_exists:
+                target_week_start = self._shift_week(current_week_start, 1)
+
+        if target_week_start > schedule_end:
+            return None
+
+        target_week_end = min(target_week_start + timedelta(days=6), schedule_end)
+        return target_week_start, target_week_end
+
+    async def _build_long_term_invoice_details(
+        self,
+        record: ClientRequestRecord,
+        *,
+        schedule_record: RequestScheduleTemplateRecord,
+        trigger: RequestInvoiceTrigger,
     ) -> Optional[Dict[str, Any]]:
         pricing_snapshot = record.pricing_snapshot if isinstance(getattr(record, "pricing_snapshot", None), dict) else {}
         client_hourly_quote = self._as_float(pricing_snapshot.get("client_hourly_quote"))
         if client_hourly_quote is None:
             return None
 
+        resolved_period = await self._resolve_long_term_invoice_period(
+            record,
+            schedule_record=schedule_record,
+            trigger=trigger,
+        )
+        if not resolved_period:
+            return None
+        period_start, period_end = resolved_period
         tzinfo = self._resolve_invoice_timezone(record, schedule_record)
-        today_local = datetime.now(tzinfo).date()
-        anchor = date(today_local.year, today_local.month, 1)
-        if today_local.day >= max(int(cutoff_day or 1), 1):
-            anchor = self._shift_month(anchor, 1)
-        period_start, period_end = self._month_bounds(anchor)
 
         occurrence_dates = self._iter_schedule_dates_for_period(
             schedule_record,
@@ -2121,7 +2886,7 @@ class RequestManager:
         return {
             "billing_period_start_local": period_start.isoformat(),
             "billing_period_end_local": period_end.isoformat(),
-            "billing_period_label": period_start.strftime("%B %Y"),
+            "billing_period_label": f"Week of {period_start.strftime('%b %d, %Y')}",
             "line_items": line_items,
         }
 
@@ -2210,15 +2975,23 @@ class RequestManager:
 
         invoice_details: Optional[Dict[str, Any]] = None
         if contract_type == "long_term":
-            cutoff_day = invoicing_snapshot.get("monthly_cutoff_day")
-            if cutoff_day is None:
-                return {"action": "skipped", "invoice": None}
             if schedule_record is None:
                 return {"action": "skipped", "invoice": None}
-            invoice_details = self._build_long_term_invoice_details(
+            existing_long_term_invoices = await self._list_request_invoices_for_contract(
+                request_id=str(record.id),
+                contract_type="long_term",
+            )
+            if not existing_long_term_invoices and not self._request_has_full_accepted_coverage(record):
+                return {"action": "skipped", "invoice": None}
+            effective_trigger = (
+                RequestInvoiceTrigger.WEEKLY_ADVANCE
+                if trigger == RequestInvoiceTrigger.MONTHLY_ADVANCE
+                else trigger
+            )
+            invoice_details = await self._build_long_term_invoice_details(
                 record,
                 schedule_record=schedule_record,
-                cutoff_day=int(cutoff_day),
+                trigger=effective_trigger,
             )
         else:
             invoice_details = self._build_short_term_invoice_details(record, schedule_record=schedule_record)
@@ -2248,9 +3021,9 @@ class RequestManager:
             "request_revision": max(int(record.request_revision or 0), 1),
             "trigger": trigger,
             "contract_type": contract_type,
-            "billing_cycle": str(invoicing_snapshot.get("billing_cycle") or ("monthly" if contract_type == "long_term" else "per_request")),
-            "charge_timing": str(invoicing_snapshot.get("charge_timing") or ("advance_monthly" if contract_type == "long_term" else "on_the_go")),
-            "monthly_cutoff_day": invoicing_snapshot.get("monthly_cutoff_day"),
+            "billing_cycle": str(invoicing_snapshot.get("billing_cycle") or ("weekly" if contract_type == "long_term" else "per_request")),
+            "charge_timing": str(invoicing_snapshot.get("charge_timing") or ("advance_weekly" if contract_type == "long_term" else "on_the_go")),
+            "monthly_cutoff_day": None if contract_type == "long_term" else invoicing_snapshot.get("monthly_cutoff_day"),
             "billing_period_start_local": billing_period_start_local,
             "billing_period_end_local": billing_period_end_local,
             "billing_period_label": str(invoice_details.get("billing_period_label") or "").strip() or None,
@@ -2417,6 +3190,7 @@ class RequestManager:
             RequestWaveTrigger.PUBLISH_UPDATE.value: "The invoice was updated because the request details changed.",
             RequestWaveTrigger.ADDITIONAL_COVERAGE.value: "The invoice was updated because additional coverage was requested.",
             RequestInvoiceTrigger.SCHEDULE_UPDATED.value: "The invoice was updated because the coverage schedule changed.",
+            RequestInvoiceTrigger.WEEKLY_ADVANCE.value: "The next weekly advance invoice is ready for the upcoming scheduled coverage window.",
             RequestInvoiceTrigger.MONTHLY_ADVANCE.value: "The next monthly advance invoice is ready for the upcoming billing period.",
         }.get(
             normalized_reason,
@@ -2444,8 +3218,6 @@ class RequestManager:
             body_text += f"<br>Billing period: <strong>{period_label}</strong>"
         elif period_start and period_end:
             body_text += f"<br>Billing period: <strong>{period_start}</strong> to <strong>{period_end}</strong>"
-        if contract_type == "long_term" and invoice_record.monthly_cutoff_day is not None:
-            body_text += f"<br>Monthly cutoff day: <strong>{int(invoice_record.monthly_cutoff_day)}</strong>"
         body_text += (
             f"<br>Scheduled invoice lines: <strong>{len(invoice_record.line_items or [])}</strong>"
             "<br><br>Client payment capture is still mocked inside the platform until gateway automation is enabled, "
@@ -2476,6 +3248,7 @@ class RequestManager:
     async def _build_request_pricing_and_invoicing(
         self,
         *,
+        fulfillment_mode: RequestFulfillmentMode,
         site_snapshot: Dict[str, Any],
         requested_start_at: Optional[datetime],
         requested_end_at: Optional[datetime],
@@ -2516,7 +3289,11 @@ class RequestManager:
 
         guard_quote = round(guard_base_rate + guard_margin_default, 2)
         provider_quote = round(provider_base_rate + provider_commission_default, 2)
-        client_hourly_quote = round(max(guard_quote, provider_quote), 2)
+        pricing_strategy = self._pricing_strategy_for_mode(fulfillment_mode)
+        client_hourly_quote = round(
+            provider_quote if pricing_strategy == "provider_baseline" else guard_quote,
+            2,
+        )
 
         guard_company_margin = round(max(client_hourly_quote - guard_base_rate, 0.0), 2)
         provider_company_commission = round(max(client_hourly_quote - provider_base_rate, 0.0), 2)
@@ -2536,6 +3313,8 @@ class RequestManager:
                 "city": str((site_address or {}).get("city") or "").strip(),
             },
             "guards_required": normalized_guards_required,
+            "fulfillment_mode": fulfillment_mode.value,
+            "pricing_strategy": pricing_strategy,
             "client_hourly_quote": client_hourly_quote,
             "guard_hourly_pay": round(guard_base_rate, 2),
             "guard_company_margin": guard_company_margin,
@@ -2548,25 +3327,27 @@ class RequestManager:
             "estimated_provider_payout": round(provider_base_rate * estimated_total_hours, 2) if estimated_total_hours is not None else None,
             "estimated_company_margin_with_guard": round(guard_company_margin * estimated_total_hours, 2) if estimated_total_hours is not None else None,
             "estimated_company_margin_with_provider": round(provider_company_commission * estimated_total_hours, 2) if estimated_total_hours is not None else None,
+            "provider_adjustment_policy": (
+                "platform_payout_adjustment_required"
+                if fulfillment_mode == RequestFulfillmentMode.HYBRID
+                else None
+            ),
             "mock_payment_status": "pending_capture",
             "calculation_version": "mock_v1",
         }
 
         contract_type = self._normalize_invoice_contract_type(invoice_contract_type)
-        cutoff_day = int(invoice_cutoff_day) if invoice_cutoff_day is not None else None
-        if contract_type == "long_term" and (cutoff_day is None or cutoff_day < 1 or cutoff_day > 28):
-            cutoff_day = 1
 
         invoicing_snapshot = {
             "contract_type": contract_type,
-            "billing_cycle": "monthly" if contract_type == "long_term" else "per_request",
-            "charge_timing": "advance_monthly" if contract_type == "long_term" else "on_the_go",
-            "monthly_cutoff_day": cutoff_day if contract_type == "long_term" else None,
+            "billing_cycle": "weekly" if contract_type == "long_term" else "per_request",
+            "charge_timing": "advance_weekly" if contract_type == "long_term" else "on_the_go",
+            "monthly_cutoff_day": None,
             "invoice_delivery_channel": "email",
             "invoice_recipient_email": str(invoice_recipient_email or "").strip() or None,
             "invoice_status": RequestInvoiceStatus.PENDING.value,
             "invoice_note": (
-                "Invoices are generated one month in advance on the monthly cutoff and emailed to the client."
+                "Invoices are generated one week in advance for the upcoming scheduled coverage period and emailed to the client after the first full-coverage commitment."
                 if contract_type == "long_term"
                 else "A one-time invoice is issued for this coverage window when the request is published."
             ),
@@ -3878,6 +4659,7 @@ class RequestManager:
             payload.requested_end_at,
         )
         finance_snapshot = await self._build_request_pricing_and_invoicing(
+            fulfillment_mode=payload.fulfillment_mode,
             site_snapshot=site_snapshot,
             requested_start_at=payload.requested_start_at,
             requested_end_at=payload.requested_end_at,
@@ -3960,6 +4742,7 @@ class RequestManager:
         self._validate_requested_window(payload.requested_start_at, payload.requested_end_at)
 
         finance_snapshot = await self._build_request_pricing_and_invoicing(
+            fulfillment_mode=payload.fulfillment_mode,
             site_snapshot=site_snapshot,
             requested_start_at=payload.requested_start_at,
             requested_end_at=payload.requested_end_at,
@@ -4221,6 +5004,7 @@ class RequestManager:
                 continue
 
             entry = relevant.setdefault(request_id, {
+                "assignee_tenant_id": assignee_tenant_id,
                 "committed_slots": 0,
                 "statuses": set(),
             })
@@ -4413,6 +5197,170 @@ class RequestManager:
                 )
 
         raise HTTPException(status_code=404, detail="Invoice not found")
+
+    async def create_platform_payout_adjustment(
+        self,
+        invoice_id: str,
+        payload: RequestPayoutAdjustmentCreatePayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        if not self._is_platform_write_role(self._role_value(current_user)):
+            raise HTTPException(status_code=403, detail="Access forbidden")
+
+        invoice = await self.get_platform_payout_invoice_by_id(
+            invoice_id=invoice_id,
+            current_user=current_user,
+        )
+        if str(invoice.get("assignee_tenant_type") or "").strip().lower() != RequestTargetType.SERVICE_PROVIDER.value:
+            raise HTTPException(status_code=400, detail="Provider adjustments are only available for service-provider payout invoices")
+        if str(invoice.get("request_fulfillment_mode") or "").strip().lower() != RequestFulfillmentMode.HYBRID.value:
+            raise HTTPException(status_code=400, detail="Provider adjustments are only available for hybrid requests")
+
+        amount = self._as_float(payload.amount)
+        if amount is None or amount == 0:
+            raise HTTPException(status_code=400, detail="Adjustment amount must be non-zero")
+        reason = str(payload.reason or "").strip()
+        if not reason:
+            raise HTTPException(status_code=400, detail="Adjustment reason is required")
+
+        current_amount = self._as_float(invoice.get("estimated_amount")) or 0.0
+        if round(current_amount + amount, 2) < 0:
+            raise HTTPException(status_code=400, detail="Adjustment would reduce the provider payout below zero")
+
+        now = datetime.utcnow()
+        adjustment = RequestPayoutAdjustmentRecord(
+            id=ObjectId(),
+            payout_invoice_id=str(invoice_id or "").strip(),
+            request_id=str(invoice.get("request_id") or "").strip(),
+            assignee_tenant_id=str(invoice.get("assignee_tenant_id") or "").strip(),
+            assignee_tenant_type=str(invoice.get("assignee_tenant_type") or "").strip(),
+            currency=str(invoice.get("currency") or "CAD").strip() or "CAD",
+            amount=round(amount, 2),
+            reason=reason,
+            adjustment_status=PAYOUT_ADJUSTMENT_STATUS_DRAFT,
+            created_by_user_id=str(getattr(current_user, "id", "") or "") or None,
+            created_by_username=str(getattr(current_user, "username", "") or "") or None,
+            updated_by_user_id=str(getattr(current_user, "id", "") or "") or None,
+            updated_by_username=str(getattr(current_user, "username", "") or "") or None,
+            created_at=now,
+            updated_at=now,
+        )
+        await self._engine.save(adjustment)
+
+        return await self.get_platform_payout_invoice_by_id(
+            invoice_id=invoice_id,
+            current_user=current_user,
+        )
+
+    async def update_platform_payout_adjustment(
+        self,
+        adjustment_id: str,
+        payload: RequestPayoutAdjustmentUpdatePayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        if not self._is_platform_write_role(self._role_value(current_user)):
+            raise HTTPException(status_code=403, detail="Access forbidden")
+
+        adjustment = await self._get_payout_adjustment_or_404(adjustment_id)
+        if self._normalize_payout_adjustment_status(adjustment.adjustment_status) != PAYOUT_ADJUSTMENT_STATUS_DRAFT:
+            raise HTTPException(status_code=409, detail="Only draft payout adjustments can be edited")
+
+        invoice = await self.get_platform_payout_invoice_by_id(
+            invoice_id=str(adjustment.payout_invoice_id or "").strip(),
+            current_user=current_user,
+        )
+        amount = self._as_float(payload.amount)
+        if amount is None or amount == 0:
+            raise HTTPException(status_code=400, detail="Adjustment amount must be non-zero")
+        reason = str(payload.reason or "").strip()
+        if not reason:
+            raise HTTPException(status_code=400, detail="Adjustment reason is required")
+
+        current_amount = self._as_float(invoice.get("baseline_estimated_amount"))
+        if current_amount is None:
+            current_amount = self._as_float(invoice.get("estimated_amount")) or 0.0
+        if round(float(current_amount) + amount, 2) < 0:
+            raise HTTPException(status_code=400, detail="Adjustment would reduce the provider payout below zero")
+
+        adjustment.amount = round(amount, 2)
+        adjustment.reason = reason
+        adjustment.updated_by_user_id = str(getattr(current_user, "id", "") or "") or None
+        adjustment.updated_by_username = str(getattr(current_user, "username", "") or "") or None
+        adjustment.updated_at = datetime.utcnow()
+        await self._engine.save(adjustment)
+
+        return await self.get_platform_payout_invoice_by_id(
+            invoice_id=str(adjustment.payout_invoice_id or "").strip(),
+            current_user=current_user,
+        )
+
+    async def approve_platform_payout_adjustment(
+        self,
+        adjustment_id: str,
+        payload: RequestPayoutAdjustmentDecisionPayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        if not self._is_platform_write_role(self._role_value(current_user)):
+            raise HTTPException(status_code=403, detail="Access forbidden")
+
+        adjustment = await self._get_payout_adjustment_or_404(adjustment_id)
+        if self._normalize_payout_adjustment_status(adjustment.adjustment_status) != PAYOUT_ADJUSTMENT_STATUS_DRAFT:
+            raise HTTPException(status_code=409, detail="Only draft payout adjustments can be approved")
+
+        invoice = await self.get_platform_payout_invoice_by_id(
+            invoice_id=str(adjustment.payout_invoice_id or "").strip(),
+            current_user=current_user,
+        )
+        baseline_amount = self._as_float(invoice.get("baseline_estimated_amount"))
+        if baseline_amount is None:
+            baseline_amount = self._as_float(invoice.get("estimated_amount")) or 0.0
+        if round(float(baseline_amount) + float(self._as_float(adjustment.amount) or 0.0), 2) < 0:
+            raise HTTPException(status_code=400, detail="Adjustment would reduce the provider payout below zero")
+
+        now = datetime.utcnow()
+        adjustment.adjustment_status = PAYOUT_ADJUSTMENT_STATUS_APPROVED
+        adjustment.status_note = self._normalize_optional_note(payload.note)
+        adjustment.approved_by_user_id = str(getattr(current_user, "id", "") or "") or None
+        adjustment.approved_by_username = str(getattr(current_user, "username", "") or "") or None
+        adjustment.approved_at = now
+        adjustment.updated_by_user_id = adjustment.approved_by_user_id
+        adjustment.updated_by_username = adjustment.approved_by_username
+        adjustment.updated_at = now
+        await self._engine.save(adjustment)
+
+        return await self.get_platform_payout_invoice_by_id(
+            invoice_id=str(adjustment.payout_invoice_id or "").strip(),
+            current_user=current_user,
+        )
+
+    async def void_platform_payout_adjustment(
+        self,
+        adjustment_id: str,
+        payload: RequestPayoutAdjustmentDecisionPayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        if not self._is_platform_write_role(self._role_value(current_user)):
+            raise HTTPException(status_code=403, detail="Access forbidden")
+
+        adjustment = await self._get_payout_adjustment_or_404(adjustment_id)
+        if self._normalize_payout_adjustment_status(adjustment.adjustment_status) == PAYOUT_ADJUSTMENT_STATUS_VOIDED:
+            raise HTTPException(status_code=409, detail="Payout adjustment is already voided")
+
+        now = datetime.utcnow()
+        adjustment.adjustment_status = PAYOUT_ADJUSTMENT_STATUS_VOIDED
+        adjustment.status_note = self._normalize_optional_note(payload.note) or adjustment.status_note
+        adjustment.voided_by_user_id = str(getattr(current_user, "id", "") or "") or None
+        adjustment.voided_by_username = str(getattr(current_user, "username", "") or "") or None
+        adjustment.voided_at = now
+        adjustment.updated_by_user_id = adjustment.voided_by_user_id
+        adjustment.updated_by_username = adjustment.voided_by_username
+        adjustment.updated_at = now
+        await self._engine.save(adjustment)
+
+        return await self.get_platform_payout_invoice_by_id(
+            invoice_id=str(adjustment.payout_invoice_id or "").strip(),
+            current_user=current_user,
+        )
 
     async def list_request_invoices(
         self,
@@ -5240,7 +6188,12 @@ class RequestManager:
 
         current_status = assignment.assignment_status
         next_status = payload.assignment_status
-        if not is_platform and not self._allowed_assignment_transition(current_status, next_status):
+        allows_provider_coverage_increase = self._allows_provider_coverage_increase_transition(
+            assignment,
+            current_status,
+            next_status,
+        )
+        if not is_platform and not allows_provider_coverage_increase and not self._allowed_assignment_transition(current_status, next_status):
             raise HTTPException(status_code=400, detail=f"Invalid transition from {current_status.value} to {next_status.value}")
         if next_status in {RequestAssignmentStatus.CANCELLED, RequestAssignmentStatus.DECLINED} and not (payload.reason or "").strip():
             raise HTTPException(status_code=400, detail="Reason is required when declining or cancelling a job")
@@ -5281,6 +6234,12 @@ class RequestManager:
                 if desired_slots <= 0:
                     raise HTTPException(status_code=400, detail="Service provider acceptance requires committed slots")
 
+            if assignment.assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER and int(desired_slots or 0) < reserved_slots:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Committed provider coverage cannot be reduced from the currently accepted total",
+                )
+
             if assignment.assignee_tenant_type == RequestTargetType.SERVICE_PROVIDER:
                 request_address = cast(Dict[str, Any], record.site_snapshot.get("site_address") or {})
                 request_latitude, request_longitude = self._validated_site_snapshot_coordinates(record.site_snapshot or {})
@@ -5303,18 +6262,24 @@ class RequestManager:
                     ),
                 )
                 available_provider_guards = int(provider_capacity.get("available_guard_count") or 0)
-                if available_provider_guards <= 0:
+                additional_slots_requested = max(int(desired_slots or 0) - reserved_slots, 0)
+                if additional_slots_requested > 0 and available_provider_guards <= 0:
                     raise HTTPException(
                         status_code=409,
                         detail="Service provider has no available linked guards for this request window",
                     )
-                if int(desired_slots or 0) > available_provider_guards:
+                if additional_slots_requested > available_provider_guards:
                     raise HTTPException(
                         status_code=409,
                         detail=(
                             f"Service provider only has {available_provider_guards} available linked "
                             "guard(s) for this request window"
                         ),
+                    )
+                if allows_provider_coverage_increase and additional_slots_requested <= 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Increase committed provider coverage above the current accepted total to add more guards",
                     )
 
             available_slots = int(record.open_slots or 0) + reserved_slots

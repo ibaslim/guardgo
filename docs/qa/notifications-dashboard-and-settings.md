@@ -14,7 +14,8 @@ Typical examples:
 
 - platform users see requests needing staffing attention, upcoming shift workload, and recent job activity
 - service providers see offers awaiting response, roster work, and payout invoices
-- guards see offers awaiting response, upcoming assignments, and payout invoices
+- direct guards see offers awaiting response, upcoming assignments, and payout invoices
+- service-provider-owned guards see offers and assignments but should not see payout widgets or invoice navigation
 - clients see request workload and arrival confirmation follow-up
 
 ### Core checks
@@ -55,6 +56,11 @@ Good events to use during QA:
 - review returned
 - shift attendance change
 - leave or exception event
+
+For leave notifications specifically, verify both routes:
+
+- planned leave approvals and requests should open `/dashboard/leaves`
+- same-shift operational exceptions should still open the relevant Requests or shift detail view
 
 ## C. Platform Settings
 

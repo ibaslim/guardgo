@@ -11,11 +11,17 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     ClientRequestSoftDeletePayload,
     ClientRequestStatusUpdatePayload,
     ClientRequestUpdatePayload,
+    GuardLeavePolicyUpsertPayload,
+    GuardPlannedLeaveCreatePayload,
+    GuardPlannedLeaveDecisionPayload,
     ProviderRosterPayload,
     RequestScheduleUpsertPayload,
     RequestAdditionalCoveragePayload,
     RequestAssignmentCreatePayload,
     RequestAssignmentStatusUpdatePayload,
+    RequestPayoutAdjustmentCreatePayload,
+    RequestPayoutAdjustmentDecisionPayload,
+    RequestPayoutAdjustmentUpdatePayload,
     RequestPublishPayload,
     RequestPublishUpdatePayload,
     RequestPricingPreviewPayload,
@@ -364,6 +370,110 @@ async def get_platform_payout_invoice(
 ):
     return await RequestManager.get_instance().get_platform_payout_invoice_by_id(
         invoice_id=invoice_id,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/payout-invoices/{invoice_id}/adjustments",
+    summary="Create provider payout adjustment",
+    description="Apply a platform-tracked payout adjustment to a service-provider payout invoice.",
+    tags=["Client Requests"],
+    operation_id="createPlatformPayoutAdjustment",
+    response_description="Updated platform payout invoice detail.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+    ]))],
+)
+async def create_platform_payout_adjustment(
+    invoice_id: str,
+    payload: RequestPayoutAdjustmentCreatePayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().create_platform_payout_adjustment(
+        invoice_id=invoice_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.patch(
+    "/api/payout-adjustments/{adjustment_id}",
+    summary="Update provider payout adjustment draft",
+    description="Update a draft platform payout adjustment before it is approved.",
+    tags=["Client Requests"],
+    operation_id="updatePlatformPayoutAdjustment",
+    response_description="Updated payout invoice detail.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+    ]))],
+)
+async def update_platform_payout_adjustment(
+    adjustment_id: str,
+    payload: RequestPayoutAdjustmentUpdatePayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().update_platform_payout_adjustment(
+        adjustment_id=adjustment_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/payout-adjustments/{adjustment_id}/approve",
+    summary="Approve provider payout adjustment draft",
+    description="Approve a draft platform payout adjustment so it affects payout and margin reporting.",
+    tags=["Client Requests"],
+    operation_id="approvePlatformPayoutAdjustment",
+    response_description="Updated payout invoice detail.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+    ]))],
+)
+async def approve_platform_payout_adjustment(
+    adjustment_id: str,
+    payload: RequestPayoutAdjustmentDecisionPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().approve_platform_payout_adjustment(
+        adjustment_id=adjustment_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/payout-adjustments/{adjustment_id}/void",
+    summary="Void provider payout adjustment",
+    description="Void a platform payout adjustment while preserving its finance audit trail.",
+    tags=["Client Requests"],
+    operation_id="voidPlatformPayoutAdjustment",
+    response_description="Updated payout invoice detail.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+    ]))],
+)
+async def void_platform_payout_adjustment(
+    adjustment_id: str,
+    payload: RequestPayoutAdjustmentDecisionPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestManager.get_instance().void_platform_payout_adjustment(
+        adjustment_id=adjustment_id,
+        payload=payload,
         current_user=current_user,
     )
 
@@ -725,6 +835,220 @@ async def reconcile_shift_guard_leave_return(
 ):
     return await RequestShiftManager.get_instance().reconcile_guard_leave_return(
         leave_id=leave_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/planned-guard-leaves",
+    summary="List planned guard leave requests",
+    description="Return planned leave requests visible to the current guard, provider, or platform role.",
+    tags=["Client Requests"],
+    operation_id="listPlannedGuardLeaves",
+    response_description="Paginated planned leave requests.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def list_planned_guard_leaves(
+    page: int = 1,
+    rows: int = 20,
+    guard_tenant_id: str = "",
+    leave_status: str = "",
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().list_planned_guard_leaves(
+        current_user=current_user,
+        page=page,
+        rows=rows,
+        guard_tenant_id=guard_tenant_id,
+        leave_status=leave_status,
+    )
+
+
+@request_routes.post(
+    "/api/planned-guard-leaves",
+    summary="Request planned guard leave",
+    description="Create a planned leave request for the current guard tenant.",
+    tags=["Client Requests"],
+    operation_id="createPlannedGuardLeave",
+    response_description="Created planned leave request.",
+    status_code=201,
+    dependencies=[Depends(role_required([
+        user_role.GUARD_ADMIN,
+    ]))],
+)
+async def create_planned_guard_leave(
+    payload: GuardPlannedLeaveCreatePayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().create_planned_guard_leave(
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/planned-guard-leaves/{leave_id}/approve",
+    summary="Approve planned guard leave",
+    description="Approve a pending planned leave request.",
+    tags=["Client Requests"],
+    operation_id="approvePlannedGuardLeave",
+    response_description="Approved planned leave request.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def approve_planned_guard_leave(
+    leave_id: str,
+    payload: GuardPlannedLeaveDecisionPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().approve_planned_guard_leave(
+        leave_id=leave_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/planned-guard-leaves/{leave_id}/reject",
+    summary="Reject planned guard leave",
+    description="Reject a pending planned leave request.",
+    tags=["Client Requests"],
+    operation_id="rejectPlannedGuardLeave",
+    response_description="Rejected planned leave request.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def reject_planned_guard_leave(
+    leave_id: str,
+    payload: GuardPlannedLeaveDecisionPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().reject_planned_guard_leave(
+        leave_id=leave_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.post(
+    "/api/planned-guard-leaves/{leave_id}/cancel",
+    summary="Cancel planned guard leave",
+    description="Cancel a pending or approved planned leave request.",
+    tags=["Client Requests"],
+    operation_id="cancelPlannedGuardLeave",
+    response_description="Cancelled planned leave request.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def cancel_planned_guard_leave(
+    leave_id: str,
+    payload: GuardPlannedLeaveDecisionPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().cancel_planned_guard_leave(
+        leave_id=leave_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/guard-leave-quota-targets",
+    summary="List guard leave quota targets",
+    description="Return guards whose leave quota can be managed by the current reviewer role.",
+    tags=["Client Requests"],
+    operation_id="listGuardLeaveQuotaTargets",
+    response_description="Guard targets available for leave quota management.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def list_guard_leave_quota_targets(
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().list_guard_leave_quota_targets(
+        current_user=current_user,
+    )
+
+
+@request_routes.get(
+    "/api/guard-leave-balances/{guard_tenant_id}",
+    summary="Get guard leave balance",
+    description="Return the current leave policy and balance snapshot for a guard tenant.",
+    tags=["Client Requests"],
+    operation_id="getGuardLeaveBalance",
+    response_description="Leave policy and balance snapshot.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.READ_ONLY_ADMIN,
+        user_role.GUARD_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def get_guard_leave_balance(
+    guard_tenant_id: str,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().get_guard_leave_balance_snapshot(
+        guard_tenant_id=guard_tenant_id,
+        current_user=current_user,
+    )
+
+
+@request_routes.put(
+    "/api/guard-leave-balances/{guard_tenant_id}",
+    summary="Update guard leave quota",
+    description="Update the leave quota policy for a direct or provider-owned guard tenant.",
+    tags=["Client Requests"],
+    operation_id="upsertGuardLeaveBalance",
+    response_description="Updated leave policy and balance snapshot.",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN,
+        user_role.OPS_ADMIN,
+        user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN,
+        user_role.SP_ADMIN,
+    ]))],
+)
+async def upsert_guard_leave_balance(
+    guard_tenant_id: str,
+    payload: GuardLeavePolicyUpsertPayload,
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().upsert_guard_leave_policy(
+        guard_tenant_id=guard_tenant_id,
         payload=payload,
         current_user=current_user,
     )

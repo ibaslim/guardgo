@@ -63,6 +63,9 @@
               {{ invoice.billing_period_label || formatTokenLabel(invoice.billing_cycle) }}
               <span *ngIf="invoice.coverage_status"> · {{ formatTokenLabel(invoice.coverage_status) }}</span>
             </div>
+            <div *ngIf="(invoice.payout_adjustment_count || 0) > 0" class="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+              Includes {{ invoice.payout_adjustment_count }} platform adjustment{{ invoice.payout_adjustment_count === 1 ? '' : 's' }}
+            </div>
             <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
               Issued {{ formatDateTime(invoice.created_at) }}
               <span *ngIf="invoice.updated_at"> · Updated {{ formatDateTime(invoice.updated_at) }}</span>
@@ -118,8 +121,16 @@
       <ng-container *ngIf="!detailLoading && selectedInvoice as invoice">
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <app-summary-metric-card
+            label="Baseline Payment"
+            [value]="formatMoney(invoice.baseline_estimated_amount, invoice.currency || 'CAD')"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
             label="Expected Payment"
             [value]="formatMoney(invoice.estimated_amount, invoice.currency || 'CAD')"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Platform Adjustments"
+            [value]="formatMoney(invoice.payout_adjustment_total, invoice.currency || 'CAD')"
           ></app-summary-metric-card>
           <app-summary-metric-card
             label="Hourly Rate"
@@ -160,6 +171,30 @@
           <p *ngIf="invoice.note" class="mt-3 text-sm leading-6 text-gray-600 dark:text-gray-300">
             {{ invoice.note }}
           </p>
+        </app-section>
+
+        <app-section
+          *ngIf="invoice.payout_adjustments?.length"
+          [title]="'Platform Adjustments'"
+          [subtitle]="'Additional payout entries applied by platform finance for this invoice.'"
+        >
+          <div class="space-y-3">
+            <div *ngFor="let adjustment of invoice.payout_adjustments" class="rounded-xl border border-gray-200 px-4 py-4 dark:border-gray-700">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {{ adjustment.reason || 'Platform payout adjustment' }}
+                  </div>
+                  <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    {{ adjustment.created_by_username || adjustment.created_by_user_id || 'Platform admin' }} · {{ formatDateTime(adjustment.created_at) }}
+                  </div>
+                </div>
+                <div class="text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  {{ formatMoney(adjustment.amount, adjustment.currency || invoice.currency || 'CAD') }}
+                </div>
+              </div>
+            </div>
+          </div>
         </app-section>
 
         <app-section

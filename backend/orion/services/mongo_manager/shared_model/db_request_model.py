@@ -97,6 +97,7 @@ class RequestInvoiceTrigger(str, Enum):
     ADDITIONAL_COVERAGE = "additional_coverage"
     SCHEDULE_UPDATED = "schedule_updated"
     MONTHLY_ADVANCE = "monthly_advance"
+    WEEKLY_ADVANCE = "weekly_advance"
 
 
 class RequestInvoiceStatus(str, Enum):
@@ -180,6 +181,18 @@ class ShiftGuardLeaveStatus(str, Enum):
     ACTIVE = "active"
     RETURNED_EARLY = "returned_early"
     COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class GuardPlannedLeaveType(str, Enum):
+    PAID = "paid"
+    UNPAID = "unpaid"
+
+
+class GuardPlannedLeaveStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
     CANCELLED = "cancelled"
 
 
@@ -382,6 +395,30 @@ class RequestInvoiceRecord(Model):
     updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
 
+class RequestPayoutAdjustmentRecord(Model):
+    payout_invoice_id: str = Field(index=True)
+    request_id: str = Field(index=True)
+    assignee_tenant_id: str = Field(index=True)
+    assignee_tenant_type: str = Field(index=True)
+    currency: str = "CAD"
+    amount: float = 0.0
+    reason: str = ""
+    adjustment_status: str = Field(default="draft", index=True)
+    status_note: Optional[str] = None
+    created_by_user_id: Optional[str] = Field(default=None, index=True)
+    created_by_username: Optional[str] = None
+    approved_by_user_id: Optional[str] = Field(default=None, index=True)
+    approved_by_username: Optional[str] = None
+    approved_at: Optional[datetime] = Field(default=None, index=True)
+    voided_by_user_id: Optional[str] = Field(default=None, index=True)
+    voided_by_username: Optional[str] = None
+    voided_at: Optional[datetime] = Field(default=None, index=True)
+    updated_by_user_id: Optional[str] = Field(default=None, index=True)
+    updated_by_username: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
 class ShiftInstanceRecord(Model):
     request_id: str = Field(index=True)
     client_tenant_id: str = Field(index=True)
@@ -468,6 +505,61 @@ class ShiftGuardLeaveRecord(Model):
     returned_early_by_user_id: Optional[str] = Field(default=None, index=True)
     returned_early_by_username: Optional[str] = None
     return_note: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class GuardLeavePolicyRecord(Model):
+    guard_tenant_id: str = Field(index=True)
+    ownership_type: Optional[str] = Field(default=None, index=True)
+    service_provider_tenant_id: Optional[str] = Field(default=None, index=True)
+    annual_paid_leave_days: float = 14.0
+    annual_unpaid_leave_days: float = 0.0
+    carry_forward_days: float = 0.0
+    effective_from: str = Field(index=True)
+    effective_to: Optional[str] = Field(default=None, index=True)
+    is_active: bool = Field(default=True, index=True)
+    updated_by_user_id: Optional[str] = Field(default=None, index=True)
+    updated_by_username: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class GuardLeaveBalanceRecord(Model):
+    guard_tenant_id: str = Field(index=True)
+    policy_id: Optional[str] = Field(default=None, index=True)
+    period_start: str = Field(index=True)
+    period_end: str = Field(index=True)
+    paid_leave_allocated_days: float = 14.0
+    paid_leave_used_days: float = 0.0
+    paid_leave_remaining_days: float = 14.0
+    unpaid_leave_used_days: float = 0.0
+    carry_forward_days: float = 0.0
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class GuardPlannedLeaveRecord(Model):
+    guard_tenant_id: str = Field(index=True)
+    ownership_type: Optional[str] = Field(default=None, index=True)
+    service_provider_tenant_id: Optional[str] = Field(default=None, index=True)
+    leave_type: GuardPlannedLeaveType = Field(index=True)
+    request_status: GuardPlannedLeaveStatus = Field(default=GuardPlannedLeaveStatus.PENDING, index=True)
+    reason: Optional[str] = None
+    start_at_utc: datetime = Field(index=True)
+    end_at_utc: datetime = Field(index=True)
+    requested_days: float = 0.0
+    balance_days_consumed: float = 0.0
+    affected_slot_ids: List[str] = []
+    requested_by_user_id: Optional[str] = Field(default=None, index=True)
+    requested_by_username: Optional[str] = None
+    requested_by_role: Optional[str] = Field(default=None, index=True)
+    approved_by_user_id: Optional[str] = Field(default=None, index=True)
+    approved_by_username: Optional[str] = None
+    approval_note: Optional[str] = None
+    approved_at: Optional[datetime] = Field(default=None, index=True)
+    rejected_at: Optional[datetime] = Field(default=None, index=True)
+    cancelled_at: Optional[datetime] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
 
@@ -565,6 +657,20 @@ class RequestAdditionalCoveragePayload(BaseModel):
     additional_slots: int = PydanticField(ge=1, le=500)
     request_expires_at: Optional[datetime] = None
     max_match_results: int = PydanticField(default=25, ge=1, le=100)
+
+
+class RequestPayoutAdjustmentCreatePayload(BaseModel):
+    amount: float
+    reason: str = PydanticField(min_length=3, max_length=500)
+
+
+class RequestPayoutAdjustmentUpdatePayload(BaseModel):
+    amount: float
+    reason: str = PydanticField(min_length=3, max_length=500)
+
+
+class RequestPayoutAdjustmentDecisionPayload(BaseModel):
+    note: Optional[str] = PydanticField(default=None, max_length=500)
 
 
 class RequestWaveReviewPayload(BaseModel):
@@ -668,6 +774,25 @@ class ShiftGuardLeaveReturnDecisionPayload(BaseModel):
 class ShiftGuardLeaveReconcilePayload(BaseModel):
     note: Optional[str] = PydanticField(default=None, max_length=500)
     decisions: List[ShiftGuardLeaveReturnDecisionPayload] = []
+
+
+class GuardPlannedLeaveCreatePayload(BaseModel):
+    guard_tenant_id: Optional[str] = PydanticField(default=None, min_length=1, max_length=80)
+    leave_type: GuardPlannedLeaveType = GuardPlannedLeaveType.PAID
+    start_at_utc: datetime
+    end_at_utc: datetime
+    reason: Optional[str] = PydanticField(default=None, max_length=500)
+
+
+class GuardPlannedLeaveDecisionPayload(BaseModel):
+    note: Optional[str] = PydanticField(default=None, max_length=500)
+
+
+class GuardLeavePolicyUpsertPayload(BaseModel):
+    annual_paid_leave_days: float = PydanticField(default=14.0, ge=0, le=365)
+    annual_unpaid_leave_days: float = PydanticField(default=0.0, ge=0, le=365)
+    carry_forward_days: float = PydanticField(default=0.0, ge=0, le=365)
+    effective_from: Optional[date] = None
 
 
 class ClientRequestListFilters(BaseModel):

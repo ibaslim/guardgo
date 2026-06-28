@@ -66,6 +66,12 @@ export class DashboardLayoutComponent implements OnInit {
       policy: 'clientRequests'
     },
     {
+      label: 'Leaves',
+      route: '/dashboard/leaves',
+      icon: 'clock',
+      roles: ['guard_admin', 'sp_admin', 'admin', 'ops_admin', 'support_admin', 'compliance_admin', 'read_only_admin']
+    },
+    {
       label: 'My Invoices',
       route: '/dashboard/my-invoices',
       icon: 'file-text',
