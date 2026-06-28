@@ -12,6 +12,8 @@ from orion.api.interactive.request_matching_manager.models.request_matching_mode
 )
 from orion.services.mongo_manager.shared_model.db_request_model import (
     ClientRequestRecord,
+    GuardPlannedLeaveRecord,
+    GuardPlannedLeaveStatus,
     RequestAssignmentRecord,
     RequestAssignmentScope,
     RequestAssignmentStatus,
@@ -328,6 +330,43 @@ class RequestMatchingManager:
 
         return True
 
+    async def _approved_planned_leave_guard_ids(
+        self,
+        guard_tenant_ids: List[str],
+        *,
+        requested_start_at: Optional[datetime],
+        requested_end_at: Optional[datetime],
+    ) -> set[str]:
+        normalized_guard_ids = [
+            str(guard_tenant_id or "").strip()
+            for guard_tenant_id in guard_tenant_ids
+            if str(guard_tenant_id or "").strip()
+        ]
+        if not normalized_guard_ids:
+            return set()
+        if self._normalize_datetime_wall_clock(requested_start_at) is None or self._normalize_datetime_wall_clock(requested_end_at) is None:
+            return set()
+
+        leave_collection = self._engine.get_collection(GuardPlannedLeaveRecord)
+        leave_docs = await leave_collection.find({
+            "guard_tenant_id": {"$in": normalized_guard_ids},
+            "request_status": GuardPlannedLeaveStatus.APPROVED.value,
+        }).to_list(length=None)
+
+        overlapping_guard_ids: set[str] = set()
+        for leave_doc in leave_docs:
+            guard_tenant_id = str(leave_doc.get("guard_tenant_id") or "").strip()
+            if not guard_tenant_id:
+                continue
+            if self._windows_overlap(
+                leave_doc.get("start_at_utc"),
+                leave_doc.get("end_at_utc"),
+                requested_start_at,
+                requested_end_at,
+            ):
+                overlapping_guard_ids.add(guard_tenant_id)
+        return overlapping_guard_ids
+
     @staticmethod
     def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         earth_radius_km = 6371.0
@@ -352,6 +391,7 @@ class RequestMatchingManager:
         *,
         allow_provider_owned: bool = False,
         provider_operating_regions: Optional[List[Dict[str, Any]]] = None,
+        planned_leave_guard_ids: Optional[set[str]] = None,
     ) -> RequestMatchCandidate:
         request_address = payload.site_address
         request_country = self._normalize_country_code(request_address.country)
@@ -408,6 +448,11 @@ class RequestMatchingManager:
                 candidate.reason_code = "guard_type_mismatch"
                 candidate.distance_source = "province_fallback"
                 return candidate
+
+        if tenant_id in (planned_leave_guard_ids or set()):
+            candidate.reason_code = "planned_leave_conflict"
+            candidate.distance_source = "province_fallback"
+            return candidate
 
         if not self._is_request_window_within_weekly_availability(
             profile.get("weekly_availability"),
@@ -473,7 +518,7 @@ class RequestMatchingManager:
 
         return candidate
 
-    def _provider_guard_capacity_from_tenants(
+    async def _provider_guard_capacity_from_tenants(
         self,
         provider_tenant_id: str,
         provider_profile: Dict[str, Any],
@@ -492,6 +537,11 @@ class RequestMatchingManager:
             for guard in guards
             if str(getattr(guard, "service_provider_tenant_id", "") or "").strip() == normalized_provider_id
         ]
+        planned_leave_guard_ids = await self._approved_planned_leave_guard_ids(
+            [str(getattr(guard, "id", "") or "").strip() for guard in linked_guards],
+            requested_start_at=payload.requested_start_at,
+            requested_end_at=payload.requested_end_at,
+        )
 
         eligible_guard_count = 0
         for guard in linked_guards:
@@ -503,6 +553,7 @@ class RequestMatchingManager:
                 payload,
                 allow_provider_owned=True,
                 provider_operating_regions=provider_operating_regions,
+                planned_leave_guard_ids=planned_leave_guard_ids,
             )
             if candidate.eligible:
                 eligible_guard_count += 1
@@ -578,6 +629,14 @@ class RequestMatchingManager:
         provider_tenant_id: str,
         payload: RequestMatchingPreviewPayload,
     ) -> Dict[str, int]:
+        normalized_provider_id = str(provider_tenant_id or "").strip()
+        provider = None
+        if ObjectId.is_valid(normalized_provider_id):
+            provider = await self._engine.find_one(
+                db_tenant_model,
+                db_tenant_model.id == ObjectId(normalized_provider_id),
+            )
+        provider_profile = provider.profile if provider and isinstance(provider.profile, dict) else {}
         guards = await self._engine.find(
             db_tenant_model,
             (db_tenant_model.tenant_type == TenantType.GUARD)
@@ -585,11 +644,12 @@ class RequestMatchingManager:
             & (db_tenant_model.ownership_type == GuardOwnershipType.SERVICE_PROVIDER),
         )
         reserved_capacity = await self._provider_reserved_capacity_by_provider(payload)
-        return self._provider_guard_capacity_from_tenants(
-            provider_tenant_id,
+        return await self._provider_guard_capacity_from_tenants(
+            normalized_provider_id,
+            provider_profile,
             guards,
             payload,
-            reserved_guard_count=reserved_capacity.get(str(provider_tenant_id or "").strip(), 0),
+            reserved_guard_count=reserved_capacity.get(normalized_provider_id, 0),
         )
 
     def _candidate_from_provider_region(
@@ -764,6 +824,7 @@ class RequestMatchingManager:
         results: List[RequestMatchCandidate] = []
         provider_guards_by_provider_id: Dict[str, List[db_tenant_model]] = {}
         provider_reserved_capacity_by_provider_id: Dict[str, int] = {}
+        planned_leave_guard_ids: set[str] = set()
 
         if target_type == "service_provider":
             provider_guards = await self._engine.find(
@@ -778,13 +839,25 @@ class RequestMatchingManager:
                     continue
                 provider_guards_by_provider_id.setdefault(provider_id, []).append(guard)
             provider_reserved_capacity_by_provider_id = await self._provider_reserved_capacity_by_provider(payload)
+        else:
+            planned_leave_guard_ids = await self._approved_planned_leave_guard_ids(
+                [str(getattr(tenant, "id", "") or "").strip() for tenant in tenants],
+                requested_start_at=payload.requested_start_at,
+                requested_end_at=payload.requested_end_at,
+            )
 
         for tenant in tenants:
             tenant_id = str(tenant.id)
             profile = tenant.profile if isinstance(tenant.profile, dict) else {}
 
             if target_type == "guard":
-                results.append(self._candidate_from_guard(tenant_id, getattr(tenant, "ownership_type", None), profile, payload))
+                results.append(self._candidate_from_guard(
+                    tenant_id,
+                    getattr(tenant, "ownership_type", None),
+                    profile,
+                    payload,
+                    planned_leave_guard_ids=planned_leave_guard_ids,
+                ))
                 continue
 
             operating_regions = profile.get("operating_regions") if isinstance(profile.get("operating_regions"), list) else []
@@ -824,7 +897,7 @@ class RequestMatchingManager:
 
             if best_candidate is not None:
                 if best_candidate.eligible:
-                    provider_capacity = self._provider_guard_capacity_from_tenants(
+                    provider_capacity = await self._provider_guard_capacity_from_tenants(
                         tenant_id,
                         profile,
                         provider_guards_by_provider_id.get(tenant_id, []),
@@ -858,6 +931,7 @@ class RequestMatchingManager:
             "total_candidates": len(full_results),
             "eligible_count": len([r for r in full_results if r.eligible]),
             "ownership_excluded_count": len([r for r in full_results if r.reason_code == "ownership_excluded"]),
+            "planned_leave_conflict_count": len([r for r in full_results if r.reason_code == "planned_leave_conflict"]),
             "outside_availability_count": len([r for r in full_results if r.reason_code == "outside_availability"]),
             "outside_radius_count": len([r for r in full_results if r.reason_code == "outside_radius"]),
             "province_mismatch_count": len([r for r in full_results if r.reason_code == "province_mismatch"]),

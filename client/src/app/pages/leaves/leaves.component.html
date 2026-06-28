@@ -1,0 +1,292 @@
+<app-page
+  title="Leaves"
+  [subtitle]="pageSubtitle"
+  [containerClass]="'w-full px-4 py-8 sm:px-6 lg:px-8'"
+  [contentClass]="'max-w-6xl mx-auto space-y-8'"
+>
+  <div page-actions *ngIf="canRequestPlannedLeave">
+    <app-button label="Request Leave" type="primary" (pressed)="openPlannedLeaveRequestDrawer()"></app-button>
+  </div>
+
+  <app-card
+    [showHeader]="false"
+    [containerClass]="'rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
+    [bodyClass]="'p-4 sm:p-5'"
+  >
+    <div class="flex flex-nowrap items-center gap-3 overflow-x-auto">
+      <app-button
+        label="Leaves"
+        [type]="activeView === 'leaves' ? 'primary' : 'secondary'"
+        (pressed)="activeView = 'leaves'"
+      ></app-button>
+      <app-button
+        *ngIf="canShowQuotaTab"
+        label="Quota"
+        [type]="activeView === 'quota' ? 'primary' : 'secondary'"
+        (pressed)="activeView = 'quota'"
+      ></app-button>
+    </div>
+  </app-card>
+
+  <div *ngIf="isGuardAdmin && guardLeaveBalance" class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <app-summary-metric-card label="Allocated Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_allocated_days) + ' days'"></app-summary-metric-card>
+    <app-summary-metric-card label="Used Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_used_days) + ' days'"></app-summary-metric-card>
+    <app-summary-metric-card label="Remaining Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_remaining_days) + ' days'"></app-summary-metric-card>
+  </div>
+
+  <app-card
+    *ngIf="activeView === 'leaves'"
+    [showHeader]="false"
+    [containerClass]="'rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
+    [bodyClass]="'p-0'"
+  >
+    <app-list-toolbar
+      [title]="plannedLeaveListTitle"
+      [subtitle]="plannedLeaveListSubtitle"
+      [controlsClass]="'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'"
+    >
+      <div toolbar-controls class="contents">
+        <app-select-input
+          label="Leave Status"
+          [name]="'plannedLeaveStatusFilter'"
+          [(ngModel)]="plannedLeaveStatusFilter"
+          [options]="plannedLeaveStatusOptions"
+        ></app-select-input>
+        <div class="hidden lg:block"></div>
+        <app-filter-action-bar
+          (apply)="loadPlannedLeaves(1)"
+          (clear)="plannedLeaveStatusFilter = ''; loadPlannedLeaves(1)"
+        ></app-filter-action-bar>
+      </div>
+    </app-list-toolbar>
+
+    <app-list-state-panel *ngIf="isScopeLoading(plannedLeaveListScope)" mode="loading" [loadingRows]="3"></app-list-state-panel>
+
+    <app-list-state-panel
+      *ngIf="!isScopeLoading(plannedLeaveListScope) && !plannedLeaves.length"
+      mode="empty"
+      icon="clock"
+      title="No leave requests"
+      [message]="isGuardAdmin ? 'Your leave requests will appear here after you submit them.' : 'Leave approvals and history will appear here once guards start submitting them.'"
+    ></app-list-state-panel>
+
+    <div *ngIf="!isScopeLoading(plannedLeaveListScope) && plannedLeaves.length" class="divide-y divide-gray-100 dark:divide-gray-800">
+      <app-record-list-item *ngFor="let item of plannedLeaves; trackBy: trackByPlannedLeaveId">
+        <div record-badges>
+          <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getStatusClasses(item.request_status)">
+            {{ formatTokenLabel(item.request_status) }}
+          </span>
+          <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+            {{ formatTokenLabel(item.leave_type) }}
+          </span>
+          <span class="text-xs text-gray-400 dark:text-gray-500">
+            {{ formatDateTime(item.start_at_utc) }} to {{ formatDateTime(item.end_at_utc) }}
+          </span>
+        </div>
+
+        <h3 record-title class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          {{ isGuardAdmin ? 'My leave request' : getGuardLabel(item.guard_tenant_id) }}
+        </h3>
+
+        <div record-meta>
+          <span *ngFor="let meta of getPlannedLeaveMetaItems(item)">{{ meta }}</span>
+        </div>
+
+        <div *ngIf="item.reason" record-body class="text-sm text-gray-600 dark:text-gray-300">
+          {{ item.reason }}
+        </div>
+
+        <div record-actions class="flex flex-wrap gap-2">
+          <app-button
+            *ngIf="canApprovePlannedLeaveItem(item)"
+            label="Approve"
+            type="primary"
+            (pressed)="openPlannedLeaveDecisionDrawer(item, 'approve')"
+          ></app-button>
+          <app-button
+            *ngIf="canRejectPlannedLeaveItem(item)"
+            label="Reject"
+            type="danger"
+            (pressed)="openPlannedLeaveDecisionDrawer(item, 'reject')"
+          ></app-button>
+          <app-button
+            *ngIf="canCancelPlannedLeaveItem(item)"
+            label="Cancel"
+            type="secondary"
+            (pressed)="openPlannedLeaveDecisionDrawer(item, 'cancel')"
+          ></app-button>
+        </div>
+      </app-record-list-item>
+    </div>
+
+    <app-pagination-footer
+      *ngIf="!isScopeLoading(plannedLeaveListScope)"
+      [page]="plannedLeavePage"
+      [totalPages]="plannedLeaveTotalPages"
+      [pages]="buildPaginationPages(plannedLeavePage, plannedLeaveTotalPages)"
+      (pageChange)="loadPlannedLeaves($event)"
+    ></app-pagination-footer>
+  </app-card>
+
+  <app-card
+    *ngIf="activeView === 'quota' && canShowQuotaTab"
+    [showHeader]="false"
+    [containerClass]="'rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900'"
+    [bodyClass]="'p-0'"
+  >
+    <app-list-toolbar
+      title="Guard Leave Quota"
+      [subtitle]="quotaListSubtitle"
+      [showFooter]="true"
+    >
+      <div toolbar-footer class="flex flex-wrap gap-3">
+        <app-button label="Refresh Quota List" type="secondary" (pressed)="loadQuotaRows()"></app-button>
+      </div>
+    </app-list-toolbar>
+
+    <app-list-state-panel *ngIf="isScopeLoading(plannedLeaveQuotaRowsScope)" mode="loading" [loadingRows]="4"></app-list-state-panel>
+
+    <app-list-state-panel
+      *ngIf="!isScopeLoading(plannedLeaveQuotaRowsScope) && !visibleQuotaRows.length"
+      mode="empty"
+      icon="clock"
+      title="No guards available for quota management"
+      message="Managed guards will appear here once they are active in your current ownership scope."
+    ></app-list-state-panel>
+
+    <div *ngIf="!isScopeLoading(plannedLeaveQuotaRowsScope) && visibleQuotaRows.length" class="divide-y divide-gray-100 dark:divide-gray-800">
+      <div *ngFor="let row of visibleQuotaRows; trackBy: trackByQuotaGuardId" class="space-y-4 px-4 py-5 sm:px-5">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div class="min-w-0 space-y-1">
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ row.target.name }}</div>
+            <div class="flex flex-wrap gap-3 text-sm text-gray-500 dark:text-gray-400">
+              <span>{{ formatTokenLabel(row.target.ownership_type || 'platform') }}</span>
+              <span *ngIf="row.balance">Used {{ formatNumber(row.balance.paid_leave_used_days) }} days</span>
+              <span *ngIf="row.balance">Remaining {{ formatNumber(row.balance.paid_leave_remaining_days) }} days</span>
+            </div>
+          </div>
+          <app-button
+            label="Save Quota"
+            type="primary"
+            [loadingScope]="getQuotaSaveScope(row.target.id)"
+            (pressed)="saveQuotaRow(row)"
+          ></app-button>
+        </div>
+
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <app-base-input
+            label="Annual Paid Leave"
+            [name]="'quota-paid-' + row.target.id"
+            type="number"
+            [(ngModel)]="row.form.annualPaidLeaveDays"
+            [min]="0"
+          ></app-base-input>
+          <app-base-input
+            label="Annual Unpaid Leave"
+            [name]="'quota-unpaid-' + row.target.id"
+            type="number"
+            [(ngModel)]="row.form.annualUnpaidLeaveDays"
+            [min]="0"
+          ></app-base-input>
+          <app-base-input
+            label="Carry Forward"
+            [name]="'quota-carry-' + row.target.id"
+            type="number"
+            [(ngModel)]="row.form.carryForwardDays"
+            [min]="0"
+          ></app-base-input>
+          <app-base-input
+            label="Effective From"
+            [name]="'quota-effective-' + row.target.id"
+            type="date"
+            [(ngModel)]="row.form.effectiveFrom"
+          ></app-base-input>
+        </div>
+      </div>
+    </div>
+  </app-card>
+</app-page>
+
+<app-side-drawer [show]="showPlannedLeaveRequestDrawer" size="lg" (close)="closePlannedLeaveRequestDrawer()">
+  <ng-container *ngIf="showPlannedLeaveRequestDrawer">
+    <app-drawer-title-block
+      title="Request Leave"
+      subtitle="Submit a paid or unpaid leave request and track the approval outcome here."
+    ></app-drawer-title-block>
+
+    <div *ngIf="guardLeaveBalance" class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <app-summary-metric-card label="Allocated Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_allocated_days) + ' days'"></app-summary-metric-card>
+      <app-summary-metric-card label="Used Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_used_days) + ' days'"></app-summary-metric-card>
+      <app-summary-metric-card label="Remaining Paid Leave" [value]="formatNumber(guardLeaveBalance.paid_leave_remaining_days) + ' days'"></app-summary-metric-card>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <app-select-input
+        label="Leave Type"
+        [name]="'plannedLeaveType'"
+        [(ngModel)]="plannedLeaveForm.leaveType"
+        [options]="plannedLeaveTypeOptions"
+      ></app-select-input>
+      <div></div>
+      <app-base-input
+        label="Leave Start"
+        name="plannedLeaveStartAt"
+        type="datetime-local"
+        [(ngModel)]="plannedLeaveForm.startAt"
+        [required]="true"
+        [errorText]="plannedLeaveErrors['startAt'] || ''"
+      ></app-base-input>
+      <app-base-input
+        label="Leave End"
+        name="plannedLeaveEndAt"
+        type="datetime-local"
+        [(ngModel)]="plannedLeaveForm.endAt"
+        [required]="true"
+        [errorText]="plannedLeaveErrors['endAt'] || ''"
+      ></app-base-input>
+    </div>
+
+    <app-textarea
+      label="Reason"
+      name="plannedLeaveReason"
+      [(ngModel)]="plannedLeaveForm.reason"
+      [placeholder]="'Share the reason or context for this leave request.'"
+    ></app-textarea>
+
+    <app-drawer-action-row>
+      <app-button label="Close" type="secondary" (pressed)="closePlannedLeaveRequestDrawer()"></app-button>
+      <app-button label="Submit Leave Request" type="primary" [loadingScope]="'leaves:create'" (pressed)="submitPlannedLeaveRequest()"></app-button>
+    </app-drawer-action-row>
+  </ng-container>
+</app-side-drawer>
+
+<app-side-drawer [show]="showPlannedLeaveDecisionDrawer" size="md" (close)="closePlannedLeaveDecisionDrawer()">
+  <ng-container *ngIf="showPlannedLeaveDecisionDrawer && selectedPlannedLeave as item">
+    <app-drawer-title-block
+      [title]="plannedLeaveDecisionForm.action === 'approve' ? 'Approve Leave' : plannedLeaveDecisionForm.action === 'reject' ? 'Reject Leave' : 'Cancel Leave'"
+      [subtitle]="isGuardAdmin ? 'Update your leave request.' : getGuardLabel(item.guard_tenant_id)"
+    ></app-drawer-title-block>
+
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <app-summary-metric-card label="Leave Type" [value]="formatTokenLabel(item.leave_type)"></app-summary-metric-card>
+      <app-summary-metric-card label="Requested Days" [value]="formatNumber(item.requested_days)"></app-summary-metric-card>
+    </div>
+
+    <app-textarea
+      label="Note"
+      name="plannedLeaveDecisionNote"
+      [(ngModel)]="plannedLeaveDecisionForm.note"
+      [placeholder]="plannedLeaveDecisionForm.action === 'approve' ? 'Add an optional approval note.' : plannedLeaveDecisionForm.action === 'reject' ? 'Explain why this leave is being rejected.' : 'Add an optional cancellation note.'"
+    ></app-textarea>
+
+    <app-drawer-action-row>
+      <app-button label="Close" type="secondary" (pressed)="closePlannedLeaveDecisionDrawer()"></app-button>
+      <app-button
+        [label]="plannedLeaveDecisionForm.action === 'approve' ? 'Confirm Approval' : plannedLeaveDecisionForm.action === 'reject' ? 'Confirm Rejection' : 'Confirm Cancellation'"
+        [type]="plannedLeaveDecisionForm.action === 'approve' ? 'primary' : plannedLeaveDecisionForm.action === 'reject' ? 'danger' : 'secondary'"
+        [loadingScope]="plannedLeaveDecisionForm.action === 'approve' ? 'leaves:approve:' + item.id : plannedLeaveDecisionForm.action === 'reject' ? 'leaves:reject:' + item.id : 'leaves:cancel:' + item.id"
+        (pressed)="submitPlannedLeaveDecision()"
+      ></app-button>
+    </app-drawer-action-row>
+  </ng-container>
+</app-side-drawer>

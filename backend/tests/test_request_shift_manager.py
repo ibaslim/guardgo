@@ -9,6 +9,14 @@ from orion.api.interactive.request_shift_manager.request_shift_manager import Re
 from orion.api.interactive.notification_manager.notification_manager import NotificationManager
 from orion.services.mongo_manager.shared_model.db_request_model import (
     ClientRequestRecord,
+    GuardLeaveBalanceRecord,
+    GuardLeavePolicyRecord,
+    GuardLeavePolicyUpsertPayload,
+    GuardPlannedLeaveCreatePayload,
+    GuardPlannedLeaveDecisionPayload,
+    GuardPlannedLeaveRecord,
+    GuardPlannedLeaveStatus,
+    GuardPlannedLeaveType,
     ProviderRosterPayload,
     RequestAssignmentRecord,
     RequestAssignmentStatus,
@@ -327,6 +335,9 @@ class FakeEngine:
         self.shift_slots = []
         self.shift_events = []
         self.shift_guard_leaves = []
+        self.guard_leave_policies = []
+        self.guard_leave_balances = []
+        self.guard_planned_leaves = []
         self.tenants = []
         self.request_assignments = []
         self.request_waves = []
@@ -352,6 +363,18 @@ class FakeEngine:
         if isinstance(model, ShiftGuardLeaveRecord):
             self.shift_guard_leaves = [item for item in self.shift_guard_leaves if str(item.id) != str(model.id)]
             self.shift_guard_leaves.append(model)
+            return model
+        if isinstance(model, GuardLeavePolicyRecord):
+            self.guard_leave_policies = [item for item in self.guard_leave_policies if str(item.id) != str(model.id)]
+            self.guard_leave_policies.append(model)
+            return model
+        if isinstance(model, GuardLeaveBalanceRecord):
+            self.guard_leave_balances = [item for item in self.guard_leave_balances if str(item.id) != str(model.id)]
+            self.guard_leave_balances.append(model)
+            return model
+        if isinstance(model, GuardPlannedLeaveRecord):
+            self.guard_planned_leaves = [item for item in self.guard_planned_leaves if str(item.id) != str(model.id)]
+            self.guard_planned_leaves.append(model)
             return model
         if isinstance(model, RequestAssignmentRecord):
             self.request_assignments = [item for item in self.request_assignments if str(item.id) != str(model.id)]
@@ -396,6 +419,27 @@ class FakeEngine:
                     if item.id == target_id:
                         return item
             return self.shift_guard_leaves[0] if self.shift_guard_leaves else None
+        if model is GuardLeavePolicyRecord:
+            target_id = query.get("_id", {}).get("$eq")
+            if target_id is not None:
+                for item in self.guard_leave_policies:
+                    if item.id == target_id:
+                        return item
+            return self.guard_leave_policies[0] if self.guard_leave_policies else None
+        if model is GuardLeaveBalanceRecord:
+            target_id = query.get("_id", {}).get("$eq")
+            if target_id is not None:
+                for item in self.guard_leave_balances:
+                    if item.id == target_id:
+                        return item
+            return self.guard_leave_balances[0] if self.guard_leave_balances else None
+        if model is GuardPlannedLeaveRecord:
+            target_id = query.get("_id", {}).get("$eq")
+            if target_id is not None:
+                for item in self.guard_planned_leaves:
+                    if item.id == target_id:
+                        return item
+            return self.guard_planned_leaves[0] if self.guard_planned_leaves else None
         if model is db_tenant_model:
             target_id = query.get("_id", {}).get("$eq")
             if target_id is not None:
@@ -423,6 +467,27 @@ class FakeEngine:
                 normalized_status = getattr(leave_status, "value", leave_status)
                 items = [item for item in items if item.leave_status.value == normalized_status]
             return items
+        if model is GuardLeavePolicyRecord:
+            items = list(self.guard_leave_policies)
+            query = dict(_condition) if isinstance(_condition, dict) else {}
+            guard_id = query.get("guard_tenant_id", {}).get("$eq") if isinstance(query.get("guard_tenant_id"), dict) else query.get("guard_tenant_id")
+            if guard_id is not None:
+                items = [item for item in items if item.guard_tenant_id == guard_id]
+            return items
+        if model is GuardLeaveBalanceRecord:
+            items = list(self.guard_leave_balances)
+            query = dict(_condition) if isinstance(_condition, dict) else {}
+            guard_id = query.get("guard_tenant_id", {}).get("$eq") if isinstance(query.get("guard_tenant_id"), dict) else query.get("guard_tenant_id")
+            if guard_id is not None:
+                items = [item for item in items if item.guard_tenant_id == guard_id]
+            return items
+        if model is GuardPlannedLeaveRecord:
+            items = list(self.guard_planned_leaves)
+            query = dict(_condition) if isinstance(_condition, dict) else {}
+            guard_id = query.get("guard_tenant_id", {}).get("$eq") if isinstance(query.get("guard_tenant_id"), dict) else query.get("guard_tenant_id")
+            if guard_id is not None:
+                items = [item for item in items if item.guard_tenant_id == guard_id]
+            return items
         if model is RequestBroadcastWaveRecord:
             return list(self.request_waves)
         return []
@@ -434,6 +499,12 @@ class FakeEngine:
             self.shift_instances = [item for item in self.shift_instances if str(item.id) != str(model.id)]
         if isinstance(model, ShiftGuardLeaveRecord):
             self.shift_guard_leaves = [item for item in self.shift_guard_leaves if str(item.id) != str(model.id)]
+        if isinstance(model, GuardLeavePolicyRecord):
+            self.guard_leave_policies = [item for item in self.guard_leave_policies if str(item.id) != str(model.id)]
+        if isinstance(model, GuardLeaveBalanceRecord):
+            self.guard_leave_balances = [item for item in self.guard_leave_balances if str(item.id) != str(model.id)]
+        if isinstance(model, GuardPlannedLeaveRecord):
+            self.guard_planned_leaves = [item for item in self.guard_planned_leaves if str(item.id) != str(model.id)]
 
     def get_collection(self, model):
         if model is ShiftInstanceRecord:
@@ -2887,3 +2958,465 @@ async def test_reconcile_guard_leave_return_restores_reserved_replacement_to_ori
     assert replacement_slot.slot_status == ShiftSlotStatus.CANCELLED
     assert replacement_assignment.assignment_status == RequestAssignmentStatus.CANCELLED
     assert engine.shift_events[-1].event_type == ShiftAttendanceEventType.LEAVE_RETURNED
+
+
+async def _async_noop(**_kwargs):
+    return 1
+
+
+@pytest.mark.anyio
+async def test_create_planned_guard_leave_creates_pending_record_and_default_balance(monkeypatch):
+    engine = FakeEngine()
+    guard_tenant = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        ownership_type=GuardOwnershipType.PLATFORM,
+        status=TenantStatus.ACTIVE,
+        profile={"full_name": "Direct Guard"},
+    )
+    object.__setattr__(guard_tenant, "id", ObjectId())
+    engine.tenants.append(guard_tenant)
+
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(None, tenants={str(guard_tenant.id): guard_tenant}, engine=engine),
+    )
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.NotificationManager.get_instance",
+        lambda: SimpleNamespace(
+            create_for_platform_admin_users=_async_noop,
+            create_for_tenant_admin_users=_async_noop,
+        ),
+    )
+
+    response = await manager.create_planned_guard_leave(
+        payload=GuardPlannedLeaveCreatePayload(
+            leave_type=GuardPlannedLeaveType.PAID,
+            start_at_utc=datetime.utcnow() + timedelta(days=2),
+            end_at_utc=datetime.utcnow() + timedelta(days=4),
+            reason="vacation",
+        ),
+        current_user=SimpleNamespace(id="guard-user-1", username="guard", role="guard_admin", tenant_uuid=str(guard_tenant.id)),
+    )
+
+    assert response["message"] == "Planned leave request submitted"
+    assert len(engine.guard_planned_leaves) == 1
+    assert engine.guard_planned_leaves[0].request_status == GuardPlannedLeaveStatus.PENDING
+    assert len(engine.guard_leave_policies) == 1
+    assert len(engine.guard_leave_balances) == 1
+    assert engine.guard_leave_balances[0].paid_leave_remaining_days == 14.0
+
+
+@pytest.mark.anyio
+async def test_approve_planned_guard_leave_consumes_paid_balance(monkeypatch):
+    _stub_notifications(monkeypatch)
+    engine = FakeEngine()
+    request_record = _make_request(guards_required=1, request_status=RequestStatus.SUBMITTED)
+    engine.request_record = request_record
+    guard_tenant = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        ownership_type=GuardOwnershipType.PLATFORM,
+        status=TenantStatus.ACTIVE,
+        profile={"full_name": "Direct Guard"},
+    )
+    object.__setattr__(guard_tenant, "id", ObjectId())
+    engine.tenants.append(guard_tenant)
+    direct_assignment = _make_assignment(
+        request_id=str(request_record.id),
+        assignee_tenant_id=str(guard_tenant.id),
+        assignee_tenant_type=RequestTargetType.GUARD,
+        slots_committed=1,
+    )
+    schedule = RequestScheduleTemplateRecord(
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        timezone="Asia/Karachi",
+        schedule_type=RequestScheduleType.ONE_TIME,
+        start_date_local=(date.today() + timedelta(days=3)).isoformat(),
+        end_date_local=None,
+        start_time_local="09:00",
+        end_time_local="17:00",
+        active=True,
+    )
+    object.__setattr__(schedule, "id", ObjectId())
+    engine.schedule_record = schedule
+    shift = ShiftInstanceRecord(
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        schedule_template_id=str(schedule.id),
+        shift_date_local=(date.today() + timedelta(days=3)).isoformat(),
+        shift_start_at_utc=datetime.utcnow() + timedelta(days=3, hours=2),
+        shift_end_at_utc=datetime.utcnow() + timedelta(days=3, hours=10),
+        timezone="Asia/Karachi",
+        slots_required=1,
+    )
+    object.__setattr__(shift, "id", ObjectId())
+    engine.shift_instances.append(shift)
+    slot = ShiftSlotRecord(
+        shift_instance_id=str(shift.id),
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        parent_assignment_id=str(direct_assignment.id),
+        slot_number=1,
+        coverage_slot_index=1,
+        coverage_source_type=ShiftCoverageSourceType.DIRECT_GUARD,
+        coverage_tenant_id=str(guard_tenant.id),
+        service_provider_tenant_id=None,
+        assigned_guard_tenant_id=str(guard_tenant.id),
+        slot_status=ShiftSlotStatus.RESERVED,
+        roster_due_at=shift.shift_start_at_utc - timedelta(hours=2),
+    )
+    object.__setattr__(slot, "id", ObjectId())
+    engine.shift_slots.append(slot)
+    leave_record = GuardPlannedLeaveRecord(
+        guard_tenant_id=str(guard_tenant.id),
+        ownership_type=GuardOwnershipType.PLATFORM.value,
+        leave_type=GuardPlannedLeaveType.PAID,
+        request_status=GuardPlannedLeaveStatus.PENDING,
+        start_at_utc=datetime.utcnow() + timedelta(days=3),
+        end_at_utc=datetime.utcnow() + timedelta(days=5),
+        requested_days=2.0,
+    )
+    object.__setattr__(leave_record, "id", ObjectId())
+    engine.guard_planned_leaves.append(leave_record)
+    policy = GuardLeavePolicyRecord(
+        guard_tenant_id=str(guard_tenant.id),
+        ownership_type=GuardOwnershipType.PLATFORM.value,
+        annual_paid_leave_days=14.0,
+        effective_from=datetime.utcnow().date().isoformat(),
+        is_active=True,
+    )
+    object.__setattr__(policy, "id", ObjectId())
+    engine.guard_leave_policies.append(policy)
+    balance = GuardLeaveBalanceRecord(
+        guard_tenant_id=str(guard_tenant.id),
+        policy_id=str(policy.id),
+        period_start=date(datetime.utcnow().year, 1, 1).isoformat(),
+        period_end=date(datetime.utcnow().year, 12, 31).isoformat(),
+        paid_leave_allocated_days=14.0,
+        paid_leave_used_days=0.0,
+        paid_leave_remaining_days=14.0,
+    )
+    object.__setattr__(balance, "id", ObjectId())
+    engine.guard_leave_balances.append(balance)
+
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(
+            request_record,
+            assignments=[direct_assignment],
+            tenants={str(guard_tenant.id): guard_tenant},
+            engine=engine,
+        ),
+    )
+
+    response = await manager.approve_planned_guard_leave(
+        leave_id=str(leave_record.id),
+        payload=GuardPlannedLeaveDecisionPayload(note="approved"),
+        current_user=SimpleNamespace(id="ops-1", username="ops", role="ops_admin", tenant_uuid="ops"),
+    )
+
+    assert response["message"] == "Planned leave approved"
+    assert leave_record.request_status == GuardPlannedLeaveStatus.APPROVED
+    assert balance.paid_leave_used_days == 2.0
+    assert balance.paid_leave_remaining_days == 12.0
+    assert response["impact_summary"]["affected_future_slot_count"] == 1
+    assert response["impact_summary"]["direct_replacement_opened_count"] == 1
+    assert response["impact_summary"]["provider_unrostered_slot_count"] == 0
+    original_slot = next(item for item in engine.shift_slots if str(item.id) == str(slot.id))
+    replacement_slot = next(item for item in engine.shift_slots if str(item.id) != str(slot.id))
+    assert original_slot.slot_status == ShiftSlotStatus.REPLACEMENT_REQUIRED
+    assert replacement_slot.slot_status == ShiftSlotStatus.OPEN
+    assert replacement_slot.replacement_of_slot_id == str(original_slot.id)
+    assert str(original_slot.id) in response["item"]["affected_slot_ids"]
+
+
+@pytest.mark.anyio
+async def test_approve_planned_guard_leave_unrosters_provider_guard_for_overlapping_future_shift(monkeypatch):
+    _stub_notifications(monkeypatch)
+    engine = FakeEngine()
+    request_record = _make_request(guards_required=1, request_status=RequestStatus.SUBMITTED)
+    engine.request_record = request_record
+    provider_tenant = db_tenant_model(
+        tenant_type=TenantType.SERVICE_PROVIDER,
+        status=TenantStatus.ACTIVE,
+        profile={"company_name": "Shield Ops"},
+    )
+    object.__setattr__(provider_tenant, "id", ObjectId())
+    provider_guard = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+        service_provider_tenant_id=str(provider_tenant.id),
+        status=TenantStatus.ACTIVE,
+        profile={"full_name": "Provider Guard"},
+    )
+    object.__setattr__(provider_guard, "id", ObjectId())
+    engine.tenants.extend([provider_tenant, provider_guard])
+    provider_assignment = _make_assignment(
+        request_id=str(request_record.id),
+        assignee_tenant_id=str(provider_tenant.id),
+        assignee_tenant_type=RequestTargetType.SERVICE_PROVIDER,
+        slots_committed=1,
+    )
+    schedule = RequestScheduleTemplateRecord(
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        timezone="Asia/Karachi",
+        schedule_type=RequestScheduleType.ONE_TIME,
+        start_date_local=(date.today() + timedelta(days=4)).isoformat(),
+        end_date_local=None,
+        start_time_local="09:00",
+        end_time_local="17:00",
+        active=True,
+    )
+    object.__setattr__(schedule, "id", ObjectId())
+    engine.schedule_record = schedule
+    shift = ShiftInstanceRecord(
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        schedule_template_id=str(schedule.id),
+        shift_date_local=(date.today() + timedelta(days=4)).isoformat(),
+        shift_start_at_utc=datetime.utcnow() + timedelta(days=4, hours=2),
+        shift_end_at_utc=datetime.utcnow() + timedelta(days=4, hours=10),
+        timezone="Asia/Karachi",
+        slots_required=1,
+    )
+    object.__setattr__(shift, "id", ObjectId())
+    engine.shift_instances.append(shift)
+    slot = ShiftSlotRecord(
+        shift_instance_id=str(shift.id),
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        parent_assignment_id=str(provider_assignment.id),
+        slot_number=1,
+        coverage_slot_index=1,
+        coverage_source_type=ShiftCoverageSourceType.SERVICE_PROVIDER,
+        coverage_tenant_id=str(provider_tenant.id),
+        service_provider_tenant_id=str(provider_tenant.id),
+        assigned_guard_tenant_id=str(provider_guard.id),
+        slot_status=ShiftSlotStatus.ROSTERED,
+        roster_due_at=shift.shift_start_at_utc - timedelta(hours=2),
+        rostered_at=datetime.utcnow(),
+    )
+    object.__setattr__(slot, "id", ObjectId())
+    engine.shift_slots.append(slot)
+    leave_record = GuardPlannedLeaveRecord(
+        guard_tenant_id=str(provider_guard.id),
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER.value,
+        service_provider_tenant_id=str(provider_tenant.id),
+        leave_type=GuardPlannedLeaveType.UNPAID,
+        request_status=GuardPlannedLeaveStatus.PENDING,
+        start_at_utc=datetime.utcnow() + timedelta(days=4),
+        end_at_utc=datetime.utcnow() + timedelta(days=6),
+        requested_days=2.0,
+    )
+    object.__setattr__(leave_record, "id", ObjectId())
+    engine.guard_planned_leaves.append(leave_record)
+    policy = GuardLeavePolicyRecord(
+        guard_tenant_id=str(provider_guard.id),
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER.value,
+        service_provider_tenant_id=str(provider_tenant.id),
+        annual_paid_leave_days=14.0,
+        effective_from=datetime.utcnow().date().isoformat(),
+        is_active=True,
+    )
+    object.__setattr__(policy, "id", ObjectId())
+    engine.guard_leave_policies.append(policy)
+    balance = GuardLeaveBalanceRecord(
+        guard_tenant_id=str(provider_guard.id),
+        policy_id=str(policy.id),
+        period_start=date(datetime.utcnow().year, 1, 1).isoformat(),
+        period_end=date(datetime.utcnow().year, 12, 31).isoformat(),
+        paid_leave_allocated_days=14.0,
+        paid_leave_used_days=0.0,
+        paid_leave_remaining_days=14.0,
+    )
+    object.__setattr__(balance, "id", ObjectId())
+    engine.guard_leave_balances.append(balance)
+
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(
+            request_record,
+            assignments=[provider_assignment],
+            tenants={
+                str(provider_tenant.id): provider_tenant,
+                str(provider_guard.id): provider_guard,
+            },
+            engine=engine,
+        ),
+    )
+
+    response = await manager.approve_planned_guard_leave(
+        leave_id=str(leave_record.id),
+        payload=GuardPlannedLeaveDecisionPayload(note="approved"),
+        current_user=SimpleNamespace(
+            id="sp-admin-1",
+            username="provider-admin",
+            role="sp_admin",
+            tenant_uuid=str(provider_tenant.id),
+        ),
+    )
+
+    assert response["message"] == "Planned leave approved"
+    assert response["impact_summary"]["affected_future_slot_count"] == 1
+    assert response["impact_summary"]["direct_replacement_opened_count"] == 0
+    assert response["impact_summary"]["provider_unrostered_slot_count"] == 1
+    updated_slot = next(item for item in engine.shift_slots if str(item.id) == str(slot.id))
+    assert updated_slot.assigned_guard_tenant_id is None
+    assert updated_slot.slot_status == ShiftSlotStatus.RESERVED
+    assert updated_slot.rostered_at is None
+    assert len(engine.shift_slots) == 1
+    assert str(updated_slot.id) in response["item"]["affected_slot_ids"]
+
+
+@pytest.mark.anyio
+async def test_list_guard_leave_quota_targets_returns_active_direct_guards_for_platform_roles(monkeypatch):
+    engine = FakeEngine()
+    direct_guard_a = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        ownership_type=GuardOwnershipType.PLATFORM,
+        status=TenantStatus.ACTIVE,
+        profile={"full_name": "Bravo Guard"},
+    )
+    object.__setattr__(direct_guard_a, "id", ObjectId())
+    direct_guard_b = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        ownership_type=GuardOwnershipType.PLATFORM,
+        status=TenantStatus.ACTIVE,
+        profile={"full_name": "Alpha Guard"},
+    )
+    object.__setattr__(direct_guard_b, "id", ObjectId())
+    provider_guard = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+        service_provider_tenant_id=str(ObjectId()),
+        status=TenantStatus.ACTIVE,
+        profile={"full_name": "Provider Guard"},
+    )
+    object.__setattr__(provider_guard, "id", ObjectId())
+    inactive_guard = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        ownership_type=GuardOwnershipType.PLATFORM,
+        status=TenantStatus.INACTIVE,
+        profile={"full_name": "Inactive Guard"},
+    )
+    object.__setattr__(inactive_guard, "id", ObjectId())
+    engine.tenants.extend([direct_guard_a, direct_guard_b, provider_guard, inactive_guard])
+
+    async def fake_find(model, _condition):
+        assert model is db_tenant_model
+        return [direct_guard_a, direct_guard_b]
+
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    manager._engine.find = fake_find
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(None, tenants={str(item.id): item for item in engine.tenants}, engine=engine),
+    )
+
+    response = await manager.list_guard_leave_quota_targets(
+        current_user=SimpleNamespace(id="ops-1", username="ops", role="ops_admin", tenant_uuid="ops"),
+    )
+
+    assert [item["name"] for item in response["items"]] == ["Alpha Guard", "Bravo Guard"]
+    assert {item["ownership_type"] for item in response["items"]} == {GuardOwnershipType.PLATFORM.value}
+
+
+@pytest.mark.anyio
+async def test_list_guard_leave_quota_targets_returns_own_provider_guards_for_sp_admin(monkeypatch):
+    engine = FakeEngine()
+    provider_tenant_id = str(ObjectId())
+    provider_guard_a = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+        service_provider_tenant_id=provider_tenant_id,
+        status=TenantStatus.ACTIVE,
+        profile={"full_name": "Zulu Guard"},
+    )
+    object.__setattr__(provider_guard_a, "id", ObjectId())
+    provider_guard_b = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+        service_provider_tenant_id=provider_tenant_id,
+        status=TenantStatus.ACTIVE,
+        profile={"full_name": "Echo Guard"},
+    )
+    object.__setattr__(provider_guard_b, "id", ObjectId())
+    foreign_provider_guard = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+        service_provider_tenant_id=str(ObjectId()),
+        status=TenantStatus.ACTIVE,
+        profile={"full_name": "Foreign Guard"},
+    )
+    object.__setattr__(foreign_provider_guard, "id", ObjectId())
+    engine.tenants.extend([provider_guard_a, provider_guard_b, foreign_provider_guard])
+
+    async def fake_find(model, _condition):
+        assert model is db_tenant_model
+        return [provider_guard_a, provider_guard_b]
+
+    provider_tenant = SimpleNamespace(id=provider_tenant_id, tenant_type=TenantType.SERVICE_PROVIDER, status=TenantStatus.ACTIVE)
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    manager._engine.find = fake_find
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(
+            None,
+            tenants={str(item.id): item for item in engine.tenants} | {provider_tenant_id: provider_tenant},
+            engine=engine,
+        ),
+    )
+
+    response = await manager.list_guard_leave_quota_targets(
+        current_user=SimpleNamespace(id="sp-1", username="provider", role="sp_admin", tenant_uuid=provider_tenant_id),
+    )
+
+    assert [item["name"] for item in response["items"]] == ["Echo Guard", "Zulu Guard"]
+    assert {item["service_provider_tenant_id"] for item in response["items"]} == {provider_tenant_id}
+
+
+@pytest.mark.anyio
+async def test_upsert_guard_leave_policy_updates_provider_owned_guard_quota(monkeypatch):
+    engine = FakeEngine()
+    provider_tenant_id = str(ObjectId())
+    guard_tenant = db_tenant_model(
+        tenant_type=TenantType.GUARD,
+        ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
+        service_provider_tenant_id=provider_tenant_id,
+        status=TenantStatus.ACTIVE,
+        profile={"full_name": "Provider Guard"},
+    )
+    object.__setattr__(guard_tenant, "id", ObjectId())
+    engine.tenants.append(guard_tenant)
+
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(None, tenants={str(guard_tenant.id): guard_tenant}, engine=engine),
+    )
+
+    response = await manager.upsert_guard_leave_policy(
+        guard_tenant_id=str(guard_tenant.id),
+        payload=GuardLeavePolicyUpsertPayload(
+            annual_paid_leave_days=18,
+            annual_unpaid_leave_days=5,
+            carry_forward_days=2,
+        ),
+        current_user=SimpleNamespace(id="sp-1", username="provider", role="sp_admin", tenant_uuid=provider_tenant_id),
+    )
+
+    assert response["message"] == "Guard leave quota updated"
+    assert len(engine.guard_leave_policies) == 1
+    assert engine.guard_leave_policies[0].annual_paid_leave_days == 18
+    assert len(engine.guard_leave_balances) == 1
+    assert engine.guard_leave_balances[0].paid_leave_allocated_days == 20

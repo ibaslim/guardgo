@@ -10,6 +10,7 @@ from orion.api.interactive.request_matching_manager.models.request_matching_mode
 from orion.api.interactive.request_matching_manager.request_matching_manager import RequestMatchingManager
 from orion.services.mongo_manager.shared_model.db_request_model import (
     ClientRequestRecord,
+    GuardPlannedLeaveRecord,
     RequestAssignmentRecord,
 )
 from orion.services.mongo_manager.shared_model.db_tenant_model import (
@@ -37,10 +38,11 @@ class _FakeCollection:
 
 
 class FakeEngine:
-    def __init__(self, tenants, *, assignments=None, requests=None):
+    def __init__(self, tenants, *, assignments=None, requests=None, planned_leaves=None):
         self.tenants = tenants
         self.assignments = assignments or []
         self.requests = requests or []
+        self.planned_leaves = planned_leaves or []
 
     async def find(self, model, query=None, *_args, **_kwargs):
         if model is not db_tenant_model:
@@ -59,11 +61,27 @@ class FakeEngine:
             return items
         return items
 
+    async def find_one(self, model, query=None, *_args, **_kwargs):
+        if model is not db_tenant_model:
+            return None
+
+        query_text = str(query or "")
+        if "'_id': {'$eq': ObjectId('" not in query_text:
+            return None
+
+        object_id_text = query_text.split("'_id': {'$eq': ObjectId('", 1)[1].split("')", 1)[0]
+        for tenant in self.tenants:
+            if str(getattr(tenant, "id", "") or "") == object_id_text:
+                return tenant
+        return None
+
     def get_collection(self, model):
         if model is RequestAssignmentRecord:
             return _FakeCollection(self.assignments)
         if model is ClientRequestRecord:
             return _FakeCollection(self.requests)
+        if model is GuardPlannedLeaveRecord:
+            return _FakeCollection(self.planned_leaves)
         raise AssertionError(f"Unexpected collection request: {model}")
 
 
@@ -253,6 +271,41 @@ async def test_preview_matches_respects_guard_weekly_availability():
     assert len(result.results) == 1
     assert result.results[0].eligible is False
     assert result.results[0].reason_code == "outside_availability"
+
+
+@pytest.mark.anyio
+async def test_preview_matches_excludes_guard_with_overlapping_approved_planned_leave():
+    guard = _guard_tenant()
+    manager = object.__new__(RequestMatchingManager)
+    manager._engine = FakeEngine(
+        [guard],
+        planned_leaves=[{
+            "guard_tenant_id": str(guard.id),
+            "request_status": "approved",
+            "start_at_utc": datetime(2026, 4, 27, 9, 0),
+            "end_at_utc": datetime(2026, 4, 27, 13, 0),
+        }],
+    )
+
+    result = await manager.preview_matches(
+        RequestMatchingPreviewPayload(
+            target_type="guard",
+            site_address=MatchAddress(
+                country="CA",
+                province="ON",
+                city="Toronto",
+                latitude=43.6532,
+                longitude=-79.3832,
+            ),
+            requested_start_at=datetime(2026, 4, 27, 10, 0),
+            requested_end_at=datetime(2026, 4, 27, 12, 0),
+        )
+    )
+
+    assert result.summary["planned_leave_conflict_count"] == 1
+    assert result.summary["eligible_count"] == 0
+    assert result.results[0].eligible is False
+    assert result.results[0].reason_code == "planned_leave_conflict"
 
 
 @pytest.mark.anyio
@@ -940,3 +993,103 @@ async def test_preview_matches_marks_provider_insufficient_capacity_when_overlap
     assert result.results[0].eligible_guard_count == 2
     assert result.results[0].reserved_guard_count == 2
     assert result.results[0].available_guard_count == 0
+
+
+@pytest.mark.anyio
+async def test_provider_available_guard_capacity_uses_provider_profile_and_linked_guards():
+    provider = _provider_tenant(
+        city_entries=[
+            {
+                "city_code": "MISSISSAUGA",
+                "city": "Mississauga",
+                "coverage_radius_km": 25,
+                "latitude": 43.5890,
+                "longitude": -79.6441,
+            }
+        ]
+    )
+    provider_id = str(provider.id)
+    manager = object.__new__(RequestMatchingManager)
+    manager._engine = FakeEngine(
+        [
+            provider,
+            _linked_provider_guard(
+                provider_id,
+                operational_region_code="ON",
+                operational_city_code="MISSISSAUGA",
+                max_travel_radius_km=20,
+            ),
+        ]
+    )
+
+    capacity = await manager.provider_available_guard_capacity(
+        provider_id,
+        RequestMatchingPreviewPayload(
+            target_type="service_provider",
+            site_address=MatchAddress(
+                country="CA",
+                province="ON",
+                city="Mississauga",
+                latitude=43.5890,
+                longitude=-79.6441,
+            ),
+            requested_start_at=datetime(2026, 4, 27, 10, 0),
+            requested_end_at=datetime(2026, 4, 27, 12, 0),
+        ),
+    )
+
+    assert capacity["linked_guard_count"] == 1
+    assert capacity["eligible_guard_count"] == 1
+    assert capacity["available_guard_count"] == 1
+
+
+@pytest.mark.anyio
+async def test_provider_available_guard_capacity_excludes_linked_guard_on_approved_planned_leave():
+    provider = _provider_tenant(
+        city_entries=[
+            {
+                "city_code": "MISSISSAUGA",
+                "city": "Mississauga",
+                "coverage_radius_km": 25,
+                "latitude": 43.5890,
+                "longitude": -79.6441,
+            }
+        ]
+    )
+    provider_id = str(provider.id)
+    linked_guard = _linked_provider_guard(
+        provider_id,
+        operational_region_code="ON",
+        operational_city_code="MISSISSAUGA",
+        max_travel_radius_km=20,
+    )
+    manager = object.__new__(RequestMatchingManager)
+    manager._engine = FakeEngine(
+        [provider, linked_guard],
+        planned_leaves=[{
+            "guard_tenant_id": str(linked_guard.id),
+            "request_status": "approved",
+            "start_at_utc": datetime(2026, 4, 27, 9, 0),
+            "end_at_utc": datetime(2026, 4, 27, 13, 0),
+        }],
+    )
+
+    capacity = await manager.provider_available_guard_capacity(
+        provider_id,
+        RequestMatchingPreviewPayload(
+            target_type="service_provider",
+            site_address=MatchAddress(
+                country="CA",
+                province="ON",
+                city="Mississauga",
+                latitude=43.5890,
+                longitude=-79.6441,
+            ),
+            requested_start_at=datetime(2026, 4, 27, 10, 0),
+            requested_end_at=datetime(2026, 4, 27, 12, 0),
+        ),
+    )
+
+    assert capacity["linked_guard_count"] == 1
+    assert capacity["eligible_guard_count"] == 0
+    assert capacity["available_guard_count"] == 0

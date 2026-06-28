@@ -32,12 +32,31 @@
       [value]="formatMoney(totalProviderPayout)"
     ></app-summary-metric-card>
     <app-summary-metric-card
+      label="Provider Adjustments"
+      [value]="formatMoney(totalPayoutAdjustments)"
+    ></app-summary-metric-card>
+    <app-summary-metric-card
       label="Platform Margin"
       [value]="formatPercent(platformMarginPercent)"
     ></app-summary-metric-card>
+  </div>
+
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
     <app-summary-metric-card
       label="Total Hours"
       [value]="formatHours(totalHours)"
+    ></app-summary-metric-card>
+    <app-summary-metric-card
+      label="Draft Adjustments"
+      [value]="draftPayoutAdjustmentCount"
+    ></app-summary-metric-card>
+    <app-summary-metric-card
+      label="Approved Adjustments"
+      [value]="approvedPayoutAdjustmentCount"
+    ></app-summary-metric-card>
+    <app-summary-metric-card
+      label="Voided Adjustments"
+      [value]="voidedPayoutAdjustmentCount"
     ></app-summary-metric-card>
   </div>
 
@@ -127,6 +146,10 @@
               [value]="formatMoney(invoice.estimated_amount, invoice.currency || 'CAD')"
             ></app-summary-metric-card>
             <app-summary-metric-card
+              label="Provider Adjustments"
+              [value]="formatMoney(invoice.payout_adjustment_total, invoice.currency || 'CAD')"
+            ></app-summary-metric-card>
+            <app-summary-metric-card
               label="Platform Earning"
               [value]="formatMoney(invoice.estimated_platform_earning, invoice.currency || 'CAD')"
             ></app-summary-metric-card>
@@ -187,15 +210,114 @@
           <app-summary-metric-card label="Client" [value]="invoice.client_label || invoice.client_tenant_id || '—'"></app-summary-metric-card>
           <app-summary-metric-card label="Client Invoice" [value]="invoice.linked_client_invoice_number || '—'"></app-summary-metric-card>
           <app-summary-metric-card label="Client Revenue" [value]="formatMoney(invoice.estimated_client_revenue, invoice.currency || 'CAD')"></app-summary-metric-card>
+          <app-summary-metric-card label="Baseline Payout" [value]="formatMoney(invoice.baseline_estimated_amount, invoice.currency || 'CAD')"></app-summary-metric-card>
           <app-summary-metric-card label="Assignee Payout" [value]="formatMoney(invoice.estimated_amount, invoice.currency || 'CAD')"></app-summary-metric-card>
+          <app-summary-metric-card label="Provider Adjustments" [value]="formatMoney(invoice.payout_adjustment_total, invoice.currency || 'CAD')"></app-summary-metric-card>
+          <app-summary-metric-card label="Baseline Platform Earning" [value]="formatMoney(invoice.baseline_estimated_platform_earning, invoice.currency || 'CAD')"></app-summary-metric-card>
           <app-summary-metric-card label="Platform Earning" [value]="formatMoney(invoice.estimated_platform_earning, invoice.currency || 'CAD')"></app-summary-metric-card>
           <app-summary-metric-card label="Margin %" [value]="formatPercent(invoice.platform_margin_percent)"></app-summary-metric-card>
           <app-summary-metric-card label="Client Rate" [value]="formatMoney(invoice.client_hourly_quote, invoice.currency || 'CAD')"></app-summary-metric-card>
+          <app-summary-metric-card label="Baseline Payout Rate" [value]="formatMoney(invoice.baseline_payout_hourly_rate, invoice.currency || 'CAD')"></app-summary-metric-card>
           <app-summary-metric-card label="Payout Rate" [value]="formatMoney(invoice.payout_hourly_rate, invoice.currency || 'CAD')"></app-summary-metric-card>
           <app-summary-metric-card label="Platform Cut / Hr" [value]="formatMoney(invoice.platform_cut_hourly_rate, invoice.currency || 'CAD')"></app-summary-metric-card>
           <app-summary-metric-card label="Billed Hours" [value]="formatHours(invoice.estimated_total_hours)"></app-summary-metric-card>
           <app-summary-metric-card label="Committed Positions" [value]="invoice.committed_slots ?? '—'"></app-summary-metric-card>
         </div>
+
+        <app-section
+          *ngIf="canAdjustSelectedInvoice || (invoice.payout_adjustments?.length || 0) > 0"
+          [title]="'Provider Compensation Adjustments'"
+          [subtitle]="'Draft, approve, void, and audit provider payout adjustments for provider-covered hybrid work without changing client billing.'"
+        >
+          <div *ngIf="canAdjustSelectedInvoice" class="grid grid-cols-1 gap-3 rounded-xl border border-gray-200 p-4 dark:border-gray-700 lg:grid-cols-[180px_minmax(0,1fr)_auto]">
+            <input
+              type="number"
+              [(ngModel)]="adjustmentAmount"
+              step="0.01"
+              placeholder="Adjustment amount"
+              class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            />
+            <input
+              type="text"
+              [(ngModel)]="adjustmentReason"
+              placeholder="Reason for provider compensation adjustment"
+              class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            />
+            <app-button
+              [label]="adjustmentSubmitting ? (editingAdjustmentId ? 'Saving...' : 'Saving...') : (editingAdjustmentId ? 'Save Draft' : 'Save Draft')"
+              [disabled]="adjustmentSubmitting || !adjustmentAmount || !adjustmentReason.trim()"
+              type="primary"
+              (pressed)="submitAdjustment()"
+            ></app-button>
+          </div>
+          <div *ngIf="editingAdjustmentId" class="mt-3 flex justify-end">
+            <app-button
+              label="Cancel Edit"
+              type="secondary"
+              (pressed)="cancelAdjustmentEdit()"
+            ></app-button>
+          </div>
+
+          <div *ngIf="!(invoice.payout_adjustments?.length || 0)" class="text-sm text-gray-500 dark:text-gray-400">
+            No provider payout adjustments have been recorded for this invoice.
+          </div>
+
+          <div *ngIf="invoice.payout_adjustments?.length" class="space-y-3">
+            <div *ngFor="let adjustment of invoice.payout_adjustments" class="rounded-xl border border-gray-200 px-4 py-4 dark:border-gray-700">
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {{ adjustment.reason || 'Provider payout adjustment' }}
+                    </div>
+                    <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold" [class]="getAdjustmentStatusClasses(adjustment.adjustment_status)">
+                      {{ formatTokenLabel(adjustment.adjustment_status) }}
+                    </span>
+                  </div>
+                  <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    {{ adjustment.created_by_username || adjustment.created_by_user_id || 'Platform admin' }} · {{ formatDateTime(adjustment.created_at) }}
+                  </div>
+                  <div *ngIf="adjustment.approved_at" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    Approved by {{ adjustment.approved_by_username || adjustment.approved_by_user_id || 'Platform admin' }} · {{ formatDateTime(adjustment.approved_at) }}
+                  </div>
+                  <div *ngIf="adjustment.voided_at" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    Voided by {{ adjustment.voided_by_username || adjustment.voided_by_user_id || 'Platform admin' }} · {{ formatDateTime(adjustment.voided_at) }}
+                  </div>
+                  <div *ngIf="adjustment.status_note" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ adjustment.status_note }}
+                  </div>
+                </div>
+                <div class="flex flex-col items-start gap-2 sm:items-end">
+                  <div class="text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {{ formatMoney(adjustment.amount, adjustment.currency || invoice.currency || 'CAD') }}
+                  </div>
+                  <div *ngIf="!isVoidedAdjustment(adjustment)" class="flex flex-wrap gap-2">
+                    <app-button
+                      *ngIf="isDraftAdjustment(adjustment)"
+                      label="Edit"
+                      type="secondary"
+                      [disabled]="adjustmentSubmitting || adjustmentActingId === adjustment.id"
+                      (pressed)="startAdjustmentEdit(adjustment)"
+                    ></app-button>
+                    <app-button
+                      *ngIf="isDraftAdjustment(adjustment)"
+                      label="Approve"
+                      type="primary"
+                      [disabled]="adjustmentSubmitting || adjustmentActingId === adjustment.id"
+                      (pressed)="approveAdjustment(adjustment.id)"
+                    ></app-button>
+                    <app-button
+                      label="Void"
+                      type="secondary"
+                      [disabled]="adjustmentSubmitting || adjustmentActingId === adjustment.id"
+                      (pressed)="voidAdjustment(adjustment.id)"
+                    ></app-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </app-section>
 
         <app-section [title]="'Finance Meta'" [subtitle]="'Billing period, linked client invoice, and reporting basis for this assignee invoice.'">
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">

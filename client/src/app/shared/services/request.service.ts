@@ -8,6 +8,15 @@ import {
   ClientRequestListResponse,
   ClientRequestStatus,
   ClientRequestUpdatePayload,
+  GuardLeaveBalanceItem,
+  GuardLeaveBalanceResponse,
+  GuardLeaveQuotaTargetListResponse,
+  GuardLeavePolicyItem,
+  GuardLeavePolicyUpsertPayload,
+  GuardPlannedLeaveCreatePayload,
+  GuardPlannedLeaveDecisionPayload,
+  GuardPlannedLeaveItem,
+  GuardPlannedLeaveListResponse,
   RequestScheduleResponse,
   RequestScheduleUpsertPayload,
   RequestAdditionalCoveragePayload,
@@ -133,6 +142,54 @@ export class RequestService {
 
   getPlatformPayoutInvoice(invoiceId: string, options?: ApiRequestOptions) {
     return this.api.get<PlatformPayoutInvoiceItem>(`payout-invoices/${invoiceId}`, options);
+  }
+
+  createPlatformPayoutAdjustment(
+    invoiceId: string,
+    payload: { amount: number; reason: string },
+    options?: ApiRequestOptions,
+  ) {
+    return this.api.post<PlatformPayoutInvoiceItem>(
+      `payout-invoices/${invoiceId}/adjustments`,
+      payload,
+      options,
+    );
+  }
+
+  updatePlatformPayoutAdjustment(
+    adjustmentId: string,
+    payload: { amount: number; reason: string },
+    options?: ApiRequestOptions,
+  ) {
+    return this.api.patch<PlatformPayoutInvoiceItem>(
+      `payout-adjustments/${adjustmentId}`,
+      payload,
+      options,
+    );
+  }
+
+  approvePlatformPayoutAdjustment(
+    adjustmentId: string,
+    payload: { note?: string | null } = {},
+    options?: ApiRequestOptions,
+  ) {
+    return this.api.post<PlatformPayoutInvoiceItem>(
+      `payout-adjustments/${adjustmentId}/approve`,
+      payload,
+      options,
+    );
+  }
+
+  voidPlatformPayoutAdjustment(
+    adjustmentId: string,
+    payload: { note?: string | null } = {},
+    options?: ApiRequestOptions,
+  ) {
+    return this.api.post<PlatformPayoutInvoiceItem>(
+      `payout-adjustments/${adjustmentId}/void`,
+      payload,
+      options,
+    );
   }
 
   getRequestSchedule(requestId: string, options?: ApiRequestOptions) {
@@ -311,6 +368,69 @@ export class RequestService {
   reconcileShiftGuardLeaveReturn(leaveId: string, payload: ShiftGuardLeaveReconcilePayload, options?: ApiRequestOptions) {
     return this.api.post<{ message: string; item: ShiftGuardLeaveItem; summary?: Record<string, number> }>(
       `shift-guard-leaves/${leaveId}/reconcile-return`,
+      payload,
+      options,
+    );
+  }
+
+  listPlannedGuardLeaves(
+    page = 1,
+    rows = 20,
+    guardTenantId = '',
+    leaveStatus = '',
+    options?: ApiRequestOptions,
+  ) {
+    let params = new HttpParams()
+      .set('page', page)
+      .set('rows', rows);
+    params = this.withOptionalParam(params, 'guard_tenant_id', guardTenantId);
+    params = this.withOptionalParam(params, 'leave_status', leaveStatus);
+    return this.api.get<GuardPlannedLeaveListResponse>('planned-guard-leaves', { ...options, params });
+  }
+
+  createPlannedGuardLeave(payload: GuardPlannedLeaveCreatePayload, options?: ApiRequestOptions) {
+    return this.api.post<{ message: string; item: GuardPlannedLeaveItem; policy?: GuardLeavePolicyItem; balance?: GuardLeaveBalanceItem }>(
+      'planned-guard-leaves',
+      payload,
+      options,
+    );
+  }
+
+  approvePlannedGuardLeave(leaveId: string, payload: GuardPlannedLeaveDecisionPayload, options?: ApiRequestOptions) {
+    return this.api.post<{ message: string; item: GuardPlannedLeaveItem; policy?: GuardLeavePolicyItem; balance?: GuardLeaveBalanceItem }>(
+      `planned-guard-leaves/${leaveId}/approve`,
+      payload,
+      options,
+    );
+  }
+
+  rejectPlannedGuardLeave(leaveId: string, payload: GuardPlannedLeaveDecisionPayload, options?: ApiRequestOptions) {
+    return this.api.post<{ message: string; item: GuardPlannedLeaveItem }>(
+      `planned-guard-leaves/${leaveId}/reject`,
+      payload,
+      options,
+    );
+  }
+
+  cancelPlannedGuardLeave(leaveId: string, payload: GuardPlannedLeaveDecisionPayload, options?: ApiRequestOptions) {
+    return this.api.post<{ message: string; item: GuardPlannedLeaveItem }>(
+      `planned-guard-leaves/${leaveId}/cancel`,
+      payload,
+      options,
+    );
+  }
+
+  getGuardLeaveBalance(guardTenantId: string, options?: ApiRequestOptions) {
+    return this.api.get<GuardLeaveBalanceResponse>(`guard-leave-balances/${guardTenantId}`, options);
+  }
+
+  listGuardLeaveQuotaTargets(options?: ApiRequestOptions) {
+    return this.api.get<GuardLeaveQuotaTargetListResponse>('guard-leave-quota-targets', options);
+  }
+
+  upsertGuardLeaveBalance(guardTenantId: string, payload: GuardLeavePolicyUpsertPayload, options?: ApiRequestOptions) {
+    return this.api.put<GuardLeaveBalanceResponse & { message?: string }>(
+      `guard-leave-balances/${guardTenantId}`,
       payload,
       options,
     );

@@ -12,6 +12,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     ClientRequestRecord,
     ClientRequestStatusUpdatePayload,
     ClientRequestSoftDeletePayload,
+    GuardPlannedLeaveRecord,
     RequestAdditionalCoveragePayload,
     RequestAssignmentRecord,
     RequestAssignmentStatus,
@@ -22,6 +23,11 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestInvoiceStatus,
     RequestInvoiceTrigger,
     RequestLockReason,
+    RequestFulfillmentMode,
+    RequestPayoutAdjustmentCreatePayload,
+    RequestPayoutAdjustmentDecisionPayload,
+    RequestPayoutAdjustmentRecord,
+    RequestPayoutAdjustmentUpdatePayload,
     RequestPricingPreviewPayload,
     RequestPublishUpdatePayload,
     RequestScheduleTemplateRecord,
@@ -99,7 +105,7 @@ class _FakeCollection:
 
 
 class _FakeListJobsEngine(FakeEngine):
-    def __init__(self, assignment_docs, request_docs, schedule_docs=None, invoice_docs=None, shift_docs=None, slot_docs=None):
+    def __init__(self, assignment_docs, request_docs, schedule_docs=None, invoice_docs=None, shift_docs=None, slot_docs=None, adjustment_docs=None, planned_leave_docs=None):
         super().__init__()
         self._assignment_docs = assignment_docs
         self._request_docs = request_docs
@@ -107,6 +113,8 @@ class _FakeListJobsEngine(FakeEngine):
         self._invoice_docs = invoice_docs or []
         self._shift_docs = shift_docs or []
         self._slot_docs = slot_docs or []
+        self._adjustment_docs = adjustment_docs or []
+        self._planned_leave_docs = planned_leave_docs or []
 
     def get_collection(self, model):
         if model is RequestAssignmentRecord:
@@ -117,6 +125,10 @@ class _FakeListJobsEngine(FakeEngine):
             return _FakeCollection(self._schedule_docs)
         if model is RequestInvoiceRecord:
             return _FakeCollection(self._invoice_docs)
+        if model is RequestPayoutAdjustmentRecord:
+            return _FakeCollection(self._adjustment_docs)
+        if model is GuardPlannedLeaveRecord:
+            return _FakeCollection(self._planned_leave_docs)
         if model is ShiftInstanceRecord:
             return _FakeCollection(self._shift_docs)
         if model is ShiftSlotRecord:
@@ -329,8 +341,8 @@ async def test_list_request_invoices_returns_newest_first_for_client_admin():
             "trigger": "publish_update",
             "invoice_number": "INV-202606-NEW",
             "contract_type": "long_term",
-            "billing_cycle": "monthly",
-            "charge_timing": "advance_monthly",
+            "billing_cycle": "weekly",
+            "charge_timing": "advance_weekly",
             "currency": "CAD",
             "guards_required": 3,
             "invoice_status": "revised",
@@ -369,11 +381,11 @@ async def test_get_request_invoice_by_id_returns_invoice_for_client_admin():
         "request_id": str(request_record.id),
         "client_tenant_id": "tenant-1",
         "request_revision": 2,
-        "trigger": "monthly_advance",
+        "trigger": "weekly_advance",
         "invoice_number": "INV-202606-NEW",
         "contract_type": "long_term",
-        "billing_cycle": "monthly",
-        "charge_timing": "advance_monthly",
+        "billing_cycle": "weekly",
+        "charge_timing": "advance_weekly",
         "billing_period_start_local": "2026-06-01",
         "billing_period_end_local": "2026-06-30",
         "billing_period_label": "June 2026",
@@ -407,9 +419,14 @@ async def test_get_request_invoice_by_id_returns_invoice_for_client_admin():
 async def test_list_my_invoices_returns_guard_payout_share():
     manager = object.__new__(RequestManager)
     request_id = ObjectId()
+    shift_id = ObjectId()
     request_docs = [{
         "_id": request_id,
         "title": "Weekend Patrol",
+        "timezone": "America/Vancouver",
+        "guards_required": 2,
+        "pricing_snapshot": {"currency": "CAD", "guard_hourly_pay": 25, "guards_required": 2},
+        "invoicing_snapshot": {"contract_type": "short_term"},
         "site_snapshot": {"site_name": "Harbour Centre"},
     }]
     assignment_docs = [{
@@ -455,8 +472,31 @@ async def test_list_my_invoices_returns_guard_payout_share():
         "created_at": datetime(2026, 6, 10, 10, 0),
         "updated_at": datetime(2026, 6, 10, 10, 0),
     }]
+    shift_docs = [{
+        "_id": shift_id,
+        "request_id": str(request_id),
+        "shift_date_local": "2026-06-12",
+        "shift_start_at_utc": datetime(2026, 6, 12, 15, 0),
+        "shift_end_at_utc": datetime(2026, 6, 12, 23, 0),
+        "timezone": "America/Vancouver",
+    }]
+    slot_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "shift_instance_id": str(shift_id),
+        "assigned_guard_tenant_id": "guard-tenant-1",
+        "completed_at": datetime(2026, 6, 12, 21, 5),
+        "actual_start_at": datetime(2026, 6, 12, 15, 0),
+        "actual_end_at": datetime(2026, 6, 12, 21, 0),
+    }]
 
-    manager._engine = _FakeListJobsEngine(assignment_docs, request_docs, invoice_docs=invoice_docs)
+    manager._engine = _FakeListJobsEngine(
+        assignment_docs,
+        request_docs,
+        invoice_docs=invoice_docs,
+        shift_docs=shift_docs,
+        slot_docs=slot_docs,
+    )
     manager._get_assignee_invoice_scope = lambda _user: _async_return({
         "tenant_id": "guard-tenant-1",
         "assignee_tenant_type": "guard",
@@ -473,9 +513,123 @@ async def test_list_my_invoices_returns_guard_payout_share():
     assert result["items"][0]["request_title"] == "Weekend Patrol"
     assert result["items"][0]["site_name"] == "Harbour Centre"
     assert result["items"][0]["payout_hourly_rate"] == 25.0
-    assert result["items"][0]["estimated_total_hours"] == 8.0
-    assert result["items"][0]["estimated_amount"] == 200.0
+    assert result["items"][0]["estimated_total_hours"] == 6.0
+    assert result["items"][0]["estimated_amount"] == 150.0
     assert result["items"][0]["committed_slots"] == 1
+
+
+@pytest.mark.anyio
+async def test_list_my_invoices_returns_paid_leave_adjustment_for_direct_guard_without_completed_attendance():
+    manager = object.__new__(RequestManager)
+    request_id = ObjectId()
+    shift_id = ObjectId()
+    leave_id = ObjectId()
+    request_docs = [{
+        "_id": request_id,
+        "title": "Reception Coverage",
+        "timezone": "America/Vancouver",
+        "guards_required": 1,
+        "pricing_snapshot": {"currency": "CAD", "guard_hourly_pay": 25, "guards_required": 1},
+        "invoicing_snapshot": {"contract_type": "short_term"},
+        "site_snapshot": {"site_name": "Pacific Tower"},
+    }]
+    assignment_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "assignee_tenant_id": "guard-tenant-9",
+        "assignee_tenant_type": "guard",
+        "assignment_scope": "request",
+        "assignment_status": "accepted",
+        "slots_committed": 1,
+    }]
+    invoice_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "client_tenant_id": "client-1",
+        "request_revision": 1,
+        "trigger": "initial_publish",
+        "invoice_number": "INV-202606-LEAVE",
+        "contract_type": "short_term",
+        "billing_cycle": "per_request",
+        "charge_timing": "on_the_go",
+        "billing_period_start_local": "2026-06-20",
+        "billing_period_end_local": "2026-06-20",
+        "billing_period_label": "Jun 20, 2026",
+        "currency": "CAD",
+        "estimated_total_hours": 8,
+        "estimated_guard_payout": 200,
+        "invoice_status": "issued",
+        "line_items": [{
+            "description": "Reception Coverage",
+            "service_date_local": "2026-06-20",
+            "unit": "hour",
+            "quantity": 8,
+            "unit_rate": 39,
+            "amount": 312,
+            "metadata": {
+                "guards_required": 1,
+                "hours_per_position": 8,
+                "start_at_local": "2026-06-20T08:00:00-07:00",
+                "end_at_local": "2026-06-20T16:00:00-07:00",
+            },
+        }],
+        "created_at": datetime(2026, 6, 18, 10, 0),
+        "updated_at": datetime(2026, 6, 18, 10, 0),
+    }]
+    shift_docs = [{
+        "_id": shift_id,
+        "request_id": str(request_id),
+        "shift_date_local": "2026-06-20",
+        "shift_start_at_utc": datetime(2026, 6, 20, 15, 0),
+        "shift_end_at_utc": datetime(2026, 6, 20, 23, 0),
+        "timezone": "America/Vancouver",
+    }]
+    slot_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "shift_instance_id": str(shift_id),
+        "assigned_guard_tenant_id": "guard-tenant-9",
+    }]
+    planned_leave_docs = [{
+        "_id": leave_id,
+        "guard_tenant_id": "guard-tenant-9",
+        "request_status": "approved",
+        "leave_type": "paid",
+        "start_at_utc": datetime(2026, 6, 20, 15, 0),
+        "end_at_utc": datetime(2026, 6, 20, 23, 0),
+        "approved_by_user_id": "ops-1",
+        "approved_by_username": "ops",
+        "approved_at": datetime(2026, 6, 19, 9, 0),
+        "created_at": datetime(2026, 6, 18, 8, 0),
+        "updated_at": datetime(2026, 6, 19, 9, 0),
+    }]
+
+    manager._engine = _FakeListJobsEngine(
+        assignment_docs,
+        request_docs,
+        invoice_docs=invoice_docs,
+        shift_docs=shift_docs,
+        slot_docs=slot_docs,
+        planned_leave_docs=planned_leave_docs,
+    )
+    manager._get_assignee_invoice_scope = lambda _user: _async_return({
+        "tenant_id": "guard-tenant-9",
+        "assignee_tenant_type": "guard",
+    })
+
+    result = await manager.list_my_invoices(
+        current_user=SimpleNamespace(role="guard_admin", tenant_uuid="guard-tenant-9"),
+        page=1,
+        rows=10,
+    )
+
+    assert result["pagination"]["total_items"] == 1
+    assert result["items"][0]["invoice_number"] == "INV-202606-LEAVE"
+    assert result["items"][0]["baseline_estimated_amount"] == 0.0
+    assert result["items"][0]["payout_adjustment_total"] == 200.0
+    assert result["items"][0]["estimated_amount"] == 200.0
+    assert result["items"][0]["payout_adjustment_count"] == 1
+    assert result["items"][0]["payout_adjustments"][0]["reason"] == "Approved paid leave coverage for 2026-06-20"
 
 
 @pytest.mark.anyio
@@ -613,6 +767,7 @@ async def test_get_my_invoice_by_id_returns_provider_weekly_completed_share(monk
 async def test_list_platform_payout_invoices_returns_enriched_items(monkeypatch):
     manager = object.__new__(RequestManager)
     request_id = ObjectId()
+    shift_id = ObjectId()
     request_docs = [{
         "_id": request_id,
         "client_tenant_id": "client-1",
@@ -668,8 +823,31 @@ async def test_list_platform_payout_invoices_returns_enriched_items(monkeypatch)
         "created_at": datetime(2026, 6, 10, 10, 0),
         "updated_at": datetime(2026, 6, 10, 10, 0),
     }]
+    shift_docs = [{
+        "_id": shift_id,
+        "request_id": str(request_id),
+        "shift_date_local": "2026-06-12",
+        "shift_start_at_utc": datetime(2026, 6, 12, 15, 0),
+        "shift_end_at_utc": datetime(2026, 6, 12, 23, 0),
+        "timezone": "America/Vancouver",
+    }]
+    slot_docs = [{
+        "_id": ObjectId(),
+        "request_id": str(request_id),
+        "shift_instance_id": str(shift_id),
+        "assigned_guard_tenant_id": "guard-tenant-1",
+        "completed_at": datetime(2026, 6, 12, 23, 5),
+        "actual_start_at": datetime(2026, 6, 12, 15, 0),
+        "actual_end_at": datetime(2026, 6, 12, 23, 0),
+    }]
 
-    manager._engine = _FakeListJobsEngine(assignment_docs, request_docs, invoice_docs=invoice_docs)
+    manager._engine = _FakeListJobsEngine(
+        assignment_docs,
+        request_docs,
+        invoice_docs=invoice_docs,
+        shift_docs=shift_docs,
+        slot_docs=slot_docs,
+    )
     manager._role_value = lambda _user: "ops_admin"
     manager._is_platform_role = lambda role: role in {"admin", "ops_admin", "support_admin", "compliance_admin", "read_only_admin"}
     manager._build_tenant_label_lookup = lambda tenant_ids: _async_return({"guard-tenant-1": "Guard One"})
@@ -723,11 +901,11 @@ async def test_get_platform_payout_invoice_by_id_returns_item(monkeypatch):
         "request_id": str(request_id),
         "client_tenant_id": "client-9",
         "request_revision": 1,
-        "trigger": "scheduled_long_term_cycle",
+        "trigger": "weekly_advance",
         "invoice_number": "INV-202606-CLIENT",
         "contract_type": "long_term",
-        "billing_cycle": "monthly",
-        "charge_timing": "advance_monthly",
+        "billing_cycle": "weekly",
+        "charge_timing": "advance_weekly",
         "billing_period_start_local": "2026-06-01",
         "billing_period_end_local": "2026-06-30",
         "billing_period_label": "Jun 2026",
@@ -1148,6 +1326,7 @@ async def test_sync_request_invoice_state_creates_and_revises_long_term_invoice(
     record = _make_request_record(
         request_revision=2,
         guards_required=3,
+        accepted_slots=3,
         title="Downtown Patrol",
         pricing_snapshot={
             "currency": "CAD",
@@ -1166,9 +1345,9 @@ async def test_sync_request_invoice_state_creates_and_revises_long_term_invoice(
         },
         invoicing_snapshot={
             "contract_type": "long_term",
-            "billing_cycle": "monthly",
-            "charge_timing": "advance_monthly",
-            "monthly_cutoff_day": 7,
+            "billing_cycle": "weekly",
+            "charge_timing": "advance_weekly",
+            "monthly_cutoff_day": None,
             "invoice_recipient_email": "billing@example.com",
         },
     )
@@ -1208,15 +1387,21 @@ async def test_sync_request_invoice_state_creates_and_revises_long_term_invoice(
 
     async def _send_request_invoice_email(_record, invoice_record, *, reason, is_revision):
         assert getattr(reason, "value", reason) == RequestInvoiceTrigger.PUBLISH_UPDATE.value
-        assert invoice_record.billing_period_label == "June 2026"
+        assert invoice_record.billing_period_label == "Week of Jun 01, 2026"
         assert is_revision in {False, True}
         return True
 
     manager._get_active_schedule_template = lambda _request_id: _async_return(schedule_record)
 
-    async def _find_existing_invoice(*_args, **_kwargs):
+    async def _find_existing_invoice(*_args, **kwargs):
+        billing_period_start_local = str(kwargs.get("billing_period_start_local") or "").strip()
+        billing_period_end_local = str(kwargs.get("billing_period_end_local") or "").strip()
         for item in reversed(manager._engine.saved):
-            if isinstance(item, RequestInvoiceRecord):
+            if (
+                isinstance(item, RequestInvoiceRecord)
+                and str(getattr(item, "billing_period_start_local", "") or "").strip() == billing_period_start_local
+                and str(getattr(item, "billing_period_end_local", "") or "").strip() == billing_period_end_local
+            ):
                 return item
         return None
 
@@ -1236,7 +1421,7 @@ async def test_sync_request_invoice_state_creates_and_revises_long_term_invoice(
     assert invoice.email_delivery_status == RequestInvoiceDeliveryStatus.SENT
     assert invoice.invoice_recipient_email == "billing@example.com"
     assert invoice.billing_period_start_local == "2026-06-01"
-    assert invoice.billing_period_end_local == "2026-06-30"
+    assert invoice.billing_period_end_local == "2026-06-03"
     assert invoice.estimated_amount == 2016.0
     assert len(invoice.line_items) == 3
     assert record.invoicing_snapshot["invoice_status"] == RequestInvoiceStatus.ISSUED.value
@@ -1261,6 +1446,178 @@ async def test_sync_request_invoice_state_creates_and_revises_long_term_invoice(
     assert revised_invoice.estimated_amount == 2688.0
     assert revised_invoice.estimated_total_hours == 96.0
     assert record.invoicing_snapshot["invoice_status"] == RequestInvoiceStatus.REVISED.value
+
+
+@pytest.mark.anyio
+async def test_sync_request_invoice_state_skips_first_long_term_invoice_until_full_coverage(monkeypatch):
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+
+    record = _make_request_record(
+        request_revision=1,
+        guards_required=2,
+        accepted_slots=1,
+        title="Harbour Patrol",
+        pricing_snapshot={
+            "currency": "CAD",
+            "rate_basis": "hourly",
+            "guards_required": 2,
+            "client_hourly_quote": 28,
+            "requested_hours_per_position": 8,
+            "estimated_total_hours": 16,
+            "estimated_client_charge": 448,
+            "mock_payment_status": "pending_capture",
+            "calculation_version": "mock_v1",
+        },
+        invoicing_snapshot={
+            "contract_type": "long_term",
+            "billing_cycle": "weekly",
+            "charge_timing": "advance_weekly",
+            "monthly_cutoff_day": None,
+            "invoice_recipient_email": None,
+        },
+    )
+
+    schedule_record = RequestScheduleTemplateRecord(
+        request_id=str(record.id),
+        client_tenant_id=record.client_tenant_id,
+        timezone="UTC",
+        schedule_type="date_range",
+        start_date_local="2026-06-01",
+        end_date_local="2026-06-30",
+        start_time_local="08:00",
+        end_time_local="16:00",
+        active=True,
+    )
+
+    class _FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = datetime(2026, 6, 1, 9, 0, tzinfo=tz)
+            return value.replace(tzinfo=None) if tz is None else value
+
+        @classmethod
+        def utcnow(cls):
+            return datetime(2026, 6, 1, 9, 0)
+
+        @classmethod
+        def strptime(cls, value, fmt):
+            return datetime.strptime(value, fmt)
+
+    monkeypatch.setattr(
+        "orion.api.interactive.request_manager.request_manager.datetime",
+        _FrozenDateTime,
+    )
+
+    manager._get_active_schedule_template = lambda _request_id: _async_return(schedule_record)
+
+    result = await manager._sync_request_invoice_state(
+        record,
+        current_user=SimpleNamespace(id="user-1", username="ops"),
+        reason=RequestInvoiceTrigger.PUBLISH_UPDATE,
+    )
+
+    assert result == {"action": "skipped", "invoice": None}
+    assert not any(isinstance(item, RequestInvoiceRecord) for item in manager._engine.saved)
+
+
+@pytest.mark.anyio
+async def test_sync_request_invoice_state_advances_long_term_weekly_period_after_current_invoice_exists(monkeypatch):
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+
+    record = _make_request_record(
+        request_revision=1,
+        guards_required=2,
+        accepted_slots=2,
+        title="Campus Security",
+        pricing_snapshot={
+            "currency": "CAD",
+            "rate_basis": "hourly",
+            "guards_required": 2,
+            "client_hourly_quote": 30,
+            "requested_hours_per_position": 8,
+            "estimated_total_hours": 16,
+            "estimated_client_charge": 480,
+            "mock_payment_status": "pending_capture",
+            "calculation_version": "mock_v1",
+        },
+        invoicing_snapshot={
+            "contract_type": "long_term",
+            "billing_cycle": "weekly",
+            "charge_timing": "advance_weekly",
+            "monthly_cutoff_day": None,
+            "invoice_recipient_email": None,
+        },
+    )
+
+    schedule_record = RequestScheduleTemplateRecord(
+        request_id=str(record.id),
+        client_tenant_id=record.client_tenant_id,
+        timezone="UTC",
+        schedule_type="date_range",
+        start_date_local="2026-06-01",
+        end_date_local="2026-06-30",
+        start_time_local="08:00",
+        end_time_local="16:00",
+        active=True,
+    )
+
+    class _FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = datetime(2026, 6, 3, 10, 0, tzinfo=tz)
+            return value.replace(tzinfo=None) if tz is None else value
+
+        @classmethod
+        def utcnow(cls):
+            return datetime(2026, 6, 3, 10, 0)
+
+        @classmethod
+        def strptime(cls, value, fmt):
+            return datetime.strptime(value, fmt)
+
+    monkeypatch.setattr(
+        "orion.api.interactive.request_manager.request_manager.datetime",
+        _FrozenDateTime,
+    )
+
+    manager._get_active_schedule_template = lambda _request_id: _async_return(schedule_record)
+    manager._send_request_invoice_email = lambda *_args, **_kwargs: _async_return(False)
+
+    async def _find_existing_invoice(*_args, **kwargs):
+        billing_period_start_local = str(kwargs.get("billing_period_start_local") or "").strip()
+        billing_period_end_local = str(kwargs.get("billing_period_end_local") or "").strip()
+        for item in reversed(manager._engine.saved):
+            if (
+                isinstance(item, RequestInvoiceRecord)
+                and str(getattr(item, "billing_period_start_local", "") or "").strip() == billing_period_start_local
+                and str(getattr(item, "billing_period_end_local", "") or "").strip() == billing_period_end_local
+            ):
+                return item
+        return None
+
+    manager._find_existing_invoice = _find_existing_invoice
+
+    first_result = await manager._sync_request_invoice_state(
+        record,
+        current_user=SimpleNamespace(id="user-1", username="ops"),
+        reason=RequestInvoiceTrigger.PUBLISH_UPDATE,
+    )
+    second_result = await manager._sync_request_invoice_state(
+        record,
+        current_user=SimpleNamespace(id="user-1", username="ops"),
+        reason=RequestInvoiceTrigger.WEEKLY_ADVANCE,
+    )
+
+    first_invoice = first_result["invoice"]
+    second_invoice = second_result["invoice"]
+    assert first_result["action"] == "created"
+    assert second_result["action"] == "created"
+    assert first_invoice.billing_period_start_local == "2026-06-01"
+    assert first_invoice.billing_period_end_local == "2026-06-07"
+    assert second_invoice.billing_period_start_local == "2026-06-08"
+    assert second_invoice.billing_period_end_local == "2026-06-14"
 
 
 @pytest.mark.anyio
@@ -1584,6 +1941,319 @@ async def test_preview_request_pricing_returns_mock_snapshots():
 
     assert result["pricing"]["client_hourly_quote"] == 28
     assert result["invoicing"]["contract_type"] == "long_term"
+
+
+@pytest.mark.anyio
+async def test_build_request_pricing_and_invoicing_uses_guard_baseline_for_hybrid():
+    manager = object.__new__(RequestManager)
+
+    async def _resolve_scoped_rate(scopes, _province, _city, _rate_field):
+        scope = tuple(scopes or [])
+        if "guard_default" in scope or "guard_default_legacy" in scope:
+            return 20.0
+        if "provider_default" in scope:
+            return 28.0
+        if "guard_margin_default" in scope:
+            return 8.0
+        if "provider_commission_default" in scope:
+            return 10.0
+        return 0.0
+
+    manager._resolve_scoped_rate = _resolve_scoped_rate
+    manager._resolve_rate_field = lambda *_args, **_kwargs: "default_hourly_rate"
+    manager._normalize_province_code = lambda *_args, **_kwargs: "ON"
+    manager._normalize_city_code = lambda *_args, **_kwargs: "TORONTO"
+
+    result = await manager._build_request_pricing_and_invoicing(
+        fulfillment_mode=RequestFulfillmentMode.HYBRID,
+        site_snapshot={"site_address": {"province": "ON", "city": "Toronto"}},
+        requested_start_at=datetime(2026, 5, 16, 18, 0),
+        requested_end_at=datetime(2026, 5, 16, 22, 0),
+        guards_required=3,
+        invoice_contract_type="short_term",
+        invoice_cutoff_day=None,
+        invoice_recipient_email="billing@example.com",
+    )
+
+    pricing = result["pricing_snapshot"]
+    assert pricing["pricing_strategy"] == "guard_baseline"
+    assert pricing["client_hourly_quote"] == 28.0
+    assert pricing["guard_company_margin"] == 8.0
+    assert pricing["provider_company_commission"] == 0.0
+    assert pricing["provider_adjustment_policy"] == "platform_payout_adjustment_required"
+
+
+@pytest.mark.anyio
+async def test_build_request_pricing_and_invoicing_uses_weekly_advance_for_long_term():
+    manager = object.__new__(RequestManager)
+
+    async def _resolve_scoped_rate(scopes, _province, _city, _rate_field):
+        scope = tuple(scopes or [])
+        if "guard_default" in scope or "guard_default_legacy" in scope:
+            return 20.0
+        if "provider_default" in scope:
+            return 28.0
+        if "guard_margin_default" in scope:
+            return 8.0
+        if "provider_commission_default" in scope:
+            return 10.0
+        return 0.0
+
+    manager._resolve_scoped_rate = _resolve_scoped_rate
+    manager._resolve_rate_field = lambda *_args, **_kwargs: "default_hourly_rate"
+    manager._normalize_province_code = lambda *_args, **_kwargs: "ON"
+    manager._normalize_city_code = lambda *_args, **_kwargs: "TORONTO"
+
+    result = await manager._build_request_pricing_and_invoicing(
+        fulfillment_mode=RequestFulfillmentMode.INDIVIDUAL_ONLY,
+        site_snapshot={"site_address": {"province": "ON", "city": "Toronto"}},
+        requested_start_at=datetime(2026, 5, 16, 18, 0),
+        requested_end_at=datetime(2026, 5, 16, 22, 0),
+        guards_required=2,
+        invoice_contract_type="long_term",
+        invoice_cutoff_day=12,
+        invoice_recipient_email="billing@example.com",
+    )
+
+    invoicing = result["invoicing_snapshot"]
+    assert invoicing["contract_type"] == "long_term"
+    assert invoicing["billing_cycle"] == "weekly"
+    assert invoicing["charge_timing"] == "advance_weekly"
+    assert invoicing["monthly_cutoff_day"] is None
+
+
+@pytest.mark.anyio
+async def test_serialize_assignee_invoice_uses_assignee_specific_short_term_identity():
+    invoice = RequestManager._serialize_assignee_invoice(
+        {
+            "_id": ObjectId("507f1f77bcf86cd799439011"),
+            "request_id": "req-7",
+            "invoice_number": "INV-202606-0007",
+            "contract_type": "short_term",
+            "billing_cycle": "per_request",
+            "charge_timing": "on_the_go",
+            "currency": "CAD",
+            "estimated_total_hours": 8.0,
+            "estimated_guard_payout": 160.0,
+            "estimated_provider_payout": 224.0,
+            "line_items": [{
+                "description": "Coverage payout",
+                "quantity": 8.0,
+                "metadata": {"guards_required": 2, "hours_per_position": 4.0},
+            }],
+            "invoice_status": "issued",
+            "created_at": datetime(2026, 6, 1, 9, 0),
+            "updated_at": datetime(2026, 6, 1, 9, 0),
+        },
+        assignee_tenant_id="sp-1",
+        assignee_tenant_type="service_provider",
+        committed_slots=2,
+        coverage_status="accepted",
+        request_title="Hybrid request",
+        site_name="Client HQ",
+    )
+
+    assert invoice["id"] == "payout:service_provider:sp-1:507f1f77bcf86cd799439011"
+    assert invoice["invoice_number"] == "INV-202606-0007"
+    assert invoice["source_request_invoice_id"] == "507f1f77bcf86cd799439011"
+
+
+@pytest.mark.anyio
+async def test_create_platform_payout_adjustment_persists_and_returns_updated_invoice():
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+
+    responses = [
+        {
+            "id": "pinv-77",
+            "request_id": "req-7",
+            "assignee_tenant_id": "sp-1",
+            "assignee_tenant_type": "service_provider",
+            "request_fulfillment_mode": "hybrid",
+            "currency": "CAD",
+            "estimated_amount": 300.0,
+        },
+        {
+            "id": "pinv-77",
+            "request_id": "req-7",
+            "assignee_tenant_id": "sp-1",
+            "assignee_tenant_type": "service_provider",
+            "request_fulfillment_mode": "hybrid",
+            "currency": "CAD",
+            "estimated_amount": 300.0,
+            "payout_adjustment_total": 0.0,
+        },
+    ]
+
+    async def _get_platform_payout_invoice_by_id(*, invoice_id, current_user):
+        assert invoice_id == "pinv-77"
+        assert current_user.username == "ops"
+        return responses.pop(0)
+
+    manager.get_platform_payout_invoice_by_id = _get_platform_payout_invoice_by_id
+
+    result = await manager.create_platform_payout_adjustment(
+        invoice_id="pinv-77",
+        payload=RequestPayoutAdjustmentCreatePayload(
+            amount=42.5,
+            reason="Hybrid provider compensation",
+        ),
+        current_user=SimpleNamespace(id="user-1", username="ops", role="ops_admin"),
+    )
+
+    assert result["payout_adjustment_total"] == 0.0
+    assert len(manager._engine.saved) == 1
+    saved = manager._engine.saved[0]
+    assert saved.payout_invoice_id == "pinv-77"
+    assert saved.request_id == "req-7"
+    assert saved.assignee_tenant_id == "sp-1"
+    assert saved.amount == 42.5
+    assert saved.reason == "Hybrid provider compensation"
+    assert saved.adjustment_status == "draft"
+
+
+@pytest.mark.anyio
+async def test_update_platform_payout_adjustment_edits_draft_only():
+    adjustment = RequestPayoutAdjustmentRecord(
+        id=ObjectId(),
+        payout_invoice_id="pinv-77",
+        request_id="req-7",
+        assignee_tenant_id="sp-1",
+        assignee_tenant_type="service_provider",
+        amount=42.5,
+        reason="Original reason",
+        adjustment_status="draft",
+    )
+
+    class _Engine(FakeEngine):
+        async def find_one(self, *_args, **_kwargs):
+            return adjustment
+
+    manager = object.__new__(RequestManager)
+    manager._engine = _Engine()
+
+    async def _get_platform_payout_invoice_by_id(*, invoice_id, current_user):
+        assert invoice_id == "pinv-77"
+        return {
+            "id": "pinv-77",
+            "request_id": "req-7",
+            "assignee_tenant_type": "service_provider",
+            "request_fulfillment_mode": "hybrid",
+            "baseline_estimated_amount": 300.0,
+            "estimated_amount": 300.0,
+        }
+
+    manager.get_platform_payout_invoice_by_id = _get_platform_payout_invoice_by_id
+
+    result = await manager.update_platform_payout_adjustment(
+        adjustment_id=str(adjustment.id),
+        payload=RequestPayoutAdjustmentUpdatePayload(amount=50.0, reason="Revised provider uplift"),
+        current_user=SimpleNamespace(id="user-1", username="ops", role="ops_admin"),
+    )
+
+    assert result["id"] == "pinv-77"
+    assert adjustment.amount == 50.0
+    assert adjustment.reason == "Revised provider uplift"
+    assert adjustment.updated_by_username == "ops"
+
+
+@pytest.mark.anyio
+async def test_approve_platform_payout_adjustment_marks_record_approved():
+    adjustment = RequestPayoutAdjustmentRecord(
+        id=ObjectId(),
+        payout_invoice_id="pinv-77",
+        request_id="req-7",
+        assignee_tenant_id="sp-1",
+        assignee_tenant_type="service_provider",
+        amount=42.5,
+        reason="Provider uplift",
+        adjustment_status="draft",
+    )
+
+    class _Engine(FakeEngine):
+        async def find_one(self, *_args, **_kwargs):
+            return adjustment
+
+    manager = object.__new__(RequestManager)
+    manager._engine = _Engine()
+
+    responses = [
+        {
+            "id": "pinv-77",
+            "request_id": "req-7",
+            "assignee_tenant_type": "service_provider",
+            "request_fulfillment_mode": "hybrid",
+            "baseline_estimated_amount": 300.0,
+            "estimated_amount": 300.0,
+        },
+        {
+            "id": "pinv-77",
+            "request_id": "req-7",
+            "assignee_tenant_type": "service_provider",
+            "request_fulfillment_mode": "hybrid",
+            "estimated_amount": 342.5,
+            "payout_adjustment_total": 42.5,
+        },
+    ]
+
+    async def _get_platform_payout_invoice_by_id(*, invoice_id, current_user):
+        return responses.pop(0)
+
+    manager.get_platform_payout_invoice_by_id = _get_platform_payout_invoice_by_id
+
+    result = await manager.approve_platform_payout_adjustment(
+        adjustment_id=str(adjustment.id),
+        payload=RequestPayoutAdjustmentDecisionPayload(note="Approved after review"),
+        current_user=SimpleNamespace(id="user-1", username="ops", role="ops_admin"),
+    )
+
+    assert result["payout_adjustment_total"] == 42.5
+    assert adjustment.adjustment_status == "approved"
+    assert adjustment.approved_by_username == "ops"
+    assert adjustment.status_note == "Approved after review"
+
+
+@pytest.mark.anyio
+async def test_void_platform_payout_adjustment_marks_record_voided():
+    adjustment = RequestPayoutAdjustmentRecord(
+        id=ObjectId(),
+        payout_invoice_id="pinv-77",
+        request_id="req-7",
+        assignee_tenant_id="sp-1",
+        assignee_tenant_type="service_provider",
+        amount=42.5,
+        reason="Provider uplift",
+        adjustment_status="approved",
+    )
+
+    class _Engine(FakeEngine):
+        async def find_one(self, *_args, **_kwargs):
+            return adjustment
+
+    manager = object.__new__(RequestManager)
+    manager._engine = _Engine()
+
+    async def _get_platform_payout_invoice_by_id(*, invoice_id, current_user):
+        return {
+            "id": "pinv-77",
+            "request_id": "req-7",
+            "assignee_tenant_type": "service_provider",
+            "request_fulfillment_mode": "hybrid",
+            "estimated_amount": 300.0,
+            "payout_adjustment_total": 0.0,
+        }
+
+    manager.get_platform_payout_invoice_by_id = _get_platform_payout_invoice_by_id
+
+    result = await manager.void_platform_payout_adjustment(
+        adjustment_id=str(adjustment.id),
+        payload=RequestPayoutAdjustmentDecisionPayload(note="Superseded"),
+        current_user=SimpleNamespace(id="user-1", username="ops", role="ops_admin"),
+    )
+
+    assert result["payout_adjustment_total"] == 0.0
+    assert adjustment.adjustment_status == "voided"
+    assert adjustment.voided_by_username == "ops"
 
 
 @pytest.mark.anyio
@@ -2547,6 +3217,221 @@ async def test_update_job_status_rejects_provider_acceptance_beyond_linked_guard
 
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == "Service provider only has 1 available linked guard(s) for this request window"
+
+
+@pytest.mark.anyio
+async def test_update_job_status_provider_can_increase_committed_coverage(monkeypatch):
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+    manager._role_value = lambda _user: "sp_admin"
+    manager._is_platform_write_role = lambda _role: False
+    manager._allowed_assignment_transition = lambda current, nxt: False
+    manager._assignment_scope_value = lambda _assignment: RequestAssignmentScope.REQUEST.value
+    manager._assignment_slots = lambda assignment: int(getattr(assignment, "slots_committed", None) or 1)
+    manager._dashboard_requests_url = lambda **_kwargs: "/dashboard/requests?tab=jobs&job=assign-1"
+    manager._request_snapshot = lambda record: {"id": str(record.id), "title": record.title}
+    manager._request_has_active_schedule = lambda _request_id: _async_return(False)
+
+    accepted_at = datetime.utcnow() - timedelta(hours=1)
+    assignment = SimpleNamespace(
+        id=ObjectId(),
+        request_id="req-1",
+        client_tenant_id="client-1",
+        assignee_tenant_id="provider-1",
+        assignee_tenant_type=RequestTargetType.SERVICE_PROVIDER,
+        assignment_status=RequestAssignmentStatus.ACCEPTED,
+        assignment_origin="broadcast",
+        assignment_scope=RequestAssignmentScope.REQUEST,
+        broadcast_wave_id=None,
+        shift_instance_id=None,
+        shift_slot_id=None,
+        request_revision_at_offer=1,
+        slots_committed=2,
+        response_due_at=None,
+        reconfirmation_due_at=None,
+        lock_reason=None,
+        candidate_snapshot={},
+        assigned_by_user_id="user-1",
+        assigned_by_username="ops",
+        offered_at=None,
+        accepted_at=accepted_at,
+        reconfirmed_at=None,
+        declined_at=None,
+        expired_at=None,
+        reconfirmation_requested_at=None,
+        closed_filled_at=None,
+        superseded_at=None,
+        started_at=None,
+        completed_at=None,
+        cancelled_at=None,
+        created_at=None,
+        updated_at=None,
+        note=None,
+    )
+    record = _make_request_record(
+        id="req-1",
+        title="Night Patrol",
+        request_status=RequestStatus.SUBMITTED,
+        staffing_status=RequestStaffingStatus.PARTIALLY_FILLED,
+        requested_guard_type="armed",
+        requested_start_at=datetime(2026, 5, 20, 10, 0),
+        requested_end_at=datetime(2026, 5, 20, 14, 0),
+        site_snapshot={
+            "site_address": {
+                "country": "CA",
+                "province": "ON",
+                "city": "Toronto",
+                "latitude": 43.6532,
+                "longitude": -79.3832,
+            }
+        },
+        accepted_slots=2,
+        open_slots=1,
+    )
+    session_tenant = SimpleNamespace(id="provider-1", tenant_type="service_provider")
+
+    async def _get_assignment(_assignment_id):
+        return assignment
+
+    async def _get_session_tenant(_current_user):
+        return session_tenant
+
+    async def _get_request(_request_id):
+        return record
+
+    async def _sync_request_runtime_state(request_record):
+        return request_record
+
+    async def _write_activity(**_kwargs):
+        return None
+
+    manager._get_assignment_or_404 = _get_assignment
+    manager._get_session_tenant = _get_session_tenant
+    manager._get_request_or_404 = _get_request
+    manager._sync_request_runtime_state = _sync_request_runtime_state
+    manager._write_activity = _write_activity
+
+    notifications = []
+
+    class _FakeNotifications:
+        async def create_for_tenant_admin_users(self, **kwargs):
+            notifications.append(kwargs)
+            return 1
+
+    class _FakeShiftManager:
+        async def sync_shift_slots_for_request(self, request_record):
+            assert request_record is record
+            return {"shift_count": 1, "slot_count": 3}
+
+    class _FakeMatchingManager:
+        async def provider_available_guard_capacity(self, provider_tenant_id, payload):
+            assert provider_tenant_id == "provider-1"
+            assert payload.requested_guard_type == "armed"
+            return {"linked_guard_count": 3, "available_guard_count": 1}
+
+    monkeypatch.setattr(
+        "orion.api.interactive.request_manager.request_manager.NotificationManager.get_instance",
+        staticmethod(lambda: _FakeNotifications()),
+    )
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestShiftManager.get_instance",
+        staticmethod(lambda: _FakeShiftManager()),
+    )
+    monkeypatch.setattr(
+        "orion.api.interactive.request_manager.request_manager.RequestMatchingManager.get_instance",
+        staticmethod(lambda: _FakeMatchingManager()),
+    )
+
+    payload = RequestAssignmentStatusUpdatePayload(
+        assignment_status=RequestAssignmentStatus.ACCEPTED,
+        slots_committed=3,
+    )
+
+    response = await manager.update_job_status(
+        str(assignment.id),
+        payload,
+        current_user=SimpleNamespace(role="sp_admin", tenant_uuid="provider-1"),
+    )
+
+    assert assignment.assignment_status == RequestAssignmentStatus.ACCEPTED
+    assert assignment.slots_committed == 3
+    assert assignment.accepted_at == accepted_at
+    assert response["item"]["assignment_status"] == "accepted"
+    assert response["item"]["slots_committed"] == 3
+    assert len(notifications) == 2
+
+
+@pytest.mark.anyio
+async def test_update_job_status_provider_cannot_reduce_committed_coverage(monkeypatch):
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+    manager._role_value = lambda _user: "sp_admin"
+    manager._is_platform_write_role = lambda _role: False
+    manager._allowed_assignment_transition = lambda current, nxt: False
+    manager._assignment_scope_value = lambda _assignment: RequestAssignmentScope.REQUEST.value
+    manager._assignment_slots = lambda assignment: int(getattr(assignment, "slots_committed", None) or 1)
+
+    assignment = SimpleNamespace(
+        id=ObjectId(),
+        request_id="req-1",
+        client_tenant_id="client-1",
+        assignee_tenant_id="provider-1",
+        assignee_tenant_type=RequestTargetType.SERVICE_PROVIDER,
+        assignment_status=RequestAssignmentStatus.ACCEPTED,
+        assignment_scope=RequestAssignmentScope.REQUEST,
+        slots_committed=2,
+        lock_reason=None,
+    )
+    record = _make_request_record(
+        title="Night Patrol",
+        requested_guard_type="armed",
+        requested_start_at=datetime(2026, 5, 20, 10, 0),
+        requested_end_at=datetime(2026, 5, 20, 14, 0),
+        site_snapshot={
+            "site_address": {
+                "country": "CA",
+                "province": "ON",
+                "city": "Toronto",
+                "latitude": 43.6532,
+                "longitude": -79.3832,
+            }
+        },
+        accepted_slots=2,
+        open_slots=1,
+    )
+    session_tenant = SimpleNamespace(id="provider-1", tenant_type="service_provider")
+
+    async def _get_assignment(_assignment_id):
+        return assignment
+
+    async def _get_session_tenant(_current_user):
+        return session_tenant
+
+    async def _get_request(_request_id):
+        return record
+
+    async def _sync_request_runtime_state(request_record):
+        return request_record
+
+    manager._get_assignment_or_404 = _get_assignment
+    manager._get_session_tenant = _get_session_tenant
+    manager._get_request_or_404 = _get_request
+    manager._sync_request_runtime_state = _sync_request_runtime_state
+
+    payload = RequestAssignmentStatusUpdatePayload(
+        assignment_status=RequestAssignmentStatus.ACCEPTED,
+        slots_committed=1,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await manager.update_job_status(
+            str(assignment.id),
+            payload,
+            current_user=SimpleNamespace(role="sp_admin", tenant_uuid="provider-1"),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Committed provider coverage cannot be reduced from the currently accepted total"
 
 
 @pytest.mark.anyio

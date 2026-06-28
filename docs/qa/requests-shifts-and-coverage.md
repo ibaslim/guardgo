@@ -15,6 +15,13 @@ It covers:
 - attendance execution
 - leave, exceptions, and replacement coverage
 
+Important scope split:
+
+- planned leave, leave quota, and leave approvals now belong mainly to `/dashboard/leaves`
+- Requests and shift detail now keep the operational same-shift exception and replacement behavior
+- approved planned leave affects only overlapping future shifts, not the entire job assignment
+- after the leave window ends naturally, later shifts stay with the original guard automatically unless an earlier manual reconciliation decision changed them
+
 If a term here sounds unclear or too technical, use `docs/qa/testing-terms-glossary.md` before continuing.
 
 ## Best Companion Docs
@@ -150,6 +157,7 @@ Verify:
 - provider cannot accept beyond available linked-guard capacity
 - provider acceptance does not yet assign named guards
 - named guard assignment happens later in provider rostering
+- if a provider-owned guard later gets approved planned leave, the named guard should be removed only from overlapping future provider-rostered shifts and the provider should re-roster coverage
 
 ### Shared job scenarios
 

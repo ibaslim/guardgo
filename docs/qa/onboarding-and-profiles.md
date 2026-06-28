@@ -21,6 +21,16 @@ It matters because profile data is reused by:
 
 ## Guard Profile
 
+Before testing guard profile edits, separate these two cases:
+
+- direct guard
+  - self-manages full profile, including weekly availability and operational coverage
+- service-provider-owned guard
+  - self-manages personal/compliance profile fields
+  - does not self-manage provider-owned weekly availability
+  - does not self-manage provider-owned operational region/city/radius
+  - those provider-managed fields are completed by the service provider
+
 ### What The guard profile must support
 
 - personal information
@@ -39,11 +49,17 @@ It matters because profile data is reused by:
 
 Verify:
 
-- guard can save a complete profile
+- direct guard can save a complete profile
 - uploaded documents appear after save
-- saved availability stays in the same pattern after page refresh
+- for direct guard, saved availability stays in the same pattern after page refresh
 - preferred guard types stay selected after save
 - profile picture upload works
+
+For service-provider-owned guard, verify:
+
+- onboarding can still be completed without editing provider-managed weekly availability or operational coverage
+- those provider-managed fields are read-only or otherwise not self-editable
+- service provider can later open that guard and manage those values
 
 ### Important rule checks
 
@@ -55,7 +71,7 @@ Verify:
 - issue dates cannot be in the future
 - expiry date cannot be before issue date
 - expired security license is rejected
-- weekly availability cannot be empty
+- weekly availability cannot be empty for direct-guard self-managed profiles
 - preferred guard type cannot be empty
 - latitude and longitude must both be present when used
 
@@ -65,6 +81,7 @@ Verify:
 
 - a first-time guard profile save does not directly self-activate the tenant
 - the tenant moves into pending activation review
+- for service-provider-owned guards, provider-managed availability and coverage should be completed by the service provider before real operational use
 
 ## Client Profile
 
