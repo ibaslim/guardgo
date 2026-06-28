@@ -34,6 +34,14 @@ import {
   ClientRequestFulfillmentMode,
   ClientRequestItem,
   ClientRequestStatus,
+  GuardLeaveBalanceItem,
+  GuardLeaveQuotaTargetItem,
+  GuardLeavePolicyItem,
+  GuardLeavePolicyUpsertPayload,
+  GuardPlannedLeaveCreatePayload,
+  GuardPlannedLeaveDecisionPayload,
+  GuardPlannedLeaveItem,
+  GuardPlannedLeaveType,
   ProviderRosterPayload,
   RequestAssignmentItem,
   RequestAssignmentRequestSnapshot,
@@ -173,7 +181,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
   readonly jobShiftLookupScope = 'requests:jobs:shift-lookup';
   readonly shiftGuardLeaveListScope = 'requests:shifts:leave:list';
   readonly shiftGuardLeaveReviewScope = 'requests:shifts:leave:review';
+  readonly plannedLeaveListScope = 'requests:leave:list';
+  readonly plannedLeaveBalanceScope = 'requests:leave:balance';
+  readonly plannedLeaveQuotaTargetsScope = 'requests:leave:quota-targets';
   readonly shiftProviderGuardsScope = 'requests:shifts:provider-guards';
+  readonly shiftProviderGuardLeaveScope = 'requests:shifts:provider-guard-leaves';
   readonly shiftRosterPatternScope = 'requests:shifts:roster-pattern';
   readonly exceptionListScope = 'requests:exceptions:list';
   readonly exceptionDetailScope = 'requests:exceptions:detail';
@@ -217,7 +229,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   role = '';
   tenantType = '';
 
-  activeTab: 'requests' | 'jobs' | 'review' | 'exceptions' | 'shifts' = 'requests';
+  activeTab: 'requests' | 'jobs' | 'review' | 'exceptions' | 'shifts' | 'leave' = 'requests';
   shiftViewMode: 'calendar' | 'list' = 'calendar';
 
   items: ClientRequestItem[] = [];
@@ -227,6 +239,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   shiftCalendarItems: ShiftInstanceItem[] = [];
   shiftCalendarWeeks: ShiftCalendarDayCell[][] = [];
   shiftExceptions: ShiftExceptionItem[] = [];
+  plannedLeaves: GuardPlannedLeaveItem[] = [];
   selectedRequestWaves: RequestBroadcastWaveItem[] = [];
   shiftRequestSummaries: Record<string, { title: string; siteName: string }> = {};
   pendingShiftRequestSummaryIds = new Set<string>();
@@ -257,6 +270,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
   exceptionTotalPages = 1;
   exceptionTotalItems = 0;
 
+  plannedLeavePage = 1;
+  plannedLeaveRows = 10;
+  plannedLeaveTotalPages = 1;
+  plannedLeaveTotalItems = 0;
+
   keyword = '';
   requestStatusFilter = '';
   fulfillmentModeFilter = '';
@@ -275,6 +293,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
   exceptionStatusFilter = '';
   exceptionDateFrom = '';
   exceptionDateTo = '';
+
+  plannedLeaveStatusFilter = '';
 
   requestErrors: Record<string, string> = {};
 
@@ -300,6 +320,12 @@ export class RequestsComponent implements OnInit, OnDestroy {
   selectedShiftGuardLeaves: ShiftGuardLeaveItem[] = [];
   selectedShiftGuardLeaveReviewTarget: ShiftGuardLeaveItem | null = null;
   selectedShiftGuardLeaveReturnReview: ShiftGuardLeaveReturnReviewResponse | null = null;
+  selectedPlannedLeave: GuardPlannedLeaveItem | null = null;
+  selectedPlannedLeavePolicyGuardId = '';
+  selectedLeaveQuotaTargetGuardId = '';
+  guardLeavePolicy: GuardLeavePolicyItem | null = null;
+  guardLeaveBalance: GuardLeaveBalanceItem | null = null;
+  guardLeaveQuotaTargets: GuardLeaveQuotaTargetItem[] = [];
   selectedException: ShiftExceptionItem | null = null;
   selectedExceptionDetail: ShiftSlotDetailResponse | null = null;
   selectedScheduleRequest: ClientRequestItem | null = null;
@@ -322,6 +348,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   showShiftActionDrawer = false;
   showShiftGuardLeaveDrawer = false;
   showShiftGuardLeaveReviewDrawer = false;
+  showPlannedLeaveRequestDrawer = false;
+  showPlannedLeaveDecisionDrawer = false;
+  showPlannedLeavePolicyDrawer = false;
   showReopenExceptionDrawer = false;
   showBulkConfirmDrawer = false;
   requestFormMode: 'create' | 'edit' | 'publish_update' = 'create';
@@ -354,6 +383,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   shiftActionErrors: Record<string, string> = {};
   shiftGuardLeaveErrors: Record<string, string> = {};
   shiftGuardLeaveReviewErrors: Record<string, string> = {};
+  plannedLeaveErrors: Record<string, string> = {};
+  plannedLeaveDecisionErrors: Record<string, string> = {};
+  plannedLeavePolicyErrors: Record<string, string> = {};
   reopenExceptionErrors: Record<string, string> = {};
   scheduleErrors: Record<string, string> = {};
   bulkConfirmErrors: Record<string, string> = {};
@@ -399,6 +431,25 @@ export class RequestsComponent implements OnInit, OnDestroy {
   };
   shiftGuardLeaveReturnSelections: Record<string, ShiftGuardLeaveReturnDecisionAction> = {};
 
+  plannedLeaveForm = {
+    leaveType: 'paid' as GuardPlannedLeaveType,
+    startAt: '',
+    endAt: '',
+    reason: '',
+  };
+
+  plannedLeaveDecisionForm = {
+    note: '',
+    action: 'approve' as 'approve' | 'reject' | 'cancel',
+  };
+
+  plannedLeavePolicyForm = {
+    annualPaidLeaveDays: 14,
+    annualUnpaidLeaveDays: 0,
+    carryForwardDays: 0,
+    effectiveFrom: '',
+  };
+
   scheduleForm = {
     timezone: 'UTC',
     scheduleType: 'one_time' as RequestScheduleType,
@@ -409,7 +460,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     recurrenceDays: [] as string[],
     generationHorizonDays: 30,
     rosterDueOffsetMinutes: 120,
-    unavailableCutoffMinutes: 120,
+    unavailableCutoffMinutes: 60,
     lateGraceMinutes: 15,
     noShowCutoffMinutes: 30,
     checkinGeofenceMeters: 200,
@@ -540,7 +591,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   invoiceContractTypeOptions = [
     { label: 'Short-Term (Charge Per Job)', value: 'short_term' },
-    { label: 'Long-Term (Advance Monthly Invoice)', value: 'long_term' },
+    { label: 'Long-Term (Advance Weekly Invoice)', value: 'long_term' },
   ];
 
   pricingPreview: RequestPricingSnapshot | null = null;
@@ -553,6 +604,19 @@ export class RequestsComponent implements OnInit, OnDestroy {
     { label: 'Possible No-Show', value: 'no_show_suspected' },
     { label: 'Confirmed No-Show', value: 'no_show_confirmed' },
     { label: 'Needs Replacement', value: 'replacement_required' },
+  ];
+
+  plannedLeaveStatusOptions = [
+    { label: 'All Leave Requests', value: '' },
+    { label: 'Pending', value: 'pending' },
+    { label: 'Approved', value: 'approved' },
+    { label: 'Rejected', value: 'rejected' },
+    { label: 'Cancelled', value: 'cancelled' },
+  ];
+
+  plannedLeaveTypeOptions = [
+    { label: 'Paid Leave', value: 'paid' },
+    { label: 'Unpaid Leave', value: 'unpaid' },
   ];
 
   fulfillmentModeFilterOptions = [
@@ -725,6 +789,25 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return ['admin', 'ops_admin', 'support_admin', 'compliance_admin', 'read_only_admin'].includes(this.role);
   }
 
+  get canViewPlannedLeave(): boolean {
+    return this.isPlatformAdmin || this.isGuardAdmin || this.isProviderAdmin;
+  }
+
+  get canReviewPlannedLeave(): boolean {
+    return this.isPlatformAdmin || this.isProviderAdmin;
+  }
+
+  get guardLeaveQuotaTargetOptions(): { label: string; value: string }[] {
+    return (this.guardLeaveQuotaTargets || []).map((item) => ({
+      label: item.name || item.id,
+      value: item.id,
+    }));
+  }
+
+  get canRequestPlannedLeave(): boolean {
+    return this.isGuardAdmin;
+  }
+
   get canReopenShiftExceptions(): boolean {
     return ['admin', 'ops_admin', 'support_admin', 'compliance_admin'].includes(this.role);
   }
@@ -825,6 +908,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return 'Coverage Issues';
   }
 
+  get leaveTabLabel(): string {
+    return 'Leave';
+  }
+
   get requestsListTitle(): string {
     if (this.isGuardOrProvider) {
       return 'Offers And Coverage Updates';
@@ -855,6 +942,20 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   get shiftsListTitle(): string {
     return 'Daily Attendance And Shift Work';
+  }
+
+  get plannedLeaveListTitle(): string {
+    if (this.isGuardAdmin) {
+      return 'Planned Leave Requests';
+    }
+    if (this.isProviderAdmin) {
+      return 'Provider Guard Leave Queue';
+    }
+    return 'Guard Leave Queue';
+  }
+
+  get plannedLeaveListSubtitle(): string {
+    return this.getCountSummary(this.plannedLeaveTotalItems, 'leave request', 'visible in your current role scope.');
   }
 
   get canManageProviderRoster(): boolean {
@@ -925,6 +1026,15 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (this.canViewShiftExceptions) {
       this.loadShiftExceptions(1);
     }
+    if (this.canViewPlannedLeave) {
+      this.loadPlannedLeaves(1);
+      if (this.isGuardAdmin) {
+        this.loadGuardLeaveBalance(this.currentTenantId, { silent: true, suppressError: true });
+      }
+      if (this.canReviewPlannedLeave) {
+        this.loadGuardLeaveQuotaTargets({ suppressError: true });
+      }
+    }
     this.routeQuerySubscription = this.route.queryParams.subscribe((params) => {
       this.handleRouteFocusParams(params || {});
     });
@@ -977,6 +1087,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
       case 'review':
         if (this.canReviewBroadcastWaves) {
           this.loadReviewWaves(this.reviewPage, { silent: true, suppressError: true });
+        }
+        break;
+      case 'leave':
+        if (this.canViewPlannedLeave) {
+          this.loadPlannedLeaves(this.plannedLeavePage, { silent: true, suppressError: true });
+          if (this.isGuardAdmin) {
+            this.loadGuardLeaveBalance(this.currentTenantId, { silent: true, suppressError: true });
+          }
         }
         break;
       default:
@@ -1036,6 +1154,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
       || this.showShiftActionDrawer
       || this.showShiftGuardLeaveDrawer
       || this.showShiftGuardLeaveReviewDrawer
+      || this.showPlannedLeaveRequestDrawer
+      || this.showPlannedLeaveDecisionDrawer
+      || this.showPlannedLeavePolicyDrawer
       || this.showReopenExceptionDrawer
       || this.showBulkConfirmDrawer
     );
@@ -1047,10 +1168,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
       tab === 'jobs'
       || tab === 'requests'
       || (tab === 'shifts' && this.canViewShifts)
+      || (tab === 'leave' && this.canViewPlannedLeave)
       || (tab === 'review' && this.canReviewBroadcastWaves)
       || (tab === 'exceptions' && this.canViewShiftExceptions)
     ) {
-      this.activeTab = tab as 'requests' | 'jobs' | 'review' | 'exceptions' | 'shifts';
+      this.activeTab = tab as 'requests' | 'jobs' | 'review' | 'exceptions' | 'shifts' | 'leave';
     }
 
     const requestId = String(params['request'] || '').trim();
@@ -1734,7 +1856,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       recurrenceDays: [],
       generationHorizonDays: 30,
       rosterDueOffsetMinutes: 120,
-      unavailableCutoffMinutes: 120,
+      unavailableCutoffMinutes: 60,
       lateGraceMinutes: 15,
       noShowCutoffMinutes: 30,
       checkinGeofenceMeters: 200,
@@ -1754,7 +1876,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
         recurrenceDays: Array.isArray(schedule.recurrence_days) ? [...schedule.recurrence_days] : [],
         generationHorizonDays: Number(schedule.generation_horizon_days || 30),
         rosterDueOffsetMinutes: Number(schedule.roster_due_offset_minutes || 120),
-        unavailableCutoffMinutes: Number(schedule.unavailable_cutoff_minutes || 120),
+        unavailableCutoffMinutes: Number(schedule.unavailable_cutoff_minutes || 60),
         lateGraceMinutes: Number(schedule.late_grace_minutes || 15),
         noShowCutoffMinutes: Number(schedule.no_show_cutoff_minutes || 30),
         checkinGeofenceMeters: Number(schedule.checkin_geofence_meters || 200),
@@ -1777,7 +1899,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       recurrenceDays: [],
       generationHorizonDays: 30,
       rosterDueOffsetMinutes: 120,
-      unavailableCutoffMinutes: 120,
+      unavailableCutoffMinutes: 60,
       lateGraceMinutes: 15,
       noShowCutoffMinutes: 30,
       checkinGeofenceMeters: 200,
@@ -1812,10 +1934,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
     const derivedContractType = this.deriveInvoiceContractTypeFromScheduleType(this.scheduleForm.scheduleType);
     this.requestForm.invoiceContractType = derivedContractType;
-    if (derivedContractType !== 'long_term') {
-      this.requestForm.invoiceCutoffDay = 1;
-      delete this.requestErrors['invoiceCutoffDay'];
-    }
+    this.requestForm.invoiceCutoffDay = 1;
+    delete this.requestErrors['invoiceCutoffDay'];
     delete this.requestErrors['invoiceContractType'];
     if (this.requestForm.invoiceRecipientEmail.trim()) {
       delete this.requestErrors['invoiceRecipientEmail'];
@@ -1823,9 +1943,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   onInvoiceContractTypeChange(): void {
-    if (this.requestForm.invoiceContractType !== 'long_term') {
-      this.requestForm.invoiceCutoffDay = 1;
-    }
+    this.requestForm.invoiceCutoffDay = 1;
     delete this.requestErrors['invoiceCutoffDay'];
     delete this.requestErrors['invoiceContractType'];
   }
@@ -2041,13 +2159,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
     } else if (!this.isValidEmail(this.requestForm.invoiceRecipientEmail)) {
       this.requestErrors['invoiceRecipientEmail'] = 'Invoice recipient email is invalid.';
     }
-    if (this.requestForm.invoiceContractType === 'long_term') {
-      const cutoffDay = Number(this.requestForm.invoiceCutoffDay);
-      if (!Number.isInteger(cutoffDay) || cutoffDay < 1 || cutoffDay > 28) {
-        this.requestErrors['invoiceCutoffDay'] = 'Monthly cutoff day must be between 1 and 28.';
-      }
-    }
-
     const latitude = this.parseCoordinate(this.requestForm.latitude);
     const longitude = this.parseCoordinate(this.requestForm.longitude);
     const hasLatitude = this.requestForm.latitude.trim() !== '';
@@ -2178,6 +2289,17 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return this.formatMoney(amount);
   }
 
+  formatNumber(value: number | null | undefined): string {
+    const amount = Number(value ?? 0);
+    if (!Number.isFinite(amount)) {
+      return '0';
+    }
+    return new Intl.NumberFormat('en-CA', {
+      minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  }
+
   estimateRequestPricing(): void {
     const payload = this.buildRequestPayload();
     this.requestService.previewRequestPricing(payload, { loadingScope: this.requestPricingPreviewScope }).subscribe({
@@ -2223,6 +2345,25 @@ export class RequestsComponent implements OnInit, OnDestroy {
       return 1;
     }
     return Math.floor(rawSlots);
+  }
+
+  isProviderRequestCoverageJob(job: RequestAssignmentItem | null): boolean {
+    return Boolean(
+      job
+      && job.assignee_tenant_type === 'service_provider'
+      && (job.assignment_scope || 'request') === 'request',
+    );
+  }
+
+  getJobOpenSlots(job: RequestAssignmentItem | null): number {
+    const openSlots = Number(job?.request?.open_slots ?? 0);
+    return Number.isFinite(openSlots) && openSlots > 0 ? Math.floor(openSlots) : 0;
+  }
+
+  canIncreaseProviderCoverage(job: RequestAssignmentItem | null): boolean {
+    return this.isProviderRequestCoverageJob(job)
+      && job?.assignment_status === 'accepted'
+      && this.getJobOpenSlots(job) > 0;
   }
 
   getJobPricingRequestContext(job: RequestAssignmentItem, request: ClientRequestItem | null): PricingRequestContext | null {
@@ -2833,9 +2974,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       request_expires_at: requestExpiresAt || null,
       special_instructions: this.requestForm.specialInstructions.trim() || null,
       invoice_contract_type: this.requestForm.invoiceContractType,
-      invoice_cutoff_day: this.requestForm.invoiceContractType === 'long_term'
-        ? Number(this.requestForm.invoiceCutoffDay || 1)
-        : null,
+      invoice_cutoff_day: null,
       invoice_recipient_email: this.requestForm.invoiceRecipientEmail.trim() || null,
       max_match_results: 25,
     };
@@ -3527,15 +3666,27 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
     this.providerGuards = [];
     this.showRosterDrawer = true;
-    this.requestService.listServiceProviderGuards(1, 100, {
-      loadingScope: this.shiftProviderGuardsScope,
-      loadingMode: 'silent',
+    forkJoin({
+      guards: this.requestService.listServiceProviderGuards(1, 100, {
+        loadingScope: this.shiftProviderGuardsScope,
+        loadingMode: 'silent',
+      }),
+      leaves: this.requestService.listPlannedGuardLeaves(1, 500, '', 'approved', {
+        loadingScope: this.shiftProviderGuardLeaveScope,
+        loadingMode: 'silent',
+      }),
     }).subscribe({
-      next: (response) => {
-        this.providerGuards = (response.items || []).filter((guard) => {
+      next: ({ guards, leaves }) => {
+        const overlappingLeaveGuardIds = new Set(
+          (leaves.items || [])
+            .filter((leave) => this.doesPlannedLeaveOverlapShift(leave, targetShift))
+            .map((leave) => String(leave.guard_tenant_id || ''))
+            .filter((guardId) => !!guardId),
+        );
+        this.providerGuards = (guards.items || []).filter((guard) => {
           const status = String(guard.status || '').trim().toLowerCase();
           const inviteStatus = String(guard.invite_status || '').trim().toLowerCase();
-          return status === 'active' && inviteStatus !== 'expired';
+          return status === 'active' && inviteStatus !== 'expired' && !overlappingLeaveGuardIds.has(String(guard.id || ''));
         });
       },
       error: (error) => {
@@ -3576,6 +3727,26 @@ export class RequestsComponent implements OnInit, OnDestroy {
       applyToFutureShifts: false,
     };
     this.providerGuards = [];
+  }
+
+  private doesPlannedLeaveOverlapShift(leave: GuardPlannedLeaveItem, shift: ShiftInstanceItem): boolean {
+    const leaveStart = this.parseIsoDateValue(leave.start_at_utc);
+    const leaveEnd = this.parseIsoDateValue(leave.end_at_utc);
+    const shiftStart = this.parseIsoDateValue(shift.shift_start_at_utc);
+    const shiftEnd = this.parseIsoDateValue(shift.shift_end_at_utc);
+    if (!leaveStart || !leaveEnd || !shiftStart || !shiftEnd) {
+      return false;
+    }
+    return leaveStart < shiftEnd && shiftStart < leaveEnd;
+  }
+
+  private parseIsoDateValue(value?: string | null): Date | null {
+    const normalized = String(value || '').trim();
+    if (!normalized) {
+      return null;
+    }
+    const parsed = new Date(normalized);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
   openReopenExceptionDrawer(item: ShiftExceptionItem): void {
@@ -3706,7 +3877,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   openShiftGuardLeaveDrawer(slot: ShiftSlotItem): void {
     if (!this.canOpenShiftGuardLeaveDrawer(slot)) {
-      this.notification.show('Leave can only be reported by the assigned guard within the final 2 hours before shift start.', 'fail', 4000);
+      this.notification.show('Leave can only be reported by the assigned guard within the configured pre-start window before shift start.', 'fail', 4000);
       return;
     }
 
@@ -3765,6 +3936,162 @@ export class RequestsComponent implements OnInit, OnDestroy {
         }
       },
     });
+  }
+
+  loadPlannedLeaves(
+    page = 1,
+    options?: { silent?: boolean; suppressError?: boolean },
+  ): void {
+    if (!this.canViewPlannedLeave) {
+      this.plannedLeaves = [];
+      return;
+    }
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    const guardTenantId = this.isGuardAdmin ? this.currentTenantId : '';
+    this.requestService.listPlannedGuardLeaves(page, this.plannedLeaveRows, guardTenantId, this.plannedLeaveStatusFilter, {
+      loadingScope: this.plannedLeaveListScope,
+      loadingMode: silent ? 'silent' : undefined,
+    }).subscribe({
+      next: (response) => {
+        this.plannedLeaves = response.items || [];
+        this.plannedLeavePage = response.pagination?.page || page;
+        this.plannedLeaveRows = response.pagination?.rows || this.plannedLeaveRows;
+        this.plannedLeaveTotalPages = response.pagination?.total_pages || 1;
+        this.plannedLeaveTotalItems = response.pagination?.total_items || 0;
+      },
+      error: (error) => {
+        this.plannedLeaves = [];
+        this.plannedLeavePage = page;
+        this.plannedLeaveTotalPages = 1;
+        this.plannedLeaveTotalItems = 0;
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to load planned leave requests', 'fail', 5000);
+        }
+      },
+    });
+  }
+
+  loadGuardLeaveQuotaTargets(
+    options?: { suppressError?: boolean },
+  ): void {
+    if (!this.canReviewPlannedLeave) {
+      this.guardLeaveQuotaTargets = [];
+      this.selectedLeaveQuotaTargetGuardId = '';
+      return;
+    }
+    const suppressError = Boolean(options?.suppressError);
+    this.requestService.listGuardLeaveQuotaTargets({
+      loadingScope: this.plannedLeaveQuotaTargetsScope,
+      loadingMode: 'silent',
+    }).subscribe({
+      next: (response) => {
+        this.guardLeaveQuotaTargets = response.items || [];
+        if (
+          this.selectedLeaveQuotaTargetGuardId
+          && !this.guardLeaveQuotaTargets.some((item) => String(item.id || '') === this.selectedLeaveQuotaTargetGuardId)
+        ) {
+          this.selectedLeaveQuotaTargetGuardId = '';
+        }
+        if (!this.selectedLeaveQuotaTargetGuardId && this.guardLeaveQuotaTargets.length === 1) {
+          this.selectedLeaveQuotaTargetGuardId = String(this.guardLeaveQuotaTargets[0].id || '');
+        }
+      },
+      error: (error) => {
+        this.guardLeaveQuotaTargets = [];
+        this.selectedLeaveQuotaTargetGuardId = '';
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to load guard leave quota targets', 'fail', 5000);
+        }
+      },
+    });
+  }
+
+  loadGuardLeaveBalance(
+    guardTenantId: string,
+    options?: { silent?: boolean; suppressError?: boolean },
+  ): void {
+    if (!guardTenantId.trim()) {
+      this.guardLeavePolicy = null;
+      this.guardLeaveBalance = null;
+      return;
+    }
+    const silent = Boolean(options?.silent);
+    const suppressError = Boolean(options?.suppressError);
+    this.requestService.getGuardLeaveBalance(guardTenantId, {
+      loadingScope: this.plannedLeaveBalanceScope,
+      loadingMode: silent ? 'silent' : undefined,
+    }).subscribe({
+      next: (response) => {
+        this.guardLeavePolicy = response.policy;
+        this.guardLeaveBalance = response.balance;
+        this.selectedPlannedLeavePolicyGuardId = response.guard_tenant_id;
+        this.plannedLeavePolicyForm = {
+          annualPaidLeaveDays: Number(response.policy?.annual_paid_leave_days || 0),
+          annualUnpaidLeaveDays: Number(response.policy?.annual_unpaid_leave_days || 0),
+          carryForwardDays: Number(response.policy?.carry_forward_days || 0),
+          effectiveFrom: String(response.policy?.effective_from || '').slice(0, 10),
+        };
+      },
+      error: (error) => {
+        this.guardLeavePolicy = null;
+        this.guardLeaveBalance = null;
+        if (!suppressError) {
+          this.notification.show(error?.error?.detail || 'Failed to load leave balance', 'fail', 5000);
+        }
+      },
+    });
+  }
+
+  openPlannedLeaveRequestDrawer(): void {
+    if (!this.canRequestPlannedLeave) {
+      return;
+    }
+    this.plannedLeaveErrors = {};
+    this.plannedLeaveForm = {
+      leaveType: 'paid',
+      startAt: '',
+      endAt: '',
+      reason: '',
+    };
+    this.showPlannedLeaveRequestDrawer = true;
+  }
+
+  closePlannedLeaveRequestDrawer(): void {
+    this.showPlannedLeaveRequestDrawer = false;
+    this.plannedLeaveErrors = {};
+  }
+
+  openPlannedLeaveDecisionDrawer(item: GuardPlannedLeaveItem, action: 'approve' | 'reject' | 'cancel'): void {
+    this.selectedPlannedLeave = item;
+    this.plannedLeaveDecisionErrors = {};
+    this.plannedLeaveDecisionForm = {
+      note: '',
+      action,
+    };
+    this.showPlannedLeaveDecisionDrawer = true;
+  }
+
+  closePlannedLeaveDecisionDrawer(): void {
+    this.showPlannedLeaveDecisionDrawer = false;
+    this.selectedPlannedLeave = null;
+    this.plannedLeaveDecisionErrors = {};
+  }
+
+  openPlannedLeavePolicyDrawer(guardTenantId: string): void {
+    if (!guardTenantId.trim()) {
+      return;
+    }
+    this.selectedLeaveQuotaTargetGuardId = guardTenantId;
+    this.selectedPlannedLeavePolicyGuardId = guardTenantId;
+    this.plannedLeavePolicyErrors = {};
+    this.showPlannedLeavePolicyDrawer = true;
+    this.loadGuardLeaveBalance(guardTenantId);
+  }
+
+  closePlannedLeavePolicyDrawer(): void {
+    this.showPlannedLeavePolicyDrawer = false;
+    this.plannedLeavePolicyErrors = {};
   }
 
   openShiftGuardLeaveReturnReviewDrawer(leave: ShiftGuardLeaveItem): void {
@@ -3941,6 +4268,125 @@ export class RequestsComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.notification.show(error?.error?.detail || 'Failed to record guard leave', 'fail', 5000);
+      },
+    });
+  }
+
+  submitPlannedLeaveRequest(): void {
+    if (!this.canRequestPlannedLeave) {
+      return;
+    }
+    this.plannedLeaveErrors = {};
+    const startAt = this.plannedLeaveForm.startAt.trim();
+    const endAt = this.plannedLeaveForm.endAt.trim();
+    if (!startAt) {
+      this.plannedLeaveErrors['startAt'] = 'Leave start is required.';
+    }
+    if (!endAt) {
+      this.plannedLeaveErrors['endAt'] = 'Leave end is required.';
+    }
+    const startDate = startAt ? new Date(startAt) : null;
+    const endDate = endAt ? new Date(endAt) : null;
+    if (startDate && Number.isNaN(startDate.getTime())) {
+      this.plannedLeaveErrors['startAt'] = 'Provide a valid leave start date and time.';
+    }
+    if (endDate && Number.isNaN(endDate.getTime())) {
+      this.plannedLeaveErrors['endAt'] = 'Provide a valid leave end date and time.';
+    }
+    if (startDate && endDate && !Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate <= startDate) {
+      this.plannedLeaveErrors['endAt'] = 'Leave end must be after the leave start.';
+    }
+    if (Object.keys(this.plannedLeaveErrors).length) {
+      this.notification.show('Please fix the planned leave fields.', 'fail', 4000);
+      return;
+    }
+    const payload: GuardPlannedLeaveCreatePayload = {
+      leave_type: this.plannedLeaveForm.leaveType,
+      start_at_utc: startDate!.toISOString(),
+      end_at_utc: endDate!.toISOString(),
+      reason: this.plannedLeaveForm.reason.trim() || null,
+    };
+    this.requestService.createPlannedGuardLeave(payload, { loadingScope: 'requests:leave:create' }).subscribe({
+      next: (response) => {
+        this.notification.show(response.message || 'Planned leave request submitted', 'success', 4500);
+        this.closePlannedLeaveRequestDrawer();
+        this.loadPlannedLeaves(1, { silent: true, suppressError: true });
+        this.loadGuardLeaveBalance(this.currentTenantId, { silent: true, suppressError: true });
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to submit planned leave request', 'fail', 5000);
+      },
+    });
+  }
+
+  submitPlannedLeaveDecision(): void {
+    const leave = this.selectedPlannedLeave;
+    if (!leave) {
+      return;
+    }
+    const notePayload: GuardPlannedLeaveDecisionPayload = {
+      note: this.plannedLeaveDecisionForm.note.trim() || null,
+    };
+    const action = this.plannedLeaveDecisionForm.action;
+    const request$ = action === 'approve'
+      ? this.requestService.approvePlannedGuardLeave(leave.id, notePayload, { loadingScope: `requests:leave:approve:${leave.id}` })
+      : action === 'reject'
+        ? this.requestService.rejectPlannedGuardLeave(leave.id, notePayload, { loadingScope: `requests:leave:reject:${leave.id}` })
+        : this.requestService.cancelPlannedGuardLeave(leave.id, notePayload, { loadingScope: `requests:leave:cancel:${leave.id}` });
+    request$.subscribe({
+      next: (response) => {
+        const targetGuardId = leave.guard_tenant_id;
+        this.notification.show(
+          response.message || (action === 'approve' ? 'Planned leave approved' : action === 'reject' ? 'Planned leave rejected' : 'Planned leave cancelled'),
+          'success',
+          4500,
+        );
+        this.closePlannedLeaveDecisionDrawer();
+        this.loadPlannedLeaves(this.plannedLeavePage, { silent: true, suppressError: true });
+        if (this.currentTenantId === targetGuardId || this.selectedPlannedLeavePolicyGuardId === targetGuardId) {
+          this.loadGuardLeaveBalance(targetGuardId, { silent: true, suppressError: true });
+        }
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to update planned leave request', 'fail', 5000);
+      },
+    });
+  }
+
+  submitPlannedLeavePolicy(): void {
+    const guardTenantId = this.selectedPlannedLeavePolicyGuardId;
+    if (!guardTenantId.trim()) {
+      return;
+    }
+    this.plannedLeavePolicyErrors = {};
+    const payload: GuardLeavePolicyUpsertPayload = {
+      annual_paid_leave_days: Number(this.plannedLeavePolicyForm.annualPaidLeaveDays || 0),
+      annual_unpaid_leave_days: Number(this.plannedLeavePolicyForm.annualUnpaidLeaveDays || 0),
+      carry_forward_days: Number(this.plannedLeavePolicyForm.carryForwardDays || 0),
+      effective_from: this.plannedLeavePolicyForm.effectiveFrom || null,
+    };
+    if (payload.annual_paid_leave_days < 0) {
+      this.plannedLeavePolicyErrors['annualPaidLeaveDays'] = 'Paid leave quota must be zero or more.';
+    }
+    if (payload.annual_unpaid_leave_days < 0) {
+      this.plannedLeavePolicyErrors['annualUnpaidLeaveDays'] = 'Unpaid leave quota must be zero or more.';
+    }
+    if (payload.carry_forward_days < 0) {
+      this.plannedLeavePolicyErrors['carryForwardDays'] = 'Carry-forward must be zero or more.';
+    }
+    if (Object.keys(this.plannedLeavePolicyErrors).length) {
+      this.notification.show('Please fix the leave quota fields.', 'fail', 4000);
+      return;
+    }
+    this.requestService.upsertGuardLeaveBalance(guardTenantId, payload, { loadingScope: `requests:leave:policy:${guardTenantId}` }).subscribe({
+      next: (response) => {
+        this.notification.show(response.message || 'Guard leave quota updated', 'success', 4500);
+        this.guardLeavePolicy = response.policy;
+        this.guardLeaveBalance = response.balance;
+        this.closePlannedLeavePolicyDrawer();
+      },
+      error: (error) => {
+        this.notification.show(error?.error?.detail || 'Failed to update leave quota', 'fail', 5000);
       },
     });
   }
@@ -4646,12 +5092,28 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.notification.show('Please fix the acceptance fields.', 'fail', 4000);
       return;
     }
+    const minimumSlots = this.getAcceptJobMinimumCommittedSlots(job);
+    if (slotsCommitted < minimumSlots) {
+      const message = this.canIncreaseProviderCoverage(job)
+        ? `Increase committed coverage to at least ${minimumSlots} guard positions to add more provider coverage.`
+        : `Committed coverage cannot be lower than ${minimumSlots} guard positions.`;
+      this.acceptJobErrors['slotsCommitted'] = message;
+      this.notification.show(message, 'fail', 4000);
+      return;
+    }
+
+    const successMessage = this.canIncreaseProviderCoverage(job)
+      ? 'Coverage increased'
+      : (job.assignment_status === 'reconfirmation_required' ? 'Coverage reconfirmed' : 'Job accepted');
+    const failureMessage = this.canIncreaseProviderCoverage(job)
+      ? 'Failed to add coverage'
+      : (job.assignment_status === 'reconfirmation_required' ? 'Failed to reconfirm coverage' : 'Failed to accept job');
 
     this.updatingJobId = job.id;
     this.requestService.updateJobStatus(job.id, 'accepted', undefined, { loadingScope: this.getJobUpdateScope(job.id) }, slotsCommitted).subscribe({
       next: (response) => {
         this.updatingJobId = '';
-        this.notification.show(response.message || 'Job accepted', 'success', 3500);
+        this.notification.show(response.message || successMessage, 'success', 3500);
         if (this.isGuardOrProvider) {
           this.activeTab = 'jobs';
           this.jobStatusFilter = '';
@@ -4668,7 +5130,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.updatingJobId = '';
-        this.notification.show(error?.error?.detail || 'Failed to accept job', 'fail', 5000);
+        this.notification.show(error?.error?.detail || failureMessage, 'fail', 5000);
       }
     });
   }
@@ -4719,14 +5181,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
     _index: number,
     action: { label: string; status: RequestAssignmentStatus; type: 'primary' | 'secondary' | 'danger' },
   ): string {
-    return action.status;
+    return `${action.status}:${action.label}`;
   }
 
   trackByRequestViewerActionStatus(
     _index: number,
     action: { label: string; status: RequestAssignmentStatus; type: 'primary' | 'secondary' | 'danger' },
   ): string {
-    return action.status;
+    return `${action.status}:${action.label}`;
   }
 
   hasRequestViewerActions(item: ClientRequestItem | null): boolean {
@@ -4803,6 +5265,13 @@ export class RequestsComponent implements OnInit, OnDestroy {
           { label: 'Decline', status: 'declined', type: 'danger' },
         ];
       case 'accepted':
+        if (this.canIncreaseProviderCoverage(job)) {
+          return [
+            { label: 'Add Coverage', status: 'accepted', type: 'primary' },
+            { label: 'Start', status: 'in_progress', type: 'secondary' },
+            { label: 'Cancel', status: 'cancelled', type: 'danger' },
+          ];
+        }
         return [
           { label: 'Start', status: 'in_progress', type: 'primary' },
           { label: 'Cancel', status: 'cancelled', type: 'danger' },
@@ -5317,7 +5786,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   getShiftGuardLeaveCoverageMessage(slot: ShiftSlotItem | null): string {
     if (!slot) {
-      return 'Leave can only be reported by the assigned guard within the final 2 hours before shift start.';
+      return 'Leave can only be reported by the assigned guard within the configured pre-start window before shift start.';
     }
     return 'Reporting leave now only marks this selected shift unavailable. It does not auto-open replacement coverage. Client and platform ops are notified to review replacement action manually.';
   }
@@ -5390,6 +5859,58 @@ export class RequestsComponent implements OnInit, OnDestroy {
       `${summary.decision_required_count || 0} need review`,
       `${summary.locked_history_count || 0} locked to history`,
     ].join(' • ');
+  }
+
+  getPlannedLeaveMetaItems(item: GuardPlannedLeaveItem): string[] {
+    const items = [
+      `Guard: ${item.guard_tenant_id}`,
+      `Requested ${this.formatBackendDateTime(item.created_at || item.start_at_utc)}`,
+      `${this.formatNumber(item.requested_days)} day${Number(item.requested_days) === 1 ? '' : 's'}`,
+    ];
+    if (item.requested_by_username) {
+      items.push(`By ${item.requested_by_username}`);
+    }
+    if (item.approved_by_username) {
+      items.push(`Reviewed by ${item.approved_by_username}`);
+    }
+    if (item.reason) {
+      items.push(`Reason: ${item.reason}`);
+    }
+    return items;
+  }
+
+  canApprovePlannedLeaveItem(item: GuardPlannedLeaveItem): boolean {
+    if (String(item.request_status || '') !== 'pending') {
+      return false;
+    }
+    if (this.isProviderAdmin) {
+      return String(item.ownership_type || '') === 'service_provider';
+    }
+    if (this.isPlatformAdmin) {
+      return String(item.ownership_type || '') !== 'service_provider';
+    }
+    return false;
+  }
+
+  canRejectPlannedLeaveItem(item: GuardPlannedLeaveItem): boolean {
+    return this.canApprovePlannedLeaveItem(item);
+  }
+
+  canCancelPlannedLeaveItem(item: GuardPlannedLeaveItem): boolean {
+    if (String(item.request_status || '') === 'cancelled') {
+      return false;
+    }
+    if (this.isGuardAdmin) {
+      return String(item.guard_tenant_id || '') === this.currentTenantId
+        && ['pending', 'approved'].includes(String(item.request_status || ''));
+    }
+    if (this.isProviderAdmin) {
+      return String(item.service_provider_tenant_id || '') === this.currentTenantId
+        && ['pending', 'approved'].includes(String(item.request_status || ''));
+    }
+    return this.isPlatformAdmin
+      && String(item.ownership_type || '') !== 'service_provider'
+      && ['pending', 'approved'].includes(String(item.request_status || ''));
   }
 
   getBulkConfirmSlotMetaItems(slot: ShiftSlotItem): string[] {
@@ -5632,13 +6153,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
       default:
         return 'Shift updated';
     }
-  }
-
-  getProviderGuardOptions(): Array<{ label: string; value: string }> {
-    return this.providerGuards.map((guard) => ({
-      label: `${guard.name || guard.id} • ${guard.email || 'No email'}`,
-      value: guard.id,
-    }));
   }
 
   buildRosterAssignmentsForSlots(slots: ShiftSlotItem[]): {
@@ -5966,12 +6480,55 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (!this.selectedAcceptJob) {
       return 'Accept Coverage Offer';
     }
+    if (this.canIncreaseProviderCoverage(this.selectedAcceptJob)) {
+      return 'Add Coverage';
+    }
     return this.selectedAcceptJob.assignment_status === 'reconfirmation_required' ? 'Reconfirm Coverage' : 'Accept Coverage Offer';
   }
 
   getAcceptJobDrawerSubtitle(): string {
     const requestTitle = this.selectedAcceptJob?.request?.title || 'Request';
     return `${requestTitle} • Service provider response`;
+  }
+
+  getAcceptJobMinimumCommittedSlots(job: RequestAssignmentItem | null): number {
+    const currentCommitted = job ? this.getJobCommittedSlots(job) : 1;
+    if (this.canIncreaseProviderCoverage(job)) {
+      return currentCommitted + 1;
+    }
+    if (this.isProviderRequestCoverageJob(job) && job?.assignment_status === 'reconfirmation_required') {
+      return currentCommitted;
+    }
+    return 1;
+  }
+
+  getAcceptJobSlotsLabel(job: RequestAssignmentItem | null): string {
+    if (this.canIncreaseProviderCoverage(job)) {
+      return 'Total Guard Positions You Can Cover Now';
+    }
+    return 'Guard Positions You Can Cover';
+  }
+
+  getAcceptJobSlotsHelperText(job: RequestAssignmentItem | null): string {
+    const currentCommitted = job ? this.getJobCommittedSlots(job) : 0;
+    const openSlots = this.getJobOpenSlots(job);
+    if (this.canIncreaseProviderCoverage(job)) {
+      return `You already committed ${currentCommitted}. Increase the total to claim up to ${openSlots} additional open position(s) on this request.`;
+    }
+    if (this.isProviderRequestCoverageJob(job) && job?.assignment_status === 'reconfirmation_required') {
+      return `You currently have ${currentCommitted} committed position(s). Reconfirm the same total or increase it if your provider can take more coverage now.`;
+    }
+    return 'Enter how many guard positions your service provider can cover for this request.';
+  }
+
+  getAcceptJobSubmitLabel(job: RequestAssignmentItem | null): string {
+    if (this.canIncreaseProviderCoverage(job)) {
+      return 'Confirm Coverage Increase';
+    }
+    if (job?.assignment_status === 'reconfirmation_required') {
+      return 'Confirm Coverage';
+    }
+    return 'Confirm Offer Acceptance';
   }
 
   getSelectedJobWave(): RequestBroadcastWaveItem | null {
@@ -6005,6 +6562,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
           break;
       }
     }
+    if (this.canIncreaseProviderCoverage(job)) {
+      return `You have already committed ${this.getJobCommittedSlots(job)} position(s). This request still has ${this.getJobOpenSlots(job)} open position(s), so you can add more provider coverage or continue into shift operations.`;
+    }
     if (this.isScheduleBackedRequestJob(job) && ['accepted', 'in_progress', 'completed'].includes(job.assignment_status)) {
       return 'This request uses a schedule. Use Open Attendance Steps for check-in, client confirmation, start, and check-out.';
     }
@@ -6018,6 +6578,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
     }
     switch (job.assignment_status) {
       case 'reconfirmation_required':
+        if (this.isProviderRequestCoverageJob(job)) {
+          return 'This request changed after your earlier provider acceptance. Reconfirm your current committed coverage or increase it if you can now cover more positions.';
+        }
         return 'This request changed after your earlier acceptance. Review the updated request details and reconfirm only if you can still cover the assignment.';
       case 'closed_filled':
         return 'All required slots have already been filled. This offer remains visible for history but no longer accepts responses.';
@@ -6028,6 +6591,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
       case 'cancelled':
         return 'This assignment was cancelled and is no longer actionable.';
       case 'accepted':
+        if (this.isProviderRequestCoverageJob(job)) {
+          return 'You have already accepted this provider coverage assignment. Continue into shift operations to roster named guards and monitor execution.';
+        }
         return 'You have already accepted this assignment. Review the request details below before starting work.';
       case 'offered':
         return job.response_due_at
@@ -6603,6 +7169,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   trackByShiftGuardLeaveId(_index: number, item: ShiftGuardLeaveItem): string {
+    return item.id;
+  }
+
+  trackByPlannedLeaveId(_index: number, item: GuardPlannedLeaveItem): string {
     return item.id;
   }
 

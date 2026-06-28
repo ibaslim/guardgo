@@ -79,6 +79,13 @@ Verify:
 - changing schedule type changes the expected contract type when schedule-driven behavior applies
 - preview still behaves correctly for platform-created requests on behalf of a client tenant
 
+Critical pricing rule checks:
+
+- `individual_only` uses guard pricing
+- `service_provider_only` uses provider pricing
+- `hybrid` uses guard-baseline client pricing
+- `hybrid` provider uplift is not silently added into client billing
+
 ## C. Request Invoice History
 
 Inside request detail, verify:
@@ -88,6 +95,12 @@ Inside request detail, verify:
 - invoice detail opens
 - line items and amounts look consistent with the request window or schedule
 - revised invoice behavior is visible when a request changed after earlier invoice generation
+
+Long-term billing checks:
+
+- long-term client invoice periods are weekly
+- first weekly invoice appears only after full accepted coverage
+- later weekly invoices continue while the request and schedule remain active
 
 ## D. My Invoices
 
@@ -107,6 +120,8 @@ Verify:
 Important expectation:
 
 - these are payout-side invoices only, not the client charge view
+- service-provider-owned guards must not have access to this page
+- short-term payout should reflect actual attendance hours
 
 ## E. Platform Payout Analysis
 
@@ -131,6 +146,20 @@ Key metrics to check:
 - total hours
 - total guard payout
 - total provider payout
+
+Adjustment lifecycle checks:
+
+- provider payout adjustments can be saved as drafts
+- draft adjustments do not change payout totals
+- approved adjustments change payout and platform earning
+- voided adjustments stay visible in the audit trail but stop affecting totals
+- draft, approved, and voided counts are visible in the finance summary
+
+Hybrid finance expectation:
+
+- hybrid client billing remains guard-baseline
+- extra provider compensation is tracked through payout adjustments
+- platform margin reduces transparently after approved provider adjustments
 
 ## Finance Limitation To Remember
 

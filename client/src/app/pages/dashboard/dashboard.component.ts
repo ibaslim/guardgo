@@ -49,12 +49,16 @@ type PlatformPayoutSummary = {
   invoice_count?: number;
   total_client_revenue?: number;
   total_payout?: number;
+  total_payout_adjustments?: number;
   total_platform_earning?: number;
   total_hours?: number;
   total_guard_payout?: number;
   total_provider_payout?: number;
   total_guard_earning?: number;
   total_provider_earning?: number;
+  draft_payout_adjustment_count?: number;
+  approved_payout_adjustment_count?: number;
+  voided_payout_adjustment_count?: number;
   platform_margin_percent?: number | null;
 };
 
@@ -215,6 +219,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
           label: 'Assignee Payout',
           value: this.formatMoney(this.totalPayout),
           helperText: `${this.formatMoney(this.totalProviderPayout)} to providers • ${this.formatMoney(this.totalGuardPayout)} to direct guards`,
+        },
+        {
+          label: 'Provider Adjustments',
+          value: this.formatMoney(this.totalPlatformPayoutAdjustments),
+          helperText: `${this.platformApprovedAdjustmentCount} approved • ${this.platformDraftAdjustmentCount} drafts waiting in finance`,
         },
         {
           label: 'Platform Margin',
@@ -791,6 +800,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private get totalPlatformEarning(): number {
     return Number(this.platformPayoutSummary?.total_platform_earning || 0);
+  }
+
+  private get totalPlatformPayoutAdjustments(): number {
+    return Number(this.platformPayoutSummary?.total_payout_adjustments || 0);
+  }
+
+  private get platformDraftAdjustmentCount(): number {
+    return Number(this.platformPayoutSummary?.draft_payout_adjustment_count || 0);
+  }
+
+  private get platformApprovedAdjustmentCount(): number {
+    return Number(this.platformPayoutSummary?.approved_payout_adjustment_count || 0);
   }
 
   private get platformMarginPercent(): number | null {

@@ -13,6 +13,14 @@ from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_request_model import (
     AssignmentLockReason,
     ClientRequestRecord,
+    GuardLeaveBalanceRecord,
+    GuardLeavePolicyRecord,
+    GuardLeavePolicyUpsertPayload,
+    GuardPlannedLeaveCreatePayload,
+    GuardPlannedLeaveDecisionPayload,
+    GuardPlannedLeaveRecord,
+    GuardPlannedLeaveStatus,
+    GuardPlannedLeaveType,
     ProviderRosterPayload,
     RequestAssignmentRecord,
     RequestAssignmentScope,
@@ -45,6 +53,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestWaveStatus,
 )
 from orion.services.mongo_manager.shared_model.db_tenant_model import (
+    GuardOwnershipType,
     TenantStatus,
     TenantType,
     db_tenant_model,
@@ -111,7 +120,7 @@ _SHIFT_EXCEPTION_STATUSES = {
 _IMPLICIT_SCHEDULE_TIMEZONE = "UTC"
 _DEFAULT_GENERATION_HORIZON_DAYS = 1
 _DEFAULT_ROSTER_DUE_OFFSET_MINUTES = 120
-_DEFAULT_UNAVAILABLE_CUTOFF_MINUTES = 120
+_DEFAULT_UNAVAILABLE_CUTOFF_MINUTES = 60
 _DEFAULT_LATE_GRACE_MINUTES = 15
 _DEFAULT_NO_SHOW_CUTOFF_MINUTES = 30
 _DEFAULT_CHECKIN_GEOFENCE_METERS = 200
@@ -416,6 +425,83 @@ class RequestShiftManager:
         }
 
     @staticmethod
+    def _serialize_guard_leave_policy(record: GuardLeavePolicyRecord) -> Dict[str, Any]:
+        return {
+            "id": str(record.id),
+            "guard_tenant_id": record.guard_tenant_id,
+            "ownership_type": record.ownership_type,
+            "service_provider_tenant_id": record.service_provider_tenant_id,
+            "annual_paid_leave_days": float(record.annual_paid_leave_days or 0),
+            "annual_unpaid_leave_days": float(record.annual_unpaid_leave_days or 0),
+            "carry_forward_days": float(record.carry_forward_days or 0),
+            "effective_from": RequestShiftManager._local_date_iso(record.effective_from),
+            "effective_to": RequestShiftManager._local_date_iso(record.effective_to),
+            "is_active": bool(record.is_active),
+            "updated_by_user_id": record.updated_by_user_id,
+            "updated_by_username": record.updated_by_username,
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+        }
+
+    @staticmethod
+    def _serialize_guard_leave_balance(record: GuardLeaveBalanceRecord) -> Dict[str, Any]:
+        return {
+            "id": str(record.id),
+            "guard_tenant_id": record.guard_tenant_id,
+            "policy_id": record.policy_id,
+            "period_start": RequestShiftManager._local_date_iso(record.period_start),
+            "period_end": RequestShiftManager._local_date_iso(record.period_end),
+            "paid_leave_allocated_days": float(record.paid_leave_allocated_days or 0),
+            "paid_leave_used_days": float(record.paid_leave_used_days or 0),
+            "paid_leave_remaining_days": float(record.paid_leave_remaining_days or 0),
+            "unpaid_leave_used_days": float(record.unpaid_leave_used_days or 0),
+            "carry_forward_days": float(record.carry_forward_days or 0),
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+        }
+
+    @staticmethod
+    def _serialize_guard_planned_leave(record: GuardPlannedLeaveRecord) -> Dict[str, Any]:
+        return {
+            "id": str(record.id),
+            "guard_tenant_id": record.guard_tenant_id,
+            "ownership_type": record.ownership_type,
+            "service_provider_tenant_id": record.service_provider_tenant_id,
+            "leave_type": record.leave_type.value,
+            "request_status": record.request_status.value,
+            "reason": record.reason,
+            "start_at_utc": record.start_at_utc,
+            "end_at_utc": record.end_at_utc,
+            "requested_days": float(record.requested_days or 0),
+            "balance_days_consumed": float(record.balance_days_consumed or 0),
+            "affected_slot_ids": list(record.affected_slot_ids or []),
+            "requested_by_user_id": record.requested_by_user_id,
+            "requested_by_username": record.requested_by_username,
+            "requested_by_role": record.requested_by_role,
+            "approved_by_user_id": record.approved_by_user_id,
+            "approved_by_username": record.approved_by_username,
+            "approval_note": record.approval_note,
+            "approved_at": record.approved_at,
+            "rejected_at": record.rejected_at,
+            "cancelled_at": record.cancelled_at,
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+        }
+
+    @staticmethod
+    def _leave_balance_period(for_date: date) -> tuple[date, date]:
+        return date(for_date.year, 1, 1), date(for_date.year, 12, 31)
+
+    @staticmethod
+    def _round_leave_days(value: float) -> float:
+        return round(max(float(value or 0), 0.0), 4)
+
+    @classmethod
+    def _calculate_leave_days(cls, start_at_utc: datetime, end_at_utc: datetime) -> float:
+        seconds = max((end_at_utc - start_at_utc).total_seconds(), 0.0)
+        return cls._round_leave_days(seconds / 86400.0)
+
+    @staticmethod
     def _parse_local_time(label: str, value: str) -> time:
         raw = str(value or "").strip()
         try:
@@ -641,6 +727,46 @@ class RequestShiftManager:
             full_name = str(getattr(profile, "full_name", "") or getattr(profile, "name", "") or "").strip()
         return full_name or normalized_guard_id
 
+    async def list_guard_leave_quota_targets(self, *, current_user) -> Dict[str, Any]:
+        request_manager = RequestManager.get_instance()
+        role_value = request_manager._role_value(current_user)
+
+        guards = await self._engine.find(
+            db_tenant_model,
+            (db_tenant_model.tenant_type == TenantType.GUARD)
+            & (db_tenant_model.status == TenantStatus.ACTIVE),
+        )
+
+        if request_manager._is_platform_write_role(role_value):
+            guards = [
+                guard for guard in guards
+                if self._guard_ownership_value(guard) != GuardOwnershipType.SERVICE_PROVIDER.value
+            ]
+        elif role_value == "sp_admin":
+            session_tenant = await request_manager._get_session_tenant(current_user)
+            if session_tenant.tenant_type != TenantType.SERVICE_PROVIDER:
+                raise HTTPException(status_code=403, detail="Access forbidden")
+            provider_tenant_id = str(session_tenant.id)
+            guards = [
+                guard for guard in guards
+                if self._guard_ownership_value(guard) == GuardOwnershipType.SERVICE_PROVIDER.value
+                and str(getattr(guard, "service_provider_tenant_id", "") or "") == provider_tenant_id
+            ]
+        else:
+            raise HTTPException(status_code=403, detail="Access forbidden")
+
+        items: List[Dict[str, Any]] = []
+        for guard in guards:
+            items.append({
+                "id": str(guard.id),
+                "name": await self._guard_display_name(str(guard.id)),
+                "ownership_type": self._guard_ownership_value(guard),
+                "service_provider_tenant_id": str(getattr(guard, "service_provider_tenant_id", "") or "") or None,
+            })
+
+        items.sort(key=lambda item: str(item.get("name") or "").lower())
+        return {"items": items}
+
     async def _notify_platform_shift_exception(
         self,
         *,
@@ -704,7 +830,7 @@ class RequestShiftManager:
             request_record=request_record,
             title="Guard leave reported",
             message=(
-                f"{guard_name} reported leave for {request_title} within the allowed 2-hour pre-start window."
+                f"{guard_name} reported leave for {request_title} within the allowed pre-start window."
             ),
             metadata={
                 **payload,
@@ -722,6 +848,70 @@ class RequestShiftManager:
                 action_label="Open shift",
                 metadata=payload,
             )
+
+    async def _notify_planned_leave_requested(
+        self,
+        *,
+        leave_record: GuardPlannedLeaveRecord,
+        guard_tenant: db_tenant_model,
+    ) -> None:
+        ownership_type = str(leave_record.ownership_type or "")
+        guard_name = await self._guard_display_name(leave_record.guard_tenant_id)
+        action_url = "/dashboard/leaves"
+        payload = {
+            "planned_leave_id": str(leave_record.id),
+            "guard_tenant_id": leave_record.guard_tenant_id,
+            "leave_type": leave_record.leave_type.value,
+            "request_status": leave_record.request_status.value,
+        }
+        if ownership_type == getattr(GuardOwnershipType.SERVICE_PROVIDER, "value", "service_provider"):
+            await NotificationManager.get_instance().create_for_tenant_admin_users(
+                tenant_id=str(getattr(guard_tenant, "service_provider_tenant_id", "") or ""),
+                title="Guard planned leave requested",
+                message=f"{guard_name} submitted a planned leave request that needs service provider approval.",
+                category="warning",
+                source_module="leaves",
+                action_url=action_url,
+                action_label="Open Leaves",
+                metadata=payload,
+            )
+            return
+        await NotificationManager.get_instance().create_for_platform_admin_users(
+            title="Guard planned leave requested",
+            message=f"{guard_name} submitted a planned leave request that needs platform approval.",
+            category="warning",
+            source_module="leaves",
+            action_url=action_url,
+            action_label="Open Leaves",
+            metadata=payload,
+        )
+
+    async def _notify_planned_leave_decision(
+        self,
+        *,
+        leave_record: GuardPlannedLeaveRecord,
+        approved: bool,
+    ) -> None:
+        title = "Planned leave approved" if approved else "Planned leave rejected"
+        status_label = "approved" if approved else "rejected"
+        message = (
+            f"Your planned leave request from {leave_record.start_at_utc.isoformat()} "
+            f"to {leave_record.end_at_utc.isoformat()} was {status_label}."
+        )
+        await NotificationManager.get_instance().create_for_tenant_admin_users(
+            tenant_id=leave_record.guard_tenant_id,
+            title=title,
+            message=message,
+            category="info" if approved else "warning",
+            source_module="leaves",
+            action_url="/dashboard/leaves",
+            action_label="Open Leaves",
+            metadata={
+                "planned_leave_id": str(leave_record.id),
+                "request_status": leave_record.request_status.value,
+                "leave_type": leave_record.leave_type.value,
+            },
+        )
 
     async def _notify_late_arrival_ineligible(
         self,
@@ -776,7 +966,7 @@ class RequestShiftManager:
             title="Guard failed to arrive on time",
             message=(
                 f"{guard_name} did not arrive for {request_title} within the {grace_minutes}-minute grace period "
-                "and did not report leave in the allowed 2-hour pre-start window."
+                "and did not report leave in the allowed pre-start window."
             ),
             metadata=payload,
         )
@@ -828,7 +1018,7 @@ class RequestShiftManager:
         if not matches:
             raise HTTPException(
                 status_code=409,
-                detail="Leave can only be reported for an assigned upcoming shift within the final 2 hours before its start time",
+                detail="Leave can only be reported for an assigned upcoming shift within the configured pre-start window",
             )
         if len(matches) > 1:
             raise HTTPException(
@@ -841,7 +1031,7 @@ class RequestShiftManager:
         if now < leave_window_opens_at:
             raise HTTPException(
                 status_code=409,
-                detail="Leave can only be reported within 2 hours before the job start time",
+                detail="Leave can only be reported within the configured pre-start window before the job start time",
             )
         return slot_record, shift_record, request_record
 
@@ -1889,6 +2079,174 @@ class RequestShiftManager:
             raise HTTPException(status_code=404, detail="Guard tenant not found")
         return guard
 
+    @staticmethod
+    def _guard_ownership_value(guard_tenant: db_tenant_model) -> Optional[str]:
+        raw = getattr(guard_tenant, "ownership_type", None)
+        return getattr(raw, "value", raw or None)
+
+    @staticmethod
+    def _local_date_iso(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.date().isoformat()
+        if isinstance(value, date):
+            return value.isoformat()
+        normalized = str(value or "").strip()
+        return normalized or None
+
+    async def _get_active_guard_leave_policy(self, guard_tenant_id: str) -> Optional[GuardLeavePolicyRecord]:
+        policies = await self._engine.find(GuardLeavePolicyRecord, GuardLeavePolicyRecord.guard_tenant_id == guard_tenant_id)
+        candidates = [item for item in policies if bool(getattr(item, "is_active", False))]
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: self._local_date_iso(getattr(item, "effective_from", None)) or "", reverse=True)
+        return candidates[0]
+
+    async def _ensure_guard_leave_policy(
+        self,
+        *,
+        guard_tenant: db_tenant_model,
+        effective_from: Optional[date] = None,
+        updated_by_user_id: Optional[str] = None,
+        updated_by_username: Optional[str] = None,
+    ) -> GuardLeavePolicyRecord:
+        existing = await self._get_active_guard_leave_policy(str(guard_tenant.id))
+        if existing:
+            return existing
+        now = datetime.utcnow()
+        record = GuardLeavePolicyRecord(
+            guard_tenant_id=str(guard_tenant.id),
+            ownership_type=self._guard_ownership_value(guard_tenant),
+            service_provider_tenant_id=str(getattr(guard_tenant, "service_provider_tenant_id", "") or "") or None,
+            annual_paid_leave_days=14.0,
+            annual_unpaid_leave_days=0.0,
+            carry_forward_days=0.0,
+            effective_from=self._local_date_iso(effective_from or now.date()) or now.date().isoformat(),
+            is_active=True,
+            updated_by_user_id=updated_by_user_id,
+            updated_by_username=updated_by_username,
+            created_at=now,
+            updated_at=now,
+        )
+        await self._engine.save(record)
+        return record
+
+    async def _get_guard_leave_balance(
+        self,
+        *,
+        guard_tenant_id: str,
+        period_start: date,
+        period_end: date,
+    ) -> Optional[GuardLeaveBalanceRecord]:
+        balances = await self._engine.find(GuardLeaveBalanceRecord, GuardLeaveBalanceRecord.guard_tenant_id == guard_tenant_id)
+        target_period_start = self._local_date_iso(period_start)
+        target_period_end = self._local_date_iso(period_end)
+        for item in balances:
+            if (
+                self._local_date_iso(getattr(item, "period_start", None)) == target_period_start
+                and self._local_date_iso(getattr(item, "period_end", None)) == target_period_end
+            ):
+                return item
+        return None
+
+    async def _ensure_guard_leave_balance(
+        self,
+        *,
+        guard_tenant: db_tenant_model,
+        policy: GuardLeavePolicyRecord,
+        as_of_date: date,
+    ) -> GuardLeaveBalanceRecord:
+        period_start, period_end = self._leave_balance_period(as_of_date)
+        existing = await self._get_guard_leave_balance(
+            guard_tenant_id=str(guard_tenant.id),
+            period_start=period_start,
+            period_end=period_end,
+        )
+        if existing:
+            return existing
+        now = datetime.utcnow()
+        allocated = self._round_leave_days(float(policy.annual_paid_leave_days or 0) + float(policy.carry_forward_days or 0))
+        record = GuardLeaveBalanceRecord(
+            guard_tenant_id=str(guard_tenant.id),
+            policy_id=str(policy.id),
+            period_start=self._local_date_iso(period_start) or period_start.isoformat(),
+            period_end=self._local_date_iso(period_end) or period_end.isoformat(),
+            paid_leave_allocated_days=allocated,
+            paid_leave_used_days=0.0,
+            paid_leave_remaining_days=allocated,
+            unpaid_leave_used_days=0.0,
+            carry_forward_days=self._round_leave_days(float(policy.carry_forward_days or 0)),
+            created_at=now,
+            updated_at=now,
+        )
+        await self._engine.save(record)
+        return record
+
+    async def _resolve_planned_leave_target_guard(self, payload: GuardPlannedLeaveCreatePayload, current_user) -> db_tenant_model:
+        request_manager = RequestManager.get_instance()
+        role_value = request_manager._role_value(current_user)
+        session_tenant = await request_manager._get_session_tenant(current_user)
+        requested_guard_id = str(payload.guard_tenant_id or "").strip()
+        if role_value != "guard_admin" or session_tenant.tenant_type != TenantType.GUARD:
+            raise HTTPException(status_code=403, detail="Only guard admins can request planned leave")
+        if requested_guard_id and requested_guard_id != str(session_tenant.id):
+            raise HTTPException(status_code=403, detail="Guard admins can only request planned leave for their own guard tenant")
+        return await self._get_guard_tenant_or_404(str(session_tenant.id))
+
+    async def _get_guard_planned_leave_or_404(self, leave_id: str) -> GuardPlannedLeaveRecord:
+        try:
+            object_id = ObjectId(leave_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid planned leave id")
+        record = await self._engine.find_one(GuardPlannedLeaveRecord, GuardPlannedLeaveRecord.id == object_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="Planned leave request not found")
+        return record
+
+    async def _assert_guard_leave_balance_access(self, guard_tenant: db_tenant_model, current_user, *, write: bool = False) -> None:
+        request_manager = RequestManager.get_instance()
+        role_value = request_manager._role_value(current_user)
+        is_platform = request_manager._is_platform_role(role_value)
+        is_platform_write = request_manager._is_platform_write_role(role_value)
+        ownership_type = self._guard_ownership_value(guard_tenant)
+        service_provider_tenant_id = str(getattr(guard_tenant, "service_provider_tenant_id", "") or "")
+        if is_platform and not write:
+            return
+        session_tenant = await request_manager._get_session_tenant(current_user)
+        if role_value == "guard_admin" and session_tenant.tenant_type == TenantType.GUARD and not write:
+            if str(session_tenant.id) == str(guard_tenant.id):
+                return
+        if role_value == "sp_admin" and session_tenant.tenant_type == TenantType.SERVICE_PROVIDER:
+            if service_provider_tenant_id and str(session_tenant.id) == service_provider_tenant_id:
+                return
+        if write and ownership_type != getattr(GuardOwnershipType.SERVICE_PROVIDER, "value", "service_provider") and is_platform_write:
+            return
+        raise HTTPException(status_code=403, detail="Access forbidden")
+
+    async def _assert_planned_leave_record_access(self, leave_record: GuardPlannedLeaveRecord, current_user, *, review: bool = False) -> None:
+        request_manager = RequestManager.get_instance()
+        role_value = request_manager._role_value(current_user)
+        is_platform = request_manager._is_platform_role(role_value)
+        is_platform_write = request_manager._is_platform_write_role(role_value)
+        ownership_type = str(leave_record.ownership_type or "")
+        if review and is_platform_write and ownership_type != getattr(GuardOwnershipType.SERVICE_PROVIDER, "value", "service_provider"):
+            return
+        if is_platform and not review and ownership_type != getattr(GuardOwnershipType.SERVICE_PROVIDER, "value", "service_provider"):
+            return
+        session_tenant = await request_manager._get_session_tenant(current_user)
+        if role_value == "guard_admin" and session_tenant.tenant_type == TenantType.GUARD:
+            if str(session_tenant.id) != str(leave_record.guard_tenant_id or ""):
+                raise HTTPException(status_code=403, detail="This planned leave request does not belong to your guard tenant")
+            if review:
+                raise HTTPException(status_code=403, detail="Guard admins cannot approve planned leave")
+            return
+        if role_value == "sp_admin" and session_tenant.tenant_type == TenantType.SERVICE_PROVIDER:
+            if str(session_tenant.id) != str(leave_record.service_provider_tenant_id or ""):
+                raise HTTPException(status_code=403, detail="This planned leave request does not belong to your service provider")
+            return
+        raise HTTPException(status_code=403, detail="Access forbidden")
+
     async def _resolve_leave_target_guard(self, payload: ShiftGuardLeaveCreatePayload, current_user) -> db_tenant_model:
         request_manager = RequestManager.get_instance()
         role_value = request_manager._role_value(current_user)
@@ -2376,6 +2734,425 @@ class RequestShiftManager:
             if summary["affected_slot_count"] or summary["replacement_slot_count"]:
                 touched += 1
         return touched
+
+    async def list_planned_guard_leaves(
+        self,
+        *,
+        current_user,
+        page: int = 1,
+        rows: int = 20,
+        guard_tenant_id: str = "",
+        leave_status: str = "",
+    ) -> Dict[str, Any]:
+        request_manager = RequestManager.get_instance()
+        role_value = request_manager._role_value(current_user)
+        normalized_status = str(leave_status or "").strip().lower()
+        allowed_statuses = {status.value for status in GuardPlannedLeaveStatus}
+        if normalized_status and normalized_status not in allowed_statuses:
+            raise HTTPException(status_code=400, detail="Invalid planned leave status filter")
+
+        session_tenant = None if request_manager._is_platform_role(role_value) else await request_manager._get_session_tenant(current_user)
+        normalized_guard_id = str(guard_tenant_id or "").strip()
+        all_items = await self._engine.find(GuardPlannedLeaveRecord, {})
+        visible_items: List[GuardPlannedLeaveRecord] = []
+        for item in all_items:
+            if normalized_status and item.request_status.value != normalized_status:
+                continue
+            if normalized_guard_id and str(item.guard_tenant_id or "") != normalized_guard_id:
+                continue
+            if request_manager._is_platform_role(role_value):
+                visible_items.append(item)
+                continue
+            if role_value == "guard_admin" and session_tenant and session_tenant.tenant_type == TenantType.GUARD:
+                if str(item.guard_tenant_id or "") == str(session_tenant.id):
+                    visible_items.append(item)
+                continue
+            if role_value == "sp_admin" and session_tenant and session_tenant.tenant_type == TenantType.SERVICE_PROVIDER:
+                if str(item.service_provider_tenant_id or "") == str(session_tenant.id):
+                    visible_items.append(item)
+                continue
+
+        visible_items.sort(key=lambda item: item.created_at or datetime.min, reverse=True)
+        safe_page = max(int(page or 1), 1)
+        safe_rows = max(int(rows or 20), 1)
+        total_items = len(visible_items)
+        total_pages = max((total_items + safe_rows - 1) // safe_rows, 1)
+        start = (safe_page - 1) * safe_rows
+        items = visible_items[start:start + safe_rows]
+        return {
+            "items": [self._serialize_guard_planned_leave(item) for item in items],
+            "pagination": {
+                "page": safe_page,
+                "rows": safe_rows,
+                "total_items": total_items,
+                "total_pages": total_pages,
+            },
+            "filters": {
+                "guard_tenant_id": normalized_guard_id,
+                "leave_status": normalized_status,
+            },
+        }
+
+    async def create_planned_guard_leave(
+        self,
+        *,
+        payload: GuardPlannedLeaveCreatePayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        guard_tenant = await self._resolve_planned_leave_target_guard(payload, current_user)
+        start_at_utc = payload.start_at_utc
+        end_at_utc = payload.end_at_utc
+        now = datetime.utcnow()
+        if end_at_utc <= start_at_utc:
+            raise HTTPException(status_code=400, detail="Leave end time must be after leave start time")
+        if start_at_utc <= now:
+            raise HTTPException(status_code=400, detail="Planned leave must start in the future")
+
+        existing_items = await self._engine.find(GuardPlannedLeaveRecord, GuardPlannedLeaveRecord.guard_tenant_id == str(guard_tenant.id))
+        for existing in existing_items:
+            if existing.request_status not in {GuardPlannedLeaveStatus.PENDING, GuardPlannedLeaveStatus.APPROVED}:
+                continue
+            if existing.end_at_utc > start_at_utc and existing.start_at_utc < end_at_utc:
+                raise HTTPException(status_code=409, detail="An overlapping planned leave request already exists for this guard")
+
+        policy = await self._ensure_guard_leave_policy(
+            guard_tenant=guard_tenant,
+            effective_from=start_at_utc.date(),
+            updated_by_user_id=str(getattr(current_user, "id", "") or "") or None,
+            updated_by_username=str(getattr(current_user, "username", "") or "") or None,
+        )
+        requested_days = self._calculate_leave_days(start_at_utc, end_at_utc)
+        if requested_days <= 0:
+            raise HTTPException(status_code=400, detail="Planned leave window must cover a positive duration")
+        balance = await self._ensure_guard_leave_balance(
+            guard_tenant=guard_tenant,
+            policy=policy,
+            as_of_date=start_at_utc.date(),
+        )
+        if payload.leave_type == GuardPlannedLeaveType.PAID and float(balance.paid_leave_remaining_days or 0) < requested_days:
+            raise HTTPException(status_code=409, detail="Insufficient paid leave balance for this request")
+
+        request_manager = RequestManager.get_instance()
+        leave_record = GuardPlannedLeaveRecord(
+            guard_tenant_id=str(guard_tenant.id),
+            ownership_type=self._guard_ownership_value(guard_tenant),
+            service_provider_tenant_id=str(getattr(guard_tenant, "service_provider_tenant_id", "") or "") or None,
+            leave_type=payload.leave_type,
+            request_status=GuardPlannedLeaveStatus.PENDING,
+            reason=self._parse_optional_note(payload.reason),
+            start_at_utc=start_at_utc,
+            end_at_utc=end_at_utc,
+            requested_days=requested_days,
+            requested_by_user_id=str(getattr(current_user, "id", "") or "") or None,
+            requested_by_username=str(getattr(current_user, "username", "") or "") or None,
+            requested_by_role=request_manager._role_value(current_user),
+            created_at=now,
+            updated_at=now,
+        )
+        await self._engine.save(leave_record)
+        await self._notify_planned_leave_requested(leave_record=leave_record, guard_tenant=guard_tenant)
+        return {
+            "message": "Planned leave request submitted",
+            "item": self._serialize_guard_planned_leave(leave_record),
+            "policy": self._serialize_guard_leave_policy(policy),
+            "balance": self._serialize_guard_leave_balance(balance),
+        }
+
+    async def _apply_planned_leave_schedule_impact(
+        self,
+        leave_record: GuardPlannedLeaveRecord,
+        *,
+        current_user,
+    ) -> Dict[str, int]:
+        request_manager = RequestManager.get_instance()
+        now = self._utc_now()
+        affected_future_slot_count = 0
+        direct_replacement_opened_count = 0
+        provider_unrostered_slot_count = 0
+        recorded_slot_ids = set(str(slot_id) for slot_id in list(leave_record.affected_slot_ids or []))
+        guard_name = await self._guard_display_name(leave_record.guard_tenant_id)
+
+        slots = await self._engine.find(ShiftSlotRecord, ShiftSlotRecord.assigned_guard_tenant_id == str(leave_record.guard_tenant_id))
+        for slot_record in slots:
+            if slot_record.slot_status in {
+                ShiftSlotStatus.CANCELLED,
+                ShiftSlotStatus.COMPLETED,
+                ShiftSlotStatus.IN_PROGRESS,
+                ShiftSlotStatus.UNAVAILABLE,
+                ShiftSlotStatus.LATE_RISK,
+                ShiftSlotStatus.NO_SHOW_SUSPECTED,
+                ShiftSlotStatus.NO_SHOW_CONFIRMED,
+                ShiftSlotStatus.REPLACEMENT_REQUIRED,
+            }:
+                continue
+            try:
+                shift_record = await self._get_shift_or_404(slot_record.shift_instance_id)
+            except HTTPException:
+                continue
+            if shift_record.shift_start_at_utc <= now:
+                continue
+            if not self._shift_overlaps_leave_window(
+                shift_record,
+                leave_start_at_utc=leave_record.start_at_utc,
+                leave_end_at_utc=leave_record.end_at_utc,
+            ):
+                continue
+
+            request_record = await request_manager._get_request_or_404(slot_record.request_id)
+            slot_id = str(slot_record.id)
+            coverage_source = self._coverage_source_value(slot_record)
+
+            if coverage_source == ShiftCoverageSourceType.DIRECT_GUARD.value:
+                slot_record.guard_unavailable_reported_at = now
+                slot_record.updated_at = now
+                await self._engine.save(slot_record)
+                reopened = await self._open_replacement_slot_for_exception(
+                    original_slot=slot_record,
+                    shift_record=shift_record,
+                    request_record=request_record,
+                    current_user=current_user,
+                    note=leave_record.reason or "Approved planned leave requires future replacement coverage",
+                    max_match_results=25,
+                    auto_generated=True,
+                    notification_title="Planned leave replacement opened",
+                    notification_message=(
+                        f"{self._request_display_title(request_record)}: {guard_name} is on approved planned leave. "
+                        "Replacement coverage was opened for this future shift."
+                    ),
+                )
+                affected_future_slot_count += 1
+                if reopened.get("created"):
+                    direct_replacement_opened_count += 1
+            elif coverage_source == ShiftCoverageSourceType.SERVICE_PROVIDER.value:
+                previous_status = self._slot_status_value(slot_record)
+                slot_record.assigned_guard_tenant_id = None
+                slot_record.slot_status = ShiftSlotStatus.RESERVED
+                slot_record.rostered_at = None
+                slot_record.guard_unavailable_reported_at = now
+                slot_record.updated_at = now
+                await self._engine.save(slot_record)
+                await self._record_slot_event(
+                    slot_record,
+                    shift_record,
+                    request_record,
+                    current_user,
+                    ShiftAttendanceEventType.LEAVE_REPORTED,
+                    note=leave_record.reason or "Approved planned leave removed this guard from the provider roster",
+                    metadata={
+                        "planned_leave_id": str(leave_record.id),
+                        "planned_leave_type": leave_record.leave_type.value,
+                        "original_status": previous_status,
+                    },
+                )
+                await self._refresh_shift_progress(shift_record)
+                provider_tenant_id = str(slot_record.service_provider_tenant_id or leave_record.service_provider_tenant_id or "").strip()
+                if provider_tenant_id:
+                    await NotificationManager.get_instance().create_for_tenant_admin_users(
+                        tenant_id=provider_tenant_id,
+                        title="Approved guard leave needs re-roster",
+                        message=(
+                            f"{self._request_display_title(request_record)}: {guard_name} is on approved planned leave. "
+                            "Reroster another linked guard for the affected future shift."
+                        ),
+                        category="warning",
+                        source_module="requests",
+                        action_url=f"/dashboard/requests?tab=shifts&slot={slot_record.id}",
+                        action_label="Open shift",
+                        metadata={
+                            "request_id": str(request_record.id),
+                            "shift_id": str(shift_record.id),
+                            "slot_id": str(slot_record.id),
+                            "planned_leave_id": str(leave_record.id),
+                        },
+                    )
+                affected_future_slot_count += 1
+                provider_unrostered_slot_count += 1
+            else:
+                continue
+
+            recorded_slot_ids.add(slot_id)
+
+        leave_record.affected_slot_ids = list(recorded_slot_ids)
+        leave_record.updated_at = now
+        await self._engine.save(leave_record)
+        return {
+            "affected_future_slot_count": affected_future_slot_count,
+            "direct_replacement_opened_count": direct_replacement_opened_count,
+            "provider_unrostered_slot_count": provider_unrostered_slot_count,
+        }
+
+    async def approve_planned_guard_leave(
+        self,
+        *,
+        leave_id: str,
+        payload: GuardPlannedLeaveDecisionPayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        leave_record = await self._get_guard_planned_leave_or_404(leave_id)
+        await self._assert_planned_leave_record_access(leave_record, current_user, review=True)
+        if leave_record.request_status != GuardPlannedLeaveStatus.PENDING:
+            raise HTTPException(status_code=409, detail="Only pending planned leave requests can be approved")
+        guard_tenant = await self._get_guard_tenant_or_404(leave_record.guard_tenant_id)
+        policy = await self._ensure_guard_leave_policy(guard_tenant=guard_tenant, effective_from=leave_record.start_at_utc.date())
+        balance = await self._ensure_guard_leave_balance(
+            guard_tenant=guard_tenant,
+            policy=policy,
+            as_of_date=leave_record.start_at_utc.date(),
+        )
+        if leave_record.leave_type == GuardPlannedLeaveType.PAID:
+            requested_days = float(leave_record.requested_days or 0)
+            if float(balance.paid_leave_remaining_days or 0) < requested_days:
+                raise HTTPException(status_code=409, detail="Insufficient paid leave balance to approve this request")
+            balance.paid_leave_used_days = self._round_leave_days(float(balance.paid_leave_used_days or 0) + requested_days)
+            balance.paid_leave_remaining_days = self._round_leave_days(float(balance.paid_leave_allocated_days or 0) - float(balance.paid_leave_used_days or 0))
+            balance.updated_at = datetime.utcnow()
+            await self._engine.save(balance)
+            leave_record.balance_days_consumed = requested_days
+        else:
+            balance.unpaid_leave_used_days = self._round_leave_days(float(balance.unpaid_leave_used_days or 0) + float(leave_record.requested_days or 0))
+            balance.updated_at = datetime.utcnow()
+            await self._engine.save(balance)
+        leave_record.request_status = GuardPlannedLeaveStatus.APPROVED
+        leave_record.approval_note = self._parse_optional_note(payload.note)
+        leave_record.approved_by_user_id = str(getattr(current_user, "id", "") or "") or None
+        leave_record.approved_by_username = str(getattr(current_user, "username", "") or "") or None
+        leave_record.approved_at = datetime.utcnow()
+        leave_record.updated_at = leave_record.approved_at
+        await self._engine.save(leave_record)
+        impact_summary = await self._apply_planned_leave_schedule_impact(
+            leave_record,
+            current_user=current_user,
+        )
+        await self._notify_planned_leave_decision(leave_record=leave_record, approved=True)
+        return {
+            "message": "Planned leave approved",
+            "item": self._serialize_guard_planned_leave(leave_record),
+            "policy": self._serialize_guard_leave_policy(policy),
+            "balance": self._serialize_guard_leave_balance(balance),
+            "impact_summary": impact_summary,
+        }
+
+    async def reject_planned_guard_leave(
+        self,
+        *,
+        leave_id: str,
+        payload: GuardPlannedLeaveDecisionPayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        leave_record = await self._get_guard_planned_leave_or_404(leave_id)
+        await self._assert_planned_leave_record_access(leave_record, current_user, review=True)
+        if leave_record.request_status != GuardPlannedLeaveStatus.PENDING:
+            raise HTTPException(status_code=409, detail="Only pending planned leave requests can be rejected")
+        leave_record.request_status = GuardPlannedLeaveStatus.REJECTED
+        leave_record.approval_note = self._parse_optional_note(payload.note)
+        leave_record.approved_by_user_id = str(getattr(current_user, "id", "") or "") or None
+        leave_record.approved_by_username = str(getattr(current_user, "username", "") or "") or None
+        leave_record.rejected_at = datetime.utcnow()
+        leave_record.updated_at = leave_record.rejected_at
+        await self._engine.save(leave_record)
+        await self._notify_planned_leave_decision(leave_record=leave_record, approved=False)
+        return {
+            "message": "Planned leave rejected",
+            "item": self._serialize_guard_planned_leave(leave_record),
+        }
+
+    async def cancel_planned_guard_leave(
+        self,
+        *,
+        leave_id: str,
+        payload: GuardPlannedLeaveDecisionPayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        leave_record = await self._get_guard_planned_leave_or_404(leave_id)
+        await self._assert_planned_leave_record_access(leave_record, current_user, review=False)
+        if leave_record.request_status not in {GuardPlannedLeaveStatus.PENDING, GuardPlannedLeaveStatus.APPROVED}:
+            raise HTTPException(status_code=409, detail="Only pending or approved planned leave requests can be cancelled")
+        if leave_record.request_status == GuardPlannedLeaveStatus.APPROVED:
+            guard_tenant = await self._get_guard_tenant_or_404(leave_record.guard_tenant_id)
+            policy = await self._ensure_guard_leave_policy(guard_tenant=guard_tenant, effective_from=leave_record.start_at_utc.date())
+            balance = await self._ensure_guard_leave_balance(
+                guard_tenant=guard_tenant,
+                policy=policy,
+                as_of_date=leave_record.start_at_utc.date(),
+            )
+            if leave_record.leave_type == GuardPlannedLeaveType.PAID:
+                balance.paid_leave_used_days = self._round_leave_days(float(balance.paid_leave_used_days or 0) - float(leave_record.balance_days_consumed or 0))
+                balance.paid_leave_remaining_days = self._round_leave_days(float(balance.paid_leave_allocated_days or 0) - float(balance.paid_leave_used_days or 0))
+            else:
+                balance.unpaid_leave_used_days = self._round_leave_days(float(balance.unpaid_leave_used_days or 0) - float(leave_record.requested_days or 0))
+            balance.updated_at = datetime.utcnow()
+            await self._engine.save(balance)
+        leave_record.request_status = GuardPlannedLeaveStatus.CANCELLED
+        leave_record.approval_note = self._parse_optional_note(payload.note)
+        leave_record.cancelled_at = datetime.utcnow()
+        leave_record.updated_at = leave_record.cancelled_at
+        await self._engine.save(leave_record)
+        return {
+            "message": "Planned leave cancelled",
+            "item": self._serialize_guard_planned_leave(leave_record),
+        }
+
+    async def get_guard_leave_balance_snapshot(
+        self,
+        *,
+        guard_tenant_id: str,
+        current_user,
+    ) -> Dict[str, Any]:
+        guard_tenant = await self._get_guard_tenant_or_404(guard_tenant_id)
+        await self._assert_guard_leave_balance_access(guard_tenant, current_user, write=False)
+        policy = await self._ensure_guard_leave_policy(guard_tenant=guard_tenant)
+        balance = await self._ensure_guard_leave_balance(
+            guard_tenant=guard_tenant,
+            policy=policy,
+            as_of_date=datetime.utcnow().date(),
+        )
+        return {
+            "guard_tenant_id": str(guard_tenant.id),
+            "policy": self._serialize_guard_leave_policy(policy),
+            "balance": self._serialize_guard_leave_balance(balance),
+        }
+
+    async def upsert_guard_leave_policy(
+        self,
+        *,
+        guard_tenant_id: str,
+        payload: GuardLeavePolicyUpsertPayload,
+        current_user,
+    ) -> Dict[str, Any]:
+        guard_tenant = await self._get_guard_tenant_or_404(guard_tenant_id)
+        await self._assert_guard_leave_balance_access(guard_tenant, current_user, write=True)
+        now = datetime.utcnow()
+        policy = await self._ensure_guard_leave_policy(
+            guard_tenant=guard_tenant,
+            effective_from=payload.effective_from or now.date(),
+            updated_by_user_id=str(getattr(current_user, "id", "") or "") or None,
+            updated_by_username=str(getattr(current_user, "username", "") or "") or None,
+        )
+        policy.annual_paid_leave_days = self._round_leave_days(payload.annual_paid_leave_days)
+        policy.annual_unpaid_leave_days = self._round_leave_days(payload.annual_unpaid_leave_days)
+        policy.carry_forward_days = self._round_leave_days(payload.carry_forward_days)
+        if payload.effective_from:
+            policy.effective_from = self._local_date_iso(payload.effective_from) or policy.effective_from
+        policy.updated_by_user_id = str(getattr(current_user, "id", "") or "") or None
+        policy.updated_by_username = str(getattr(current_user, "username", "") or "") or None
+        policy.updated_at = now
+        await self._engine.save(policy)
+        balance = await self._ensure_guard_leave_balance(
+            guard_tenant=guard_tenant,
+            policy=policy,
+            as_of_date=now.date(),
+        )
+        balance.paid_leave_allocated_days = self._round_leave_days(float(policy.annual_paid_leave_days or 0) + float(policy.carry_forward_days or 0))
+        balance.paid_leave_remaining_days = self._round_leave_days(float(balance.paid_leave_allocated_days or 0) - float(balance.paid_leave_used_days or 0))
+        balance.carry_forward_days = self._round_leave_days(float(policy.carry_forward_days or 0))
+        balance.updated_at = now
+        await self._engine.save(balance)
+        return {
+            "message": "Guard leave quota updated",
+            "guard_tenant_id": str(guard_tenant.id),
+            "policy": self._serialize_guard_leave_policy(policy),
+            "balance": self._serialize_guard_leave_balance(balance),
+        }
 
     async def list_guard_leaves(
         self,
@@ -3177,7 +3954,7 @@ class RequestShiftManager:
         if not is_platform:
             raise HTTPException(
                 status_code=403,
-                detail="Assigned guards must use the leave flow within the final 2 hours before shift start",
+                detail="Assigned guards must use the leave flow within the configured pre-start window before shift start",
             )
         if not slot_record.assigned_guard_tenant_id:
             raise HTTPException(status_code=409, detail="This shift slot has not been assigned to a named guard yet")

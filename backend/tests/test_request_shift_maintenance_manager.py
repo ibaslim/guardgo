@@ -262,4 +262,4 @@ async def test_sync_advance_request_invoices_only_counts_live_long_term_requests
     synced_count = await manager._sync_advance_request_invoices(limit=10)
 
     assert synced_count == 1
-    assert synced == [("req-long", "system", "monthly_advance")]
+    assert synced == [("req-long", "system", "weekly_advance")]

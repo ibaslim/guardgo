@@ -108,7 +108,7 @@ class request_shift_maintenance_manager:
                 result = await request_manager._sync_request_invoice_state(
                     request_record,
                     current_user=system_user,
-                    reason=RequestInvoiceTrigger.MONTHLY_ADVANCE,
+                    reason=RequestInvoiceTrigger.WEEKLY_ADVANCE,
                 )
             except Exception as exc:
                 print(f"Advance invoice sync failed for request {request_id}: {exc}")

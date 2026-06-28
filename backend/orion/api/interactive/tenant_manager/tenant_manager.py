@@ -510,6 +510,16 @@ class TenantManager:
             # Save the tenant
             await self._engine.save(data)
 
+            if data.tenant_type == TenantType.GUARD:
+                from orion.api.interactive.request_shift_manager.request_shift_manager import RequestShiftManager
+                leave_manager = RequestShiftManager.get_instance()
+                leave_policy = await leave_manager._ensure_guard_leave_policy(guard_tenant=data)
+                await leave_manager._ensure_guard_leave_balance(
+                    guard_tenant=data,
+                    policy=leave_policy,
+                    as_of_date=datetime.utcnow().date(),
+                )
+
             if data.tenant_type in [TenantType.GUARD, TenantType.SERVICE_PROVIDER]:
                 from orion.api.interactive.billing_manager.billing_manager import BillingManager
                 await BillingManager.get_instance().ensure_tenant_rate_snapshot(

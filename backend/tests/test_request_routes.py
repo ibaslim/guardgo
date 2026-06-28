@@ -134,6 +134,7 @@ async def test_preview_client_request_pricing_forwards_payload(monkeypatch):
 
     class FakeManager:
         async def preview_request_pricing(self, payload, current_user):
+            captured["fulfillment_mode"] = payload.fulfillment_mode.value
             captured["guards_required"] = payload.guards_required
             captured["invoice_contract_type"] = payload.invoice_contract_type
             captured["invoice_cutoff_day"] = payload.invoice_cutoff_day
@@ -148,6 +149,7 @@ async def test_preview_client_request_pricing_forwards_payload(monkeypatch):
         response = await client.post(
             "/api/requests/pricing-preview",
             json={
+                "fulfillment_mode": "hybrid",
                 "guards_required": 3,
                 "invoice_contract_type": "long_term",
                 "invoice_cutoff_day": 9,
@@ -158,6 +160,7 @@ async def test_preview_client_request_pricing_forwards_payload(monkeypatch):
 
     assert response.status_code == 200
     assert captured == {
+        "fulfillment_mode": "hybrid",
         "guards_required": 3,
         "invoice_contract_type": "long_term",
         "invoice_cutoff_day": 9,
@@ -362,6 +365,118 @@ async def test_get_platform_payout_invoice_forwards_invoice_id(monkeypatch):
 
     assert response.status_code == 200
     assert captured == {"invoice_id": "pinv-77", "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_create_platform_payout_adjustment_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def create_platform_payout_adjustment(self, invoice_id, payload, current_user):
+            captured["invoice_id"] = invoice_id
+            captured["amount"] = payload.amount
+            captured["reason"] = payload.reason
+            captured["user"] = current_user.username
+            return {"id": invoice_id, "payout_adjustment_total": payload.amount}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/payout-invoices/pinv-77/adjustments",
+            json={"amount": 42.5, "reason": "Hybrid provider compensation"},
+        )
+
+    assert response.status_code == 200
+    assert captured == {
+        "invoice_id": "pinv-77",
+        "amount": 42.5,
+        "reason": "Hybrid provider compensation",
+        "user": "tester",
+    }
+
+
+@pytest.mark.anyio
+async def test_update_platform_payout_adjustment_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def update_platform_payout_adjustment(self, adjustment_id, payload, current_user):
+            captured["adjustment_id"] = adjustment_id
+            captured["amount"] = payload.amount
+            captured["reason"] = payload.reason
+            captured["user"] = current_user.username
+            return {"id": "pinv-77"}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.ADMIN)), base_url="http://test") as client:
+        response = await client.patch(
+            "/api/payout-adjustments/adj-77",
+            json={"amount": 50, "reason": "Revised provider compensation"},
+        )
+
+    assert response.status_code == 200
+    assert captured == {
+        "adjustment_id": "adj-77",
+        "amount": 50,
+        "reason": "Revised provider compensation",
+        "user": "tester",
+    }
+
+
+@pytest.mark.anyio
+async def test_approve_platform_payout_adjustment_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def approve_platform_payout_adjustment(self, adjustment_id, payload, current_user):
+            captured["adjustment_id"] = adjustment_id
+            captured["note"] = payload.note
+            captured["user"] = current_user.username
+            return {"id": "pinv-77"}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/payout-adjustments/adj-77/approve",
+            json={"note": "Looks good"},
+        )
+
+    assert response.status_code == 200
+    assert captured == {
+        "adjustment_id": "adj-77",
+        "note": "Looks good",
+        "user": "tester",
+    }
+
+
+@pytest.mark.anyio
+async def test_void_platform_payout_adjustment_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def void_platform_payout_adjustment(self, adjustment_id, payload, current_user):
+            captured["adjustment_id"] = adjustment_id
+            captured["note"] = payload.note
+            captured["user"] = current_user.username
+            return {"id": "pinv-77"}
+
+    monkeypatch.setattr(RequestManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/payout-adjustments/adj-77/void",
+            json={"note": "Superseded"},
+        )
+
+    assert response.status_code == 200
+    assert captured == {
+        "adjustment_id": "adj-77",
+        "note": "Superseded",
+        "user": "tester",
+    }
 
 
 @pytest.mark.anyio
@@ -805,6 +920,98 @@ async def test_reconcile_shift_guard_leave_return_forwards_payload(monkeypatch):
         "first_action": "restore_original",
         "user": "tester",
     }
+
+
+@pytest.mark.anyio
+async def test_list_planned_guard_leaves_forwards_filters(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def list_planned_guard_leaves(self, **kwargs):
+            captured.update(kwargs)
+            return {"items": [], "pagination": {"page": kwargs["page"], "rows": kwargs["rows"]}}
+
+    monkeypatch.setattr(RequestShiftManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.SP_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/planned-guard-leaves?page=2&rows=5&guard_tenant_id=guard-7&leave_status=pending")
+
+    assert response.status_code == 200
+    assert captured["page"] == 2
+    assert captured["rows"] == 5
+    assert captured["guard_tenant_id"] == "guard-7"
+    assert captured["leave_status"] == "pending"
+    assert captured["current_user"].username == "tester"
+
+
+@pytest.mark.anyio
+async def test_create_planned_guard_leave_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def create_planned_guard_leave(self, payload, current_user):
+            captured["leave_type"] = payload.leave_type.value
+            captured["reason"] = payload.reason
+            captured["user"] = current_user.username
+            return {"item": {"id": "planned-1"}}
+
+    monkeypatch.setattr(RequestShiftManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.GUARD_ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/planned-guard-leaves",
+            json={
+                "leave_type": "paid",
+                "start_at_utc": "2026-07-01T08:00:00",
+                "end_at_utc": "2026-07-02T08:00:00",
+                "reason": "vacation",
+            },
+        )
+
+    assert response.status_code == 201
+    assert captured == {"leave_type": "paid", "reason": "vacation", "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_approve_planned_guard_leave_forwards_payload(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def approve_planned_guard_leave(self, leave_id, payload, current_user):
+            captured["leave_id"] = leave_id
+            captured["note"] = payload.note
+            captured["user"] = current_user.username
+            return {"item": {"id": leave_id}}
+
+    monkeypatch.setattr(RequestShiftManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.SP_ADMIN)), base_url="http://test") as client:
+        response = await client.post(
+            "/api/planned-guard-leaves/planned-7/approve",
+            json={"note": "approved"},
+        )
+
+    assert response.status_code == 200
+    assert captured == {"leave_id": "planned-7", "note": "approved", "user": "tester"}
+
+
+@pytest.mark.anyio
+async def test_list_guard_leave_quota_targets_forwards_current_user(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def list_guard_leave_quota_targets(self, current_user):
+            captured["user"] = current_user.username
+            return {"items": [{"id": "guard-1", "name": "Alpha Guard"}]}
+
+    monkeypatch.setattr(RequestShiftManager, "get_instance", staticmethod(lambda: FakeManager()))
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.SP_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/guard-leave-quota-targets")
+
+    assert response.status_code == 200
+    assert captured == {"user": "tester"}
+    assert response.json()["items"][0]["id"] == "guard-1"
 
 
 @pytest.mark.anyio

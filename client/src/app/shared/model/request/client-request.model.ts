@@ -19,7 +19,7 @@ export type RequestAssignmentScope = 'request' | 'shift_replacement';
 export type RequestAssignmentLockReason = 'filled' | 'wave_expired' | 'request_expired' | 'superseded' | 'request_cancelled';
 export type RequestWaveTrigger = 'initial_publish' | 'publish_update' | 'additional_coverage' | 'capacity_reopened';
 export type RequestWaveStatus = 'pending_review' | 'active' | 'returned' | 'filled' | 'expired' | 'superseded' | 'cancelled';
-export type RequestInvoiceTrigger = RequestWaveTrigger | 'schedule_updated' | 'monthly_advance';
+export type RequestInvoiceTrigger = RequestWaveTrigger | 'schedule_updated' | 'monthly_advance' | 'weekly_advance';
 export type RequestScheduleType = 'one_time' | 'date_range' | 'recurring_weekly';
 export type ShiftInstanceStatus =
   | 'scheduled'
@@ -619,6 +619,116 @@ export interface ShiftGuardLeaveReconcilePayload {
   decisions: ShiftGuardLeaveReturnDecisionPayload[];
 }
 
+export type GuardPlannedLeaveType = 'paid' | 'unpaid';
+export type GuardPlannedLeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface GuardPlannedLeaveItem {
+  id: string;
+  guard_tenant_id: string;
+  ownership_type?: string | null;
+  service_provider_tenant_id?: string | null;
+  leave_type: GuardPlannedLeaveType | string;
+  request_status: GuardPlannedLeaveStatus | string;
+  reason?: string | null;
+  start_at_utc: string;
+  end_at_utc: string;
+  requested_days: number;
+  balance_days_consumed?: number;
+  requested_by_user_id?: string | null;
+  requested_by_username?: string | null;
+  requested_by_role?: string | null;
+  approved_by_user_id?: string | null;
+  approved_by_username?: string | null;
+  approval_note?: string | null;
+  approved_at?: string | null;
+  rejected_at?: string | null;
+  cancelled_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface GuardPlannedLeaveListResponse {
+  items: GuardPlannedLeaveItem[];
+  pagination: {
+    page: number;
+    rows: number;
+    total_items: number;
+    total_pages: number;
+  };
+  filters: {
+    guard_tenant_id?: string;
+    leave_status?: string;
+  };
+}
+
+export interface GuardPlannedLeaveCreatePayload {
+  guard_tenant_id?: string | null;
+  leave_type: GuardPlannedLeaveType;
+  start_at_utc: string;
+  end_at_utc: string;
+  reason?: string | null;
+}
+
+export interface GuardPlannedLeaveDecisionPayload {
+  note?: string | null;
+}
+
+export interface GuardLeavePolicyItem {
+  id: string;
+  guard_tenant_id: string;
+  ownership_type?: string | null;
+  service_provider_tenant_id?: string | null;
+  annual_paid_leave_days: number;
+  annual_unpaid_leave_days: number;
+  carry_forward_days: number;
+  effective_from: string;
+  effective_to?: string | null;
+  is_active: boolean;
+  updated_by_user_id?: string | null;
+  updated_by_username?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface GuardLeaveBalanceItem {
+  id: string;
+  guard_tenant_id: string;
+  policy_id?: string | null;
+  period_start: string;
+  period_end: string;
+  paid_leave_allocated_days: number;
+  paid_leave_used_days: number;
+  paid_leave_remaining_days: number;
+  unpaid_leave_used_days: number;
+  carry_forward_days: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface GuardLeaveBalanceResponse {
+  guard_tenant_id: string;
+  policy: GuardLeavePolicyItem;
+  balance: GuardLeaveBalanceItem;
+}
+
+export interface GuardLeaveQuotaTargetItem {
+  id: string;
+  name: string;
+  ownership_type?: string | null;
+  service_provider_tenant_id?: string | null;
+}
+
+export interface GuardLeaveQuotaTargetListResponse {
+  items: GuardLeaveQuotaTargetItem[];
+}
+
+export interface GuardLeavePolicyUpsertPayload {
+  annual_paid_leave_days: number;
+  annual_unpaid_leave_days: number;
+  carry_forward_days: number;
+  effective_from?: string | null;
+}
+
 export interface ServiceProviderGuardSummaryItem {
   id: string;
   name?: string | null;
@@ -686,6 +796,31 @@ export interface MyInvoiceLineItem {
   };
 }
 
+export interface RequestPayoutAdjustmentItem {
+  id: string;
+  payout_invoice_id: string;
+  request_id: string;
+  assignee_tenant_id?: string | null;
+  assignee_tenant_type?: ClientRequestTargetType | string | null;
+  currency?: string | null;
+  amount?: number | null;
+  reason?: string | null;
+  adjustment_status?: 'draft' | 'approved' | 'voided' | string | null;
+  status_note?: string | null;
+  created_by_user_id?: string | null;
+  created_by_username?: string | null;
+  approved_by_user_id?: string | null;
+  approved_by_username?: string | null;
+  approved_at?: string | null;
+  voided_by_user_id?: string | null;
+  voided_by_username?: string | null;
+  voided_at?: string | null;
+  updated_by_user_id?: string | null;
+  updated_by_username?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface MyInvoiceItem {
   id: string;
   request_id: string;
@@ -702,9 +837,17 @@ export interface MyInvoiceItem {
   billing_period_label?: string | null;
   currency?: string;
   committed_slots?: number | null;
+  baseline_payout_hourly_rate?: number | null;
   payout_hourly_rate?: number | null;
   estimated_total_hours?: number | null;
+  baseline_estimated_amount?: number | null;
   estimated_amount?: number | null;
+  payout_adjustment_total?: number | null;
+  payout_adjustment_count?: number | null;
+  payout_adjustment_draft_count?: number | null;
+  payout_adjustment_voided_count?: number | null;
+  payout_adjustment_registry_count?: number | null;
+  payout_adjustments?: RequestPayoutAdjustmentItem[];
   invoice_status?: string;
   line_items?: MyInvoiceLineItem[];
   note?: string | null;
@@ -727,8 +870,10 @@ export interface PlatformPayoutInvoiceItem extends MyInvoiceItem {
   assignee_label?: string | null;
   client_tenant_id?: string | null;
   client_label?: string | null;
+  request_fulfillment_mode?: ClientRequestFulfillmentMode | string | null;
   client_hourly_quote?: number | null;
   estimated_client_revenue?: number | null;
+  baseline_estimated_platform_earning?: number | null;
   estimated_platform_earning?: number | null;
   platform_cut_hourly_rate?: number | null;
   platform_margin_percent?: number | null;
@@ -758,7 +903,13 @@ export interface PlatformPayoutInvoiceListResponse {
     invoice_count?: number;
     total_client_revenue?: number;
     total_payout?: number;
+    total_baseline_payout?: number;
+    total_payout_adjustments?: number;
+    draft_payout_adjustment_count?: number;
+    approved_payout_adjustment_count?: number;
+    voided_payout_adjustment_count?: number;
     total_platform_earning?: number;
+    total_baseline_platform_earning?: number;
     total_hours?: number;
     total_guard_payout?: number;
     total_provider_payout?: number;
