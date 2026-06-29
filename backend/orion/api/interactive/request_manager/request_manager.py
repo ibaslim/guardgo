@@ -22,7 +22,7 @@ from configs.metadata_constants import CANADIAN_CITIES_BY_PROVINCE_OPTIONS, CANA
 from orion.constants import constant
 from orion.services.mail_manager.mail_manager import mail_manager
 from orion.services.mongo_manager.mongo_controller import mongo_controller
-from orion.services.mongo_manager.shared_model.db_auth_models import PLATFORM_ADMIN_ROLES, normalize_role_value
+from orion.services.mongo_manager.shared_model.db_auth_models import PLATFORM_ADMIN_ROLES, db_user_account, normalize_role_value
 from orion.services.mongo_manager.shared_model.db_billing_model import BillingRate
 from orion.services.mongo_manager.shared_model.db_request_model import (
     AssignmentLockReason,
@@ -3456,10 +3456,15 @@ class RequestManager:
     def _extract_tenant_name(profile: Optional[Dict[str, Any]]) -> str:
         if not isinstance(profile, dict):
             return ""
-        for key in ["legal_company_name", "trading_name", "legal_entity_name", "full_name", "company_name", "name"]:
+        first_name = str(profile.get("first_name") or "").strip()
+        last_name = str(profile.get("last_name") or "").strip()
+        combined_name = " ".join(part for part in [first_name, last_name] if part).strip()
+        for key in ["legal_company_name", "trading_name", "legal_entity_name", "full_name", "company_name", "business_name", "name"]:
             value = profile.get(key)
             if isinstance(value, str) and value.strip():
                 return value.strip()
+        if combined_name:
+            return combined_name
         primary_contact = cast(Dict[str, Any], profile.get("primary_contact") or {})
         representative = cast(Dict[str, Any], profile.get("primary_representative") or {})
         for candidate in [primary_contact.get("name"), representative.get("name")]:
@@ -3521,14 +3526,32 @@ class RequestManager:
         if object_ids:
             collection = self._engine.get_collection(db_tenant_model)
             docs = await collection.find({"_id": {"$in": object_ids}}).to_list(length=None)
+            unresolved_guard_ids: List[str] = []
             for doc in docs:
                 tenant_id = str(doc.get("_id") or "")
                 profile = cast(Dict[str, Any], doc.get("profile") or {})
-                label_lookup[tenant_id] = (
+                resolved_label = (
                     self._extract_tenant_name(profile)
                     or str(doc.get("name") or "").strip()
-                    or tenant_id
                 )
+                if resolved_label and resolved_label != "N/A":
+                    label_lookup[tenant_id] = resolved_label
+                    continue
+                if str(doc.get("tenant_type") or "").strip() == "guard":
+                    unresolved_guard_ids.append(tenant_id)
+                    continue
+                label_lookup[tenant_id] = tenant_id
+
+            if unresolved_guard_ids:
+                guard_users = await self._engine.find(
+                    db_user_account,
+                    db_user_account.tenant_uuid.in_(unresolved_guard_ids),
+                )
+                for user in guard_users:
+                    tenant_id = str(getattr(user, "tenant_uuid", "") or "").strip()
+                    full_name = str(getattr(user, "full_name", "") or "").strip()
+                    if tenant_id and full_name:
+                        label_lookup[tenant_id] = full_name
 
         for tenant_id in normalized_ids:
             label_lookup.setdefault(tenant_id, tenant_id)

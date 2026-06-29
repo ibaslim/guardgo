@@ -94,7 +94,7 @@
         ></app-summary-metric-card>
         <app-summary-metric-card
           label="Shift Window"
-          [value]="formatBackendDateTime(focus.shift.shift_start_at_utc) + ' to ' + formatBackendDateTime(focus.shift.shift_end_at_utc)"
+          [value]="formatShiftDateTime(focus.shift.shift_start_at_utc, focus.shift) + ' to ' + formatShiftDateTime(focus.shift.shift_end_at_utc, focus.shift)"
           [containerClass]="metricCompactContainerClass"
           [valueClass]="metricCompactValueClass"
         ></app-summary-metric-card>
@@ -169,7 +169,7 @@
         ></app-summary-metric-card>
         <app-summary-metric-card
           label="Shift Start"
-          [value]="formatBackendDateTime(focus.shift.shift_start_at_utc)"
+          [value]="formatShiftDateTime(focus.shift.shift_start_at_utc, focus.shift)"
           [containerClass]="metricCompactContainerClass"
           [valueClass]="metricCompactValueClass"
         ></app-summary-metric-card>
@@ -238,7 +238,7 @@
         ></app-summary-metric-card>
         <app-summary-metric-card
           label="Shift Window"
-          [value]="formatBackendDateTime(focus.shift.shift_start_at_utc) + ' to ' + formatBackendDateTime(focus.shift.shift_end_at_utc)"
+          [value]="formatShiftDateTime(focus.shift.shift_start_at_utc, focus.shift) + ' to ' + formatShiftDateTime(focus.shift.shift_end_at_utc, focus.shift)"
           [containerClass]="metricCompactContainerClass"
           [valueClass]="metricCompactValueClass"
         ></app-summary-metric-card>
@@ -570,7 +570,7 @@
                     >
                       <div class="break-words font-semibold">{{ getShiftRequestTitle(shift) }}</div>
                       <div class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                        {{ formatBackendDateTime(shift.shift_start_at_utc) }}
+                        {{ formatShiftDateTime(shift.shift_start_at_utc, shift) }}
                       </div>
                       <div class="mt-2 text-[11px] font-medium text-blue-700 dark:text-blue-300">
                         Open shift details
@@ -622,7 +622,7 @@
           <span *ngIf="shift.client_action_required" class="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
             Client Action Required
           </span>
-          <span class="text-xs text-gray-400 dark:text-gray-500">{{ shift.shift_date_local }} • {{ formatBackendDateTime(shift.shift_start_at_utc) }}</span>
+          <span class="text-xs text-gray-400 dark:text-gray-500">{{ shift.shift_date_local }} • {{ formatShiftDateTime(shift.shift_start_at_utc, shift) }}</span>
         </div>
 
         <h3 record-title class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getShiftRequestTitle(shift) }}</h3>
@@ -630,7 +630,7 @@
         <div record-meta>
           <span>{{ getShiftRequestSiteName(shift) }}</span>
           <span>{{ getShiftStatusSummary(shift) }}</span>
-          <span *ngIf="shift.roster_due_at">Assign guard by {{ formatBackendDateTime(shift.roster_due_at) }}</span>
+          <span *ngIf="shift.roster_due_at">Assign guard by {{ formatShiftDateTime(shift.roster_due_at, shift) }}</span>
         </div>
 
         <div record-actions>
@@ -799,7 +799,7 @@
           <span class="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
             Slot {{ item.slot.slot_number }}
           </span>
-          <span class="text-xs text-gray-400 dark:text-gray-500">{{ item.shift.shift_date_local }} • {{ formatBackendDateTime(item.shift.shift_start_at_utc) }}</span>
+          <span class="text-xs text-gray-400 dark:text-gray-500">{{ item.shift.shift_date_local }} • {{ formatShiftDateTime(item.shift.shift_start_at_utc, item.shift) }}</span>
         </div>
 
         <h3 record-title class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ getExceptionTitle(item) }}</h3>
@@ -1625,7 +1625,7 @@
         <app-summary-metric-card
           *ngIf="request.request_expires_at"
           label="Response Cutoff"
-          [value]="formatBackendDateTime(request.request_expires_at)"
+          [value]="formatRequestDateTime(request.request_expires_at, request)"
         ></app-summary-metric-card>
       </div>
 
@@ -2098,7 +2098,7 @@
                 <p class="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{{ item.description || 'Coverage line item' }}</p>
                 <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
                   <span *ngIf="item.metadata?.start_at_local && item.metadata?.end_at_local">
-                    {{ formatBackendDateTime(item.metadata?.start_at_local || '') }} to {{ formatBackendDateTime(item.metadata?.end_at_local || '') }}
+                    {{ formatServiceWindowDateTime(item.metadata?.start_at_local || '') }} to {{ formatServiceWindowDateTime(item.metadata?.end_at_local || '') }}
                   </span>
                   <span *ngIf="getInvoiceLineItemHoursPerPosition(item)"> · {{ getInvoiceLineItemHoursPerPosition(item) | number:'1.0-2' }} hr / position</span>
                 </div>
@@ -2404,7 +2404,7 @@
       drawer-header
       *ngIf="selectedShift as shift"
       [title]="getShiftRequestTitle(shift)"
-      [subtitle]="getShiftRequestSiteName(shift) + ' • ' + shift.shift_date_local + ' • ' + formatBackendDateTime(shift.shift_start_at_utc)"
+      [subtitle]="getShiftRequestSiteName(shift) + ' • ' + shift.shift_date_local + ' • ' + formatShiftDateTime(shift.shift_start_at_utc, shift)"
     ></app-drawer-title-block>
 
     <div drawer-body *ngIf="selectedShift as shift" class="space-y-5">
@@ -2421,11 +2421,11 @@
         <app-summary-metric-card label="Shift Status" [value]="formatTokenLabel(shift.instance_status)"></app-summary-metric-card>
         <app-summary-metric-card
           label="Schedule"
-          [value]="formatBackendDateTime(shift.shift_start_at_utc) + ' to ' + formatBackendDateTime(shift.shift_end_at_utc)"
+          [value]="formatShiftDateTime(shift.shift_start_at_utc, shift) + ' to ' + formatShiftDateTime(shift.shift_end_at_utc, shift)"
         ></app-summary-metric-card>
         <app-summary-metric-card
           label="Roster Due"
-          [value]="shift.roster_due_at ? formatBackendDateTime(shift.roster_due_at) : 'Not set'"
+          [value]="shift.roster_due_at ? formatShiftDateTime(shift.roster_due_at, shift) : 'Not set'"
         ></app-summary-metric-card>
         <app-summary-metric-card label="Shift Summary" [value]="getShiftStatusSummary(shift)"></app-summary-metric-card>
       </div>
@@ -2533,10 +2533,10 @@
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <app-summary-metric-card label="Status" [value]="formatTokenLabel(slot.slot_status)"></app-summary-metric-card>
         <app-summary-metric-card label="Coverage" [value]="getShiftSlotCoverageLabel(slot)"></app-summary-metric-card>
-        <app-summary-metric-card label="Guard / Tenant" [value]="getShiftSlotTenantLabel(slot)"></app-summary-metric-card>
+        <app-summary-metric-card [label]="getShiftSlotIdentityLabel(slot)" [value]="getShiftSlotTenantLabel(slot)"></app-summary-metric-card>
         <app-summary-metric-card
           label="Roster Due"
-          [value]="slot.roster_due_at ? formatBackendDateTime(slot.roster_due_at) : 'Not set'"
+          [value]="slot.roster_due_at ? formatShiftDateTime(slot.roster_due_at, selectedShift) : 'Not set'"
         ></app-summary-metric-card>
       </div>
 
@@ -2562,7 +2562,7 @@
           ></app-summary-metric-card>
           <app-summary-metric-card
             label="Shift Window"
-            [value]="formatBackendDateTime(shift.shift_start_at_utc) + ' to ' + formatBackendDateTime(shift.shift_end_at_utc)"
+            [value]="formatShiftDateTime(shift.shift_start_at_utc, shift) + ' to ' + formatShiftDateTime(shift.shift_end_at_utc, shift)"
             [containerClass]="metricCompactContainerClass"
             [valueClass]="metricCompactValueClass"
           ></app-summary-metric-card>
@@ -2605,7 +2605,7 @@
 
     <div drawer-body *ngIf="selectedShiftLeaveTarget as slot" class="space-y-5">
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <app-summary-metric-card label="Guard / Tenant" [value]="getShiftSlotTenantLabel(slot)"></app-summary-metric-card>
+        <app-summary-metric-card [label]="getShiftSlotIdentityLabel(slot)" [value]="getShiftSlotTenantLabel(slot)"></app-summary-metric-card>
         <app-summary-metric-card label="Coverage" [value]="getShiftSlotCoverageLabel(slot)"></app-summary-metric-card>
         <app-summary-metric-card label="Slot Status" [value]="formatTokenLabel(slot.slot_status)"></app-summary-metric-card>
         <app-summary-metric-card label="Active Leaves" [value]="selectedShiftGuardLeaves.length"></app-summary-metric-card>
@@ -2980,7 +2980,7 @@
       drawer-header
       *ngIf="selectedRosterShift as shift"
       title="Roster Provider Guards"
-      [subtitle]="getShiftRequestTitle(shift) + ' • ' + shift.shift_date_local + ' • ' + formatBackendDateTime(shift.shift_start_at_utc)"
+      [subtitle]="getShiftRequestTitle(shift) + ' • ' + shift.shift_date_local + ' • ' + formatShiftDateTime(shift.shift_start_at_utc, shift)"
     ></app-drawer-title-block>
 
     <div drawer-body *ngIf="selectedRosterShift as shift" class="space-y-5">
@@ -3105,7 +3105,7 @@
       drawer-header
       *ngIf="selectedBulkConfirmShift as shift"
       title="Bulk Confirm Arrivals"
-      [subtitle]="getShiftRequestTitle(shift) + ' • ' + shift.shift_date_local + ' • ' + formatBackendDateTime(shift.shift_start_at_utc)"
+      [subtitle]="getShiftRequestTitle(shift) + ' • ' + shift.shift_date_local + ' • ' + formatShiftDateTime(shift.shift_start_at_utc, shift)"
     ></app-drawer-title-block>
 
     <div drawer-body *ngIf="selectedBulkConfirmShift as shift" class="space-y-5">
@@ -3172,7 +3172,7 @@
     <div drawer-body *ngIf="shiftActionTarget as slot" class="space-y-5">
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <app-summary-metric-card label="Slot Status" [value]="formatTokenLabel(slot.slot_status)"></app-summary-metric-card>
-        <app-summary-metric-card label="Guard / Tenant" [value]="getShiftSlotTenantLabel(slot)"></app-summary-metric-card>
+        <app-summary-metric-card [label]="getShiftSlotIdentityLabel(slot)" [value]="getShiftSlotTenantLabel(slot)"></app-summary-metric-card>
       </div>
 
       <div *ngIf="shiftActionType === 'check_in'" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -3267,9 +3267,9 @@
     <div drawer-body *ngIf="selectedException as item" class="space-y-5">
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <app-summary-metric-card label="Exception Status" [value]="formatTokenLabel(item.slot.slot_status)"></app-summary-metric-card>
-        <app-summary-metric-card label="Shift Start" [value]="formatBackendDateTime(item.shift.shift_start_at_utc)"></app-summary-metric-card>
+        <app-summary-metric-card label="Shift Start" [value]="formatShiftDateTime(item.shift.shift_start_at_utc, item.shift)"></app-summary-metric-card>
         <app-summary-metric-card label="Slot" [value]="'Slot ' + item.slot.slot_number"></app-summary-metric-card>
-        <app-summary-metric-card label="Guard / Tenant" [value]="getExceptionGuardLabel(item)"></app-summary-metric-card>
+        <app-summary-metric-card [label]="item.slot.assigned_guard_name || item.slot.assigned_guard_tenant_id ? 'Assigned Guard' : 'Coverage Owner'" [value]="getExceptionGuardLabel(item)"></app-summary-metric-card>
       </div>
 
       <app-section
@@ -3346,7 +3346,7 @@
 
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <app-summary-metric-card label="Current Status" [value]="formatTokenLabel(item.slot.slot_status)"></app-summary-metric-card>
-        <app-summary-metric-card label="Shift Start" [value]="formatBackendDateTime(item.shift.shift_start_at_utc)"></app-summary-metric-card>
+        <app-summary-metric-card label="Shift Start" [value]="formatShiftDateTime(item.shift.shift_start_at_utc, item.shift)"></app-summary-metric-card>
       </div>
 
       <div>
@@ -3424,7 +3424,7 @@
           <app-summary-metric-card
             label="Schedule"
             [value]="request.requested_start_at
-              ? (formatBackendDateTime(request.requested_start_at) + (request.requested_end_at ? ' to ' + formatBackendDateTime(request.requested_end_at) : ''))
+              ? (formatRequestDateTime(request.requested_start_at, request) + (request.requested_end_at ? ' to ' + formatRequestDateTime(request.requested_end_at, request) : ''))
               : 'Not scheduled'"
           ></app-summary-metric-card>
           <app-summary-metric-card
@@ -3526,31 +3526,6 @@
         [containerClass]="'rounded-md p-4'"
         [bodyClass]="'mt-2 text-sm leading-6'"
       ></app-banner>
-
-      <app-section
-        *ngIf="job.assignee_tenant_type === 'service_provider'"
-        [title]="'Assigned Guards'"
-        [subtitle]="'Named guards currently rostered by this provider against this job.'"
-        [containerClass]="drawerSectionContainerClass"
-        [headerClass]="drawerSectionHeaderClass"
-        [titleClass]="drawerSectionTitleClass"
-        [subtitleClass]="drawerSectionSubtitleClass"
-      >
-        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <app-summary-metric-card
-            label="Assigned Guard Count"
-            [value]="job.assigned_guard_count || 0"
-            [containerClass]="metricCompactContainerClass"
-            [valueClass]="metricCompactValueClass"
-          ></app-summary-metric-card>
-          <app-summary-metric-card
-            label="Assigned Guards"
-            [value]="getJobAssignedGuardSummary(job)"
-            [containerClass]="'rounded-2xl border border-gray-100 bg-white px-4 py-4 shadow-sm dark:border-gray-800 dark:bg-gray-950 sm:col-span-2 xl:col-span-3'"
-            [valueClass]="metricCompactValueClass"
-          ></app-summary-metric-card>
-        </div>
-      </app-section>
 
       <ng-container *ngIf="getJobPricingRequestContext(job, selectedJobRequest) as pricingRequest">
         <app-section
@@ -3655,7 +3630,7 @@
     <app-drawer-action-row drawer-footer *ngIf="selectedJob as job">
       <app-button
         *ngIf="canOpenJobShiftOperations(job)"
-        label="Open Attendance Steps"
+        label="Open Shift Detail"
         type="secondary"
         [loadingScope]="jobShiftLookupScope"
         (pressed)="openJobShiftOperations(job)"

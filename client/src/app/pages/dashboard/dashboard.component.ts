@@ -211,7 +211,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           helperText: `${this.platformPendingTenants.length} newest approvals shown below`,
         },
         {
-          label: 'Client Revenue',
+          label: 'Client Coverage Value',
           value: this.formatMoney(this.totalClientRevenue),
           helperText: `${this.platformInvoiceCount} payout invoices normalized into the platform finance view`,
         },
@@ -228,7 +228,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         {
           label: 'Platform Margin',
           value: this.formatMoney(this.totalPlatformEarning),
-          helperText: `${this.formatPercent(this.platformMarginPercent)} net margin across normalized revenue and payout`,
+          helperText: `${this.formatPercent(this.platformMarginPercent)} net margin across coverage value and payout`,
         },
       ];
     }
@@ -926,7 +926,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       .map((item) => ({
         title: item.invoice_number,
         subtitle: `${item.assignee_label || item.assignee_tenant_id || 'Assignee unavailable'} • ${item.request_title || 'Coverage invoice'}`,
-        meta: `${this.formatMoney(item.estimated_client_revenue, item.currency || 'CAD')} revenue • ${this.formatMoney(item.estimated_platform_earning, item.currency || 'CAD')} earning • ${this.formatTokenLabel(item.linked_client_invoice_status || item.invoice_status)}`,
+        meta: `${this.formatMoney(item.estimated_client_revenue, item.currency || 'CAD')} coverage value • ${this.formatMoney(item.estimated_platform_earning, item.currency || 'CAD')} margin • ${this.formatTokenLabel(item.linked_client_invoice_status || item.invoice_status)}`,
         route: `/dashboard/payout-invoices?invoice=${item.id}`,
       }));
   }

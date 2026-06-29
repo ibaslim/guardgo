@@ -36,10 +36,18 @@ export function formatDate(date: Date | string, locale: string = 'en-CA'): strin
  */
 export function formatBackendDateTime(
   value: Date | string | null | undefined,
-  locale: string = 'en-CA'
+  locale: string = 'en-CA',
+  options?: {
+    timeZone?: string | null;
+    preserveLocalTime?: boolean;
+    timeZoneName?: 'short' | 'long';
+  },
 ): string {
   if (!value) return '-';
-  const dateObj = value instanceof Date ? value : new Date(value);
+  const preserveLocalTime = Boolean(options?.preserveLocalTime);
+  const dateObj = preserveLocalTime
+    ? parseIsoAsLocalWallTime(value)
+    : (value instanceof Date ? value : new Date(value));
   if (Number.isNaN(dateObj.getTime())) return '-';
 
   return new Intl.DateTimeFormat(locale, {
@@ -47,8 +55,32 @@ export function formatBackendDateTime(
     month: 'short',
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    timeZone: options?.timeZone || undefined,
+    timeZoneName: options?.timeZoneName,
   }).format(dateObj);
+}
+
+function parseIsoAsLocalWallTime(value: Date | string): Date {
+  if (value instanceof Date) {
+    return value;
+  }
+  const raw = String(value || '').trim();
+  const match = raw.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/,
+  );
+  if (!match) {
+    return new Date(raw);
+  }
+  const [, year, month, day, hour, minute, second = '00'] = match;
+  return new Date(Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+  ));
 }
 
 /**

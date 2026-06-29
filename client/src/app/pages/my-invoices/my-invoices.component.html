@@ -215,7 +215,7 @@
                   <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
                     {{ formatDate(item.service_date_local || null) }}
                     <span *ngIf="item.metadata?.start_at_local && item.metadata?.end_at_local">
-                      · {{ formatDateTime(item.metadata?.start_at_local || null) }} to {{ formatDateTime(item.metadata?.end_at_local || null) }}
+                      · {{ formatServiceWindowDateTime(item.metadata?.start_at_local || null) }} to {{ formatServiceWindowDateTime(item.metadata?.end_at_local || null) }}
                     </span>
                   </div>
                 </div>

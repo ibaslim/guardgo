@@ -179,6 +179,10 @@ export class MyInvoicesComponent implements OnInit, OnDestroy {
     return formatBackendDateTime(value || null);
   }
 
+  formatServiceWindowDateTime(value: string | null | undefined): string {
+    return formatBackendDateTime(value || null, 'en-CA', { preserveLocalTime: true });
+  }
+
   formatDate(value: string | null | undefined): string {
     if (!value) {
       return '—';
