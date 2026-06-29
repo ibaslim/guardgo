@@ -1217,6 +1217,7 @@ async def test_start_shift_slot_uses_actor_timezone_for_system_generated_shift_a
 @pytest.mark.anyio
 async def test_roster_shift_assigns_provider_guard_to_provider_slot(monkeypatch):
     engine = FakeEngine()
+    notifications = []
     request_record = _make_request(guards_required=3, request_status=RequestStatus.SUBMITTED)
     engine.request_record = request_record
     provider_assignment = _make_assignment(
@@ -1259,6 +1260,11 @@ async def test_roster_shift_assigns_provider_guard_to_provider_slot(monkeypatch)
     )
     manager = object.__new__(RequestShiftManager)
     manager._engine = engine
+    class FakeNotificationManager:
+        async def create_for_tenant_admin_users(self, **kwargs):
+            notifications.append(kwargs)
+
+    monkeypatch.setattr(NotificationManager, "get_instance", staticmethod(lambda: FakeNotificationManager()))
     monkeypatch.setattr(
         "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
         lambda: _fake_request_manager(
@@ -1285,6 +1291,11 @@ async def test_roster_shift_assigns_provider_guard_to_provider_slot(monkeypatch)
     assert updated_slot.assigned_guard_tenant_id == "guard-provider-1"
     assert updated_slot.slot_status == ShiftSlotStatus.ROSTERED
     assert result["slot_summary"]["rostered_slots"] >= 1
+    assert any(
+        notification.get("tenant_id") == "guard-provider-1"
+        and notification.get("title") == "New shift assignment"
+        for notification in notifications
+    )
 
 
 @pytest.mark.anyio

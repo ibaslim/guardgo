@@ -253,6 +253,272 @@ async def test_list_requests_filters_client_tenant_and_sets_tenant_label():
 
 
 @pytest.mark.anyio
+async def test_get_request_by_id_strips_matching_candidates_for_provider_viewer():
+    manager = object.__new__(RequestManager)
+    record = _make_request_record(
+        client_tenant_id="client-1",
+        pricing_snapshot={"client_hourly_quote": 32.5},
+        matched_candidates=[{"candidate_id": "guard-1", "candidate_name": "Guard One", "eligible": True}],
+    )
+
+    async def _get_request_or_404(_request_id):
+        return record
+
+    async def _can_view_request(_record, _current_user):
+        return True
+
+    async def _sync_request_runtime_state(_record):
+        return None
+
+    async def _get_session_tenant(_current_user):
+        return SimpleNamespace(id="provider-1", tenant_type=TenantType.SERVICE_PROVIDER)
+
+    async def _resolve_viewer_assignment_for_request(_request_id, _current_user):
+        return None
+
+    async def _build_client_tenant_label_lookup(_tenant_ids):
+        return {"client-1": "Client One"}
+
+    manager._get_request_or_404 = _get_request_or_404
+    manager._can_view_request = _can_view_request
+    manager._sync_request_runtime_state = _sync_request_runtime_state
+    manager._refresh_request_finance_snapshot = _async_return
+    manager._get_session_tenant = _get_session_tenant
+    manager._resolve_viewer_assignment_for_request = _resolve_viewer_assignment_for_request
+    manager._build_client_tenant_label_lookup = _build_client_tenant_label_lookup
+    manager._role_value = lambda _user: "sp_admin"
+    manager._is_platform_role = lambda _role: False
+
+    response = await manager.get_request_by_id("req-1", current_user=SimpleNamespace())
+
+    assert response["matched_candidates"] == []
+    assert response["client_tenant_label"] == "Client One"
+
+
+@pytest.mark.anyio
+async def test_get_request_wave_by_id_strips_candidate_snapshots_for_provider_viewer():
+    manager = object.__new__(RequestManager)
+    record = _make_request_record(id="req-1", client_tenant_id="client-1")
+    wave = SimpleNamespace(
+        id=ObjectId(),
+        request_id="req-1",
+        client_tenant_id="client-1",
+        request_revision=2,
+        wave_number=1,
+        trigger=RequestWaveTrigger.INITIAL_PUBLISH,
+        wave_status=RequestWaveStatus.ACTIVE,
+        request_snapshot={"title": "Night Patrol"},
+        match_summary_snapshot={"eligible_count": 4},
+        candidate_snapshots=[{"candidate_id": "guard-1", "candidate_name": "Guard One"}],
+        review_reason_codes=["needs_review"],
+        review_findings=[{"reason_code": "needs_review"}],
+        review_note="Internal note",
+        reviewed_by_user_id=None,
+        reviewed_by_username=None,
+        review_requested_at=None,
+        reviewed_at=None,
+        returned_at=None,
+        activated_at=None,
+        wave_expires_at=None,
+        filled_at=None,
+        expired_at=None,
+        superseded_at=None,
+        cancelled_at=None,
+        open_slots_at_send=2,
+        offer_count=1,
+        accepted_slots_at_close=0,
+        created_at=None,
+        updated_at=None,
+    )
+
+    async def _get_wave_or_404(_wave_id):
+        return wave
+
+    async def _get_request_or_404(_request_id):
+        return record
+
+    async def _can_view_request(_record, _current_user):
+        return True
+
+    async def _sync_request_runtime_state(_record):
+        return None
+
+    async def _get_session_tenant(_current_user):
+        return SimpleNamespace(id="provider-1", tenant_type=TenantType.SERVICE_PROVIDER)
+
+    manager._get_wave_or_404 = _get_wave_or_404
+    manager._get_request_or_404 = _get_request_or_404
+    manager._can_view_request = _can_view_request
+    manager._sync_request_runtime_state = _sync_request_runtime_state
+    manager._get_session_tenant = _get_session_tenant
+    manager._role_value = lambda _user: "sp_admin"
+    manager._is_platform_role = lambda _role: False
+
+    response = await manager.get_request_wave_by_id("wave-1", current_user=SimpleNamespace())
+
+    assert response["candidate_snapshots"] == []
+    assert response["review_reason_codes"] == []
+    assert response["review_findings"] == []
+    assert response["review_note"] is None
+
+
+@pytest.mark.anyio
+async def test_list_request_waves_strips_review_data_for_provider_viewer():
+    manager = object.__new__(RequestManager)
+    record = _make_request_record(id="req-1", client_tenant_id="client-1")
+    wave_id = ObjectId()
+
+    class _WaveEngine:
+        @staticmethod
+        def get_collection(_model):
+            return _FakeCollection([
+                {
+                    "_id": wave_id,
+                    "request_id": "req-1",
+                    "client_tenant_id": "client-1",
+                    "request_revision": 2,
+                    "wave_number": 1,
+                    "trigger": RequestWaveTrigger.INITIAL_PUBLISH.value,
+                    "wave_status": RequestWaveStatus.ACTIVE.value,
+                    "request_snapshot": {"title": "Night Patrol"},
+                    "match_summary_snapshot": {"eligible_count": 4},
+                    "candidate_snapshots": [{"candidate_id": "guard-1"}],
+                    "review_reason_codes": ["needs_review"],
+                    "review_findings": [{"reason_code": "needs_review"}],
+                    "review_note": "Internal note",
+                    "open_slots_at_send": 2,
+                    "offer_count": 1,
+                    "accepted_slots_at_close": 0,
+                    "created_at": datetime(2026, 6, 29, 10, 0),
+                    "updated_at": datetime(2026, 6, 29, 10, 0),
+                }
+            ])
+
+    async def _get_request_or_404(_request_id):
+        return record
+
+    async def _can_view_request(_record, _current_user):
+        return True
+
+    async def _get_session_tenant(_current_user):
+        return SimpleNamespace(id="provider-1", tenant_type=TenantType.SERVICE_PROVIDER)
+
+    manager._engine = _WaveEngine()
+    manager._get_request_or_404 = _get_request_or_404
+    manager._can_view_request = _can_view_request
+    manager._get_session_tenant = _get_session_tenant
+    manager._role_value = lambda _user: "sp_admin"
+    manager._is_platform_role = lambda _role: False
+
+    response = await manager.list_request_waves("req-1", current_user=SimpleNamespace(), page=1, rows=20)
+
+    assert response["items"][0]["candidate_snapshots"] == []
+    assert response["items"][0]["review_reason_codes"] == []
+    assert response["items"][0]["review_findings"] == []
+    assert response["items"][0]["review_note"] is None
+
+
+@pytest.mark.anyio
+async def test_get_request_by_id_strips_matching_candidates_for_platform_viewer():
+    manager = object.__new__(RequestManager)
+    record = _make_request_record(
+        client_tenant_id="client-1",
+        pricing_snapshot={"client_hourly_quote": 32.5},
+        matched_candidates=[{"candidate_id": "guard-1", "candidate_name": "Guard One", "eligible": True}],
+    )
+
+    async def _get_request_or_404(_request_id):
+        return record
+
+    async def _can_view_request(_record, _current_user):
+        return True
+
+    async def _sync_request_runtime_state(_record):
+        return None
+
+    async def _resolve_viewer_assignment_for_request(_request_id, _current_user):
+        return None
+
+    async def _build_client_tenant_label_lookup(_tenant_ids):
+        return {"client-1": "Client One"}
+
+    manager._get_request_or_404 = _get_request_or_404
+    manager._can_view_request = _can_view_request
+    manager._sync_request_runtime_state = _sync_request_runtime_state
+    manager._refresh_request_finance_snapshot = _async_return
+    manager._resolve_viewer_assignment_for_request = _resolve_viewer_assignment_for_request
+    manager._build_client_tenant_label_lookup = _build_client_tenant_label_lookup
+    manager._role_value = lambda _user: "ops_admin"
+
+    response = await manager.get_request_by_id("req-1", current_user=SimpleNamespace())
+
+    assert response["matched_candidates"] == []
+    assert response["client_tenant_label"] == "Client One"
+
+
+@pytest.mark.anyio
+async def test_get_request_wave_by_id_strips_candidate_snapshots_for_platform_viewer():
+    manager = object.__new__(RequestManager)
+    record = _make_request_record(id="req-1", client_tenant_id="client-1")
+    wave = SimpleNamespace(
+        id=ObjectId(),
+        request_id="req-1",
+        client_tenant_id="client-1",
+        request_revision=2,
+        wave_number=1,
+        trigger=RequestWaveTrigger.INITIAL_PUBLISH,
+        wave_status=RequestWaveStatus.ACTIVE,
+        request_snapshot={"title": "Night Patrol"},
+        match_summary_snapshot={"eligible_count": 4},
+        candidate_snapshots=[{"candidate_id": "guard-1", "candidate_name": "Guard One"}],
+        review_reason_codes=["needs_review"],
+        review_findings=[{"reason_code": "needs_review"}],
+        review_note="Internal note",
+        reviewed_by_user_id=None,
+        reviewed_by_username=None,
+        review_requested_at=None,
+        reviewed_at=None,
+        returned_at=None,
+        activated_at=None,
+        wave_expires_at=None,
+        filled_at=None,
+        expired_at=None,
+        superseded_at=None,
+        cancelled_at=None,
+        open_slots_at_send=2,
+        offer_count=1,
+        accepted_slots_at_close=0,
+        created_at=None,
+        updated_at=None,
+    )
+
+    async def _get_wave_or_404(_wave_id):
+        return wave
+
+    async def _get_request_or_404(_request_id):
+        return record
+
+    async def _can_view_request(_record, _current_user):
+        return True
+
+    async def _sync_request_runtime_state(_record):
+        return None
+
+    manager._get_wave_or_404 = _get_wave_or_404
+    manager._get_request_or_404 = _get_request_or_404
+    manager._can_view_request = _can_view_request
+    manager._sync_request_runtime_state = _sync_request_runtime_state
+    manager._role_value = lambda _user: "ops_admin"
+
+    response = await manager.get_request_wave_by_id("wave-1", current_user=SimpleNamespace())
+
+    assert response["candidate_snapshots"] == []
+    assert response["review_reason_codes"] == []
+    assert response["review_findings"] == []
+    assert response["review_note"] is None
+
+
+@pytest.mark.anyio
 async def test_list_requests_backfills_missing_pricing_snapshot_for_response_docs():
     manager = object.__new__(RequestManager)
 

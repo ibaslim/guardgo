@@ -3912,6 +3912,8 @@ class RequestShiftManager:
             if str(getattr(guard, "service_provider_tenant_id", "") or "").strip() != slot_provider_tenant_id:
                 raise HTTPException(status_code=400, detail="Guard does not belong to the service provider that owns this slot")
 
+            previous_guard_tenant_id = str(getattr(slot_record, "assigned_guard_tenant_id", "") or "").strip()
+            previous_slot_status = str(getattr(getattr(slot_record, "slot_status", None), "value", getattr(slot_record, "slot_status", "")) or "").strip()
             slot_record.assigned_guard_tenant_id = str(guard.id)
             slot_record.slot_status = ShiftSlotStatus.ROSTERED
             slot_record.rostered_at = now
@@ -3919,6 +3921,27 @@ class RequestShiftManager:
             slot_record.updated_at = now
             await self._engine.save(slot_record)
             touched_provider_ids.add(slot_provider_tenant_id)
+
+            if previous_guard_tenant_id != str(guard.id) or previous_slot_status != ShiftSlotStatus.ROSTERED.value:
+                await NotificationManager.get_instance().create_for_tenant_admin_users(
+                    tenant_id=str(guard.id),
+                    title="New shift assignment",
+                    message=(
+                        f"{request_record.title}: your service provider assigned you to an upcoming shift. "
+                        "Review the shift details and be ready for check-in."
+                    ),
+                    category="info",
+                    source_module="requests",
+                    action_url=f"/dashboard/requests?tab=shifts&slot={slot_record.id}",
+                    action_label="Open shift slot",
+                    metadata={
+                        "request_id": str(request_record.id),
+                        "shift_id": str(shift_record.id),
+                        "slot_id": str(slot_record.id),
+                        "guard_tenant_id": str(guard.id),
+                        "service_provider_tenant_id": slot_provider_tenant_id,
+                    },
+                )
 
         await self._sync_shift_slots_for_shift(
             request_record=request_record,

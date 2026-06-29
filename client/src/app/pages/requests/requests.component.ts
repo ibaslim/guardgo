@@ -1769,6 +1769,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   loadRequestWaves(requestId: string, options?: { silent?: boolean; suppressError?: boolean }): void {
+    if (!this.canViewRequestMatchingInsights) {
+      this.selectedRequestWaves = [];
+      this.requestWavesLoading = false;
+      return;
+    }
     const silent = Boolean(options?.silent);
     const suppressError = Boolean(options?.suppressError);
     this.requestWavesLoading = true;
@@ -2262,6 +2267,14 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   get canViewRequestInvoices(): boolean {
+    return this.isClientAdmin || this.isPlatformAdmin;
+  }
+
+  get canViewRequestMatchingInsights(): boolean {
+    return this.isClientAdmin;
+  }
+
+  get canOpenWaveReviewDetails(): boolean {
     return this.isClientAdmin || this.isPlatformAdmin;
   }
 
@@ -3183,6 +3196,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   openWaveDetails(wave: RequestBroadcastWaveItem): void {
+    if (!this.canOpenWaveReviewDetails) {
+      return;
+    }
     if (this.selectedRequest) {
       this.closeRequestDrawer();
     }
@@ -3191,6 +3207,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   openWaveById(waveId: string, options?: { silent?: boolean; suppressError?: boolean }): void {
+    if (!this.canOpenWaveReviewDetails) {
+      return;
+    }
     const silent = Boolean(options?.silent);
     const suppressError = Boolean(options?.suppressError);
     this.requestService.getRequestWave(waveId, {
@@ -3573,6 +3592,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
         }
       }
     });
+
+    if (!this.canViewRequestMatchingInsights) {
+      this.selectedJobWaves = [];
+      return;
+    }
 
     this.requestService.listRequestWaves(job.request_id, 1, 20, {
       loadingScope: this.jobDetailWavesScope,

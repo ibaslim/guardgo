@@ -1751,7 +1751,7 @@
       </app-section>
 
       <app-section
-        *ngIf="getTopCandidateNames(request).length"
+        *ngIf="canViewRequestMatchingInsights && getTopCandidateNames(request).length"
         [title]="'Best Match Candidates'"
         [containerClass]="drawerSectionContainerClass"
         [headerClass]="drawerSectionHeaderClass"
@@ -1971,6 +1971,7 @@
       </app-section>
 
       <app-section
+        *ngIf="canViewRequestMatchingInsights"
         [title]="'Offer History'"
         [containerClass]="drawerSectionContainerClass"
         [headerClass]="drawerSectionHeaderClass"
@@ -3572,6 +3573,7 @@
       </ng-container>
 
       <app-section
+        *ngIf="canViewRequestMatchingInsights"
         [title]="'Offer Round Details'"
         [subtitle]="'See which offer round created this offer and when it was sent.'"
         [containerClass]="drawerSectionContainerClass"
