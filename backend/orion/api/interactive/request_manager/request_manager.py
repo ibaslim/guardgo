@@ -3467,6 +3467,37 @@ class RequestManager:
 
         return serialized
 
+    async def _can_view_request_matching_insights(
+        self,
+        record: ClientRequestRecord | Dict[str, Any],
+        current_user,
+    ) -> bool:
+        role_value = self._role_value(current_user)
+        if role_value != "client_admin":
+            return False
+
+        session_tenant = await self._get_session_tenant(current_user)
+        client_tenant_id = record.get("client_tenant_id") if isinstance(record, dict) else getattr(record, "client_tenant_id", None)
+        return (
+            session_tenant.tenant_type == TenantType.CLIENT
+            and str(session_tenant.id) == str(client_tenant_id)
+        )
+
+    @staticmethod
+    def _strip_request_matching_insights(serialized: Dict[str, Any]) -> Dict[str, Any]:
+        sanitized = dict(serialized)
+        sanitized["matched_candidates"] = []
+        return sanitized
+
+    @staticmethod
+    def _strip_wave_matching_insights(serialized: Dict[str, Any]) -> Dict[str, Any]:
+        sanitized = dict(serialized)
+        sanitized["candidate_snapshots"] = []
+        sanitized["review_reason_codes"] = []
+        sanitized["review_findings"] = []
+        sanitized["review_note"] = None
+        return sanitized
+
     async def list_request_client_tenants(self, current_user, keyword: str = "", rows: int = 100) -> Dict[str, Any]:
         if not self._is_platform_role(self._role_value(current_user)):
             raise HTTPException(status_code=403, detail="Access forbidden")
@@ -4907,8 +4938,16 @@ class RequestManager:
             if isinstance(doc, dict):
                 await self._ensure_request_doc_finance_snapshot(doc)
 
+        serialized_items = await self._serialize_requests_with_client_tenant_labels(page_docs)
+        sanitized_items: List[Dict[str, Any]] = []
+        for doc, item in zip(page_docs, serialized_items):
+            if await self._can_view_request_matching_insights(doc, current_user):
+                sanitized_items.append(item)
+            else:
+                sanitized_items.append(self._strip_request_matching_insights(item))
+
         return {
-            "items": await self._serialize_requests_with_client_tenant_labels(page_docs),
+            "items": sanitized_items,
             "pagination": {
                 "page": safe_page,
                 "rows": safe_rows,
@@ -4932,6 +4971,8 @@ class RequestManager:
         if not self._has_request_pricing_snapshot(getattr(record, "pricing_snapshot", None)):
             await self._refresh_request_finance_snapshot(record)
         serialized = self._serialize(record)
+        if not await self._can_view_request_matching_insights(record, current_user):
+            serialized = self._strip_request_matching_insights(serialized)
         viewer_assignment = await self._resolve_viewer_assignment_for_request(str(record.id), current_user)
         if viewer_assignment:
             serialized["viewer_assignment"] = viewer_assignment
@@ -5424,7 +5465,10 @@ class RequestManager:
         if not await self._can_view_request(record, current_user):
             raise HTTPException(status_code=403, detail="Access forbidden")
         await self._sync_request_runtime_state(record)
-        return self._serialize_wave(wave)
+        serialized = self._serialize_wave(wave)
+        if not await self._can_view_request_matching_insights(record, current_user):
+            serialized = self._strip_wave_matching_insights(serialized)
+        return serialized
 
     async def get_job_by_id(self, assignment_id: str, current_user) -> Dict[str, Any]:
         assignment = await self._get_assignment_or_404(assignment_id)
@@ -5642,8 +5686,12 @@ class RequestManager:
         end = start + safe_rows
         page_docs = docs[start:end]
 
+        serialized_items = [self._serialize_wave(doc) for doc in page_docs]
+        if not await self._can_view_request_matching_insights(record, current_user):
+            serialized_items = [self._strip_wave_matching_insights(item) for item in serialized_items]
+
         return {
-            "items": [self._serialize_wave(doc) for doc in page_docs],
+            "items": serialized_items,
             "pagination": {
                 "page": safe_page,
                 "rows": safe_rows,
