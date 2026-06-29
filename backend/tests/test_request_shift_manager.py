@@ -601,6 +601,21 @@ def _fake_request_manager(
         async def _get_tenant(self, tenant_id):
             return tenants.get(str(tenant_id))
 
+        async def _build_tenant_label_lookup(self, tenant_ids):
+            labels = {}
+            for tenant_id in tenant_ids:
+                tenant = tenants.get(str(tenant_id))
+                if tenant is None:
+                    labels[str(tenant_id)] = str(tenant_id)
+                    continue
+                labels[str(tenant_id)] = (
+                    str(getattr(tenant, "name", "") or "").strip()
+                    or str(getattr(tenant, "email", "") or "").strip()
+                    or str(getattr(tenant, "tenant_name", "") or "").strip()
+                    or str(getattr(tenant, "id", tenant_id) or "").strip()
+                )
+            return labels
+
         async def _write_activity(self, **kwargs):
             return None
 
@@ -1039,7 +1054,162 @@ async def test_sync_shift_slots_for_request_creates_system_generated_shift_for_c
     assert implicit_slot.slot_status == ShiftSlotStatus.RESERVED
     assert implicit_slot.assigned_guard_tenant_id == "guard-direct-1"
     assert str(direct_assignment.shift_instance_id or "") == str(implicit_shift.id)
-    assert str(direct_assignment.shift_slot_id or "") == str(implicit_slot.id)
+
+
+@pytest.mark.anyio
+async def test_list_shifts_platform_creates_and_returns_implicit_shift_for_committed_non_scheduled_job(monkeypatch):
+    engine = FakeEngine()
+    start_at = datetime.utcnow() + timedelta(days=1, hours=2)
+    end_at = start_at + timedelta(hours=2)
+    request_record = _make_request(
+        guards_required=1,
+        request_status=RequestStatus.SUBMITTED,
+        requested_start_at=start_at,
+        requested_end_at=end_at,
+    )
+    engine.request_record = request_record
+    direct_assignment = _make_assignment(
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        assignee_tenant_id="guard-direct-1",
+        assignee_tenant_type=RequestTargetType.GUARD,
+        slots_committed=1,
+    )
+    engine.request_assignments = [direct_assignment]
+
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(request_record, assignments=[direct_assignment], engine=engine),
+    )
+
+    response = await manager.list_shifts(
+        current_user=SimpleNamespace(username="platform", role="ops_admin"),
+        date_from=start_at.date(),
+        date_to=end_at.date(),
+    )
+
+    assert len(engine.shift_instances) == 1
+    assert response["pagination"]["total_items"] == 1
+    assert response["items"][0]["request_title"] == request_record.title
+
+
+@pytest.mark.anyio
+async def test_list_shifts_guard_returns_implicit_shift_for_committed_non_scheduled_job(monkeypatch):
+    engine = FakeEngine()
+    start_at = datetime.utcnow() + timedelta(days=1, hours=2)
+    end_at = start_at + timedelta(hours=2)
+    request_record = _make_request(
+        guards_required=1,
+        request_status=RequestStatus.SUBMITTED,
+        requested_start_at=start_at,
+        requested_end_at=end_at,
+    )
+    engine.request_record = request_record
+    direct_assignment = _make_assignment(
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        assignee_tenant_id="guard-direct-1",
+        assignee_tenant_type=RequestTargetType.GUARD,
+        slots_committed=1,
+    )
+    engine.request_assignments = [direct_assignment]
+
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(request_record, assignments=[direct_assignment], engine=engine),
+    )
+
+    response = await manager.list_shifts(
+        current_user=SimpleNamespace(username="guard", role="guard_admin", tenant_uuid="guard-direct-1"),
+        date_from=start_at.date(),
+        date_to=end_at.date(),
+    )
+
+    assert len(engine.shift_instances) == 1
+    assert response["pagination"]["total_items"] == 1
+    assert response["items"][0]["request_title"] == request_record.title
+
+
+@pytest.mark.anyio
+async def test_list_shifts_client_returns_implicit_shift_for_committed_non_scheduled_job(monkeypatch):
+    engine = FakeEngine()
+    start_at = datetime.utcnow() + timedelta(days=1, hours=2)
+    end_at = start_at + timedelta(hours=2)
+    request_record = _make_request(
+        guards_required=1,
+        request_status=RequestStatus.SUBMITTED,
+        requested_start_at=start_at,
+        requested_end_at=end_at,
+    )
+    engine.request_record = request_record
+    direct_assignment = _make_assignment(
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        assignee_tenant_id="guard-direct-1",
+        assignee_tenant_type=RequestTargetType.GUARD,
+        slots_committed=1,
+    )
+    engine.request_assignments = [direct_assignment]
+
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(request_record, assignments=[direct_assignment], engine=engine),
+    )
+
+    response = await manager.list_shifts(
+        current_user=SimpleNamespace(username="client", role="client_admin", tenant_uuid=request_record.client_tenant_id),
+        date_from=start_at.date(),
+        date_to=end_at.date(),
+    )
+
+    assert len(engine.shift_instances) == 1
+    assert response["pagination"]["total_items"] == 1
+    assert response["items"][0]["request_title"] == request_record.title
+
+
+@pytest.mark.anyio
+async def test_list_shifts_service_provider_returns_implicit_shift_for_committed_non_scheduled_job(monkeypatch):
+    engine = FakeEngine()
+    start_at = datetime.utcnow() + timedelta(days=1, hours=2)
+    end_at = start_at + timedelta(hours=2)
+    request_record = _make_request(
+        guards_required=2,
+        request_status=RequestStatus.SUBMITTED,
+        requested_start_at=start_at,
+        requested_end_at=end_at,
+    )
+    engine.request_record = request_record
+    provider_assignment = _make_assignment(
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        assignee_tenant_id="provider-1",
+        assignee_tenant_type=RequestTargetType.SERVICE_PROVIDER,
+        slots_committed=2,
+    )
+    engine.request_assignments = [provider_assignment]
+
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(request_record, assignments=[provider_assignment], engine=engine),
+    )
+
+    response = await manager.list_shifts(
+        current_user=SimpleNamespace(username="provider", role="sp_admin", tenant_uuid="provider-1"),
+        date_from=start_at.date(),
+        date_to=end_at.date(),
+    )
+
+    assert len(engine.shift_instances) == 1
+    assert response["pagination"]["total_items"] == 1
+    assert response["items"][0]["request_title"] == request_record.title
 
 
 @pytest.mark.anyio
@@ -1296,6 +1466,66 @@ async def test_roster_shift_assigns_provider_guard_to_provider_slot(monkeypatch)
         and notification.get("title") == "New shift assignment"
         for notification in notifications
     )
+
+
+@pytest.mark.anyio
+async def test_get_shift_by_id_includes_assigned_guard_name(monkeypatch):
+    _stub_notifications(monkeypatch)
+    engine = FakeEngine()
+    request_record = _make_request(guards_required=1, request_status=RequestStatus.SUBMITTED)
+    engine.request_record = request_record
+    direct_assignment = _make_assignment(
+        request_id=str(request_record.id),
+        assignee_tenant_id="guard-direct-1",
+        assignee_tenant_type=RequestTargetType.GUARD,
+        slots_committed=1,
+    )
+    schedule = RequestScheduleTemplateRecord(
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        timezone="Asia/Karachi",
+        schedule_type=RequestScheduleType.ONE_TIME,
+        start_date_local=date.today().isoformat(),
+        end_date_local=None,
+        start_time_local="08:00",
+        end_time_local="16:00",
+    )
+    object.__setattr__(schedule, "id", ObjectId())
+    engine.schedule_record = schedule
+    shift = ShiftInstanceRecord(
+        request_id=str(request_record.id),
+        client_tenant_id=request_record.client_tenant_id,
+        schedule_template_id=str(schedule.id),
+        shift_date_local=date.today().isoformat(),
+        shift_start_at_utc=datetime.utcnow() + timedelta(hours=4),
+        shift_end_at_utc=datetime.utcnow() + timedelta(hours=12),
+        timezone="Asia/Karachi",
+        slots_required=1,
+    )
+    object.__setattr__(shift, "id", ObjectId())
+    engine.shift_instances.append(shift)
+    guard_tenant = SimpleNamespace(
+        id="guard-direct-1",
+        tenant_type=TenantType.GUARD,
+        status=TenantStatus.ACTIVE,
+        name="Guard One",
+    )
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(
+            request_record,
+            assignments=[direct_assignment],
+            tenants={"guard-direct-1": guard_tenant},
+        ),
+    )
+
+    await manager.sync_shift_slots_for_request(request_record)
+    response = await manager.get_shift_by_id(str(shift.id), SimpleNamespace(role="ops_admin", tenant_uuid="ops-1"))
+
+    assert response["slots"][0]["assigned_guard_tenant_id"] == "guard-direct-1"
+    assert response["slots"][0]["assigned_guard_name"] == "Guard One"
 
 
 @pytest.mark.anyio

@@ -3212,6 +3212,75 @@ async def test_list_jobs_client_defaults_to_committed_work_only():
 
 
 @pytest.mark.anyio
+async def test_list_jobs_provider_includes_assigned_guards_summary():
+    assignment_id = ObjectId()
+    request_id = ObjectId()
+    manager = object.__new__(RequestManager)
+    manager._engine = _FakeListJobsEngine(
+        assignment_docs=[
+            {
+                "_id": assignment_id,
+                "request_id": str(request_id),
+                "client_tenant_id": "client-1",
+                "assignee_tenant_id": "provider-1",
+                "assignee_tenant_type": "service_provider",
+                "assignment_status": "accepted",
+                "slots_committed": 2,
+                "candidate_snapshot": {"candidate_name": "Provider One"},
+                "assigned_by_user_id": "user-1",
+                "assigned_by_username": "admin",
+                "created_at": None,
+                "updated_at": datetime(2026, 5, 19, 9, 30),
+            },
+        ],
+        request_docs=[
+            {
+                "_id": request_id,
+                "title": "Mall Security",
+                "site_snapshot": {"site_name": "Mall"},
+                "fulfillment_mode": "service_provider_only",
+                "target_type": "service_provider",
+                "request_status": "submitted",
+                "staffing_status": "partially_filled",
+                "accepted_slots": 1,
+                "open_slots": 1,
+                "request_revision": 1,
+            },
+        ],
+        slot_docs=[
+            {
+                "_id": ObjectId(),
+                "request_id": str(request_id),
+                "parent_assignment_id": str(assignment_id),
+                "assigned_guard_tenant_id": "guard-provider-1",
+            },
+            {
+                "_id": ObjectId(),
+                "request_id": str(request_id),
+                "parent_assignment_id": str(assignment_id),
+                "assigned_guard_tenant_id": "guard-provider-2",
+            },
+        ],
+    )
+    manager._role_value = lambda _user: "sp_admin"
+    manager._is_platform_role = lambda _role: False
+
+    async def _get_session_tenant(_current_user):
+        return SimpleNamespace(id="provider-1", tenant_type="service_provider")
+
+    manager._get_session_tenant = _get_session_tenant
+
+    result = await manager.list_jobs(SimpleNamespace(role="sp_admin"), page=1, rows=10)
+
+    assert result["pagination"]["total_items"] == 1
+    assert result["items"][0]["assigned_guard_count"] == 2
+    assert result["items"][0]["assigned_guards"] == [
+        {"tenant_id": "guard-provider-1", "name": "guard-provider-1"},
+        {"tenant_id": "guard-provider-2", "name": "guard-provider-2"},
+    ]
+
+
+@pytest.mark.anyio
 async def test_resolve_request_docs_for_guard_only_returns_actionable_offer_requests():
     request_offer_id = ObjectId()
     request_job_id = ObjectId()

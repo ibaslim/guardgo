@@ -3686,6 +3686,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
     for (const slot of rosterableSlots) {
       if (slot.assigned_guard_tenant_id) {
         this.rosterSelections[slot.id] = slot.assigned_guard_tenant_id;
+      } else {
+        this.rosterSelections[slot.id] = '';
       }
     }
     this.providerGuards = [];
@@ -5653,6 +5655,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   getShiftSlotTenantLabel(slot: ShiftSlotItem): string {
+    if (slot.assigned_guard_name) {
+      return slot.assigned_guard_name;
+    }
     if (slot.assigned_guard_tenant_id) {
       return slot.assigned_guard_tenant_id;
     }
@@ -5795,7 +5800,47 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   getRosterSlotMetaItems(slot: ShiftSlotItem): string[] {
-    return [`Coverage owner: ${this.getShiftSlotTenantLabel(slot)}`];
+    const items = [`Coverage owner: ${slot.coverage_tenant_id || slot.service_provider_tenant_id || 'Provider'}`];
+    if (slot.assigned_guard_name || slot.assigned_guard_tenant_id) {
+      items.push(`Assigned guard: ${slot.assigned_guard_name || slot.assigned_guard_tenant_id}`);
+    }
+    return items;
+  }
+
+  getJobAssignedGuardNames(job: RequestAssignmentItem | null): string[] {
+    if (!job) {
+      return [];
+    }
+    const assignedGuards = Array.isArray(job.assigned_guards) ? job.assigned_guards : [];
+    const names = assignedGuards
+      .map((guard) => String(guard?.name || guard?.tenant_id || '').trim())
+      .filter((name) => !!name);
+    if (names.length) {
+      return names;
+    }
+    if (job.assignee_tenant_type === 'guard') {
+      const directGuardName = String(
+        job.candidate_snapshot?.['candidate_name']
+        || job.assigned_guards?.[0]?.tenant_id
+        || job.assignee_tenant_id
+        || '',
+      ).trim();
+      return directGuardName ? [directGuardName] : [];
+    }
+    return [];
+  }
+
+  getJobAssignedGuardSummary(job: RequestAssignmentItem | null): string {
+    const names = this.getJobAssignedGuardNames(job);
+    if (!names.length) {
+      return job?.assignee_tenant_type === 'service_provider'
+        ? 'No guards assigned yet'
+        : 'Unassigned';
+    }
+    if (names.length <= 2) {
+      return names.join(', ');
+    }
+    return `${names.slice(0, 2).join(', ')} +${names.length - 2} more`;
   }
 
   getShiftGuardLeaveDrawerSubtitle(): string {

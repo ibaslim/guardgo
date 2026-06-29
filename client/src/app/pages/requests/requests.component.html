@@ -886,6 +886,7 @@
         <div record-meta>
           <span>{{ job.request?.site_name || 'Unknown site' }}</span>
           <span>Candidate: {{ job.candidate_snapshot?.['candidate_name'] || job.candidate_snapshot?.['candidate_id'] || 'Unknown' }}</span>
+          <span *ngIf="job.assignee_tenant_type === 'service_provider'">Assigned Guards: {{ getJobAssignedGuardSummary(job) }}</span>
         </div>
 
         <div *ngIf="job.note" record-body class="text-sm leading-6 text-gray-600 dark:text-gray-300">
@@ -3033,7 +3034,7 @@
               [name]="'roster-slot-' + slot.id"
               [(ngModel)]="rosterSelections[slot.id]"
             >
-              <option value="">Select provider guard</option>
+              <option value="">Select guard</option>
               <option
                 *ngFor="let guard of providerGuards; trackBy: trackByProviderGuardId"
                 [value]="guard.id"
@@ -3525,6 +3526,31 @@
         [containerClass]="'rounded-md p-4'"
         [bodyClass]="'mt-2 text-sm leading-6'"
       ></app-banner>
+
+      <app-section
+        *ngIf="job.assignee_tenant_type === 'service_provider'"
+        [title]="'Assigned Guards'"
+        [subtitle]="'Named guards currently rostered by this provider against this job.'"
+        [containerClass]="drawerSectionContainerClass"
+        [headerClass]="drawerSectionHeaderClass"
+        [titleClass]="drawerSectionTitleClass"
+        [subtitleClass]="drawerSectionSubtitleClass"
+      >
+        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <app-summary-metric-card
+            label="Assigned Guard Count"
+            [value]="job.assigned_guard_count || 0"
+            [containerClass]="metricCompactContainerClass"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+          <app-summary-metric-card
+            label="Assigned Guards"
+            [value]="getJobAssignedGuardSummary(job)"
+            [containerClass]="'rounded-2xl border border-gray-100 bg-white px-4 py-4 shadow-sm dark:border-gray-800 dark:bg-gray-950 sm:col-span-2 xl:col-span-3'"
+            [valueClass]="metricCompactValueClass"
+          ></app-summary-metric-card>
+        </div>
+      </app-section>
 
       <ng-container *ngIf="getJobPricingRequestContext(job, selectedJobRequest) as pricingRequest">
         <app-section
