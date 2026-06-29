@@ -304,7 +304,10 @@ Verify:
 - leave is tied to the selected shift, not a broad future range
 - leave marks the slot unavailable
 - leave notifies the right stakeholders
-- leave does not automatically create replacement coverage
+- shift-level urgent leave stays an exception flow and does not auto-open replacement coverage by itself
+- planned leave follows the separate Leaves module rules:
+  - direct-guard planned leave opens replacement coverage for overlapping future shifts
+  - provider-owned-guard planned leave removes the named guard from overlapping future provider-rostered shifts and returns the slot to provider-managed coverage
 
 ### Exception queue scenarios
 

@@ -260,6 +260,11 @@ export interface RequestAssignmentItem {
   reconfirmation_due_at?: string | null;
   lock_reason?: RequestAssignmentLockReason | null;
   candidate_snapshot?: Record<string, any>;
+  assigned_guards?: Array<{
+    tenant_id: string;
+    name: string;
+  }>;
+  assigned_guard_count?: number;
   assigned_by_user_id: string;
   assigned_by_username: string;
   note?: string | null;
@@ -348,6 +353,7 @@ export interface ShiftSlotItem {
   coverage_tenant_id?: string | null;
   service_provider_tenant_id?: string | null;
   assigned_guard_tenant_id?: string | null;
+  assigned_guard_name?: string | null;
   slot_status: ShiftSlotStatus;
   replacement_of_slot_id?: string | null;
   rostered_at?: string | null;

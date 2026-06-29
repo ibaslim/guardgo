@@ -291,6 +291,7 @@ class RequestShiftManager:
                 "coverage_tenant_id": record.get("coverage_tenant_id"),
                 "service_provider_tenant_id": record.get("service_provider_tenant_id"),
                 "assigned_guard_tenant_id": record.get("assigned_guard_tenant_id"),
+                "assigned_guard_name": record.get("assigned_guard_name"),
                 "slot_status": getattr(record.get("slot_status"), "value", record.get("slot_status")),
                 "replacement_of_slot_id": record.get("replacement_of_slot_id"),
                 "rostered_at": record.get("rostered_at"),
@@ -320,6 +321,7 @@ class RequestShiftManager:
             "coverage_tenant_id": record.coverage_tenant_id,
             "service_provider_tenant_id": record.service_provider_tenant_id,
             "assigned_guard_tenant_id": record.assigned_guard_tenant_id,
+            "assigned_guard_name": None,
             "slot_status": record.slot_status.value,
             "replacement_of_slot_id": record.replacement_of_slot_id,
             "rostered_at": record.rostered_at,
@@ -337,6 +339,31 @@ class RequestShiftManager:
             "created_at": record.created_at,
             "updated_at": record.updated_at,
         }
+
+    async def _serialize_slots_with_guard_labels(
+        self,
+        slot_records: List[ShiftSlotRecord | Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        serialized_slots = [self._serialize_slot(slot_record) for slot_record in slot_records]
+        guard_ids = sorted({
+            str(slot.get("assigned_guard_tenant_id") or "").strip()
+            for slot in serialized_slots
+            if str(slot.get("assigned_guard_tenant_id") or "").strip()
+        })
+        if not guard_ids:
+            return serialized_slots
+
+        request_manager = RequestManager.get_instance()
+        build_guard_lookup = getattr(request_manager, "_build_tenant_label_lookup", None)
+        if callable(build_guard_lookup):
+            guard_labels = await build_guard_lookup(guard_ids)
+        else:
+            guard_labels = {guard_id: guard_id for guard_id in guard_ids}
+        for slot in serialized_slots:
+            guard_id = str(slot.get("assigned_guard_tenant_id") or "").strip()
+            if guard_id:
+                slot["assigned_guard_name"] = guard_labels.get(guard_id, guard_id)
+        return serialized_slots
 
     @staticmethod
     def _serialize_event(record: ShiftAttendanceEventRecord | Dict[str, Any]) -> Dict[str, Any]:
@@ -1948,21 +1975,19 @@ class RequestShiftManager:
             return
 
         role_value = request_manager._role_value(current_user)
-        if request_manager._is_platform_role(role_value):
-            return
-
-        session_tenant = await request_manager._get_session_tenant(current_user)
-        tenant_id = str(session_tenant.id)
         assignment_query: Dict[str, Any] = {
             "assignment_scope": RequestAssignmentScope.REQUEST.value,
             "assignment_status": {"$in": [status.value for status in _COMMITTED_ASSIGNMENT_STATUSES]},
         }
-        if role_value == "client_admin" and session_tenant.tenant_type == TenantType.CLIENT:
-            assignment_query["client_tenant_id"] = tenant_id
-        elif role_value in {"guard_admin", "sp_admin"} and session_tenant.tenant_type in {TenantType.GUARD, TenantType.SERVICE_PROVIDER}:
-            assignment_query["assignee_tenant_id"] = tenant_id
-        else:
-            return
+        if not request_manager._is_platform_role(role_value):
+            session_tenant = await request_manager._get_session_tenant(current_user)
+            tenant_id = str(session_tenant.id)
+            if role_value == "client_admin" and session_tenant.tenant_type == TenantType.CLIENT:
+                assignment_query["client_tenant_id"] = tenant_id
+            elif role_value in {"guard_admin", "sp_admin"} and session_tenant.tenant_type in {TenantType.GUARD, TenantType.SERVICE_PROVIDER}:
+                assignment_query["assignee_tenant_id"] = tenant_id
+            else:
+                return
 
         assignment_collection = self._engine.get_collection(RequestAssignmentRecord)
         assignment_docs = await assignment_collection.find(assignment_query).to_list(length=max(int(limit or 0), 0) or 200)
@@ -3741,7 +3766,7 @@ class RequestShiftManager:
             ) and not slot_docs:
                 raise HTTPException(status_code=403, detail="Access forbidden")
 
-        serialized_slots = [self._serialize_slot(doc) for doc in slot_docs]
+        serialized_slots = await self._serialize_slots_with_guard_labels(slot_docs)
         return {
             "shift": self._serialize_shift(record, request_record),
             "slots": serialized_slots,
@@ -3769,8 +3794,9 @@ class RequestShiftManager:
         if not any(str(slot.get("_id") or slot.get("id") or "") == str(slot_record.id) for slot in visible_slots):
             raise HTTPException(status_code=403, detail="Access forbidden")
         event_docs = await self._get_shift_event_docs({"shift_slot_id": str(slot_record.id)})
+        serialized_slot_list = await self._serialize_slots_with_guard_labels([slot_record])
         return {
-            "slot": self._serialize_slot(slot_record),
+            "slot": serialized_slot_list[0] if serialized_slot_list else self._serialize_slot(slot_record),
             "events": [self._serialize_event(doc) for doc in event_docs],
         }
 
@@ -3847,7 +3873,7 @@ class RequestShiftManager:
                 continue
             items.append(
                 {
-                    "slot": self._serialize_slot(slot_doc),
+                    "slot": (await self._serialize_slots_with_guard_labels([slot_doc]))[0],
                     "shift": self._serialize_shift(shift_record),
                     "request": {
                         "id": str(request_record.id) if request_record else shift_record.request_id,
