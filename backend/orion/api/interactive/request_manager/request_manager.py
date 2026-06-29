@@ -674,6 +674,8 @@ class RequestManager:
                 "assigned_by_user_id": record.get("assigned_by_user_id") or "",
                 "assigned_by_username": record.get("assigned_by_username") or "",
                 "note": record.get("note"),
+                "assigned_guards": record.get("assigned_guards") or [],
+                "assigned_guard_count": int(record.get("assigned_guard_count") or len(record.get("assigned_guards") or [])),
                 "offered_at": record.get("offered_at"),
                 "accepted_at": record.get("accepted_at"),
                 "declined_at": record.get("declined_at"),
@@ -711,6 +713,8 @@ class RequestManager:
             "assigned_by_user_id": getattr(record, "assigned_by_user_id", "") or "",
             "assigned_by_username": getattr(record, "assigned_by_username", "") or "",
             "note": getattr(record, "note", None),
+            "assigned_guards": [],
+            "assigned_guard_count": 0,
             "offered_at": getattr(record, "offered_at", None),
             "accepted_at": getattr(record, "accepted_at", None),
             "declined_at": getattr(record, "declined_at", None),
@@ -726,6 +730,83 @@ class RequestManager:
             "updated_at": getattr(record, "updated_at", None),
             "request": request_snapshot or {},
         }
+
+    async def _attach_assigned_guard_summaries_to_assignment_docs(
+        self,
+        assignment_docs: List[Dict[str, Any]],
+    ) -> None:
+        if not assignment_docs:
+            return
+
+        assignment_ids = [
+            str(doc.get("_id") or doc.get("id") or "").strip()
+            for doc in assignment_docs
+            if str(doc.get("_id") or doc.get("id") or "").strip()
+        ]
+        if not assignment_ids:
+            return
+
+        slot_collection = self._engine.get_collection(ShiftSlotRecord)
+        slot_docs = await slot_collection.find({
+            "parent_assignment_id": {"$in": assignment_ids},
+        }).to_list(length=None)
+
+        direct_slot_ids = [
+            ObjectId(str(doc.get("shift_slot_id")))
+            for doc in assignment_docs
+            if ObjectId.is_valid(str(doc.get("shift_slot_id") or "").strip())
+        ]
+        if direct_slot_ids:
+            direct_slot_docs = await slot_collection.find({"_id": {"$in": direct_slot_ids}}).to_list(length=None)
+            seen_slot_ids = {
+                str(slot_doc.get("_id") or slot_doc.get("id") or "").strip()
+                for slot_doc in slot_docs
+            }
+            for slot_doc in direct_slot_docs:
+                slot_id = str(slot_doc.get("_id") or slot_doc.get("id") or "").strip()
+                if slot_id and slot_id not in seen_slot_ids:
+                    slot_docs.append(slot_doc)
+
+        guard_ids = sorted({
+            str(slot_doc.get("assigned_guard_tenant_id") or "").strip()
+            for slot_doc in slot_docs
+            if str(slot_doc.get("assigned_guard_tenant_id") or "").strip()
+        } | {
+            str(doc.get("assignee_tenant_id") or "").strip()
+            for doc in assignment_docs
+            if self._enum_value(doc.get("assignee_tenant_type")) == RequestTargetType.GUARD.value
+            and str(doc.get("assignee_tenant_id") or "").strip()
+        })
+        guard_labels = await self._build_tenant_label_lookup(guard_ids) if guard_ids else {}
+
+        slot_map_by_assignment: Dict[str, List[Dict[str, str]]] = {}
+        for slot_doc in slot_docs:
+            assignment_id = str(slot_doc.get("parent_assignment_id") or "").strip()
+            if not assignment_id:
+                continue
+            guard_id = str(slot_doc.get("assigned_guard_tenant_id") or "").strip()
+            if not guard_id:
+                continue
+            guard_entry = {
+                "tenant_id": guard_id,
+                "name": guard_labels.get(guard_id, guard_id),
+            }
+            slot_map_by_assignment.setdefault(assignment_id, [])
+            if all(existing["tenant_id"] != guard_id for existing in slot_map_by_assignment[assignment_id]):
+                slot_map_by_assignment[assignment_id].append(guard_entry)
+
+        for doc in assignment_docs:
+            assignment_id = str(doc.get("_id") or doc.get("id") or "").strip()
+            assigned_guards = list(slot_map_by_assignment.get(assignment_id, []))
+            if not assigned_guards and self._enum_value(doc.get("assignee_tenant_type")) == RequestTargetType.GUARD.value:
+                guard_id = str(doc.get("assignee_tenant_id") or "").strip()
+                if guard_id:
+                    assigned_guards = [{
+                        "tenant_id": guard_id,
+                        "name": guard_labels.get(guard_id, guard_id),
+                    }]
+            doc["assigned_guards"] = assigned_guards
+            doc["assigned_guard_count"] = len(assigned_guards)
 
     @staticmethod
     def _assignment_sort_key(record: RequestAssignmentRecord | Dict[str, Any]) -> tuple[int, float]:
@@ -5737,6 +5818,7 @@ class RequestManager:
         start = (safe_page - 1) * safe_rows
         end = start + safe_rows
         page_docs = filtered_docs[start:end]
+        await self._attach_assigned_guard_summaries_to_assignment_docs(page_docs)
 
         return {
             "items": [self._serialize_wave(doc) for doc in page_docs],
@@ -6203,6 +6285,7 @@ class RequestManager:
         start = (safe_page - 1) * safe_rows
         end = start + safe_rows
         page_docs = filtered_docs[start:end]
+        await self._attach_assigned_guard_summaries_to_assignment_docs(page_docs)
 
         return {
             "items": [
