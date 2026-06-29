@@ -642,6 +642,33 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   formatBackendDateTime = formatBackendDateTime;
 
+  formatDateTimeInZone(
+    value: Date | string | null | undefined,
+    timeZone?: string | null,
+  ): string {
+    return formatBackendDateTime(value || null, 'en-CA', {
+      timeZone: timeZone || undefined,
+    });
+  }
+
+  formatShiftDateTime(
+    value: Date | string | null | undefined,
+    shift: Pick<ShiftInstanceItem, 'timezone'> | null | undefined,
+  ): string {
+    return this.formatDateTimeInZone(value, shift?.timezone || null);
+  }
+
+  formatRequestDateTime(
+    value: Date | string | null | undefined,
+    request: { timezone?: string | null } | null | undefined,
+  ): string {
+    return this.formatDateTimeInZone(value, request?.timezone || null);
+  }
+
+  formatServiceWindowDateTime(value: Date | string | null | undefined): string {
+    return formatBackendDateTime(value || null, 'en-CA', { preserveLocalTime: true });
+  }
+
   get shiftCalendarMonthLabel(): string {
     return new Intl.DateTimeFormat('en-CA', {
       month: 'long',
@@ -3470,7 +3497,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (!this.canOpenJobShiftOperations(job)) {
       if (job.assignment_scope === 'request' && !job.request?.has_schedule) {
         this.notification.show(
-          'Shift attendance is still being prepared for this job. Reopen the job details in a moment if the shift shortcut is not visible yet.',
+          'Shift detail is still being prepared for this job. Reopen the job details in a moment if the shift shortcut is not visible yet.',
           'fail',
           4500,
         );
@@ -3481,9 +3508,11 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.activeTab = 'shifts';
 
     if (job.shift_slot_id) {
-      this.closeJobDrawer();
-      this.openShiftSlotById(job.shift_slot_id);
-      return;
+      const shiftInstanceIdFromSlot = String(job.shift_instance_id || '').trim();
+      if (shiftInstanceIdFromSlot) {
+        this.openShiftById(shiftInstanceIdFromSlot);
+        return;
+      }
     }
 
     const shiftInstanceId = String(job.shift_instance_id || '').trim();
@@ -3494,7 +3523,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
     const requestId = String(job.request_id || job.request?.id || '').trim();
     if (!requestId) {
-      this.notification.show('Shift operations are not linked to this job yet.', 'fail', 4000);
+      this.notification.show('Shift detail is not linked to this job yet.', 'fail', 4000);
       return;
     }
 
@@ -3511,7 +3540,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
         this.openResolvedJobShiftOperations(job, candidate.id);
       },
       error: (error) => {
-        this.notification.show(error?.error?.detail || 'Failed to locate shift operations for this job', 'fail', 5000);
+        this.notification.show(error?.error?.detail || 'Failed to locate shift detail for this job', 'fail', 5000);
       },
     });
   }
@@ -5667,36 +5696,44 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return 'Unassigned';
   }
 
+  getShiftSlotIdentityLabel(slot: ShiftSlotItem): string {
+    return slot.assigned_guard_name || slot.assigned_guard_tenant_id
+      ? 'Assigned Guard'
+      : 'Coverage Owner';
+  }
+
   getShiftSlotMetaItems(slot: ShiftSlotItem): string[] {
+    const shift = this.getShiftContextForSlot(slot);
     const items = [
       `Coverage: ${this.getShiftSlotCoverageLabel(slot)}`,
-      `Guard / Tenant: ${this.getShiftSlotTenantLabel(slot)}`,
+      `${this.getShiftSlotIdentityLabel(slot)}: ${this.getShiftSlotTenantLabel(slot)}`,
     ];
     if (slot.roster_due_at) {
-      items.push(`Roster due ${this.formatBackendDateTime(slot.roster_due_at)}`);
+      items.push(`Roster due ${this.formatShiftDateTime(slot.roster_due_at, shift)}`);
     }
     return items;
   }
 
   getShiftSlotDetailItems(slot: ShiftSlotItem): string[] {
+    const shift = this.getShiftContextForSlot(slot);
     const items: string[] = [];
     if (slot.guard_unavailable_reported_at) {
-      items.push(`Unavailable ${this.formatBackendDateTime(slot.guard_unavailable_reported_at)}`);
+      items.push(`Unavailable ${this.formatShiftDateTime(slot.guard_unavailable_reported_at, shift)}`);
     }
     if (slot.arrived_at) {
-      items.push(`Arrived ${this.formatBackendDateTime(slot.arrived_at)}`);
+      items.push(`Arrived ${this.formatShiftDateTime(slot.arrived_at, shift)}`);
     }
     if (slot.client_confirmed_at) {
-      items.push(`Confirmed ${this.formatBackendDateTime(slot.client_confirmed_at)}`);
+      items.push(`Confirmed ${this.formatShiftDateTime(slot.client_confirmed_at, shift)}`);
     }
     if (slot.started_at) {
-      items.push(`Started ${this.formatBackendDateTime(slot.started_at)}`);
+      items.push(`Started ${this.formatShiftDateTime(slot.started_at, shift)}`);
     }
     if (slot.completed_at) {
-      items.push(`Completed ${this.formatBackendDateTime(slot.completed_at)}`);
+      items.push(`Completed ${this.formatShiftDateTime(slot.completed_at, shift)}`);
     }
     if (slot.no_show_confirmed_at) {
-      items.push(`No-show ${this.formatBackendDateTime(slot.no_show_confirmed_at)}`);
+      items.push(`No-show ${this.formatShiftDateTime(slot.no_show_confirmed_at, shift)}`);
     }
     return items;
   }
@@ -5746,38 +5783,39 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   getShiftSlotActivityTimestampLabel(slot: ShiftSlotItem): string {
+    const shift = this.getShiftContextForSlot(slot);
     const status = String(slot.slot_status || '').trim();
     if (slot.no_show_confirmed_at || status === 'no_show_confirmed') {
       return slot.no_show_confirmed_at
-        ? `Confirmed no-show at ${this.formatBackendDateTime(slot.no_show_confirmed_at)}`
+        ? `Confirmed no-show at ${this.formatShiftDateTime(slot.no_show_confirmed_at, shift)}`
         : 'Confirmed as a no-show.';
     }
     if (slot.guard_unavailable_reported_at || status === 'unavailable' || status === 'late_risk') {
       return slot.guard_unavailable_reported_at
-        ? `Reported at ${this.formatBackendDateTime(slot.guard_unavailable_reported_at)}`
+        ? `Reported at ${this.formatShiftDateTime(slot.guard_unavailable_reported_at, shift)}`
         : '';
     }
     if (slot.completed_at || status === 'completed') {
       return slot.completed_at
-        ? `Checked out at ${this.formatBackendDateTime(slot.completed_at)}`
+        ? `Checked out at ${this.formatShiftDateTime(slot.completed_at, shift)}`
         : '';
     }
     if (slot.started_at || status === 'in_progress') {
       return slot.started_at
-        ? `Started at ${this.formatBackendDateTime(slot.started_at)}`
+        ? `Started at ${this.formatShiftDateTime(slot.started_at, shift)}`
         : '';
     }
     if (slot.client_confirmed_at) {
-      return `Client confirmed arrival at ${this.formatBackendDateTime(slot.client_confirmed_at)}`;
+      return `Client confirmed arrival at ${this.formatShiftDateTime(slot.client_confirmed_at, shift)}`;
     }
     if (slot.arrived_at) {
-      return `Checked in at ${this.formatBackendDateTime(slot.arrived_at)}`;
+      return `Checked in at ${this.formatShiftDateTime(slot.arrived_at, shift)}`;
     }
     if (slot.rostered_at) {
-      return `Named guard assigned at ${this.formatBackendDateTime(slot.rostered_at)}`;
+      return `Named guard assigned at ${this.formatShiftDateTime(slot.rostered_at, shift)}`;
     }
     if (slot.roster_due_at && !slot.assigned_guard_tenant_id) {
-      return `Roster due ${this.formatBackendDateTime(slot.roster_due_at)}`;
+      return `Roster due ${this.formatShiftDateTime(slot.roster_due_at, shift)}`;
     }
     return '';
   }
@@ -5985,12 +6023,13 @@ export class RequestsComponent implements OnInit, OnDestroy {
   getBulkConfirmSlotMetaItems(slot: ShiftSlotItem): string[] {
     return [
       `Coverage: ${this.getShiftSlotCoverageLabel(slot)}`,
-      `Guard / Tenant: ${this.getShiftSlotTenantLabel(slot)}`,
+      `${this.getShiftSlotIdentityLabel(slot)}: ${this.getShiftSlotTenantLabel(slot)}`,
     ];
   }
 
   getBulkConfirmSlotDetailItems(slot: ShiftSlotItem): string[] {
-    return [`Arrived ${slot.arrived_at ? this.formatBackendDateTime(slot.arrived_at) : 'Not recorded'}`];
+    const shift = this.getShiftContextForSlot(slot);
+    return [`Arrived ${slot.arrived_at ? this.formatShiftDateTime(slot.arrived_at, shift) : 'Not recorded'}`];
   }
 
   isRosterableProviderSlot(slot: ShiftSlotItem): boolean {
@@ -6620,7 +6659,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     if (job.assignment_scope === 'shift_replacement') {
       switch (job.assignment_status) {
         case 'accepted':
-          return 'This is a shift replacement assignment. Use Open Attendance Steps for check-in, client confirmation, start, and check-out.';
+          return 'This is a shift replacement assignment. Open the related shift detail to access slot-level check-in, client confirmation, start, and check-out.';
         case 'offered':
           return job.response_due_at
             ? `This is a shift replacement offer for a specific uncovered slot. Review the replacement context before responding. Offer closes at ${this.formatBackendDateTime(job.response_due_at)}.`
@@ -6635,7 +6674,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       return `You have already committed ${this.getJobCommittedSlots(job)} position(s). This request still has ${this.getJobOpenSlots(job)} open position(s), so you can add more provider coverage or continue into shift operations.`;
     }
     if (this.isScheduleBackedRequestJob(job) && ['accepted', 'in_progress', 'completed'].includes(job.assignment_status)) {
-      return 'This request uses a schedule. Use Open Attendance Steps for check-in, client confirmation, start, and check-out.';
+      return 'This request uses a schedule. Open the related shift detail to access slot-level check-in, client confirmation, start, and check-out.';
     }
     if (
       this.isGuardOrProvider
@@ -6643,7 +6682,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
       && !job.request?.has_schedule
       && ['accepted', 'in_progress', 'completed'].includes(job.assignment_status)
     ) {
-      return 'Shift attendance context is still being prepared for this accepted job. Reopen the job details shortly if the shift operations shortcut is not visible yet.';
+      return 'Shift detail is still being prepared for this accepted job. Reopen the job details shortly if the shift shortcut is not visible yet.';
     }
     switch (job.assignment_status) {
       case 'reconfirmation_required':
@@ -6779,13 +6818,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   getExceptionGuardLabel(item: ShiftExceptionItem): string {
-    if (item.slot?.assigned_guard_tenant_id) {
-      return item.slot.assigned_guard_tenant_id;
-    }
-    if (item.slot?.coverage_tenant_id) {
-      return item.slot.coverage_tenant_id;
-    }
-    return 'Unassigned';
+    return item.slot ? this.getShiftSlotTenantLabel(item.slot) : 'Unassigned';
   }
 
   canReopenException(item: ShiftExceptionItem | null): boolean {
@@ -6794,7 +6827,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   getExceptionSummary(item: ShiftExceptionItem): string {
-    const shiftStart = item.shift?.shift_start_at_utc ? this.formatBackendDateTime(item.shift.shift_start_at_utc) : 'Unknown start';
+    const shiftStart = item.shift?.shift_start_at_utc
+      ? this.formatShiftDateTime(item.shift.shift_start_at_utc, item.shift)
+      : 'Unknown start';
     return `${this.formatTokenLabel(item.slot.slot_status)} • Shift starts ${shiftStart}`;
   }
 
@@ -7254,18 +7289,13 @@ export class RequestsComponent implements OnInit, OnDestroy {
       loadingScope: this.jobShiftLookupScope,
       loadingMode: 'silent',
     }).subscribe({
-      next: (response) => {
-        const slot = this.findShiftSlotForJob(job, response.slots || []);
+      next: (_response) => {
         this.closeJobDrawer();
-        if (slot) {
-          this.openShiftSlotById(slot.id, { silent: true });
-          return;
-        }
         this.openShiftById(shiftId, { silent: true });
-        this.notification.show('Opened the related shift. Select your slot to continue attendance actions.', 'success', 3500);
+        this.notification.show('Opened the related shift. Use the shift slots there for attendance actions.', 'success', 3500);
       },
       error: (error) => {
-        this.notification.show(error?.error?.detail || 'Failed to open shift operations for this job', 'fail', 5000);
+        this.notification.show(error?.error?.detail || 'Failed to open shift detail for this job', 'fail', 5000);
       },
     });
   }

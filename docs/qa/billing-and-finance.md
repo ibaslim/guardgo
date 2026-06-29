@@ -140,9 +140,9 @@ Verify:
 Key metrics to check:
 
 - invoice count
-- total client revenue
+- total client coverage value
 - total payout
-- total platform earning
+- total platform margin value
 - total hours
 - total guard payout
 - total provider payout
@@ -151,7 +151,7 @@ Adjustment lifecycle checks:
 
 - provider payout adjustments can be saved as drafts
 - draft adjustments do not change payout totals
-- approved adjustments change payout and platform earning
+- approved adjustments change payout and platform margin value
 - voided adjustments stay visible in the audit trail but stop affecting totals
 - draft, approved, and voided counts are visible in the finance summary
 

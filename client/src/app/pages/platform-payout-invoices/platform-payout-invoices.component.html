@@ -9,7 +9,7 @@
       [value]="invoiceCount"
     ></app-summary-metric-card>
     <app-summary-metric-card
-      label="Client Revenue"
+      label="Client Coverage Value"
       [value]="formatMoney(totalClientRevenue)"
     ></app-summary-metric-card>
     <app-summary-metric-card
@@ -17,7 +17,7 @@
       [value]="formatMoney(totalPayout)"
     ></app-summary-metric-card>
     <app-summary-metric-card
-      label="Net Platform Earning"
+      label="Net Platform Margin"
       [value]="formatMoney(totalPlatformEarning)"
     ></app-summary-metric-card>
   </div>
@@ -62,7 +62,7 @@
 
   <app-section
     [title]="'Finance Invoice Registry'"
-    [subtitle]="'Review revenue, payout, and margin per assignee invoice with linked client billing context.'"
+    [subtitle]="'Review client coverage value, payout, and platform margin per assignee invoice with linked client billing context.'"
   >
     <div class="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto_auto]">
       <input
@@ -138,7 +138,7 @@
 
           <div class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:w-[420px] lg:flex-none">
             <app-summary-metric-card
-              label="Client Revenue"
+              label="Client Coverage Value"
               [value]="formatMoney(invoice.estimated_client_revenue, invoice.currency || 'CAD')"
             ></app-summary-metric-card>
             <app-summary-metric-card
@@ -150,7 +150,7 @@
               [value]="formatMoney(invoice.payout_adjustment_total, invoice.currency || 'CAD')"
             ></app-summary-metric-card>
             <app-summary-metric-card
-              label="Platform Earning"
+              label="Platform Margin Value"
               [value]="formatMoney(invoice.estimated_platform_earning, invoice.currency || 'CAD')"
             ></app-summary-metric-card>
             <app-summary-metric-card
@@ -209,12 +209,12 @@
           <app-summary-metric-card label="Type" [value]="formatTokenLabel(invoice.assignee_tenant_type)"></app-summary-metric-card>
           <app-summary-metric-card label="Client" [value]="invoice.client_label || invoice.client_tenant_id || '—'"></app-summary-metric-card>
           <app-summary-metric-card label="Client Invoice" [value]="invoice.linked_client_invoice_number || '—'"></app-summary-metric-card>
-          <app-summary-metric-card label="Client Revenue" [value]="formatMoney(invoice.estimated_client_revenue, invoice.currency || 'CAD')"></app-summary-metric-card>
+          <app-summary-metric-card label="Client Coverage Value" [value]="formatMoney(invoice.estimated_client_revenue, invoice.currency || 'CAD')"></app-summary-metric-card>
           <app-summary-metric-card label="Baseline Payout" [value]="formatMoney(invoice.baseline_estimated_amount, invoice.currency || 'CAD')"></app-summary-metric-card>
           <app-summary-metric-card label="Assignee Payout" [value]="formatMoney(invoice.estimated_amount, invoice.currency || 'CAD')"></app-summary-metric-card>
           <app-summary-metric-card label="Provider Adjustments" [value]="formatMoney(invoice.payout_adjustment_total, invoice.currency || 'CAD')"></app-summary-metric-card>
-          <app-summary-metric-card label="Baseline Platform Earning" [value]="formatMoney(invoice.baseline_estimated_platform_earning, invoice.currency || 'CAD')"></app-summary-metric-card>
-          <app-summary-metric-card label="Platform Earning" [value]="formatMoney(invoice.estimated_platform_earning, invoice.currency || 'CAD')"></app-summary-metric-card>
+          <app-summary-metric-card label="Baseline Platform Margin" [value]="formatMoney(invoice.baseline_estimated_platform_earning, invoice.currency || 'CAD')"></app-summary-metric-card>
+          <app-summary-metric-card label="Platform Margin Value" [value]="formatMoney(invoice.estimated_platform_earning, invoice.currency || 'CAD')"></app-summary-metric-card>
           <app-summary-metric-card label="Margin %" [value]="formatPercent(invoice.platform_margin_percent)"></app-summary-metric-card>
           <app-summary-metric-card label="Client Rate" [value]="formatMoney(invoice.client_hourly_quote, invoice.currency || 'CAD')"></app-summary-metric-card>
           <app-summary-metric-card label="Baseline Payout Rate" [value]="formatMoney(invoice.baseline_payout_hourly_rate, invoice.currency || 'CAD')"></app-summary-metric-card>
@@ -338,7 +338,7 @@
           </p>
         </app-section>
 
-        <app-section [title]="'Line Items'" [subtitle]="'Per-day payout lines used to analyze revenue, payout, and platform earnings.'">
+        <app-section [title]="'Line Items'" [subtitle]="'Per-day payout lines used to analyze client coverage value, payout, and platform margin.'">
           <div *ngIf="!getInvoiceLineItems(invoice).length" class="text-sm text-gray-500 dark:text-gray-400">
             No payout line items are available for this invoice.
           </div>
@@ -353,7 +353,7 @@
                   <div class="mt-1 text-xs text-gray-400 dark:text-gray-500">
                     {{ formatDate(item.service_date_local || null) }}
                     <span *ngIf="item.metadata?.start_at_local && item.metadata?.end_at_local">
-                      · {{ formatDateTime(item.metadata?.start_at_local || null) }} to {{ formatDateTime(item.metadata?.end_at_local || null) }}
+                      · {{ formatServiceWindowDateTime(item.metadata?.start_at_local || null) }} to {{ formatServiceWindowDateTime(item.metadata?.end_at_local || null) }}
                     </span>
                   </div>
                 </div>

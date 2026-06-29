@@ -119,6 +119,12 @@ export class ShiftCalendarComponent {
     return this.requestSummaries[shift.request_id]?.title || `Request ${shift.request_id.slice(0, 8)}`;
   }
 
+  formatShiftStart(shift: ShiftInstanceItem): string {
+    return formatBackendDateTime(shift.shift_start_at_utc, 'en-CA', {
+      timeZone: shift.timezone || undefined,
+    });
+  }
+
   getDayPrimaryActionLabel(day: ShiftCalendarDay): string {
     if (day.shifts.length > 1) {
       return `View all ${day.shifts.length} shifts`;

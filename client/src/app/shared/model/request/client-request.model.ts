@@ -165,6 +165,7 @@ export interface ClientRequestItem {
   created_by_user_id: string;
   created_by_username: string;
   title: string;
+  timezone?: string | null;
   fulfillment_mode: ClientRequestFulfillmentMode;
   target_type: ClientRequestTargetType;
   requested_guard_type?: string | null;
@@ -224,6 +225,7 @@ export interface ClientRequestItem {
 export interface RequestAssignmentRequestSnapshot {
   id?: string;
   title?: string;
+  timezone?: string | null;
   request_status?: ClientRequestStatus | string;
   staffing_status?: RequestStaffingStatus | string;
   fulfillment_mode?: ClientRequestFulfillmentMode | string;

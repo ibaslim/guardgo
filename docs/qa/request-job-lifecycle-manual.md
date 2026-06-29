@@ -615,7 +615,7 @@ Key checks:
 - provider overview reflects operational offers and provider payout context
 - direct guard overview shows payout context
 - provider-owned guard overview shows no payout context
-- platform overview shows revenue, payout, margin, and provider adjustment pressure
+- platform overview shows client coverage value, payout, platform margin, and provider adjustment pressure
 
 Edge scenarios:
 
