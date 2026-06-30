@@ -254,25 +254,30 @@
                                     label="Expiry Month"
                                     name="billingCardExpiryMonth"
                                     [(ngModel)]="clientFormModel.billingMethod.expiryMonth"
+                                    (ngModelChange)="validateBillingCardExpiry()"
                                     [options]="billingExpiryMonthOptions"
                                     placeholder="-- Select Expiry Month --"
                                     [required]="true"
+                                    [errorText]="clientErrors.billingCardExpiryMonth"
                                     [disabled]="readonly"
                                 ></app-select-input>
-                                <app-error-message [errorMessage]="clientErrors.billingCardExpiryMonth"></app-error-message>
                             </div>
 
                             <div class="flex flex-col">
-                                <app-select-input
+                                <app-base-input
                                     label="Expiry Year"
                                     name="billingCardExpiryYear"
+                                    type="text"
                                     [(ngModel)]="clientFormModel.billingMethod.expiryYear"
-                                    [options]="billingExpiryYearOptions"
-                                    placeholder="-- Select Expiry Year --"
+                                    (ngModelChange)="validateBillingCardExpiry()"
+                                    placeholder="YYYY"
                                     [required]="true"
+                                    [pattern]="'[0-9]{4}'"
+                                    [inputMode]="'numeric'"
+                                    autocomplete="cc-exp-year"
+                                    [errorText]="clientErrors.billingCardExpiryYear"
                                     [disabled]="readonly"
-                                ></app-select-input>
-                                <app-error-message [errorMessage]="clientErrors.billingCardExpiryYear"></app-error-message>
+                                ></app-base-input>
                             </div>
                         </div>
                     </div>

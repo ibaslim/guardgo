@@ -571,6 +571,41 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     };
   }
 
+  validateBillingCardExpiry(): boolean {
+    delete this.clientErrors.billingCardExpiryMonth;
+    delete this.clientErrors.billingCardExpiryYear;
+
+    const monthRaw = String(this.clientFormModel.billingMethod.expiryMonth || '').trim();
+    const yearRaw = String(this.clientFormModel.billingMethod.expiryYear || '').trim();
+
+    if (!/^(0[1-9]|1[0-2])$/.test(monthRaw)) {
+      this.clientErrors.billingCardExpiryMonth = 'Expiry month must be two digits between 01 and 12.';
+    }
+
+    if (!/^\d{4}$/.test(yearRaw)) {
+      this.clientErrors.billingCardExpiryYear = 'Expiry year must be in YYYY format.';
+    }
+
+    if (this.clientErrors.billingCardExpiryMonth || this.clientErrors.billingCardExpiryYear) {
+      return false;
+    }
+
+    const expiryMonth = Number(monthRaw);
+    const expiryYear = Number(yearRaw);
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
+
+    if (expiryYear < currentYear || (expiryYear === currentYear && expiryMonth < currentMonth)) {
+      const message = 'Card expiry date has passed.';
+      this.clientErrors.billingCardExpiryMonth = message;
+      this.clientErrors.billingCardExpiryYear = message;
+      return false;
+    }
+
+    return true;
+  }
+
   validateClientForm(): boolean {
     this.clientErrors = {};
 
@@ -754,12 +789,7 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     if (!/^[0-9]{4}$/.test(this.clientFormModel.billingMethod.last4.trim())) {
       this.clientErrors.billingCardLast4 = 'Enter the last 4 digits of the card.';
     }
-    if (!/^(0[1-9]|1[0-2])$/.test(this.clientFormModel.billingMethod.expiryMonth.trim())) {
-      this.clientErrors.billingCardExpiryMonth = 'Expiry month must be two digits between 01 and 12.';
-    }
-    if (!/^\d{2,4}$/.test(this.clientFormModel.billingMethod.expiryYear.trim())) {
-      this.clientErrors.billingCardExpiryYear = 'Expiry year must be 2 to 4 digits.';
-    }
+    this.validateBillingCardExpiry();
 
     this.clientFormModel.sites.forEach((site, index) => {
       const errorPrefix = `sites.${index}.`;
