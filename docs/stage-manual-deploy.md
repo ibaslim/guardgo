@@ -84,12 +84,39 @@ Notes:
 - If you later put TLS in front of staging, you can flip `PRODUCTION=1`.
 - If staging uses HTTPS immediately, set `APP_URL=https://<stage-domain>` and `PRODUCTION=1`.
 
+## Build and ship the app image
+
+Stage now uses a prebuilt Docker image. Do not build on the VPS.
+
+Build the image on your local machine:
+
+```bash
+cd /path/to/guardgo
+docker build -t guardgo-app:stage -f dockerFiles/api_docker .
+```
+
+Transfer it to the staging VPS:
+
+```bash
+docker save guardgo-app:stage | gzip > guardgo-app-stage.tar.gz
+scp guardgo-app-stage.tar.gz <user>@<stage-vps>:/opt/guardgo/
+```
+
+Load it on the staging VPS:
+
+```bash
+cd /opt/guardgo
+gunzip -c guardgo-app-stage.tar.gz | docker load
+docker image ls | grep guardgo-app
+```
+
 ## Manual stage deploy
 
 On the staging VPS:
 
 ```bash
 cd /opt/guardgo
+APP_IMAGE=guardgo-app IMAGE_TAG=stage \
 ./scripts/deploy.sh stage up
 ```
 
@@ -116,14 +143,14 @@ View logs:
 
 ```bash
 cd /opt/guardgo
-./scripts/deploy.sh stage logs
+APP_IMAGE=guardgo-app IMAGE_TAG=stage ./scripts/deploy.sh stage logs
 ```
 
 Stop staging:
 
 ```bash
 cd /opt/guardgo
-./scripts/deploy.sh stage down
+APP_IMAGE=guardgo-app IMAGE_TAG=stage ./scripts/deploy.sh stage down
 ```
 
 ## Local workflow

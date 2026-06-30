@@ -11,12 +11,16 @@ case "$environment" in
         ENV_FILE="${ENV_FILE:-$APP_DIR/.env.stage}"
         COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.stage.yml}"
         PROJECT_NAME="${PROJECT_NAME:-guardgo-stage}"
+        APP_IMAGE="${APP_IMAGE:-guardgo-app}"
+        IMAGE_TAG="${IMAGE_TAG:-stage}"
         ;;
     prod)
         APP_DIR="${APP_DIR:-/opt/guardgo}"
         ENV_FILE="${ENV_FILE:-$APP_DIR/.env.prod}"
         COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
         PROJECT_NAME="${PROJECT_NAME:-guardgo-prod}"
+        APP_IMAGE="${APP_IMAGE:-guardgo-app}"
+        IMAGE_TAG="${IMAGE_TAG:-prod}"
         ;;
     *)
         echo "Usage: scripts/deploy.sh <stage|prod> [up|down|restart|logs]" >&2
@@ -32,18 +36,19 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 compose() {
-    ENV_FILE="$ENV_FILE" docker compose --project-name "$PROJECT_NAME" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+    ENV_FILE="$ENV_FILE" APP_IMAGE="$APP_IMAGE" IMAGE_TAG="$IMAGE_TAG" \
+        docker compose --project-name "$PROJECT_NAME" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
 
 case "$action" in
     up)
-        compose up -d --build --remove-orphans
+        compose up -d --remove-orphans
         ;;
     down)
         compose down --remove-orphans
         ;;
     restart)
-        compose up -d --build --force-recreate --remove-orphans
+        compose up -d --force-recreate --remove-orphans
         ;;
     logs)
         compose logs -f

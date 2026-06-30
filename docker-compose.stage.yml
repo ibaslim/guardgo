@@ -1,8 +1,6 @@
 services:
   web:
-    build:
-      context: .
-      dockerfile: dockerFiles/api_docker
+    image: ${APP_IMAGE:?Set APP_IMAGE}:${IMAGE_TAG:-latest}
     env_file:
       - ${ENV_FILE:?Set ENV_FILE to the staging env file}
     environment:
@@ -31,9 +29,7 @@ services:
       sh -c "exec gunicorn -w ${GUNICORN_WORKERS:-2} --threads ${GUNICORN_THREADS:-2} -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:8070 --timeout ${GUNICORN_TIMEOUT:-180}"
 
   worker:
-    build:
-      context: .
-      dockerfile: dockerFiles/api_docker
+    image: ${APP_IMAGE:?Set APP_IMAGE}:${IMAGE_TAG:-latest}
     env_file:
       - ${ENV_FILE:?Set ENV_FILE to the staging env file}
     environment:
