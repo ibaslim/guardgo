@@ -1,32 +1,34 @@
-# Use a minimal Python image as the base
+FROM node:20-alpine AS client-build
+
+WORKDIR /client
+
+COPY client/package.json client/package-lock.json ./
+RUN npm ci
+
+COPY client/ ./
+RUN npm run build
+
 FROM python:3.11-slim AS base
 
-# Set the working directory inside the container
 WORKDIR /app
 
-# Disable output buffering (ensures logs are printed immediately)
 ENV PYTHONUNBUFFERED=1
 
-# Install required system dependencies (minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies separately (for caching)
 COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r /tmp/requirements.txt
-RUN pip install pydantic[email]
+RUN pip install --no-cache-dir pydantic[email]
 
-# Copy the actual application code
 COPY backend/ /app/
-COPY .env /app/.env
 COPY pyproject.toml /app/pyproject.toml
-COPY README.md /app/s.md
+COPY README.md /app/README.md
 COPY docs/ /app/docs/
-COPY client/build/ /app/build/
 COPY client/src/assets/data/ /app/asset_data/
+COPY --from=client-build /client/build/ /app/build/
 RUN test -f /app/asset_data/mail_template_data/mail_template.html
 
-# Expose FastAPI's application port
 EXPOSE 8070

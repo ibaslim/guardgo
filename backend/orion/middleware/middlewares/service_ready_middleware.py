@@ -4,12 +4,17 @@ from starlette.responses import Response, JSONResponse
 
 from orion.management.managers.service_manager import service_manager
 
+HEALTHCHECK_PATHS = {"/health/live", "/health/ready"}
+
 
 class service_ready_middleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
 
     async def dispatch(self, request: Request, call_next):
+        if request.url.path in HEALTHCHECK_PATHS:
+            return await call_next(request)
+
         if not service_manager.get_instance().check_status():
             return JSONResponse(status_code=503, content={"detail": "Service Not Ready"})
 

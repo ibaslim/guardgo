@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from configs.token_auth_provider import setup_admin
@@ -74,6 +75,18 @@ if assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
     
 app.mount("/static", StaticFiles(directory=SWAGGER_STATIC_DIR), name="static")
+
+
+@app.get("/health/live", include_in_schema=False)
+async def health_live():
+    return {"status": "live"}
+
+
+@app.get("/health/ready", include_in_schema=False)
+async def health_ready():
+    if service_manager.get_instance().check_status():
+        return {"status": "ready"}
+    return JSONResponse(status_code=503, content={"status": "starting"})
 
 
 @app.get("/docs", include_in_schema=False)

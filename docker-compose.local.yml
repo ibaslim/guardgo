@@ -1,17 +1,19 @@
 services:
   web:
-    container_name: trusted-web-main
     build:
       context: .
       dockerfile: dockerFiles/api_docker
     env_file:
-      - .env
+      - ${ENV_FILE:?Set ENV_FILE to your local env file}
     environment:
       BLOOM_DIR: /app
+      TESTING_ENABLED: ${TESTING_ENABLED:-0}
     working_dir: /app
     depends_on:
-      - mongo
-      - redis_server
+      mongo:
+        condition: service_healthy
+      redis_server:
+        condition: service_healthy
     volumes:
       - ./backend/orion:/app/orion:cached
       - ./backend/routes:/app/routes:cached
@@ -23,30 +25,55 @@ services:
       - "8070"
     networks:
       - backend
-      - shared_bridge
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8070" ]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8070/health/ready"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 20s
     command: >
-      sh -c "python3 /app/cronjobs.py & exec gunicorn -w 1 -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:8070"
+      sh -c "exec gunicorn -w 1 -k uvicorn.workers.UvicornWorker main:app --bind 0.0.0.0:8070"
+
+  worker:
+    build:
+      context: .
+      dockerfile: dockerFiles/api_docker
+    env_file:
+      - ${ENV_FILE:?Set ENV_FILE to your local env file}
+    environment:
+      BLOOM_DIR: /app
+      TESTING_ENABLED: ${TESTING_ENABLED:-0}
+    working_dir: /app
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis_server:
+        condition: service_healthy
+    volumes:
+      - ./backend/orion:/app/orion:cached
+      - ./backend/routes:/app/routes:cached
+      - ./backend/static:/app/static:cached
+      - ./backend/migrations:/app/migrations:cached
+      - ./client/build:/app/build:delegated
+      - ./client/src/assets/data:/app/asset_data:ro
+    networks:
+      - backend
+    command: >
+      sh -c "exec python3 /app/cronjobs.py"
 
   nginx:
-    container_name: trusted-web-nginx
     image: fholzer/nginx-brotli:latest
     ports:
-      - "80:8080"
+      - "8080:8080"
     depends_on:
-      - web
+      web:
+        condition: service_healthy
     volumes:
-      - ./nginx/nginx-dev.conf:/etc/nginx/nginx.conf:ro
-      - ./backend/static:/app/static:cached
+      - ./nginx/nginx-app.conf:/etc/nginx/nginx.conf:ro
     networks:
       - backend
     healthcheck:
-      test: [ "CMD-SHELL", "wget -q -O - http://localhost:8080 >/dev/null 2>&1 || exit 1" ]
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/health/live >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -54,39 +81,31 @@ services:
       - ENABLE_BROTLI=1
 
   redis_server:
-    container_name: trusted-web-redis
     image: redis:7.4.0
-    logging:
-      driver: none
-    command: [ "redis-server", "--requirepass", "${REDIS_PASSWORD}" ]
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
     restart: always
     env_file:
-      - .env
+      - ${ENV_FILE:?Set ENV_FILE to your local env file}
     volumes:
       - redis:/data
     healthcheck:
-      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 3
     networks:
       - backend
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 128M
 
   mongo:
-    image: mongo:latest
-    container_name: trustly-web-mongodb
+    image: mongo:7
     restart: always
+    env_file:
+      - ${ENV_FILE:?Set ENV_FILE to your local env file}
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     ports:
-      - "127.0.0.1:27020:27017"
+      - "27020:27017"
     volumes:
       - mongo:/data/db
     command: >
@@ -111,24 +130,17 @@ services:
     networks:
       - backend
     healthcheck:
-      test: [ "CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/27017' || exit 1" ]
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/27017' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 128M
 
   mailpit:
-    container_name: trusted-web-mailpit
     image: axllent/mailpit:latest
     restart: always
     ports:
-      - "127.0.0.1:1025:1025"
-      - "127.0.0.1:8025:8025"
+      - "1025:1025"
+      - "8025:8025"
     networks:
       - backend
     environment:
@@ -136,15 +148,9 @@ services:
       MP_SMTP_AUTH_ALLOW_INSECURE: 1
 
 networks:
-  shared_bridge:
-    driver: bridge
   backend:
     driver: bridge
 
 volumes:
   redis:
   mongo:
-  elastic:
-  static_volume:
-  media_volume:
-  arangodb:
