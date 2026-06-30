@@ -5,14 +5,14 @@ This document describes the manual staging deployment path after the environment
 ## Naming
 
 - Local env file: `.env.local`
-- Staging env file on VPS: `/opt/guardgo-stage/.env.stage`
+- Staging env file on VPS: `/opt/guardgo/.env.stage`
 - Production env file on VPS: `/opt/guardgo/.env.prod`
 
 The active staging stack is [`docker-compose.stage.yml`](/home/ibsalim/Projects/guardgo/docker-compose.stage.yml:1).
 
 ## Staging assumptions
 
-- Staging app directory: `/opt/guardgo-stage`
+- Staging app directory: `/opt/guardgo`
 - Staging is reachable through a domain that points to the staging VPS
 - Mailpit runs directly on the VPS host, not inside Docker
 
@@ -36,8 +36,8 @@ If Mailpit is only bound to `127.0.0.1`, reconfigure it to listen on the VPS hos
 ## One-time VPS setup
 
 ```bash
-sudo mkdir -p /opt/guardgo-stage
-sudo chown -R "$USER":"$USER" /opt/guardgo-stage
+sudo mkdir -p /opt/guardgo
+sudo chown -R "$USER":"$USER" /opt/guardgo
 ```
 
 Copy the repository to the VPS:
@@ -50,13 +50,13 @@ rsync -az --delete \
   --exclude 'client/node_modules' \
   --exclude 'backend/build' \
   /path/to/guardgo/ \
-  <user>@<stage-vps>:/opt/guardgo-stage/
+  <user>@<stage-vps>:/opt/guardgo/
 ```
 
 Create the stage env file:
 
 ```bash
-cd /opt/guardgo-stage
+cd /opt/guardgo
 cp .env.example .env.stage
 ```
 
@@ -89,7 +89,7 @@ Notes:
 On the staging VPS:
 
 ```bash
-cd /opt/guardgo-stage
+cd /opt/guardgo
 ./scripts/deploy.sh stage up
 ```
 
@@ -103,7 +103,7 @@ This starts:
 
 For now rollback is source-based:
 
-1. deploy an older Git revision into `/opt/guardgo-stage`
+1. deploy an older Git revision into `/opt/guardgo`
 2. rerun:
 
 ```bash
@@ -115,14 +115,14 @@ For now rollback is source-based:
 View logs:
 
 ```bash
-cd /opt/guardgo-stage
+cd /opt/guardgo
 ./scripts/deploy.sh stage logs
 ```
 
 Stop staging:
 
 ```bash
-cd /opt/guardgo-stage
+cd /opt/guardgo
 ./scripts/deploy.sh stage down
 ```
 

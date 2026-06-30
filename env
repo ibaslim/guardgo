@@ -1,6 +1,6 @@
 # Deprecated template. Use .env.example and create one of:
 # - .env.local
-# - /opt/guardgo-stage/.env.stage
+# - /opt/guardgo/.env.stage
 # - /opt/guardgo/.env.prod
 
 APP_URL='http://localhost:8080'

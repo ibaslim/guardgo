@@ -7,7 +7,7 @@ action="${2:-up}"
 
 case "$environment" in
     stage)
-        APP_DIR="${APP_DIR:-/opt/guardgo-stage}"
+        APP_DIR="${APP_DIR:-/opt/guardgo}"
         ENV_FILE="${ENV_FILE:-$APP_DIR/.env.stage}"
         COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.stage.yml}"
         PROJECT_NAME="${PROJECT_NAME:-guardgo-stage}"

@@ -130,7 +130,7 @@ npm test
 Use dedicated env files per environment:
 
 - local machine: `.env.local`
-- staging VPS: `/opt/guardgo-stage/.env.stage`
+- staging VPS: `/opt/guardgo/.env.stage`
 - production VPS: `/opt/guardgo/.env.prod`
 
 Commit only `.env.example`. Do not commit real secrets to source control.
