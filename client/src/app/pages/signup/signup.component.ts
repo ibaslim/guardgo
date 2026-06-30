@@ -6,6 +6,7 @@ import { FormsModule, NgForm } from '@angular/forms';
 import { AuthService } from '../../services/authetication/auth.service';
 import { AppService } from '../../services/core/app/app.service';
 import { RadioComponent } from "../../components/form/radio/radio.component";
+import { isValidEmail } from '../../shared/helpers/email.helper';
 
 @Component({
   selector: 'app-signup',
@@ -79,9 +80,7 @@ export class SignupComponent implements OnInit {
       return false;
     }
 
-    const emailPattern = /^[\w.-]+@[\w.-]+\.\w+$/;
-
-    if (!emailPattern.test(this.user.mail)) {
+    if (!isValidEmail(this.user.mail)) {
       this.errorMessage = 'Please enter a valid email address';
       return false;
     }

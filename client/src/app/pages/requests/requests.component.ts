@@ -29,6 +29,7 @@ import { ValidationMessageComponent } from '../../components/validation-message/
 import { BannerComponent } from '../../components/banner/banner.component';
 import { ApiService } from '../../shared/services/api.service';
 import { RequestService } from '../../shared/services/request.service';
+import { isValidEmail } from '../../shared/helpers/email.helper';
 import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
 import {
   ClientRequestFulfillmentMode,
@@ -7228,7 +7229,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   isValidEmail(value: string): boolean {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+    return isValidEmail(value);
   }
 
   get paginationPages(): number[] {

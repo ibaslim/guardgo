@@ -16,6 +16,7 @@ import { BaseInputComponent } from '../../components/form/base-input/base-input.
 import { BadgeComponent } from '../../components/badge/badge.component';
 import { IconComponent } from '../../components/icon/icon.component';
 import { PageComponent } from '../../components/page/page.component';
+import { isValidEmail } from '../../shared/helpers/email.helper';
 
 interface PlatformAdminUser {
   id: string;
@@ -267,7 +268,7 @@ export class AdminUsersComponent implements OnInit {
 
     if (!this.createForm.email.trim()) {
       this.createFormErrors['email'] = 'Email is required.';
-    } else if (!/^[\w.-]+@[\w.-]+\.\w+$/.test(this.createForm.email.trim())) {
+    } else if (!isValidEmail(this.createForm.email)) {
       this.createFormErrors['email'] = 'Enter a valid email address.';
     }
 

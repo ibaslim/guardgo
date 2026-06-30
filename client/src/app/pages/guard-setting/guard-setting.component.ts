@@ -32,6 +32,7 @@ import { GeoLocationSelection, buildGoogleMapsLocationUrl } from '../../shared/h
 import { formatCoordinateInput, parseCoordinate } from '../../shared/helpers/location.helper';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import { TenantUpdateResponse } from '../../shared/model/tenant/tenant.model';
+import { isValidEmail } from '../../shared/helpers/email.helper';
 import {
   buildAlphabeticDummyTag,
   buildCaPhone,
@@ -2550,7 +2551,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
     // Email (required)
     if (!secondaryContact?.email?.trim()) {
       this.guardErrors['secondaryContactEmail'] = 'Secondary contact email is required.';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(secondaryContact.email)) {
+    } else if (!isValidEmail(secondaryContact.email)) {
       this.guardErrors['secondaryContactEmail'] = 'Please enter a valid email address.';
     }
 

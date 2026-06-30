@@ -21,6 +21,7 @@ import { MessageNotificationService } from '../../services/message_notification/
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import { TenantUpdateResponse } from '../../shared/model/tenant/tenant.model';
+import { isValidEmail } from '../../shared/helpers/email.helper';
 import {
   buildAlphabeticDummyTag,
   buildSeededCaPhone,
@@ -613,7 +614,7 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     }
     if (!this.clientFormModel.primaryContact.email.trim()) {
       this.clientErrors.primaryContactEmail = 'Primary contact email is required.';
-    } else if (!/^[\w.-]+@[\w.-]+\.\w+$/.test(this.clientFormModel.primaryContact.email)) {
+    } else if (!isValidEmail(this.clientFormModel.primaryContact.email)) {
       this.clientErrors.primaryContactEmail = 'Invalid email format.';
     }
     const hasMobile = this.clientFormModel.primaryContact.mobilePhone?.e164;
@@ -666,7 +667,7 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
 
     if (!secondary.email.trim()) {
       this.clientErrors.secondaryContactEmail = 'Secondary contact email is required.';
-    } else if (!/^[\w.-]+@[\w.-]+\.\w+$/.test(secondary.email)) {
+    } else if (!isValidEmail(secondary.email)) {
       this.clientErrors.secondaryContactEmail = 'Invalid email format.';
     }
 
@@ -807,7 +808,7 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
         }
       }
 
-      if (site.managerEmail.trim() && !/^[\w.-]+@[\w.-]+\.\w+$/.test(site.managerEmail.trim())) {
+      if (site.managerEmail.trim() && !isValidEmail(site.managerEmail)) {
         this.clientErrors[`${errorPrefix}managerEmail`] = 'Invalid email format.';
       }
 

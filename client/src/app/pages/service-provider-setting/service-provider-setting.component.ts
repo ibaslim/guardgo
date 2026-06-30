@@ -28,6 +28,7 @@ import { GeoLocationSelection, buildGoogleMapsLocationUrl } from '../../shared/h
 import { formatCoordinateInput, parseCoordinate } from '../../shared/helpers/location.helper';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import { TenantUpdateResponse } from '../../shared/model/tenant/tenant.model';
+import { isValidEmail } from '../../shared/helpers/email.helper';
 import {
   buildAlphabeticDummyTag,
   buildSeededCaPhone,
@@ -1087,7 +1088,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     }
     if (!this.providerFormModel.primaryRepresentative.email.trim()) {
       this.providerErrors.repEmail = 'Representative email is required.';
-    } else if (!/^[\w.-]+@[\w.-]+\.\w+$/.test(this.providerFormModel.primaryRepresentative.email)) {
+    } else if (!isValidEmail(this.providerFormModel.primaryRepresentative.email)) {
       this.providerErrors.repEmail = 'Invalid email format.';
     }
     const hasRepMobile = this.providerFormModel.primaryRepresentative.mobilePhone?.e164;
@@ -1142,7 +1143,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     // Email validation
     if (!secondary.email.trim()) {
       this.providerErrors.secondaryContactEmail = 'Secondary contact email is required.';
-    } else if (!/^[\w.-]+@[\w.-]+\.\w+$/.test(secondary.email)) {
+    } else if (!isValidEmail(secondary.email)) {
       this.providerErrors.secondaryContactEmail = 'Invalid email format.';
     }
 
