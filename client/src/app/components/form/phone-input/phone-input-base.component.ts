@@ -24,6 +24,7 @@ import { PHONE_COUNTRIES, PhoneCountry, getPhoneCountry } from '../../../shared/
 })
 export class PhoneInputBaseComponent implements ControlValueAccessor, OnInit, OnDestroy {
   @Input() label: string = 'Phone Number';
+  @Input() name: string = '';
   @Input() placeholder: string = '(XXX) XXX-XXXX';
   @Input() required: boolean = false;
   @Input() helperText: string = '';

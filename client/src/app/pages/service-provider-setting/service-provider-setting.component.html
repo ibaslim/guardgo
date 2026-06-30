@@ -315,7 +315,7 @@
 
             <div class="flex justify-center pt-4" *ngIf="!readonly">
                 <app-button label="+ Add Security License" type="secondary" [htmlType]="'button'"
-                    [customClass]="'rounded-lg'" (click)="addSecurityLicense()">
+                    [customClass]="'rounded-lg'" [disabled]="!canAddSecurityLicense" (click)="addSecurityLicense()">
                 </app-button>
             </div>
         </app-section>

@@ -17,6 +17,7 @@ import { GeoLocationPickerComponent } from '../../components/geo-location-picker
 import { ProfilePictureUploadComponent } from '../../components/profile-picture-upload/profile-picture-upload.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
+import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { GoogleMapsAddressConsistencyService } from '../../shared/services/google-maps-address-consistency.service';
 import { TenantUpdateResponse } from '../../shared/model/tenant/tenant.model';
@@ -176,12 +177,40 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
   clientTypeOptions: { value: string; label: string }[] = [];
 
   private destroy$ = new Subject<void>();
+  private readonly errorFieldPriority = [
+    'legalEntityName',
+    'industry',
+    'companyRegistrationNumber',
+    'companyWebsite',
+    'primaryContactName',
+    'primaryContactEmail',
+    'primaryContactMobilePhone',
+    'primaryContactLandlinePhone',
+    'primaryContactPhoneNumbers',
+    'secondaryContactName',
+    'secondaryContactEmail',
+    'secondaryContactMobilePhone',
+    'secondaryContactLandlinePhone',
+    'secondaryContactPhoneNumbers',
+    'billingStreet',
+    'billingCountry',
+    'billingProvince',
+    'billingCity',
+    'billingPostalCode',
+    'billingMethod',
+    'billingCardholderName',
+    'billingCardLast4',
+    'billingCardExpiryMonth',
+    'billingCardExpiryYear',
+    'submit',
+  ];
 
   constructor(
     private apiService: ApiService,
     private router: Router,
     private appService: AppService,
     private addressConsistencyService: GoogleMapsAddressConsistencyService,
+    private notification: MessageNotificationService,
   ) { }
 
   ngOnInit(): void {
@@ -822,6 +851,7 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
     }
 
     if (!this.validateClientForm()) {
+      this.handleValidationFailure();
       return;
     }
 
@@ -990,10 +1020,126 @@ export class ClientSettingComponent implements OnInit, OnDestroy {
 
       if (!result.ok) {
         this.clientErrors[`sites.${index}.coordinates`] = result.message || 'The selected coordinates do not match the site address.';
+        this.handleValidationFailure();
         return false;
       }
     }
 
     return true;
+  }
+
+  private handleValidationFailure(): void {
+    const firstErrorKey = this.getFirstValidationErrorKey();
+    const message = firstErrorKey
+      ? this.clientErrors[firstErrorKey]
+      : 'Please review the highlighted fields before submitting.';
+    this.notification.error(message || 'Please review the highlighted fields before submitting.', 5000);
+    this.scrollToErrorField(firstErrorKey);
+  }
+
+  private getFirstValidationErrorKey(): string {
+    const keys = Object.keys(this.clientErrors).filter(key => !!this.clientErrors[key]);
+    if (!keys.length) {
+      return '';
+    }
+    return this.errorFieldPriority.find(key => keys.includes(key))
+      || keys.find(key => key.startsWith('sites.'))
+      || keys[0];
+  }
+
+  private scrollToErrorField(errorKey: string): void {
+    const controlName = this.getControlNameForErrorKey(errorKey);
+    if (!controlName || typeof document === 'undefined') {
+      return;
+    }
+    const escapedControlName = this.escapeCssValue(controlName);
+    const target = document.querySelector<HTMLElement>(
+      `[name="${escapedControlName}"], [data-control-name="${escapedControlName}"]`
+    );
+    if (!target) {
+      return;
+    }
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    window.setTimeout(() => {
+      this.findFocusableElement(target)?.focus({ preventScroll: true });
+    }, 250);
+  }
+
+  private getControlNameForErrorKey(errorKey: string): string {
+    const directMap: Record<string, string> = {
+      legalEntityName: 'legalEntityName',
+      industry: 'industry',
+      companyRegistrationNumber: 'companyRegistrationNumber',
+      companyWebsite: 'companyWebsite',
+      primaryContactName: 'primaryContactName',
+      primaryContactEmail: 'primaryContactEmail',
+      primaryContactMobilePhone: 'primaryContactMobile',
+      primaryContactLandlinePhone: 'primaryContactLandline',
+      primaryContactPhoneNumbers: 'primaryContactMobile',
+      secondaryContactName: 'secondaryContactName',
+      secondaryContactEmail: 'secondaryContactEmail',
+      secondaryContactMobilePhone: 'secondaryContactMobile',
+      secondaryContactLandlinePhone: 'secondaryContactLandline',
+      secondaryContactPhoneNumbers: 'secondaryContactMobile',
+      billingStreet: 'billingStreet',
+      billingCountry: 'billingCountry',
+      billingProvince: 'billingProvince',
+      billingCity: 'billingCity',
+      billingPostalCode: 'billingPostalCode',
+      billingMethod: 'billingCardType',
+      billingCardholderName: 'billingCardholderName',
+      billingCardLast4: 'billingCardLast4',
+      billingCardExpiryMonth: 'billingCardExpiryMonth',
+      billingCardExpiryYear: 'billingCardExpiryYear',
+    };
+    if (directMap[errorKey]) {
+      return directMap[errorKey];
+    }
+
+    const siteMatch = errorKey.match(/^sites\.(\d+)\.(siteName|siteType|managerEmail|numberOfGuardsRequired|latitude|longitude|coordinates|country|province|city|postalCode|street)$/);
+    if (siteMatch) {
+      const index = siteMatch[1];
+      const suffixMap: Record<string, string> = {
+        siteName: `siteName${index}`,
+        siteType: `siteType${index}`,
+        managerEmail: `siteManagerEmail${index}`,
+        numberOfGuardsRequired: `siteRecommendedGuards${index}`,
+        latitude: `siteLatitude${index}`,
+        longitude: `siteLongitude${index}`,
+        coordinates: `siteLatitude${index}`,
+        country: `siteCountry${index}`,
+        province: `siteProvince${index}`,
+        city: `siteCity${index}`,
+        postalCode: `sitePostalCode${index}`,
+        street: `siteStreet${index}`,
+      };
+      return suffixMap[siteMatch[2]] || '';
+    }
+
+    return '';
+  }
+
+  private findFocusableElement(element: HTMLElement): HTMLElement | null {
+    if (this.isFocusable(element)) {
+      return element;
+    }
+    return element.querySelector<HTMLElement>(
+      'input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+  }
+
+  private isFocusable(element: HTMLElement): boolean {
+    const tagName = element.tagName.toLowerCase();
+    return (
+      ['input', 'button', 'select', 'textarea', 'a'].includes(tagName) ||
+      element.hasAttribute('tabindex')
+    ) && !element.hasAttribute('disabled');
+  }
+
+  private escapeCssValue(value: string): string {
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+      return CSS.escape(value);
+    }
+    return value.replace(/["\\]/g, '\\$&');
   }
 }

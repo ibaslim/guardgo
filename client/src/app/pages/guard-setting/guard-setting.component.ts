@@ -72,6 +72,7 @@ import {
   styleUrls: ['./guard-setting.component.css']
 })
 export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
+  readonly maxDocumentsPerSection = 2;
   readonly showDummyDataButton = isLocalhostForDummyData();
   managedByProviderName = '';
   homeAddressMapUrl = '';
@@ -408,6 +409,36 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
   private lastAutoLegalName = '';
   private _cachedProfileImageUrl: string | null = null;
   private _cachedProfileTenantId: string | undefined | null = null;
+  private readonly errorFieldPriority = [
+    'name',
+    'mobilePhone',
+    'landlinePhone',
+    'phoneNumbers',
+    'dob',
+    'operationalRadius',
+    'addressCoordinates',
+    'addressLatitude',
+    'addressLongitude',
+    'addressCountry',
+    'addressProvince',
+    'addressCity',
+    'addressPostalCode',
+    'addressStreet',
+    'operationalRegionCode',
+    'operationalCityCode',
+    'secondaryContactName',
+    'secondaryContactEmail',
+    'secondaryContactMobilePhone',
+    'secondaryContactLandlinePhone',
+    'secondaryContactPhoneNumbers',
+    'preferredGuardTypes',
+    'identification',
+    'securityLicenses',
+    'policeClearances',
+    'trainingCertificates',
+    'weeklyAvailability',
+    'submit',
+  ];
 
   // Identity document upload state
   identityUploadInProgress: Record<string, boolean> = {};
@@ -427,6 +458,22 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
 
   get showServiceProviderInfo(): boolean {
     return !this.readonly && !this.isProviderOperationalCoverageEditMode && !!this.serviceProviderDisplayName;
+  }
+
+  get canAddIdentificationDocument(): boolean {
+    return (this.guardFormModel.identification.documents?.length || 0) < this.maxDocumentsPerSection;
+  }
+
+  get canAddSecurityLicense(): boolean {
+    return (this.guardFormModel.securityLicenses?.length || 0) < this.maxDocumentsPerSection;
+  }
+
+  get canAddPoliceClearance(): boolean {
+    return (this.guardFormModel.policeClearances?.length || 0) < this.maxDocumentsPerSection;
+  }
+
+  get canAddTrainingCertificate(): boolean {
+    return (this.guardFormModel.trainingCertificates?.length || 0) < this.maxDocumentsPerSection;
   }
 
   get isOperationalCoverageLocked(): boolean {
@@ -1440,6 +1487,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
     if (this.readonly) {
       return;
     }
+    if (!this.canAddIdentificationDocument) {
+      this.notification.warning(`Only ${this.maxDocumentsPerSection} identification documents are allowed.`);
+      return;
+    }
     const newIndex = this.guardFormModel.identification.documents.length;
     const newDoc: IdentificationDocument = {
       documentType: '',
@@ -1575,6 +1626,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
     if (this.readonly) {
       return;
     }
+    if (!this.canAddSecurityLicense) {
+      this.notification.warning(`Only ${this.maxDocumentsPerSection} security licenses are allowed.`);
+      return;
+    }
     const newIndex = this.guardFormModel.securityLicenses.length;
     const newLicense: SecurityLicenseDocument = {
       fullLegalName: this.guardFormModel.name || '',
@@ -1696,6 +1751,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
     if (this.readonly) {
       return;
     }
+    if (!this.canAddPoliceClearance) {
+      this.notification.warning(`Only ${this.maxDocumentsPerSection} police clearance documents are allowed.`);
+      return;
+    }
     const newIndex = this.guardFormModel.policeClearances.length;
     const newRecord: PoliceClearanceRecord = {
       issuingAuthorityType: '',
@@ -1810,6 +1869,10 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
 
   addTrainingCertificate(): void {
     if (this.readonly) {
+      return;
+    }
+    if (!this.canAddTrainingCertificate) {
+      this.notification.warning(`Only ${this.maxDocumentsPerSection} training certificates are allowed.`);
       return;
     }
     const newIndex = this.guardFormModel.trainingCertificates.length;
@@ -2572,6 +2635,197 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
     return Object.keys(this.guardErrors).length === 0;
   }
 
+  private handleValidationFailure(): void {
+    const firstErrorKey = this.getFirstValidationErrorKey();
+    const firstErrorMessage = firstErrorKey
+      ? this.guardErrors[firstErrorKey]
+      : 'Please review the highlighted fields before submitting.';
+
+    this.notification.error(firstErrorMessage || 'Please review the highlighted fields before submitting.', 5000);
+    this.scrollToErrorField(firstErrorKey);
+  }
+
+  private getFirstValidationErrorKey(): string {
+    const errorKeys = Object.keys(this.guardErrors).filter(key => !!this.guardErrors[key]);
+    if (!errorKeys.length) {
+      return '';
+    }
+
+    const priorityKey = this.errorFieldPriority.find(key => errorKeys.includes(key));
+    if (priorityKey) {
+      return priorityKey;
+    }
+
+    return errorKeys[0];
+  }
+
+  private scrollToErrorField(errorKey: string): void {
+    if (!errorKey || typeof document === 'undefined') {
+      return;
+    }
+
+    const controlName = this.getControlNameForErrorKey(errorKey);
+    const escapedControlName = this.escapeCssValue(controlName);
+    const escapedErrorKey = this.escapeCssValue(errorKey);
+    const target = escapedControlName
+      ? document.querySelector<HTMLElement>(
+          `[name="${escapedControlName}"], [data-control-name="${escapedControlName}"]`
+        )
+      : null;
+    const errorTarget = escapedErrorKey
+      ? document.querySelector<HTMLElement>(`[data-validation-error="${escapedErrorKey}"]`)
+      : null;
+    const scrollTarget = target || errorTarget;
+
+    if (!scrollTarget) {
+      return;
+    }
+
+    scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    window.setTimeout(() => {
+      const focusTarget = this.findFocusableElement(scrollTarget);
+      focusTarget?.focus({ preventScroll: true });
+    }, 250);
+  }
+
+  private findFocusableElement(element: HTMLElement): HTMLElement | null {
+    if (this.isFocusable(element)) {
+      return element;
+    }
+
+    return element.querySelector<HTMLElement>(
+      'input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+  }
+
+  private isFocusable(element: HTMLElement): boolean {
+    const tagName = element.tagName.toLowerCase();
+    if (!['input', 'button', 'select', 'textarea', 'a'].includes(tagName) && !element.hasAttribute('tabindex')) {
+      return false;
+    }
+    return !element.hasAttribute('disabled');
+  }
+
+  private getControlNameForErrorKey(errorKey: string): string {
+    const directMap: Record<string, string> = {
+      name: 'name',
+      dob: 'dateOfBirth',
+      mobilePhone: 'mobilePhone',
+      landlinePhone: 'landlinePhone',
+      phoneNumbers: 'mobilePhone',
+      addressStreet: 'addressStreet',
+      addressCity: 'addressCity',
+      addressCountry: 'addressCountry',
+      addressProvince: 'addressProvince',
+      addressPostalCode: 'addressPostalCode',
+      addressLatitude: 'guardHomeLatitude',
+      addressLongitude: 'guardHomeLongitude',
+      addressCoordinates: 'guardHomeLatitude',
+      secondaryContactName: 'secondaryContactName',
+      secondaryContactEmail: 'secondaryContactEmail',
+      secondaryContactMobilePhone: 'secondaryContactMobile',
+      secondaryContactLandlinePhone: 'secondaryContactLandline',
+      secondaryContactPhoneNumbers: 'secondaryContactMobile',
+      preferredGuardTypes: 'preferredGuardTypes',
+      operationalRadius: 'operationalRadius',
+      operationalRegionCode: this.isProviderOperationalCoverageEditMode ? 'providerOperationalRegionCode' : 'operationalRegionCode',
+      operationalCityCode: this.isProviderOperationalCoverageEditMode ? 'providerOperationalCityCode' : 'operationalCityCode',
+      weeklyAvailability: 'availability',
+    };
+
+    if (directMap[errorKey]) {
+      return directMap[errorKey];
+    }
+
+    const documentMatch = errorKey.match(/^identification_(.+)_(type|number|province|country|expiry)$/);
+    if (documentMatch) {
+      const index = this.guardFormModel.identification.documents.findIndex(doc => doc.id === documentMatch[1]);
+      if (index >= 0) {
+        const suffixMap: Record<string, string> = {
+          type: `docType_${index}`,
+          number: `docNumber_${index}`,
+          province: `province_${index}`,
+          country: `passportCountry_${index}`,
+          expiry: `docExpiry_${index}`,
+        };
+        return suffixMap[documentMatch[2]] || '';
+      }
+    }
+
+    const securityLicenseMatch = errorKey.match(/^security_license_(.+)_(fullLegalName|licenseNumber|licenseType|issuingProvince|issuingAuthority|issueDate|expiryDate)$/);
+    if (securityLicenseMatch) {
+      const index = this.guardFormModel.securityLicenses.findIndex(license => license.id === securityLicenseMatch[1]);
+      if (index >= 0) {
+        const suffixMap: Record<string, string> = {
+          fullLegalName: `securityLicenseFullName_${index}`,
+          licenseNumber: `securityLicenseNumber_${index}`,
+          licenseType: `securityLicenseType_${index}`,
+          issuingProvince: `securityLicenseProvince_${index}`,
+          issuingAuthority: `securityLicenseAuthority_${index}`,
+          issueDate: `securityLicenseIssueDate_${index}`,
+          expiryDate: `securityLicenseExpiryDate_${index}`,
+        };
+        return suffixMap[securityLicenseMatch[2]] || '';
+      }
+    }
+
+    const policeClearanceMatch = errorKey.match(/^police_clearance_(.+)_(issuingAuthorityType|issuingAuthorityOther|issuingProvince|issuingCity|issueDate)$/);
+    if (policeClearanceMatch) {
+      const index = this.guardFormModel.policeClearances.findIndex(record => record.id === policeClearanceMatch[1]);
+      if (index >= 0) {
+        const suffixMap: Record<string, string> = {
+          issuingAuthorityType: `policeClearanceAuthority_${index}`,
+          issuingAuthorityOther: `policeClearanceAuthorityOther_${index}`,
+          issuingProvince: `policeClearanceProvince_${index}`,
+          issuingCity: `policeClearanceCity_${index}`,
+          issueDate: `policeClearanceIssueDate_${index}`,
+        };
+        return suffixMap[policeClearanceMatch[2]] || '';
+      }
+    }
+
+    const trainingCertificateMatch = errorKey.match(/^training_certificate_(.+)_(certificateName|issuingOrganizationType|issuingOrganizationOther|issueDate|expiryDate)$/);
+    if (trainingCertificateMatch) {
+      const index = this.guardFormModel.trainingCertificates.findIndex(cert => cert.id === trainingCertificateMatch[1]);
+      if (index >= 0) {
+        const suffixMap: Record<string, string> = {
+          certificateName: `trainingCertificateName_${index}`,
+          issuingOrganizationType: `trainingCertificateOrg_${index}`,
+          issuingOrganizationOther: `trainingCertificateOrgOther_${index}`,
+          issueDate: `trainingCertificateIssueDate_${index}`,
+          expiryDate: `trainingCertificateExpiryDate_${index}`,
+        };
+        return suffixMap[trainingCertificateMatch[2]] || '';
+      }
+    }
+
+    if (errorKey === 'identification') {
+      return 'docType_0';
+    }
+    if (errorKey === 'securityLicenses') {
+      return 'securityLicenseFullName_0';
+    }
+    if (errorKey === 'policeClearances') {
+      return 'policeClearanceAuthority_0';
+    }
+    if (errorKey === 'trainingCertificates') {
+      return 'trainingCertificateName_0';
+    }
+
+    return '';
+  }
+
+  private escapeCssValue(value: string): string {
+    if (!value) {
+      return '';
+    }
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+      return CSS.escape(value);
+    }
+    return value.replace(/["\\]/g, '\\$&');
+  }
+
   onSecurityLicenseProvinceChange(license: SecurityLicenseDocument, provinceCode: string): void {
     license.issuingProvince = provinceCode;
 
@@ -2610,6 +2864,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
         this.validateWeeklyAvailabilitySection();
       }
       if (Object.keys(this.guardErrors).length > 0) {
+        this.handleValidationFailure();
         return;
       }
       if (operationalRadius == null) {
@@ -2642,7 +2897,12 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
       return;
     }
 
-    if (!this.validateGuardForm() || this.isSubmitting) {
+    if (this.isSubmitting) {
+      return;
+    }
+
+    if (!this.validateGuardForm()) {
+      this.handleValidationFailure();
       return;
     }
 
@@ -2819,6 +3079,7 @@ export class GuardSettingComponent implements OnInit, OnDestroy, OnChanges {
 
     if (!result.ok) {
       this.guardErrors['addressCoordinates'] = result.message || 'Home coordinates do not match the manual address.';
+      this.handleValidationFailure();
       return false;
     }
 
