@@ -20,6 +20,7 @@ import { CardComponent } from '../../components/card/card.component';
 import { ClientPreferredGuardTypesComponent } from '../../components/client-preferred-guard-types/client-preferred-guard-types.component';
 import { ApiService } from '../../shared/services/api.service';
 import { AppService } from '../../services/core/app/app.service';
+import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
 import { TENANT_TYPES } from '../../shared/constants/tenant-types.constants';
 import { getIssuingAuthorityForProvince } from '../../shared/constants/provincial-authorities.constants';
 import { DistanceUnit, formatDistance, kmToMiles, milesToKm } from '../../shared/helpers/distance.helper';
@@ -149,6 +150,7 @@ interface ServiceProvider {
   styleUrls: ['./service-provider-setting.component.css']
 })
 export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
+  readonly maxDocumentsPerSection = 2;
   readonly showDummyDataButton = isLocalhostForDummyData();
   headOfficeMapUrl = '';
   providerHeadOfficeLocationSelected = false;
@@ -238,12 +240,43 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   insuranceUploadError: string = '';
 
   private destroy$ = new Subject<void>();
+  private readonly errorFieldPriority = [
+    'legalCompanyName',
+    'corporationNumber',
+    'yearOfEstablishment',
+    'companyWebsite',
+    'officeCoordinates',
+    'officeLatitude',
+    'officeLongitude',
+    'officeStreet',
+    'officeCountry',
+    'officeProvince',
+    'officeCity',
+    'officePostalCode',
+    'repName',
+    'repEmail',
+    'repMobilePhone',
+    'repLandlinePhone',
+    'repPhone',
+    'secondaryContactName',
+    'secondaryContactEmail',
+    'secondaryContactMobilePhone',
+    'secondaryContactLandlinePhone',
+    'secondaryContactPhone',
+    'securityLicenses',
+    'operatingRegions',
+    'guardCategories',
+    'policyNumber',
+    'policyExpiryDate',
+    'submit',
+  ];
 
   constructor(
     private apiService: ApiService,
     private router: Router,
     private appService: AppService,
     private addressConsistencyService: GoogleMapsAddressConsistencyService,
+    private notification: MessageNotificationService,
   ) { }
 
   ngOnInit(): void {
@@ -274,6 +307,10 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  get canAddSecurityLicense(): boolean {
+    return (this.providerFormModel.securityLicenses?.length || 0) < this.maxDocumentsPerSection;
   }
 
   private loadProviderMetadata(onLoaded?: () => void): void {
@@ -914,6 +951,13 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
   }
 
   addSecurityLicense(): void {
+    if (this.readonly) {
+      return;
+    }
+    if (!this.canAddSecurityLicense) {
+      this.notification.warning(`Only ${this.maxDocumentsPerSection} security licenses are allowed.`);
+      return;
+    }
     this.providerFormModel.securityLicenses.push({
       licenseNumber: '',
       licenseType: '',
@@ -1436,6 +1480,7 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
     }
 
     if (!this.validateProviderForm()) {
+      this.handleValidationFailure();
       return;
     }
 
@@ -1631,10 +1676,150 @@ export class ServiceProviderSettingComponent implements OnInit, OnDestroy {
 
     if (!result.ok) {
       this.providerErrors.officeCoordinates = result.message || 'Head office coordinates do not match the manual address.';
+      this.handleValidationFailure();
       return false;
     }
 
     return true;
+  }
+
+  private handleValidationFailure(): void {
+    const firstErrorKey = this.getFirstValidationErrorKey();
+    const message = firstErrorKey
+      ? this.providerErrors[firstErrorKey]
+      : 'Please review the highlighted fields before submitting.';
+    this.notification.error(message || 'Please review the highlighted fields before submitting.', 5000);
+    this.scrollToErrorField(firstErrorKey);
+  }
+
+  private getFirstValidationErrorKey(): string {
+    const keys = Object.keys(this.providerErrors).filter(key => !!this.providerErrors[key]);
+    if (!keys.length) {
+      return '';
+    }
+    return this.errorFieldPriority.find(key => keys.includes(key))
+      || keys.find(key => key.startsWith('security_license_'))
+      || keys.find(key => key.startsWith('region_'))
+      || keys[0];
+  }
+
+  private scrollToErrorField(errorKey: string): void {
+    const controlName = this.getControlNameForErrorKey(errorKey);
+    if (!controlName || typeof document === 'undefined') {
+      return;
+    }
+    const escapedControlName = this.escapeCssValue(controlName);
+    const target = document.querySelector<HTMLElement>(
+      `[name="${escapedControlName}"], [data-control-name="${escapedControlName}"]`
+    );
+    if (!target) {
+      return;
+    }
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    window.setTimeout(() => {
+      this.findFocusableElement(target)?.focus({ preventScroll: true });
+    }, 250);
+  }
+
+  private getControlNameForErrorKey(errorKey: string): string {
+    const directMap: Record<string, string> = {
+      legalCompanyName: 'legalCompanyName',
+      corporationNumber: 'corporationNumber',
+      yearOfEstablishment: 'dateOfEstablishment',
+      companyWebsite: 'companyWebsite',
+      officeCoordinates: 'providerHeadOfficeLatitude',
+      officeLatitude: 'providerHeadOfficeLatitude',
+      officeLongitude: 'providerHeadOfficeLongitude',
+      officeStreet: 'officeStreet',
+      officeCountry: 'officeCountry',
+      officeProvince: 'officeProvince',
+      officeCity: 'officeCity',
+      officePostalCode: 'officePostalCode',
+      repName: 'repName',
+      repEmail: 'repEmail',
+      repMobilePhone: 'repMobile',
+      repLandlinePhone: 'repLandline',
+      repPhone: 'repMobile',
+      secondaryContactName: 'secondaryContactName',
+      secondaryContactEmail: 'secondaryContactEmail',
+      secondaryContactMobilePhone: 'secondaryContactMobile',
+      secondaryContactLandlinePhone: 'secondaryContactLandline',
+      secondaryContactPhone: 'secondaryContactMobile',
+      securityLicenses: 'licenseNumber_0',
+      operatingRegions: 'regionProvince0',
+      guardCategories: 'guardCategoriesOffered',
+      policyNumber: 'policyNumber',
+      policyExpiryDate: 'policyExpiryDate',
+    };
+    if (directMap[errorKey]) {
+      return directMap[errorKey];
+    }
+
+    const licenseMatch = errorKey.match(/^security_license_(.+)_(licenseNumber|licenseType|issuingProvince|issuingAuthority|issueDate|expiryDate)$/);
+    if (licenseMatch) {
+      const index = this.providerFormModel.securityLicenses.findIndex(license => license.id === licenseMatch[1]);
+      if (index >= 0) {
+        const suffixMap: Record<string, string> = {
+          licenseNumber: `licenseNumber_${index}`,
+          licenseType: `licenseType_${index}`,
+          issuingProvince: `issuingProvince_${index}`,
+          issuingAuthority: `issuingAuthority_${index}`,
+          issueDate: `issueDate_${index}`,
+          expiryDate: `expiryDate_${index}`,
+        };
+        return suffixMap[licenseMatch[2]] || '';
+      }
+    }
+
+    const regionMatch = errorKey.match(/^region_(\d+)_(country|regionCode|cityCodes)$/);
+    if (regionMatch) {
+      const index = regionMatch[1];
+      const suffixMap: Record<string, string> = {
+        country: `regionCountry${index}`,
+        regionCode: `regionProvince${index}`,
+        cityCodes: `regionCity${index}_0`,
+      };
+      return suffixMap[regionMatch[2]] || '';
+    }
+
+    const regionCityMatch = errorKey.match(/^region_(\d+)_city_(\d+)_(radius|coordinates|latitude|longitude)$/);
+    if (regionCityMatch) {
+      const regionIndex = regionCityMatch[1];
+      const cityIndex = regionCityMatch[2];
+      const suffixMap: Record<string, string> = {
+        radius: `regionCityRadius${regionIndex}_${cityIndex}`,
+        coordinates: `regionCityLatitude${regionIndex}_${cityIndex}`,
+        latitude: `regionCityLatitude${regionIndex}_${cityIndex}`,
+        longitude: `regionCityLongitude${regionIndex}_${cityIndex}`,
+      };
+      return suffixMap[regionCityMatch[3]] || '';
+    }
+
+    return '';
+  }
+
+  private findFocusableElement(element: HTMLElement): HTMLElement | null {
+    if (this.isFocusable(element)) {
+      return element;
+    }
+    return element.querySelector<HTMLElement>(
+      'input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+  }
+
+  private isFocusable(element: HTMLElement): boolean {
+    const tagName = element.tagName.toLowerCase();
+    return (
+      ['input', 'button', 'select', 'textarea', 'a'].includes(tagName) ||
+      element.hasAttribute('tabindex')
+    ) && !element.hasAttribute('disabled');
+  }
+
+  private escapeCssValue(value: string): string {
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+      return CSS.escape(value);
+    }
+    return value.replace(/["\\]/g, '\\$&');
   }
 
   fillDummyData(): void {

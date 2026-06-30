@@ -421,6 +421,7 @@
              guardFormModel.identification.documents.length > 0
              ? 'Add Another Document'
              : 'Add Document')" type="secondary" htmlType="button" customClass="rounded-lg"
+                    [disabled]="!canAddIdentificationDocument"
                     (click)="addIdentificationDocument()">
                 </app-button>
 
@@ -537,7 +538,7 @@
 
             <div class="flex justify-center pt-4" *ngIf="!readonly">
                 <app-button label="+ Add Security License" type="secondary" [htmlType]="'button'"
-                    [customClass]="'rounded-lg'" (click)="addSecurityLicense()">
+                    [customClass]="'rounded-lg'" [disabled]="!canAddSecurityLicense" (click)="addSecurityLicense()">
                 </app-button>
             </div>
         </app-section>
@@ -642,7 +643,7 @@
 
             <div class="flex justify-center pt-4" *ngIf="!readonly">
                 <app-button label="+ Add Police Clearance" type="secondary" [htmlType]="'button'"
-                    [customClass]="'rounded-lg'" (click)="addPoliceClearance()">
+                    [customClass]="'rounded-lg'" [disabled]="!canAddPoliceClearance" (click)="addPoliceClearance()">
                 </app-button>
             </div>
         </app-section>
@@ -737,7 +738,7 @@
 
             <div class="flex justify-center pt-4" *ngIf="!readonly">
                 <app-button label="+ Add Training Certificate" type="secondary" [htmlType]="'button'"
-                    [customClass]="'rounded-lg'" (click)="addTrainingCertificate()">
+                    [customClass]="'rounded-lg'" [disabled]="!canAddTrainingCertificate" (click)="addTrainingCertificate()">
                 </app-button>
             </div>
         </app-section>
