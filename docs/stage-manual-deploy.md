@@ -77,12 +77,14 @@ At minimum set:
 - `ACCOUNTS_MAIL_PASSWORD`
 - `ACCOUNTS_SMTP_SERVER=host.docker.internal`
 - `ACCOUNTS_SMTP_PORT=1025`
+- `GUNICORN_WORKERS=1`
 
 Notes:
 
 - Keep `PRODUCTION=0` for HTTP-only staging.
 - If you later put TLS in front of staging, you can flip `PRODUCTION=1`.
 - If staging uses HTTPS immediately, set `APP_URL=https://<stage-domain>` and `PRODUCTION=1`.
+- Keep `GUNICORN_WORKERS=1` for now. The app currently runs startup index/migration work during process boot, so multiple web workers can race on Mongo initialization.
 
 ## Build and ship the app image
 
