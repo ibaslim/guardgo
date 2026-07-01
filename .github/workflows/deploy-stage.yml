@@ -108,17 +108,17 @@ jobs:
             docker pull ghcr.io/${{ env.IMAGE_NAME }}:stage
             APP_IMAGE=ghcr.io/${{ env.IMAGE_NAME }} IMAGE_TAG=stage ./scripts/deploy.sh stage down
 
-            # After stopping the stage stack, port 80 must be free for stage nginx.
-            if ss -lntp | grep -q ':80 '; then
-              echo "Port 80 is still in use on VPS by another process."
-              ss -lntp | grep ':80 ' || true
+            # After stopping the stage stack, ports 80/443 must be free for stage nginx.
+            if ss -lntp | grep -Eq ':80 |:443 '; then
+              echo "Ports 80/443 are still in use on VPS by another process."
+              ss -lntp | grep -E ':80 |:443 ' || true
               exit 1
             fi
 
             APP_IMAGE=ghcr.io/${{ env.IMAGE_NAME }} IMAGE_TAG=stage ./scripts/deploy.sh stage up
 
             # Smoke checks so we do not need manual SSH checks after each run.
-            curl -fsS -H "Host: ggstage.vaultcentric.com" http://127.0.0.1/health/live >/dev/null
-            curl -fsS -H "Host: ggstage.vaultcentric.com" http://127.0.0.1/health/ready >/dev/null
+            curl -fsS --resolve ggstage.vaultcentric.com:443:127.0.0.1 https://ggstage.vaultcentric.com/health/live >/dev/null
+            curl -fsS --resolve ggstage.vaultcentric.com:443:127.0.0.1 https://ggstage.vaultcentric.com/health/ready >/dev/null
 
             docker image prune -f
