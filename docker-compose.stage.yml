@@ -59,7 +59,7 @@ services:
     networks:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "wget --header=\"Host: $${PRODUCTION_DOMAIN:-localhost}\" -q -O - http://localhost:8080/health/live >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://web:8070/health/live >/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -105,14 +105,20 @@ jobs:
             git fetch origin "$BRANCH"
             git checkout "$BRANCH" || git checkout -b "$BRANCH" "origin/$BRANCH"
             git pull origin "$BRANCH"
+            docker pull ghcr.io/${{ env.IMAGE_NAME }}:stage
+            APP_IMAGE=ghcr.io/${{ env.IMAGE_NAME }} IMAGE_TAG=stage ./scripts/deploy.sh stage down
 
+            # After stopping the stage stack, port 80 must be free for stage nginx.
             if ss -lntp | grep -q ':80 '; then
-              echo "Port 80 is still in use on VPS. Cannot start guardgo-stage nginx."
+              echo "Port 80 is still in use on VPS by another process."
               ss -lntp | grep ':80 ' || true
               exit 1
             fi
 
-            docker pull ghcr.io/${{ env.IMAGE_NAME }}:stage
-            APP_IMAGE=ghcr.io/${{ env.IMAGE_NAME }} IMAGE_TAG=stage ./scripts/deploy.sh stage down
             APP_IMAGE=ghcr.io/${{ env.IMAGE_NAME }} IMAGE_TAG=stage ./scripts/deploy.sh stage up
+
+            # Smoke checks so we do not need manual SSH checks after each run.
+            curl -fsS -H "Host: ggstage.vaultcentric.com" http://127.0.0.1/health/live >/dev/null
+            curl -fsS -H "Host: ggstage.vaultcentric.com" http://127.0.0.1/health/ready >/dev/null
+
             docker image prune -f
