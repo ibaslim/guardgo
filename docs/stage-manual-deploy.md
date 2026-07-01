@@ -1,218 +1,137 @@
-# GuardGo Stage Manual Deploy
+# GuardGo Stage CI/CD Manual
 
-This document describes the manual staging deployment path after the environment split.
+This is the final stage deployment guide for the current architecture.
 
-## Automated deployment (GitHub Actions)
+## Final Architecture
 
-Pushing to the `stage` branch triggers `.github/workflows/deploy-stage.yml` which:
+- Deployment trigger: push to `stage` branch
+- Build location: GitHub Actions runner
+- Image registry: GHCR (`ghcr.io/<owner>/guardgo-app:stage`)
+- Deploy target: staging VPS at `/opt/guardgo`
+- Runtime edge: Docker nginx in stage stack (ports 80 and 443)
+- TLS termination: inside Docker nginx using host cert mounts (`/etc/letsencrypt`)
 
-1. Builds the Docker image on GitHub's runner (no build on VPS, no file transfer)
-2. Pushes it to GitHub Container Registry (`ghcr.io`) as `guardgo-app:stage`
-3. SSHs into the staging VPS and runs `docker pull` + `deploy.sh stage down/up`
+## What Happens On Every Stage Push
 
-### Required GitHub repository secrets
+Workflow file: `.github/workflows/deploy-stage.yml`
 
-Go to **Settings → Secrets and variables → Actions** and add:
+1. Build app image from `dockerFiles/api_docker`
+2. Push image to GHCR with tag `stage`
+3. SSH to VPS and update git branch
+4. Pull image on VPS
+5. Restart stage stack (`deploy.sh stage down` then `up`)
+6. Run HTTPS smoke checks:
+   - `/health/live`
+   - `/health/ready`
 
-| Secret | Value |
-|---|---|
-| `STAGE_VPS_HOST` | IP address or hostname of the staging VPS |
-| `STAGE_VPS_USER` | SSH user on the VPS (e.g. `root`) |
-| `STAGE_VPS_SSH_KEY` | Private SSH key whose public key is in `~/.ssh/authorized_keys` on the VPS |
+## One-Time Setup Checklist
 
-`GITHUB_TOKEN` is provided automatically by GitHub Actions — no manual secret needed for the registry.
+### 1) GitHub repository secrets
 
-### One-time VPS setup for automated deploys
+Add in GitHub: Settings -> Secrets and variables -> Actions
 
-On the staging VPS, log in to GHCR once so `docker pull` from the Actions runner can authenticate:
+- `STAGE_VPS_HOST`
+- `STAGE_VPS_USER`
+- `STAGE_VPS_SSH_KEY`
+- `STAGE_VPS_SSH_PASSPHRASE` (only if key is passphrase-protected)
 
-```bash
-# Replace YOUR_GITHUB_USERNAME with your GitHub username
-# Replace YOUR_PAT with a GitHub personal access token with read:packages scope
-echo YOUR_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-```
-
-The workflow also logs in during the SSH step, so this is only needed for manual pulls.
-
----
-
-## Naming
-
-- Local env file: `.env.local`
-- Staging env file on VPS: `/opt/guardgo/.env.stage`
-- Production env file on VPS: `/opt/guardgo/.env.prod`
-
-The active staging stack is [`docker-compose.stage.yml`](/home/ibsalim/Projects/guardgo/docker-compose.stage.yml:1).
-
-## Staging assumptions
-
-- Staging app directory: `/opt/guardgo`
-- Staging is reachable through a domain that points to the staging VPS
-- Mailpit runs directly on the VPS host, not inside Docker
-
-Because Mailpit is host-installed, the stage app container should use:
-
-```bash
-ACCOUNTS_SMTP_SERVER=host.docker.internal
-ACCOUNTS_SMTP_PORT=1025
-```
-
-The stage compose file already maps `host.docker.internal` to the Docker host using `host-gateway`.
-
-Before deploying, verify the host Mailpit SMTP listener is reachable on the VPS:
-
-```bash
-ss -lntp | grep ':1025'
-```
-
-If Mailpit is only bound to `127.0.0.1`, reconfigure it to listen on the VPS host interface as well.
-
-## One-time VPS setup
+### 2) VPS repository + compose prerequisites
 
 ```bash
 sudo mkdir -p /opt/guardgo
-sudo chown -R "$USER":"$USER" /opt/guardgo
+cd /opt/guardgo
+git clone <repo-url> .
 ```
 
-Copy the repository to the VPS:
+### 3) Stage environment file on VPS
+
+Path: `/opt/guardgo/.env.stage`
+
+Required highlights for HTTPS stage:
+
+- `APP_URL='https://ggstage.vaultcentric.com'`
+- `PRODUCTION='1'`
+- `PRODUCTION_DOMAIN='ggstage.vaultcentric.com'`
+- `ALLOWED_CORS_ORIGINS='https://ggstage.vaultcentric.com'`
+- `GUNICORN_WORKERS='1'` (recommended for this codebase startup behavior)
+
+### 4) VPS cert paths used by stage nginx
+
+The stage compose mounts these host paths into the nginx container:
+
+- `/etc/letsencrypt`
+- `/var/www/letsencrypt`
+
+Required files:
 
 ```bash
-rsync -az --delete \
-  --exclude '.git' \
-  --exclude '.env' \
-  --exclude '.env.local' \
-  --exclude 'client/node_modules' \
-  --exclude 'backend/build' \
-  /path/to/guardgo/ \
-  <user>@<stage-vps>:/opt/guardgo/
+ls -l /etc/letsencrypt/live/ggstage.vaultcentric.com/fullchain.pem
+ls -l /etc/letsencrypt/live/ggstage.vaultcentric.com/privkey.pem
 ```
 
-Create the stage env file:
+### 5) Port ownership
+
+Stage stack needs host ports 80 and 443 available.
+
+If another service is listening (for example host nginx), free those ports first.
+
+## Standard Operating Flow (Daily)
+
+1. Commit code
+2. Push to `stage`
+3. Watch workflow in GitHub Actions
+4. Done if workflow is green
+
+No manual image build, no tarball transfer, no manual `docker load`.
+
+## Verification Commands
+
+### From your machine
+
+```bash
+curl -i https://ggstage.vaultcentric.com/health/live
+curl -i https://ggstage.vaultcentric.com/health/ready
+```
+
+### On VPS (if needed)
 
 ```bash
 cd /opt/guardgo
-cp .env.example .env.stage
+export ENV_FILE=/opt/guardgo/.env.stage
+export APP_IMAGE=ghcr.io/<owner>/guardgo-app
+export IMAGE_TAG=stage
+docker compose --project-name guardgo-stage --env-file "$ENV_FILE" -f docker-compose.stage.yml ps
 ```
 
-## Required stage env values
-
-At minimum set:
-
-- `APP_URL=http://<stage-domain>`
-- `PRODUCTION=0`
-- `PRODUCTION_DOMAIN=<stage-domain>`
-- `MONGO_ROOT_USERNAME`
-- `MONGO_ROOT_PASSWORD`
-- `REDIS_PASSWORD`
-- `ENCRYPTION_KEY`
-- `S_SUPER_PASSWORD_V1`
-- `S_CRAWLER_PASSWORD`
-- `ACCOUNTS_MAIL`
-- `ACCOUNTS_MAIL_PASSWORD`
-- `ACCOUNTS_SMTP_SERVER=host.docker.internal`
-- `ACCOUNTS_SMTP_PORT=1025`
-- `GUNICORN_WORKERS=1`
-
-Notes:
-
-- Keep `PRODUCTION=0` for HTTP-only staging.
-- If you later put TLS in front of staging, you can flip `PRODUCTION=1`.
-- If staging uses HTTPS immediately, set `APP_URL=https://<stage-domain>` and `PRODUCTION=1`.
-- Keep `GUNICORN_WORKERS=1` for now. The app currently runs startup index/migration work during process boot, so multiple web workers can race on Mongo initialization.
-- The deployment is fully dockerized. Docker nginx owns port 80 directly on the VPS. There is no host nginx in front of it.
-
-### One-time: stop and disable host nginx on the VPS
-
-If host nginx was previously installed on the VPS (e.g. via `apt`), stop it so Docker can bind port 80:
-
-```bash
-sudo systemctl stop nginx
-sudo systemctl disable nginx
-```
-
-Verify port 80 is free before deploying:
-
-```bash
-ss -lntp | grep ':80 '
-```
-
-If nothing is listed, Docker nginx can bind port 80 cleanly.
-
-## Build and ship the app image
-
-Stage now uses a prebuilt Docker image. Do not build on the VPS.
-
-Build the image on your local machine:
-
-```bash
-cd /path/to/guardgo
-docker build -t guardgo-app:stage -f dockerFiles/api_docker .
-```
-
-Transfer it to the staging VPS:
-
-```bash
-docker save guardgo-app:stage | gzip > guardgo-app-stage.tar.gz
-scp guardgo-app-stage.tar.gz <user>@<stage-vps>:/opt/guardgo/
-```
-
-Load it on the staging VPS:
+## Manual Fallback (Only If CI Fails)
 
 ```bash
 cd /opt/guardgo
-gunzip -c guardgo-app-stage.tar.gz | docker load
-docker image ls | grep guardgo-app
+export ENV_FILE=/opt/guardgo/.env.stage
+export APP_IMAGE=ghcr.io/<owner>/guardgo-app
+export IMAGE_TAG=stage
+./scripts/deploy.sh stage restart
 ```
 
-## Manual stage deploy
-
-On the staging VPS:
+Logs:
 
 ```bash
 cd /opt/guardgo
-APP_IMAGE=guardgo-app IMAGE_TAG=stage \
-./scripts/deploy.sh stage up
+export ENV_FILE=/opt/guardgo/.env.stage
+export APP_IMAGE=ghcr.io/<owner>/guardgo-app
+export IMAGE_TAG=stage
+./scripts/deploy.sh stage logs
 ```
 
-This starts:
+## Troubleshooting Quick Map
 
-- `web` for the FastAPI app
-- `worker` for `backend/cronjobs.py`
-- `nginx`, `mongo`, and `redis_server`
+- Workflow fails at SSH auth: verify key/passphrase secrets
+- Workflow fails at port check: another process owns 80 or 443
+- Workflow passes but browser fails: verify DNS + external 443 reachability
+- Health endpoint returns 405 on `curl -I`: use GET (`curl -i` or `curl -sS`)
 
-## Manual stage rollback
+## Security Notes
 
-For now rollback is source-based:
-
-1. deploy an older Git revision into `/opt/guardgo`
-2. rerun:
-
-```bash
-./scripts/deploy.sh stage up
-```
-
-## Useful commands
-
-View logs:
-
-```bash
-cd /opt/guardgo
-APP_IMAGE=guardgo-app IMAGE_TAG=stage ./scripts/deploy.sh stage logs
-```
-
-Stop staging:
-
-```bash
-cd /opt/guardgo
-APP_IMAGE=guardgo-app IMAGE_TAG=stage ./scripts/deploy.sh stage down
-```
-
-## Local workflow
-
-Your local compatibility command still works:
-
-```bash
-./run.sh build -d
-```
-
-Internally that now routes to [`scripts/run-local.sh`](/home/ibsalim/Projects/guardgo/scripts/run-local.sh:1) and prefers `.env.local`.
+- Never commit real secrets into repository files
+- Keep production and stage credentials separate
+- Rotate any credentials that were exposed during setup/testing
