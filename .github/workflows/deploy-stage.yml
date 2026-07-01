@@ -42,6 +42,54 @@ jobs:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stage-cache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stage-cache,mode=max
 
+      - name: Validate SSH secrets
+        shell: bash
+        env:
+          STAGE_VPS_HOST: ${{ secrets.STAGE_VPS_HOST }}
+          STAGE_VPS_USER: ${{ secrets.STAGE_VPS_USER }}
+          STAGE_VPS_SSH_KEY: ${{ secrets.STAGE_VPS_SSH_KEY }}
+          STAGE_VPS_SSH_PASSPHRASE: ${{ secrets.STAGE_VPS_SSH_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${STAGE_VPS_HOST:-}" ]]; then
+            echo "::error::Missing secret STAGE_VPS_HOST"
+            exit 1
+          fi
+
+          if [[ -z "${STAGE_VPS_USER:-}" ]]; then
+            echo "::error::Missing secret STAGE_VPS_USER"
+            exit 1
+          fi
+
+          if [[ -z "${STAGE_VPS_SSH_KEY:-}" ]]; then
+            echo "::error::Missing secret STAGE_VPS_SSH_KEY"
+            exit 1
+          fi
+
+          tmp_key="$(mktemp)"
+          trap 'rm -f "$tmp_key"' EXIT
+          printf '%s\n' "$STAGE_VPS_SSH_KEY" > "$tmp_key"
+          chmod 600 "$tmp_key"
+
+          # If this fails without -P, key is encrypted or invalid.
+          if ssh-keygen -y -f "$tmp_key" >/dev/null 2>&1; then
+            echo "SSH key format validated (unencrypted key)."
+            exit 0
+          fi
+
+          if [[ -z "${STAGE_VPS_SSH_PASSPHRASE:-}" ]]; then
+            echo "::error::STAGE_VPS_SSH_KEY appears passphrase-protected. Add STAGE_VPS_SSH_PASSPHRASE or use a dedicated unencrypted CI deploy key."
+            exit 1
+          fi
+
+          if ssh-keygen -y -P "$STAGE_VPS_SSH_PASSPHRASE" -f "$tmp_key" >/dev/null 2>&1; then
+            echo "SSH key and passphrase validated."
+          else
+            echo "::error::STAGE_VPS_SSH_PASSPHRASE does not match STAGE_VPS_SSH_KEY. Re-enter the exact passphrase or replace with a dedicated unencrypted CI deploy key."
+            exit 1
+          fi
+
       - name: Deploy to staging VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
