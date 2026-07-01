@@ -1,0 +1,123 @@
+name: Deploy Stage
+
+on:
+  push:
+    branches:
+      - stage
+  workflow_dispatch:   # adds a manual "Run workflow" button in GitHub Actions UI
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/guardgo-app
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: dockerFiles/api_docker
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stage
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stage-cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stage-cache,mode=max
+
+      - name: Validate SSH secrets
+        shell: bash
+        env:
+          STAGE_VPS_HOST: ${{ secrets.STAGE_VPS_HOST }}
+          STAGE_VPS_USER: ${{ secrets.STAGE_VPS_USER }}
+          STAGE_VPS_SSH_KEY: ${{ secrets.STAGE_VPS_SSH_KEY }}
+          STAGE_VPS_SSH_PASSPHRASE: ${{ secrets.STAGE_VPS_SSH_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${STAGE_VPS_HOST:-}" ]]; then
+            echo "::error::Missing secret STAGE_VPS_HOST"
+            exit 1
+          fi
+
+          if [[ -z "${STAGE_VPS_USER:-}" ]]; then
+            echo "::error::Missing secret STAGE_VPS_USER"
+            exit 1
+          fi
+
+          if [[ -z "${STAGE_VPS_SSH_KEY:-}" ]]; then
+            echo "::error::Missing secret STAGE_VPS_SSH_KEY"
+            exit 1
+          fi
+
+          tmp_key="$(mktemp)"
+          trap 'rm -f "$tmp_key"' EXIT
+          printf '%s\n' "$STAGE_VPS_SSH_KEY" > "$tmp_key"
+          chmod 600 "$tmp_key"
+
+          # If this fails without -P, key is encrypted or invalid.
+          if ssh-keygen -y -f "$tmp_key" >/dev/null 2>&1; then
+            echo "SSH key format validated (unencrypted key)."
+            exit 0
+          fi
+
+          if [[ -z "${STAGE_VPS_SSH_PASSPHRASE:-}" ]]; then
+            echo "::error::STAGE_VPS_SSH_KEY appears passphrase-protected. Add STAGE_VPS_SSH_PASSPHRASE or use a dedicated unencrypted CI deploy key."
+            exit 1
+          fi
+
+          if ssh-keygen -y -P "$STAGE_VPS_SSH_PASSPHRASE" -f "$tmp_key" >/dev/null 2>&1; then
+            echo "SSH key and passphrase validated."
+          else
+            echo "::error::STAGE_VPS_SSH_PASSPHRASE does not match STAGE_VPS_SSH_KEY. Re-enter the exact passphrase or replace with a dedicated unencrypted CI deploy key."
+            exit 1
+          fi
+
+      - name: Deploy to staging VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGE_VPS_HOST }}
+          username: ${{ secrets.STAGE_VPS_USER }}
+          key: ${{ secrets.STAGE_VPS_SSH_KEY }}
+          passphrase: ${{ secrets.STAGE_VPS_SSH_PASSPHRASE }}
+          script: |
+            set -e
+            BRANCH="${{ github.ref_name }}"
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            cd /opt/guardgo
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH" || git checkout -b "$BRANCH" "origin/$BRANCH"
+            git pull origin "$BRANCH"
+            docker pull ghcr.io/${{ env.IMAGE_NAME }}:stage
+            APP_IMAGE=ghcr.io/${{ env.IMAGE_NAME }} IMAGE_TAG=stage ./scripts/deploy.sh stage down
+
+            # After stopping the stage stack, ports 80/443 must be free for stage nginx.
+            if ss -lntp | grep -Eq ':80 |:443 '; then
+              echo "Ports 80/443 are still in use on VPS by another process."
+              ss -lntp | grep -E ':80 |:443 ' || true
+              exit 1
+            fi
+
+            APP_IMAGE=ghcr.io/${{ env.IMAGE_NAME }} IMAGE_TAG=stage ./scripts/deploy.sh stage up
+
+            # Smoke checks so we do not need manual SSH checks after each run.
+            curl -fsS --resolve ggstage.vaultcentric.com:443:127.0.0.1 https://ggstage.vaultcentric.com/health/live >/dev/null
+            curl -fsS --resolve ggstage.vaultcentric.com:443:127.0.0.1 https://ggstage.vaultcentric.com/health/ready >/dev/null
+
+            docker image prune -f

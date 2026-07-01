@@ -12,6 +12,9 @@ staticfiles/*
 mongo-data/*
 static/trustly/.well-known/model/*
 .env
+.env.local
+.env.stage
+.env.prod
 
 # Optional: Ignore logs or temporary files
 *.log

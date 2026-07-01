@@ -25,25 +25,27 @@ types:
 
 - backend/ - FastAPI app, routes, services, migrations
 - client/ - Angular app
-- docker-compose.yml - local docker stack
-- docker-compose-production.yml - production docker stack
-- nginx/ - reverse proxy config
+- docker-compose.local.yml - local Docker stack
+- docker-compose.stage.yml - staging Docker stack
+- docker-compose.prod.yml - production Docker stack
+- scripts/ - local and deploy entrypoints
+- docs/stage-manual-deploy.md - manual staging deploy runbook
 
 ## Quick Start (run.sh)
 
 1) Create your environment file:
 
 ```bash
-cp env .env
+cp .env.example .env.local
 ```
 
 2) Start the stack:
 
 ```bash
-./run.sh -d
+./run.sh build -d
 ```
 
-This script wraps Docker Compose and uses the project defaults.
+This keeps the existing local command shape, but the real logic now lives in `scripts/run-local.sh`.
 
 The app will be available on http://localhost:8080 and the API docs at http://localhost:8080/docs.
 
@@ -125,8 +127,19 @@ npm test
 
 ## Configuration
 
-The app expects a `.env` file at the project root. Use `env` as a starting point and replace secrets for your
-environment. Do not commit real secrets to source control.
+Use dedicated env files per environment:
+
+- local machine: `.env.local`
+- staging VPS: `/opt/guardgo/.env.stage`
+- production VPS: `/opt/guardgo/.env.prod`
+
+Commit only `.env.example`. Do not commit real secrets to source control.
+
+For staging on a VPS with host-installed Mailpit, point SMTP to `host.docker.internal:1025`.
+
+## Stage Deployment
+
+The manual stage deployment path is documented in [docs/stage-manual-deploy.md](/home/ibsalim/Projects/guardgo/docs/stage-manual-deploy.md:1).
 
 ## API Docs
 

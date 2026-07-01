@@ -21,8 +21,16 @@ COOKIE_MAX_AGE = 30 * 60  # 30 minutes
 
 
 def set_access_cookie(resp: Response, token: str) -> None:
+    is_debug = env_handler.get_instance().env("PRODUCTION", "0") != "1"
     resp.set_cookie(
-        key=ACCESS_COOKIE, value=token, httponly=True, samesite="lax", secure=False, path="/", max_age=COOKIE_MAX_AGE, )
+        key=ACCESS_COOKIE,
+        value=token,
+        httponly=True,
+        samesite="lax",
+        secure=not is_debug,
+        path="/",
+        max_age=COOKIE_MAX_AGE,
+    )
 
 
 def token_from_request(request: Request) -> str | None:

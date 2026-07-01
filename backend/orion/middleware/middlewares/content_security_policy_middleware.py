@@ -32,25 +32,19 @@ class content_security_policy_middleware(BaseHTTPMiddleware):
                                                            "object-src *; "
                                                            "form-action *; "
                                                            "base-uri 'self'; "
-                                                           "upgrade-insecure-requests; "
-                                                           "report-to csp-endpoint;")
+                                                           "upgrade-insecure-requests;")
         else:
             response.headers["Content-Security-Policy"] = ("default-src 'self'; "
                                                            "script-src 'self'; "
-                                                           "style-src 'self'; "
-                                                           "img-src 'self' data: https://try.orionintelligence.org; "
-                                                           "font-src 'self'; "
-                                                           "connect-src 'self'; "
-                                                           "media-src 'self'; "
+                                                           "style-src 'self' 'unsafe-inline'; "
+                                                           "img-src 'self' data: blob: https: http:; "
+                                                           "font-src 'self' data:; "
+                                                           "connect-src 'self' https: http:; "
+                                                           "media-src 'self' data: blob:; "
                                                            "frame-ancestors 'self'; "
                                                            "object-src 'none'; "
                                                            "form-action 'self'; "
-                                                           "base-uri 'self'; "
-                                                           "report-to csp-endpoint;")
-
-        response.headers["Report-To"] = ('{"group":"csp-endpoint",'
-                                         '"max_age":10886400,'
-                                         '"endpoints":[{"url":"https://try.orionintelligence.org/csp-report-endpoint/"}]}')
+                                                           "base-uri 'self';")
 
         if not self.DEBUG:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
