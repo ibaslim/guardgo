@@ -23,7 +23,7 @@ case "$environment" in
         IMAGE_TAG="${IMAGE_TAG:-prod}"
         ;;
     *)
-        echo "Usage: scripts/deploy.sh <stage|prod> [up|down|restart|logs]" >&2
+        echo "Usage: scripts/deploy.sh <stage|prod> [up|down|restart|pull|logs]" >&2
         exit 1
         ;;
 esac
@@ -49,6 +49,9 @@ case "$action" in
         ;;
     restart)
         compose up -d --force-recreate --remove-orphans
+        ;;
+    pull)
+        compose pull
         ;;
     logs)
         compose logs -f

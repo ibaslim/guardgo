@@ -1,0 +1,59 @@
+name: Deploy Stage
+
+on:
+  push:
+    branches:
+      - stage
+      - feature/deploy-stage-plan   # remove this line once merged to stage
+  workflow_dispatch:   # adds a manual "Run workflow" button in GitHub Actions UI
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/guardgo-app
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: dockerFiles/api_docker
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stage
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stage-cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stage-cache,mode=max
+
+      - name: Deploy to staging VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGE_VPS_HOST }}
+          username: ${{ secrets.STAGE_VPS_USER }}
+          key: ${{ secrets.STAGE_VPS_SSH_KEY }}
+          script: |
+            set -e
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            cd /opt/guardgo
+            git pull origin stage
+            docker pull ghcr.io/${{ env.IMAGE_NAME }}:stage
+            APP_IMAGE=ghcr.io/${{ env.IMAGE_NAME }} IMAGE_TAG=stage ./scripts/deploy.sh stage down
+            APP_IMAGE=ghcr.io/${{ env.IMAGE_NAME }} IMAGE_TAG=stage ./scripts/deploy.sh stage up
+            docker image prune -f

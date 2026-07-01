@@ -2,6 +2,40 @@
 
 This document describes the manual staging deployment path after the environment split.
 
+## Automated deployment (GitHub Actions)
+
+Pushing to the `stage` branch triggers `.github/workflows/deploy-stage.yml` which:
+
+1. Builds the Docker image on GitHub's runner (no build on VPS, no file transfer)
+2. Pushes it to GitHub Container Registry (`ghcr.io`) as `guardgo-app:stage`
+3. SSHs into the staging VPS and runs `docker pull` + `deploy.sh stage down/up`
+
+### Required GitHub repository secrets
+
+Go to **Settings → Secrets and variables → Actions** and add:
+
+| Secret | Value |
+|---|---|
+| `STAGE_VPS_HOST` | IP address or hostname of the staging VPS |
+| `STAGE_VPS_USER` | SSH user on the VPS (e.g. `root`) |
+| `STAGE_VPS_SSH_KEY` | Private SSH key whose public key is in `~/.ssh/authorized_keys` on the VPS |
+
+`GITHUB_TOKEN` is provided automatically by GitHub Actions — no manual secret needed for the registry.
+
+### One-time VPS setup for automated deploys
+
+On the staging VPS, log in to GHCR once so `docker pull` from the Actions runner can authenticate:
+
+```bash
+# Replace YOUR_GITHUB_USERNAME with your GitHub username
+# Replace YOUR_PAT with a GitHub personal access token with read:packages scope
+echo YOUR_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+```
+
+The workflow also logs in during the SSH step, so this is only needed for manual pulls.
+
+---
+
 ## Naming
 
 - Local env file: `.env.local`
@@ -85,6 +119,24 @@ Notes:
 - If you later put TLS in front of staging, you can flip `PRODUCTION=1`.
 - If staging uses HTTPS immediately, set `APP_URL=https://<stage-domain>` and `PRODUCTION=1`.
 - Keep `GUNICORN_WORKERS=1` for now. The app currently runs startup index/migration work during process boot, so multiple web workers can race on Mongo initialization.
+- The deployment is fully dockerized. Docker nginx owns port 80 directly on the VPS. There is no host nginx in front of it.
+
+### One-time: stop and disable host nginx on the VPS
+
+If host nginx was previously installed on the VPS (e.g. via `apt`), stop it so Docker can bind port 80:
+
+```bash
+sudo systemctl stop nginx
+sudo systemctl disable nginx
+```
+
+Verify port 80 is free before deploying:
+
+```bash
+ss -lntp | grep ':80 '
+```
+
+If nothing is listed, Docker nginx can bind port 80 cleanly.
 
 ## Build and ship the app image
 
