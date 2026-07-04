@@ -29,7 +29,7 @@ types:
 - docker-compose.stage.yml - staging Docker stack
 - docker-compose.prod.yml - production Docker stack
 - scripts/ - local and deploy entrypoints
-- docs/stage-manual-deploy.md - manual staging deploy runbook
+- docs/deploy-manual.md - unified staging and production deployment manual
 
 ## Quick Start (run.sh)
 
@@ -137,9 +137,9 @@ Commit only `.env.example`. Do not commit real secrets to source control.
 
 For staging on a VPS with host-installed Mailpit, point SMTP to `host.docker.internal:1025`.
 
-## Stage Deployment
+## Deployment
 
-The manual stage deployment path is documented in [docs/stage-manual-deploy.md](/home/ibsalim/Projects/guardgo/docs/stage-manual-deploy.md:1).
+Staging and production deployment are documented in [docs/deploy-manual.md](/home/ibsalim/Projects/guardgo/docs/deploy-manual.md:1).
 
 ## API Docs
 
