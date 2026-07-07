@@ -41,17 +41,6 @@ class SignupManager:
         if existing_user:
             raise HTTPException(status_code=400, detail="Username or email already exists")
 
-        domain = email.split("@")[-1].lower()
-        PRODUCTION = str(env_handler.get_instance().env("PRODUCTION", 0))
-        if PRODUCTION == "1":
-            non_company_domains = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "proton.me",
-                "protonmail.com", "mail.ru", "aol.com", "icloud.com", "msn.com", "live.com", "zoho.com", "gmx.com",
-                "gmx.net", "yandex.com", "yandex.ru", "fastmail.com", "pm.me", "me.com", "mail.com", "inbox.com"]
-
-            if domain in non_company_domains:
-                raise HTTPException(
-                    status_code=400, detail="Please enter your company email (Gmail, Yahoo, etc. not allowed).")
-
         if password.startswith("$2b$") and len(password) >= 60:
             hashed_password = password
         else:
