@@ -126,3 +126,55 @@ async def test_signup_user_rejects_duplicate_user(monkeypatch):
 
     assert exc.value.status_code == 400
     assert exc.value.detail == "Username or email already exists"
+
+
+@pytest.mark.anyio
+async def test_signup_user_allows_personal_email_in_production(monkeypatch):
+    engine = FakeEngine(existing_user=None)
+
+    class FakeMongo:
+        def get_engine(self):
+            return engine
+
+    class FakeTenantManager:
+        async def create_tenant(self, _tenant):
+            return None
+
+    class FakeSession:
+        def generate_verification_token(self):
+            return "verify-token-2"
+
+    class FakeMail:
+        async def send_verification_mail(self, **_kwargs):
+            return None
+
+    class FakeTemplate:
+        def render(self, **_kwargs):
+            return "<html>ok</html>"
+
+    class FakeEnv:
+        def env(self, key, default=None):
+            if key == "PRODUCTION":
+                return "1"
+            if key == "APP_URL":
+                return "https://guardgo.org"
+            return default
+
+    monkeypatch.setattr(mongo_controller, "get_instance", staticmethod(lambda: FakeMongo()))
+    monkeypatch.setattr(TenantManager, "get_instance", staticmethod(lambda: FakeTenantManager()))
+    monkeypatch.setattr(session_manager, "get_instance", staticmethod(lambda: FakeSession()))
+    monkeypatch.setattr(mail_manager, "get_instance", staticmethod(lambda: FakeMail()))
+    monkeypatch.setattr(env_handler, "get_instance", staticmethod(lambda: FakeEnv()))
+    monkeypatch.setattr(constant, "mail_template", FakeTemplate())
+
+    payload = SignupRequest(
+        username="personal1",
+        email="user@gmail.com",
+        password="StrongPass1!",
+        tenant_type="client",
+    )
+
+    result = await SignupManager.signup_user(payload)
+
+    assert result["status"] == "pending"
+    assert result["email"] == "user@gmail.com"
