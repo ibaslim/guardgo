@@ -35,11 +35,12 @@ class content_security_policy_middleware(BaseHTTPMiddleware):
                                                            "upgrade-insecure-requests;")
         else:
             response.headers["Content-Security-Policy"] = ("default-src 'self'; "
-                                                           "script-src 'self'; "
-                                                           "style-src 'self' 'unsafe-inline'; "
-                                                           "img-src 'self' data: blob: https: http:; "
-                                                           "font-src 'self' data:; "
-                                                           "connect-src 'self' https: http:; "
+                                                           "script-src 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com; "
+                                                           "script-src-elem 'self' 'unsafe-inline' https://maps.googleapis.com https://maps.gstatic.com; "
+                                                           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                                                           "img-src 'self' data: blob: https: http: https://maps.googleapis.com https://maps.gstatic.com; "
+                                                           "font-src 'self' data: https://fonts.gstatic.com; "
+                                                           "connect-src 'self' https: http: https://maps.googleapis.com https://maps.gstatic.com; "
                                                            "media-src 'self' data: blob:; "
                                                            "frame-ancestors 'self'; "
                                                            "object-src 'none'; "
