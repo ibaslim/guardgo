@@ -117,7 +117,30 @@ jobs:
             APP_IMAGE=ghcr.io/${{ env.IMAGE_NAME }} IMAGE_TAG=stage ./scripts/deploy.sh stage up
 
             # Smoke checks so we do not need manual SSH checks after each run.
-            curl -fsS --resolve ggstage.vaultcentric.com:443:127.0.0.1 https://ggstage.vaultcentric.com/health/live >/dev/null
-            curl -fsS --resolve ggstage.vaultcentric.com:443:127.0.0.1 https://ggstage.vaultcentric.com/health/ready >/dev/null
+            check_https() {
+              local host="$1"
+              local path="$2"
+              local url="https://${host}${path}"
+
+              for attempt in $(seq 1 20); do
+                if curl -fsS --connect-timeout 5 --max-time 15 \
+                  --resolve "${host}:443:127.0.0.1" \
+                  "$url" >/dev/null; then
+                  echo "Smoke check passed: $url"
+                  return 0
+                fi
+                echo "Waiting for $url (attempt ${attempt}/20)..."
+                sleep 3
+              done
+
+              echo "Smoke check failed: $url"
+              docker ps || true
+              docker logs --tail 200 guardgo-stage-nginx-1 || true
+              docker logs --tail 200 guardgo-stage-web-1 || true
+              return 1
+            }
+
+            check_https ggstage.vaultcentric.com /health/live
+            check_https ggstage.vaultcentric.com /health/ready
 
             docker image prune -f
