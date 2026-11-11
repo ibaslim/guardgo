@@ -190,8 +190,10 @@ class AccountManager:
 
             existing_user = await engine.find_one(db_user_account, db_user_account.username == username)
             existing_mail = await engine.find_one(db_user_account, db_user_account.email == email)
-            if existing_user or existing_mail:
-                raise HTTPException(status_code=400, detail="Username or email already exists")
+            if existing_mail:
+                raise HTTPException(status_code=400, detail="Email already used, try with a different one")
+            if existing_user:
+                raise HTTPException(status_code=400, detail="Username already exists")
 
             if password.startswith("$2b$") and len(password) >= 60:
                 hashed_password = password
@@ -216,6 +218,8 @@ class AccountManager:
             return {"message": "User created successfully", "username": username, "email": email}
 
         except Exception as e:
+            if "unique_user_email" in str(e) or "email_1" in str(e):
+                raise HTTPException(status_code=400, detail="Email already used, try with a different one")
             raise HTTPException(status_code=400, detail=str(e) or "Error creating user")
 
     async def list_platform_admin_users(self, current_user):
@@ -263,7 +267,7 @@ class AccountManager:
             db_user_account.email == email
         )
         if existing:
-            raise HTTPException(status_code=400, detail="Email already exists")
+            raise HTTPException(status_code=400, detail="Email already used, try with a different one")
 
         username = await self._generate_platform_admin_username(email)
         invite_token = session_manager.get_instance().generate_verification_token()
@@ -289,7 +293,12 @@ class AccountManager:
             status_changed_by=getattr(current_user, "username", "system"),
             status_changed_at=datetime.now(timezone.utc),
         )
-        await self._engine.save(user)
+        try:
+            await self._engine.save(user)
+        except Exception as exc:
+            if "unique_user_email" in str(exc) or "email_1" in str(exc):
+                raise HTTPException(status_code=400, detail="Email already used, try with a different one")
+            raise
 
         await self._send_platform_admin_invite_mail(username=username, email=email, invite_token=invite_token)
 
@@ -533,7 +542,13 @@ class AccountManager:
         if request.full_name is not None:
             user.full_name = request.full_name
         if request.email is not None:
-            user.email = request.email
+            normalized_email = request.email.strip().lower()
+            existing_email_user = await self._engine.find_one(
+                db_user_account, db_user_account.email == normalized_email
+            )
+            if existing_email_user and str(existing_email_user.id) != str(user.id):
+                raise HTTPException(status_code=400, detail="Email already used, try with a different one")
+            user.email = normalized_email
         if request.preferences is not None:
             user.preferences = request.preferences
         if request.twofa_enabled is not None:

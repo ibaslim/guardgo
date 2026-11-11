@@ -76,6 +76,10 @@ export class ResetPasswordComponent implements OnInit {
           this.router.navigate(['/invite', token], { replaceUrl: true }).then();
         },
         error: () => {
+          // Not an invite, so this is a normal password reset: on a phone, open the GuardGo app if it is installed.
+          if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+            window.location.href = `guardgomobile://reset/${encodeURIComponent(token)}`;
+          }
         }
       });
     }

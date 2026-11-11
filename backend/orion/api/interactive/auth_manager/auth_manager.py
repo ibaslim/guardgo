@@ -43,9 +43,10 @@ class auth_manager:
         self._engine = mongo_controller.get_instance().get_engine()
 
     async def authenticate_user(self, mail: str, password: str):
-        user = await self._engine.find_one(db_user_account, db_user_account.email == mail)
+        normalized_mail = (mail or "").strip().lower()
+        user = await self._engine.find_one(db_user_account, db_user_account.email == normalized_mail)
         if not user:
-            user = await self._engine.find_one(db_user_account, db_user_account.username == mail)
+            user = await self._engine.find_one(db_user_account, db_user_account.username == (mail or "").strip())
         if not user or not CONSTANTS.S_AUTH_PWD_CONTEXT.verify(password, user.password):
             return None
         return user
@@ -243,7 +244,8 @@ class auth_manager:
     @staticmethod
     async def forgot_password(mail: str):
         engine = mongo_controller.get_instance().get_engine()
-        user = await engine.find_one(db_user_account, db_user_account.email == mail)
+        normalized_mail = (mail or "").strip().lower()
+        user = await engine.find_one(db_user_account, db_user_account.email == normalized_mail)
         if not user:
             raise HTTPException(status_code=404, detail="Entered mail is not resgister")
 
