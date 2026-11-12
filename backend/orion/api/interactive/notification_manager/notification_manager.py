@@ -15,6 +15,7 @@ from orion.services.mongo_manager.shared_model.db_auth_models import (
     normalize_role_value,
 )
 from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus
+from orion.services.pusher_manager import pusher_manager
 
 
 class NotificationManager:
@@ -180,7 +181,13 @@ class NotificationManager:
             action_label=(action_label or "").strip() or None,
             metadata=metadata or {},
         )
-        return await self._engine.save(record)
+        saved_record = await self._engine.save(record)
+        await pusher_manager.publish_notification(
+            recipient_user_id,
+            str(saved_record.id),
+            saved_record.source_module,
+        )
+        return saved_record
 
     async def create_for_users(
         self,
@@ -363,6 +370,11 @@ class NotificationManager:
             record.is_read = True
             record.read_at = datetime.utcnow()
             await self._engine.save(record)
+            await pusher_manager.publish_user_event(
+                recipient_user_id,
+                "notification-updated",
+                {"id": str(record.id), "is_read": True},
+            )
 
         return {
             "message": "Notification marked as read",
@@ -376,6 +388,11 @@ class NotificationManager:
         await collection.update_many(
             {"recipient_user_id": recipient_user_id, "is_read": False},
             {"$set": {"is_read": True, "read_at": datetime.utcnow()}},
+        )
+        await pusher_manager.publish_user_event(
+            recipient_user_id,
+            "notifications-read-all",
+            {},
         )
         unread_count = await collection.count_documents({"recipient_user_id": recipient_user_id, "is_read": False})
         return {

@@ -19,6 +19,7 @@ from routes.api_routes import api_routes
 from routes.auth_routes import auth_router
 from routes.billing_routes import billing_routes
 from routes.notification_routes import notification_routes
+from routes.pusher_routes import pusher_routes
 from routes.public_api_routes import public_routes
 from routes.request_routes import request_routes
 from routes.request_matching_routes import request_matching_routes
@@ -94,6 +95,7 @@ app.include_router(auth_router, include_in_schema=True)
 app.include_router(admin_routes, include_in_schema=True)
 app.include_router(billing_routes, include_in_schema=True)
 app.include_router(notification_routes, include_in_schema=True)
+app.include_router(pusher_routes, include_in_schema=True)
 app.include_router(public_routes, include_in_schema=True)
 app.include_router(request_routes, include_in_schema=True)
 app.include_router(tenant_routes, include_in_schema=True)

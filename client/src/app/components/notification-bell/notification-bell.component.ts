@@ -8,6 +8,7 @@ import { NotificationsService } from '../../services/notifications/notifications
 import { NotificationItem } from '../../shared/model/notification/notification.model';
 import { AppService } from '../../services/core/app/app.service';
 import { ButtonComponent } from '../button/button.component';
+import { PusherRealtimeService } from '../../services/notifications/pusher-realtime.service';
 
 @Component({
   selector: 'app-notification-bell',
@@ -18,27 +19,43 @@ import { ButtonComponent } from '../button/button.component';
 export class NotificationBellComponent implements OnInit, OnDestroy {
   isOpen = false;
   private refreshSubscription: Subscription | null = null;
+  private realtimeSubscriptions: Subscription[] = [];
 
   constructor(
     protected notificationsService: NotificationsService,
     protected appService: AppService,
     private router: Router,
+    private pusherRealtime: PusherRealtimeService,
   ) {}
 
   ngOnInit(): void {
     if (!this.canUseNotifications()) return;
-    this.notificationsService.loadLatest(6).subscribe({ error: () => undefined });
+    this.realtimeSubscriptions = [
+      this.pusherRealtime.notificationEvents$.subscribe(() => this.refreshLatest()),
+      this.pusherRealtime.subscriptionRestored$.subscribe(() => this.refreshLatest()),
+    ];
+    this.pusherRealtime.start();
+    this.refreshLatest();
     this.refreshSubscription = interval(10000).subscribe(() => {
       if (document.visibilityState !== 'visible') {
         return;
       }
-      this.notificationsService.loadLatest(6).subscribe({ error: () => undefined });
+      this.pusherRealtime.start();
+      if (!this.pusherRealtime.isConnected()) {
+        this.refreshLatest();
+      }
     });
   }
 
   ngOnDestroy(): void {
     this.refreshSubscription?.unsubscribe();
     this.refreshSubscription = null;
+    this.realtimeSubscriptions.forEach((subscription) => subscription.unsubscribe());
+    this.realtimeSubscriptions = [];
+  }
+
+  private refreshLatest(): void {
+    this.notificationsService.loadLatest(6).subscribe({ error: () => undefined });
   }
 
   toggleMenu(event: MouseEvent): void {

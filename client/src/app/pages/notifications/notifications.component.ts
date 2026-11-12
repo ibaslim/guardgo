@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
+import { interval, Subscription } from 'rxjs';
 
 import { CardComponent } from '../../components/card/card.component';
 import { ButtonComponent } from '../../components/button/button.component';
@@ -9,6 +10,7 @@ import { PageComponent } from '../../components/page/page.component';
 import { NotificationsService } from '../../services/notifications/notifications.service';
 import { NotificationItem, NotificationListResponse } from '../../shared/model/notification/notification.model';
 import { MessageNotificationService } from '../../services/message_notification/message-notification.service';
+import { PusherRealtimeService } from '../../services/notifications/pusher-realtime.service';
 
 @Component({
   selector: 'app-notifications-page',
@@ -16,22 +18,42 @@ import { MessageNotificationService } from '../../services/message_notification/
   imports: [CommonModule, PageComponent, CardComponent, ButtonComponent, IconComponent],
   templateUrl: './notifications.component.html'
 })
-export class NotificationsComponent implements OnInit {
+export class NotificationsComponent implements OnInit, OnDestroy {
   items: NotificationItem[] = [];
   currentPage = 1;
   rows = 12;
   totalPages = 0;
   totalItems = 0;
   selectedStatus: 'all' | 'unread' | 'read' = 'all';
+  private realtimeSubscriptions: Subscription[] = [];
+  private fallbackRefreshSubscription: Subscription | null = null;
 
   constructor(
     protected notificationsService: NotificationsService,
     private messageNotification: MessageNotificationService,
     private router: Router,
+    private pusherRealtime: PusherRealtimeService,
   ) {}
 
   ngOnInit(): void {
+    this.realtimeSubscriptions = [
+      this.pusherRealtime.notificationEvents$.subscribe(() => this.loadNotifications()),
+      this.pusherRealtime.subscriptionRestored$.subscribe(() => this.loadNotifications()),
+    ];
+    this.pusherRealtime.start();
     this.loadNotifications();
+    this.fallbackRefreshSubscription = interval(10000).subscribe(() => {
+      if (document.visibilityState !== 'visible') return;
+      this.pusherRealtime.start();
+      if (!this.pusherRealtime.isConnected()) this.loadNotifications();
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.fallbackRefreshSubscription?.unsubscribe();
+    this.fallbackRefreshSubscription = null;
+    this.realtimeSubscriptions.forEach((subscription) => subscription.unsubscribe());
+    this.realtimeSubscriptions = [];
   }
 
   loadNotifications(page = this.currentPage): void {
