@@ -1417,8 +1417,10 @@ class TenantManager:
                 db_user_account, (db_user_account.username == username) | (db_user_account.email == email))
             existing_mail = await engine.find_one(db_user_account, (db_user_account.email == email))
 
-            if (existing_user or existing_mail) and data.role != "demo":
-                raise HTTPException(status_code=400, detail="Username or email already exists")
+            if existing_mail and data.role != "demo":
+                raise HTTPException(status_code=400, detail="Email already used, try with a different one")
+            if existing_user and data.role != "demo":
+                raise HTTPException(status_code=400, detail="Username already exists")
 
             if password.startswith("$2b$") and len(password) >= 60:
                 hashed_password = password
@@ -1480,6 +1482,8 @@ class TenantManager:
         except HTTPException as e:
             raise e
         except Exception as e:
+            if "unique_user_email" in str(e) or "email_1" in str(e):
+                raise HTTPException(status_code=400, detail="Email already used, try with a different one")
             raise HTTPException(status_code=400, detail=str(e) or "Error creating user")
 
     async def _generate_invited_guard_username(self, email: str) -> str:
@@ -1522,7 +1526,7 @@ class TenantManager:
         email = str(data.email).strip().lower()
         existing_email_user = await self._engine.find_one(db_user_account, db_user_account.email == email)
         if existing_email_user:
-            raise HTTPException(status_code=400, detail="Email already exists")
+            raise HTTPException(status_code=400, detail="Email already used, try with a different one")
 
         guard_tenant = db_tenant_model(
             iocs=[],
@@ -1562,7 +1566,12 @@ class TenantManager:
             status_changed_by=getattr(current_user, "username", "system"),
             status_changed_at=datetime.now(timezone.utc),
         )
-        await self._engine.save(guard_user)
+        try:
+            await self._engine.save(guard_user)
+        except Exception as exc:
+            if "unique_user_email" in str(exc) or "email_1" in str(exc):
+                raise HTTPException(status_code=400, detail="Email already used, try with a different one")
+            raise
 
         try:
             app_url = env_handler.get_instance().env("APP_URL")

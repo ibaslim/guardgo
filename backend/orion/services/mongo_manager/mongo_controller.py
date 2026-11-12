@@ -50,6 +50,17 @@ class mongo_controller:
 
         await user_collection.create_index([("username", 1)], unique=True)
 
+        # Email is the identity used by all account types.  The application
+        # checks are useful for a friendly response, but this index is what
+        # prevents two concurrent requests from creating the same email.
+        await user_collection.create_index(
+            [("email", 1)],
+            unique=True,
+            name="unique_user_email",
+            collation={"locale": "en", "strength": 2},
+            partialFilterExpression={"email": {"$gt": ""}},
+        )
+
         try:
             await user_collection.drop_index("unique_admin_role")
         except Exception:
