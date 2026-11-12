@@ -4,6 +4,7 @@ import { HttpParams } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, forkJoin, interval } from 'rxjs';
+import { PusherRealtimeService } from '../../services/notifications/pusher-realtime.service';
 
 import { ButtonComponent } from '../../components/button/button.component';
 import { CardComponent } from '../../components/card/card.component';
@@ -223,7 +224,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
   private readonly loadingFeedback = inject(LoadingFeedbackService);
   private routeQuerySubscription: Subscription | null = null;
   private realtimeRefreshSubscription: Subscription | null = null;
+  private pusherRealtimeSubscriptions: Subscription[] = [];
   private realtimeRefreshTick = 0;
+  private pendingRealtimeRefresh = false;
   private lastHandledRouteFocus = '';
 
   role = '';
@@ -638,6 +641,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     private addressConsistencyService: GoogleMapsAddressConsistencyService,
     private route: ActivatedRoute,
     private router: Router,
+    private pusherRealtime: PusherRealtimeService,
   ) {}
 
   formatBackendDateTime = formatBackendDateTime;
@@ -1073,13 +1077,37 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.routeQuerySubscription = null;
     this.realtimeRefreshSubscription?.unsubscribe();
     this.realtimeRefreshSubscription = null;
+    this.pusherRealtimeSubscriptions.forEach((subscription) => subscription.unsubscribe());
+    this.pusherRealtimeSubscriptions = [];
   }
 
   private startRealtimeRefreshLoop(): void {
     this.realtimeRefreshSubscription?.unsubscribe();
+    this.pusherRealtimeSubscriptions.forEach((subscription) => subscription.unsubscribe());
+    this.pusherRealtimeSubscriptions = [
+      this.pusherRealtime.notificationEvents$.subscribe((event) => {
+        const source = String(event?.source_module || '').trim().toLowerCase();
+        if (source === 'requests' || source === 'leaves') {
+          this.requestRealtimeRefresh();
+        }
+      }),
+      this.pusherRealtime.subscriptionRestored$.subscribe(() => {
+        this.requestRealtimeRefresh();
+      }),
+    ];
+    this.pusherRealtime.start();
     this.realtimeRefreshTick = 0;
     this.realtimeRefreshSubscription = interval(10000).subscribe(() => {
-      if (document.visibilityState !== 'visible' || this.isRefreshPauseStateActive()) {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+      if (this.isRefreshPauseStateActive()) return;
+      this.pusherRealtime.start();
+      if (this.pendingRealtimeRefresh) {
+        this.requestRealtimeRefresh();
+        return;
+      }
+      if (this.pusherRealtime.isConnected()) {
         return;
       }
       this.realtimeRefreshTick += 1;
@@ -1088,6 +1116,15 @@ export class RequestsComponent implements OnInit, OnDestroy {
       }
       this.refreshRealtimeRequestLifecycleState();
     });
+  }
+
+  private requestRealtimeRefresh(): void {
+    if (document.visibilityState !== 'visible' || this.isRefreshPauseStateActive()) {
+      this.pendingRealtimeRefresh = true;
+      return;
+    }
+    this.pendingRealtimeRefresh = false;
+    this.refreshRealtimeRequestLifecycleState();
   }
 
   private refreshRealtimeRequestLifecycleState(): void {
