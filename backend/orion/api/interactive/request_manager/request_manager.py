@@ -4093,11 +4093,28 @@ class RequestManager:
         return preview
 
     @staticmethod
+    def _cutoff_to_utc(value: Optional[datetime], timezone_name: Optional[str]) -> Optional[datetime]:
+        if value is None:
+            return None
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        try:
+            zone = ZoneInfo(timezone_name or "UTC")
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid request timezone")
+        candidates = [value.replace(tzinfo=zone, fold=fold).astimezone(timezone.utc) for fold in (0, 1)]
+        valid = [candidate for candidate in candidates if candidate.astimezone(zone).replace(tzinfo=None) == value]
+        if not valid or valid[0] != valid[-1]:
+            raise HTTPException(status_code=400, detail="Cutoff is ambiguous or does not exist in the request timezone; choose another time")
+        return valid[0].replace(tzinfo=None)
+
+    @staticmethod
     def _validate_request_expiry(
         request_expires_at: Optional[datetime],
         requested_start_at: Optional[datetime],
         *,
         require_value: bool = False,
+        timezone_name: Optional[str] = None,
     ) -> None:
         if require_value and request_expires_at is None:
             raise HTTPException(status_code=400, detail="Request expiry is required before publishing")
@@ -4108,7 +4125,7 @@ class RequestManager:
         now = datetime.utcnow()
         if request_expires_at <= now:
             raise HTTPException(status_code=400, detail="Request expiry must be in the future")
-        if requested_start_at and request_expires_at > requested_start_at:
+        if requested_start_at and request_expires_at > RequestManager._cutoff_to_utc(requested_start_at, timezone_name):
             raise HTTPException(status_code=400, detail="Request expiry cannot be after the requested start time")
 
     @staticmethod
@@ -4312,9 +4329,9 @@ class RequestManager:
         to_status: RequestAssignmentStatus,
         lock_reason: AssignmentLockReason,
         wave_id: Optional[str] = None,
-    ) -> int:
+    ) -> List[RequestAssignmentRecord]:
         now = datetime.utcnow()
-        updated_count = 0
+        cancelled_assignments: List[RequestAssignmentRecord] = []
         assignments = await self._get_assignments_for_request(str(record.id))
         for assignment in assignments:
             if assignment.assignment_status not in OPEN_OFFER_STATUSES:
@@ -4333,8 +4350,8 @@ class RequestManager:
             elif to_status == RequestAssignmentStatus.CANCELLED:
                 assignment.cancelled_at = now
             await self._engine.save(assignment)
-            updated_count += 1
-        return updated_count
+            cancelled_assignments.append(assignment)
+        return cancelled_assignments
 
     async def _supersede_previous_waves(self, record: ClientRequestRecord) -> None:
         waves = await self._get_waves_for_request(str(record.id))
@@ -4707,7 +4724,7 @@ class RequestManager:
             raise HTTPException(status_code=400, detail="Requested start and end times are required before publishing")
         self._validated_site_snapshot_coordinates(record.site_snapshot or {})
         self._validate_requested_window(record.requested_start_at, record.requested_end_at)
-        self._validate_request_expiry(record.request_expires_at, record.requested_start_at, require_value=True)
+        self._validate_request_expiry(record.request_expires_at, record.requested_start_at, require_value=True, timezone_name=record.timezone)
 
         if increment_revision:
             record.request_revision = max(int(record.request_revision or 0) + 1, 1)
@@ -4776,6 +4793,7 @@ class RequestManager:
         }
 
     async def create_request(self, payload: ClientRequestCreatePayload, current_user) -> Dict[str, Any]:
+        payload.request_expires_at = self._cutoff_to_utc(payload.request_expires_at, payload.timezone)
         client_tenant = await self._resolve_request_client_tenant(payload, current_user)
         client_profile = client_tenant.profile if isinstance(client_tenant.profile, dict) else {}
         self._assert_client_billing_method(client_profile)
@@ -4783,7 +4801,7 @@ class RequestManager:
         title = self._validate_trimmed_title(payload.title)
         self._validate_requested_window(payload.requested_start_at, payload.requested_end_at)
         if payload.request_expires_at is not None:
-            self._validate_request_expiry(payload.request_expires_at, payload.requested_start_at, require_value=False)
+            self._validate_request_expiry(payload.request_expires_at, payload.requested_start_at, require_value=False, timezone_name=payload.timezone)
 
         preview = await self._preview_matches_for_request(
             payload.fulfillment_mode,
@@ -4894,6 +4912,8 @@ class RequestManager:
 
     async def update_request(self, request_id: str, payload: ClientRequestUpdatePayload, current_user) -> Dict[str, Any]:
         record = await self._get_request_or_404(request_id)
+        if payload.request_expires_at is not None:
+            payload.request_expires_at = self._cutoff_to_utc(payload.request_expires_at, (getattr(payload, "timezone", None) or record.timezone))
         self._assert_not_soft_deleted(record)
         if not await self._can_view_request(record, current_user):
             raise HTTPException(status_code=403, detail="Access forbidden")
@@ -4926,7 +4946,7 @@ class RequestManager:
             if "title" in provided and payload.title is not None:
                 record.title = self._validate_trimmed_title(payload.title)
             if "request_expires_at" in provided:
-                self._validate_request_expiry(payload.request_expires_at, record.requested_start_at, require_value=False)
+                self._validate_request_expiry(payload.request_expires_at, record.requested_start_at, require_value=False, timezone_name=record.timezone)
                 record.request_expires_at = payload.request_expires_at
             record.updated_at = datetime.utcnow()
             await self._engine.save(record)
@@ -4955,7 +4975,7 @@ class RequestManager:
         if "requested_end_at" in provided:
             record.requested_end_at = payload.requested_end_at
         if "request_expires_at" in provided:
-            self._validate_request_expiry(payload.request_expires_at, record.requested_start_at, require_value=False)
+            self._validate_request_expiry(payload.request_expires_at, record.requested_start_at, require_value=False, timezone_name=record.timezone)
             record.request_expires_at = payload.request_expires_at
         self._validate_requested_window(record.requested_start_at, record.requested_end_at)
 
@@ -5628,6 +5648,8 @@ class RequestManager:
 
     async def publish_request_update(self, request_id: str, payload: RequestPublishUpdatePayload, current_user) -> Dict[str, Any]:
         record = await self._get_request_or_404(request_id)
+        if payload.request_expires_at is not None:
+            payload.request_expires_at = self._cutoff_to_utc(payload.request_expires_at, (getattr(payload, "timezone", None) or record.timezone))
         self._assert_not_soft_deleted(record)
         if not await self._can_view_request(record, current_user):
             raise HTTPException(status_code=403, detail="Access forbidden")
@@ -5686,11 +5708,11 @@ class RequestManager:
             if next_invoice_recipient_email != current_invoice_recipient_email:
                 changed = True
         if "request_expires_at" in provided:
-            self._validate_request_expiry(payload.request_expires_at, record.requested_start_at, require_value=True)
+            self._validate_request_expiry(payload.request_expires_at, record.requested_start_at, require_value=True, timezone_name=record.timezone)
             record.request_expires_at = payload.request_expires_at
 
         self._validate_requested_window(record.requested_start_at, record.requested_end_at)
-        self._validate_request_expiry(record.request_expires_at, record.requested_start_at, require_value=True)
+        self._validate_request_expiry(record.request_expires_at, record.requested_start_at, require_value=True, timezone_name=record.timezone)
         if not changed:
             raise HTTPException(status_code=400, detail="Publish update requires a material request change")
 
@@ -5720,6 +5742,8 @@ class RequestManager:
 
     async def request_additional_coverage(self, request_id: str, payload: RequestAdditionalCoveragePayload, current_user) -> Dict[str, Any]:
         record = await self._get_request_or_404(request_id)
+        if payload.request_expires_at is not None:
+            payload.request_expires_at = self._cutoff_to_utc(payload.request_expires_at, (getattr(payload, "timezone", None) or record.timezone))
         self._assert_not_soft_deleted(record)
         if not await self._can_view_request(record, current_user):
             raise HTTPException(status_code=403, detail="Access forbidden")
@@ -5731,9 +5755,18 @@ class RequestManager:
         if record.staffing_status == RequestStaffingStatus.EXPIRED:
             raise HTTPException(status_code=400, detail="Expired requests cannot be updated")
 
+        assignments_before_update = await self._get_assignments_for_request(str(record.id))
+        existing_assignee_tenant_ids = {
+            str(assignment.assignee_tenant_id)
+            for assignment in assignments_before_update
+            if assignment.assignment_status in ACTIONABLE_ASSIGNMENT_STATUSES
+            and str(assignment.assignee_tenant_id or "")
+            and str(assignment.assignee_tenant_id) != str(record.client_tenant_id)
+        }
+
         record.guards_required = int(record.guards_required or 0) + int(payload.additional_slots or 0)
         if payload.request_expires_at is not None:
-            self._validate_request_expiry(payload.request_expires_at, record.requested_start_at, require_value=True)
+            self._validate_request_expiry(payload.request_expires_at, record.requested_start_at, require_value=True, timezone_name=record.timezone)
             record.request_expires_at = payload.request_expires_at
 
         await self._refresh_request_finance_snapshot(record)
@@ -5752,6 +5785,19 @@ class RequestManager:
             refresh_matches=False,
             max_match_results=payload.max_match_results,
         )
+
+        realtime_payload = {
+            "request_id": str(record.id),
+            "changed_fields": ["guards_required", "accepted_slots", "open_slots"],
+            "reason": "additional_coverage",
+        }
+        notifications = NotificationManager.get_instance()
+        for tenant_id in existing_assignee_tenant_ids:
+            await notifications.publish_realtime_event_to_tenant_users(
+                tenant_id,
+                "request-updated",
+                realtime_payload,
+            )
 
         await NotificationManager.get_instance().create_for_tenant_admin_users(
             tenant_id=record.client_tenant_id,
@@ -5955,11 +6001,39 @@ class RequestManager:
         if payload.request_status == RequestStatus.CANCELLED:
             record.cancelled_at = datetime.utcnow()
             record.lock_reason = RequestLockReason.REQUEST_CANCELLED
-            await self._close_open_offers_for_request(
-                record,
-                to_status=RequestAssignmentStatus.CANCELLED,
-                lock_reason=AssignmentLockReason.REQUEST_CANCELLED,
-            )
+            # Persist the parent state before updating its dependent records so new
+            # actions can reject the cancellation even while propagation is running.
+            await self._engine.save(record)
+            assignments = await self._get_assignments_for_request(str(record.id))
+            notify_tenants: Dict[str, List[str]] = {}
+            for assignment in assignments:
+                tenant_id = str(getattr(assignment, "assignee_tenant_id", "") or "").strip()
+                if tenant_id and tenant_id != str(record.client_tenant_id):
+                    notify_tenants.setdefault(tenant_id, []).append(str(assignment.id))
+                if assignment.assignment_status in {
+                    RequestAssignmentStatus.OFFERED,
+                    RequestAssignmentStatus.ACCEPTED,
+                    RequestAssignmentStatus.RECONFIRMATION_REQUIRED,
+                }:
+                    assignment.assignment_status = RequestAssignmentStatus.CANCELLED
+                    assignment.lock_reason = AssignmentLockReason.REQUEST_CANCELLED
+                    assignment.cancelled_at = record.cancelled_at
+                    assignment.updated_at = record.cancelled_at
+                    await self._engine.save(assignment)
+            slots = await self._engine.find(ShiftSlotRecord, ShiftSlotRecord.request_id == str(record.id))
+            for slot in slots:
+                guard_id = str(getattr(slot, "assigned_guard_tenant_id", "") or "").strip()
+                if guard_id and guard_id != str(record.client_tenant_id):
+                    notify_tenants.setdefault(guard_id, [])
+                if slot.slot_status in {
+                    ShiftSlotStatus.OPEN, ShiftSlotStatus.RESERVED, ShiftSlotStatus.ROSTERED,
+                    ShiftSlotStatus.LATE_RISK, ShiftSlotStatus.ARRIVAL_PENDING,
+                    ShiftSlotStatus.CLIENT_CONFIRMATION_PENDING, ShiftSlotStatus.NO_SHOW_SUSPECTED,
+                    ShiftSlotStatus.REPLACEMENT_REQUIRED,
+                }:
+                    slot.slot_status = ShiftSlotStatus.CANCELLED
+                    slot.updated_at = record.cancelled_at
+                    await self._engine.save(slot)
             for wave in await self._get_waves_for_request(str(record.id)):
                 if wave.wave_status in {RequestWaveStatus.ACTIVE, RequestWaveStatus.PENDING_REVIEW}:
                     await self._set_wave_status(wave, RequestWaveStatus.CANCELLED)
@@ -5971,7 +6045,28 @@ class RequestManager:
             await self._sync_request_assignments_for_manual_close(record)
         await self._sync_request_runtime_state(record)
 
-        await NotificationManager.get_instance().create_for_tenant_admin_users(
+        notifications = NotificationManager.get_instance()
+        if payload.request_status == RequestStatus.CANCELLED:
+            for assignee_tenant_id, assignment_ids in notify_tenants.items():
+                await notifications.create_for_tenant_admin_users(
+                    tenant_id=assignee_tenant_id,
+                    title="Job offer cancelled",
+                    message=f"{record.title}: the client cancelled this request. The job is no longer available.",
+                    category="warning",
+                    source_module="requests",
+                    action_url=self._dashboard_requests_url(
+                        tab="jobs",
+                        assignment_id=assignment_ids[0] if assignment_ids else None,
+                    ),
+                    action_label="View cancelled job",
+                    metadata={
+                        "request_id": str(record.id),
+                        "request_status": RequestStatus.CANCELLED.value,
+                        "assignment_ids": assignment_ids,
+                    },
+                )
+
+        await notifications.create_for_tenant_admin_users(
             tenant_id=record.client_tenant_id,
             title="Client request updated",
             message=f"{record.title} is now {payload.request_status.value}.",
@@ -6251,6 +6346,16 @@ class RequestManager:
         active_schedule_request_ids: set[str] = set()
         if request_ids:
             request_docs = await request_collection.find({"_id": {"$in": request_ids}, "deleted_at": None}).to_list(length=None)
+            expired_request_ids = []
+            for request_doc in request_docs:
+                expiry = self._as_datetime(request_doc.get("request_expires_at"))
+                if expiry and expiry <= datetime.utcnow() and request_doc.get("staffing_status") != RequestStaffingStatus.EXPIRED.value and request_doc.get("request_status") not in {RequestStatus.DRAFT.value, RequestStatus.CANCELLED.value, RequestStatus.CLOSED.value}:
+                    record = await self._get_request_or_404(str(request_doc["_id"]))
+                    await self._sync_request_runtime_state(record)
+                    expired_request_ids.append(request_doc["_id"])
+            if expired_request_ids:
+                docs = await assignment_collection.find(query).sort("updated_at", -1).to_list(length=None)
+                request_docs = await request_collection.find({"_id": {"$in": request_ids}, "deleted_at": None}).to_list(length=None)
             active_schedule_request_ids = await self._request_ids_with_active_schedules([
                 str(request_doc.get("_id") or "")
                 for request_doc in request_docs
@@ -6353,6 +6458,10 @@ class RequestManager:
             raise HTTPException(status_code=400, detail="Reason is required when declining or cancelling a job")
 
         record = await self._get_request_or_404(assignment.request_id)
+        if record.request_status == RequestStatus.CANCELLED and next_status in {
+            RequestAssignmentStatus.ACCEPTED, RequestAssignmentStatus.IN_PROGRESS,
+        }:
+            raise HTTPException(status_code=409, detail="This request has been cancelled")
         await self._sync_request_runtime_state(record)
 
         if assignment.lock_reason in {

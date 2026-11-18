@@ -3424,7 +3424,7 @@
           <app-summary-metric-card
             label="Schedule"
             [value]="request.requested_start_at
-              ? (formatRequestDateTime(request.requested_start_at, request) + (request.requested_end_at ? ' to ' + formatRequestDateTime(request.requested_end_at, request) : ''))
+              ? (formatServiceWindowDateTime(request.requested_start_at) + (request.requested_end_at ? ' to ' + formatServiceWindowDateTime(request.requested_end_at) : ''))
               : 'Not scheduled'"
           ></app-summary-metric-card>
           <app-summary-metric-card

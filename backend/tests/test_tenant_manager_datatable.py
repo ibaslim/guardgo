@@ -69,11 +69,14 @@ async def test_get_tenants_datatable_filters_and_sorts_by_name():
         sort_order="asc",
     )
 
-    assert len(result["items"]) == 2
-    assert result["items"][0]["name"] == "Alpha Guard"
-    assert result["items"][1]["name"] == "Zeta Guard"
+    assert len(result["items"]) == 1
+    assert result["items"][0]["name"] == "Zeta Guard"
     assert result["items"][0]["status"] == TenantStatus.PENDING_ACTIVATION.value
-    assert result["pagination"]["total_items"] == 2
+    assert result["pagination"]["total_items"] == 1
+
+    pending_invites = await manager.get_tenants_datatable(page=1, rows=10, tenant_status="pending_verification")
+    assert [item["name"] for item in pending_invites["items"]] == ["Alpha Guard"]
+    assert pending_invites["items"][0]["status"] == "pending_verification"
 
 
 @pytest.mark.anyio

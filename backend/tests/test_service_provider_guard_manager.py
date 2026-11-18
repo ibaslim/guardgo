@@ -49,6 +49,40 @@ class FakeActivityManager:
         return None
 
 
+@pytest.mark.anyio
+async def test_provider_guard_search_matches_name_and_email_before_pagination():
+    provider = db_tenant_model(tenant_type=TenantType.SERVICE_PROVIDER, profile={"name": "Provider"}, status=TenantStatus.ACTIVE)
+    guards = [
+        db_tenant_model(tenant_type=TenantType.GUARD, profile={"name": name}, status=TenantStatus.ACTIVE,
+                        ownership_type=GuardOwnershipType.SERVICE_PROVIDER, service_provider_tenant_id=str(provider.id))
+        for name in ("Alice One", "Alice Two", "Bob")
+    ]
+    class SearchEngine:
+        async def find(self, model, query):
+            assert str(provider.id) in str(query)
+            return guards
+
+    manager = object.__new__(TenantManager)
+    manager._engine = SearchEngine()
+
+    async def get_provider(_id):
+        return provider
+
+    async def get_admin(guard_id):
+        return SimpleNamespace(email="bob@example.com" if guard_id == str(guards[2].id) else "other@example.com")
+
+    manager._get_tenant = get_provider
+    manager._get_guard_admin_user = get_admin
+    user = SimpleNamespace(tenant_uuid=str(provider.id))
+    result = await manager.list_service_provider_guards(user, page=2, rows=1, keyword=" ALICE ")
+    assert result["pagination"]["total_items"] == 2
+    assert len(result["items"]) == 1
+    result = await manager.list_service_provider_guards(user, keyword="BOB@EXAMPLE")
+    assert [item["name"] for item in result["items"]] == ["Bob"]
+    result = await manager.list_service_provider_guards(user, keyword="no match")
+    assert result["items"] == []
+
+
 class FakeInviteEngine:
     def __init__(self, *, provider_status=TenantStatus.ACTIVE):
         self.provider = db_tenant_model(
@@ -245,7 +279,9 @@ async def test_sp_invite_rolls_back_when_mail_fails(monkeypatch):
     engine = FakeInviteEngine()
     manager._engine = engine
 
-    async def _fake_create_tenant(tenant):
+    async def _fake_create_tenant(tenant, initial_status):
+        assert tenant.status == TenantStatus.PENDING_VERIFICATION
+        assert initial_status == TenantStatus.PENDING_VERIFICATION
         return tenant
 
     manager.create_tenant = _fake_create_tenant

@@ -71,8 +71,6 @@ class TenantManager:
     @staticmethod
     def _normalized_status_value(status_value: Any) -> str:
         value = str(getattr(status_value, "value", status_value) or "").strip().lower()
-        if value == TenantStatus.PENDING_VERIFICATION.value:
-            return TenantStatus.PENDING_ACTIVATION.value
         return value
 
     @staticmethod
@@ -490,7 +488,7 @@ class TenantManager:
     async def _dek(tenant_id: str) -> bytes:
         return await KeyManager.get_instance().get_or_create_dek(tenant_id)
 
-    async def create_tenant(self, data: db_tenant_model):
+    async def create_tenant(self, data: db_tenant_model, initial_status: TenantStatus = TenantStatus.ONBOARDING):
         try:
             dek = await KeyManager.get_instance().create_dek(str(data.id))
             enc = Fernet(dek)
@@ -505,7 +503,7 @@ class TenantManager:
                 values=[enc.encrypt(v.encode()).decode() for v in (ioc.values or [])]) for ioc in (data.iocs or [])]
 
             # Ensure status is set
-            data.status = TenantStatus.ONBOARDING
+            data.status = initial_status
 
             # Save the tenant
             await self._engine.save(data)
@@ -868,7 +866,7 @@ class TenantManager:
         if current_status in [TenantStatus.INACTIVE.value, TenantStatus.BANNED.value]:
             return await self.set_tenant_status(tenant_id, TenantStatus.ACTIVE, current_user=current_user)
 
-        if current_status not in [TenantStatus.PENDING_ACTIVATION.value, TenantStatus.PENDING_VERIFICATION.value]:
+        if current_status != TenantStatus.PENDING_ACTIVATION.value:
             raise HTTPException(status_code=400, detail="Tenant is not pending activation")
 
         tenant.status = TenantStatus.PENDING_ACTIVATION
@@ -937,8 +935,6 @@ class TenantManager:
 
         current_status = self._normalized_status_value(previous_status)
         target_status_value = self._normalized_status_value(target_status)
-        if target_status_value == TenantStatus.PENDING_VERIFICATION.value:
-            target_status_value = TenantStatus.PENDING_ACTIVATION.value
         target_status_enum = TenantStatus(target_status_value)
 
         # Idempotent: if no change, do nothing
@@ -1528,7 +1524,7 @@ class TenantManager:
             iocs=[],
             user_quota=2,
             licenses=["maintainer", "free"],
-            status=TenantStatus.ONBOARDING,
+            status=TenantStatus.PENDING_VERIFICATION,
             tenant_type=TenantType.GUARD,
             profile={"name": "N/A"},
             ownership_type=GuardOwnershipType.SERVICE_PROVIDER,
@@ -1538,7 +1534,7 @@ class TenantManager:
             unlinked_at=None,
             unlinked_by=None,
         )
-        await self.create_tenant(guard_tenant)
+        await self.create_tenant(guard_tenant, initial_status=TenantStatus.PENDING_VERIFICATION)
 
         invite_token = session_manager.get_instance().generate_verification_token()
         invite_expiry = datetime.now(timezone.utc) + timedelta(days=30)
@@ -1617,7 +1613,14 @@ class TenantManager:
             "service_provider_tenant_id": provider_tenant_id,
         }
 
-    async def list_service_provider_guards(self, current_user, page: int = 1, rows: int = 20) -> Dict[str, Any]:
+    async def list_service_provider_guards(
+        self,
+        current_user,
+        page: int = 1,
+        rows: int = 20,
+        status: Optional[str] = None,
+        keyword: Optional[str] = None,
+    ) -> Dict[str, Any]:
         provider_tenant_id = str(getattr(current_user, "tenant_uuid", "") or "").strip()
         if not provider_tenant_id:
             raise HTTPException(status_code=400, detail="Invalid service provider association")
@@ -1632,10 +1635,29 @@ class TenantManager:
             & (db_tenant_model.service_provider_tenant_id == provider_tenant_id),
         )
 
+        normalized_filter_status = self._normalized_status_value(status)
+        if normalized_filter_status:
+            allowed_statuses = {tenant_status.value for tenant_status in TenantStatus}
+            if normalized_filter_status not in allowed_statuses:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid guard status. Allowed statuses: {', '.join(sorted(allowed_statuses))}",
+                )
+            guards = [
+                guard
+                for guard in guards
+                if self._normalized_status_value(guard.status) == normalized_filter_status
+            ]
+
         items: List[Dict[str, Any]] = []
         now = datetime.now(timezone.utc)
+        search = (keyword or "").strip().casefold()
         for guard in guards:
             admin_user = await self._get_guard_admin_user(str(guard.id))
+            name = self._extract_tenant_name(guard.profile or {})
+            email = getattr(admin_user, "email", None)
+            if search and not any(search in str(value or "").casefold() for value in (name, email)):
+                continue
             invite_pending = bool(getattr(admin_user, "invite_pending", False)) if admin_user else False
             invite_expiry = getattr(admin_user, "verification_expiry", None) if admin_user else None
             invite_status = None
@@ -1649,13 +1671,13 @@ class TenantManager:
 
             items.append({
                 "id": str(guard.id),
-                "name": self._extract_tenant_name(guard.profile or {}),
+                "name": name,
                 "status": self._normalized_status_value(guard.status),
                 "ownership_type": guard.ownership_type,
                 "service_provider_tenant_id": guard.service_provider_tenant_id,
                 "invite_status": invite_status,
                 "invite_expires_at": invite_expiry,
-                "email": getattr(admin_user, "email", None),
+                "email": email,
                 "verified": bool(guard.verified),
                 "created_at": guard.created_at,
                 "updated_at": guard.updated_at,
@@ -1835,6 +1857,8 @@ class TenantManager:
 
         if action == GuardStatusAction.ACTIVATE:
             current_status = self._normalized_status_value(guard.status)
+            if current_status in {TenantStatus.PENDING_VERIFICATION.value, TenantStatus.ONBOARDING.value}:
+                raise HTTPException(status_code=400, detail="Guard must complete onboarding before activation")
             if current_status == TenantStatus.PENDING_ACTIVATION.value:
                 result = await self.approve_tenant_activation(guard_tenant_id, current_user=current_user)
             else:

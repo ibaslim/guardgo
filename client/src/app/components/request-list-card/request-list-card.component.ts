@@ -84,7 +84,7 @@ export class RequestListCardComponent {
   }
 
   get cardContainerClass(): string {
-    return 'overflow-hidden rounded-[1.35rem] border border-slate-200/80 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)] ring-1 ring-slate-200/70 dark:border-slate-800 dark:bg-slate-950 dark:ring-slate-800';
+    return 'overflow-visible rounded-[1.35rem] border border-slate-200/80 bg-white shadow-[0_14px_34px_rgba(15,23,42,0.08)] ring-1 ring-slate-200/70 dark:border-slate-800 dark:bg-slate-950 dark:ring-slate-800';
   }
 
   get headerSurfaceClass(): string {
@@ -207,15 +207,15 @@ export class RequestListCardComponent {
     const end = this.request?.requested_end_at;
     if (start && end) {
       if (this.isSameCalendarDate(start, end)) {
-        return `${this.formatDisplayDate(start)} to ${this.formatDisplayTime(end)}`;
+        return `${this.formatWindowDate(start)} to ${this.formatDisplayTime(end)}`;
       }
-      return `${this.formatDisplayDate(start)} to ${this.formatDisplayDate(end)}`;
+      return `${this.formatWindowDate(start)} to ${this.formatWindowDate(end)}`;
     }
     if (start) {
-      return `Starts ${this.formatDisplayDate(start)}`;
+      return `Starts ${this.formatWindowDate(start)}`;
     }
     if (end) {
-      return `Ends ${this.formatDisplayDate(end)}`;
+      return `Ends ${this.formatWindowDate(end)}`;
     }
     return 'Window not set';
   }
@@ -534,7 +534,11 @@ export class RequestListCardComponent {
   }
 
   formatDisplayDate(value?: string | null): string {
-    return value ? formatBackendDateTime(value) : '-';
+    return value ? formatBackendDateTime(value, 'en-CA', { timeZone: this.request?.timezone || undefined }) : '-';
+  }
+
+  formatWindowDate(value: string): string {
+    return formatBackendDateTime(value, 'en-CA', { preserveLocalTime: true, timeZone: 'UTC' });
   }
 
   formatDisplayTime(value?: string | null): string {
@@ -542,7 +546,8 @@ export class RequestListCardComponent {
       return '-';
     }
 
-    const dateObj = new Date(value);
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+    const dateObj = new Date(match ? `${match[1]}T${match[2]}:00Z` : value);
     if (Number.isNaN(dateObj.getTime())) {
       return '-';
     }
@@ -550,19 +555,12 @@ export class RequestListCardComponent {
     return new Intl.DateTimeFormat('en-CA', {
       hour: '2-digit',
       minute: '2-digit',
+      timeZone: 'UTC',
     }).format(dateObj);
   }
 
   private isSameCalendarDate(startValue: string, endValue: string): boolean {
-    const start = new Date(startValue);
-    const end = new Date(endValue);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-      return false;
-    }
-
-    return start.getFullYear() === end.getFullYear()
-      && start.getMonth() === end.getMonth()
-      && start.getDate() === end.getDate();
+    return startValue.slice(0, 10) === endValue.slice(0, 10);
   }
 
   getStatusClasses(status: string): string {

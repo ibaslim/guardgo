@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TableComponent } from '../../components/table/table.component';
@@ -29,7 +29,7 @@ import { PlaceloadComponent } from '../../components/placeload/placeload.compone
   imports: [CommonModule, FormsModule, TableComponent, BadgeComponent, SideDrawerComponent, IconComponent, TableThComponent, TableTdComponent, ButtonComponent, ModalComponent, SelectInputComponent, BaseInputComponent, PageComponent, TenantSettingsComponent, LogListTableComponent, TenantAdminUserSummaryComponent, PlaceloadComponent],
   templateUrl: './tenants.component.html',
 })
-export class TenantsComponent implements OnInit {
+export class TenantsComponent implements OnInit, OnDestroy {
   readonly listScope = 'tenants:list';
   readonly detailScope = 'tenants:detail';
   readonly activityScope = 'tenants:activity';
@@ -61,6 +61,7 @@ export class TenantsComponent implements OnInit {
   ];
   tenantStatusOptions = [
     { label: 'All', value: '' },
+    { label: 'Pending Verification', value: 'pending_verification' },
     { label: 'Onboarding', value: 'onboarding' },
     { label: 'Pending Activation', value: 'pending_activation' },
     { label: 'Active', value: 'active' },
@@ -88,6 +89,8 @@ export class TenantsComponent implements OnInit {
   invitingGuard = false;
   private tenantDetailLoadTimer: ReturnType<typeof setTimeout> | null = null;
   private tenantDetailRequestToken = 0;
+  private spListRequestToken = 0;
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   onSelectionChange(selected: any[]) {
     this.selectedRows = selected || [];
@@ -122,6 +125,10 @@ export class TenantsComponent implements OnInit {
   }
 
   loadPage(page: number) {
+    if (this.searchTimer) {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = null;
+    }
     if (this.isSpAdmin()) {
       this.loadSpGuardPage(page);
       return;
@@ -150,14 +157,22 @@ export class TenantsComponent implements OnInit {
     });
   }
 
+  ngOnDestroy(): void {
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    ++this.spListRequestToken;
+  }
+
   loadSpGuardPage(page: number) {
     this.loading = true;
+    const requestToken = ++this.spListRequestToken;
     const params = new HttpParams()
       .set('page', String(page))
-      .set('rows', String(this.rows));
+      .set('rows', String(this.rows))
+      .set('keyword', this.keyword.trim());
 
-    this.api.get<any>('sp/guards', { params, loadingScope: this.listScope }).subscribe({
+    this.api.get<any>('sp/guards/search', { params, loadingScope: this.listScope }).subscribe({
       next: res => {
+        if (requestToken !== this.spListRequestToken) return;
         this.tenants = res.items || [];
         this.totalItems = res.pagination?.total_items || 0;
         this.totalPages = res.pagination?.total_pages || 1;
@@ -165,6 +180,7 @@ export class TenantsComponent implements OnInit {
         this.loading = false;
       },
       error: () => {
+        if (requestToken !== this.spListRequestToken) return;
         this.loading = false;
       }
     });
@@ -206,6 +222,15 @@ export class TenantsComponent implements OnInit {
 
   onSearch(q: string) {
     this.keyword = q || '';
+    if (this.isSpAdmin()) {
+      ++this.spListRequestToken;
+      if (this.searchTimer) clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(() => {
+        this.searchTimer = null;
+        this.loadPage(1);
+      }, 300);
+      return;
+    }
     this.loadPage(1);
   }
 

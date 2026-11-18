@@ -11,7 +11,7 @@ from orion.services.mongo_manager.shared_model.db_auth_models import (
     is_platform_admin_role,
     is_tenant_admin_role,
 )
-from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus
+from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus, TenantType, GuardOwnershipType
 from orion.services.session_manager.session_manager import session_manager
 from orion.constants import constant
 
@@ -98,7 +98,8 @@ def tenant_status_required(allowed_statuses: list[TenantStatus], bypass_roles: O
 
         allowed_values = {str(getattr(s, "value", s)).strip().lower() for s in (allowed_statuses or [])}
         tenant_value = str(getattr(tenant.status, "value", tenant.status)).strip().lower()
-        if tenant_value == TenantStatus.PENDING_VERIFICATION.value:
+        if (tenant_value == TenantStatus.PENDING_VERIFICATION.value
+                and not (tenant.tenant_type == TenantType.GUARD and tenant.ownership_type == GuardOwnershipType.SERVICE_PROVIDER)):
             tenant_value = TenantStatus.PENDING_ACTIVATION.value
 
         if tenant_value not in allowed_values:

@@ -7,7 +7,7 @@ async def migrate_tenant_pending_activation():
     collection = engine.get_collection(db_tenant_model)
 
     await collection.update_many(
-        {"status": "pending_verification"},
+        {"status": "pending_verification", "$nor": [{"tenant_type": "guard", "ownership_type": "service_provider"}]},
         {"$set": {"status": "pending_activation"}}
     )
 

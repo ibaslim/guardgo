@@ -75,6 +75,26 @@ async def test_sp_list_guards_route_forwards_pagination(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_sp_guard_search_route_and_access(monkeypatch):
+    captured = {}
+
+    class FakeManager:
+        async def list_service_provider_guards(self, current_user, page, rows, keyword):
+            captured.update(user=current_user.username, page=page, rows=rows, keyword=keyword)
+            return {"items": [], "pagination": {}}
+
+    monkeypatch.setattr(TenantManager, "get_instance", staticmethod(lambda: FakeManager()))
+    async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as client:
+        response = await client.get("/api/sp/guards/search", params={"keyword": "alice", "page": 2, "rows": 5})
+    assert response.status_code == 200
+    assert captured == {"user": "spadmin1", "page": 2, "rows": 5, "keyword": "alice"}
+
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.GUARD_ADMIN)), base_url="http://test") as client:
+        response = await client.get("/api/sp/guards/search")
+    assert response.status_code == 403
+
+
+@pytest.mark.anyio
 async def test_sp_status_request_route_forwards_payload(monkeypatch):
     captured = {}
 

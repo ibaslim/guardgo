@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -6,7 +7,7 @@ from fastapi import HTTPException
 from orion.api.interactive.auth_manager.auth_manager import auth_manager
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_auth_models import LicenseName, UserStatus, db_user_account, user_role
-from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus, TenantType
+from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus, TenantType, GuardOwnershipType
 
 
 class FakeEngine:
@@ -276,6 +277,36 @@ async def test_activate_invited_user_success_updates_account_fields(monkeypatch)
     assert user.verification_token is None
     assert user.verification_expiry is None
     assert len(engine.saved) == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("initial_status,profile", [
+    (TenantStatus.PENDING_VERIFICATION, {}),
+    (TenantStatus.PENDING_ACTIVATION, {"name": "N/A"}),
+])
+async def test_guard_invite_acceptance_starts_onboarding(monkeypatch, initial_status, profile):
+    user = _build_user(invite_pending=True, role=user_role.GUARD_ADMIN)
+    tenant = db_tenant_model(tenant_type=TenantType.GUARD, profile=profile, status=initial_status,
+                             ownership_type=GuardOwnershipType.SERVICE_PROVIDER)
+
+    class InviteEngine(FakeEngine):
+        async def find_one(self, model, *_args, **_kwargs):
+            if model is db_tenant_model:
+                return tenant
+            if not hasattr(self, "found_invite"):
+                self.found_invite = True
+                return user
+            return None
+
+    engine = InviteEngine(user)
+    monkeypatch.setattr(mongo_controller, "get_instance", staticmethod(lambda: SimpleNamespace(get_engine=lambda: engine)))
+
+    await auth_manager.activate_invited_user("token-1", "NewStrongPass1!", "inviteusr1", "Invite User")
+
+    assert tenant.status == TenantStatus.ONBOARDING
+    assert user.invite_pending is False
+    assert user.status == UserStatus.ACTIVE
+    assert tenant in engine.saved
 
 
 @pytest.mark.anyio

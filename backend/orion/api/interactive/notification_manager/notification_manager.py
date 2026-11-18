@@ -72,6 +72,17 @@ class NotificationManager:
     async def _active_tenant_admin_user_ids(self, tenant_id: str) -> List[str]:
         return await self._active_tenant_user_ids(tenant_id, admin_only=True)
 
+    async def publish_realtime_event_to_tenant_users(
+        self,
+        tenant_id: str,
+        event_name: str,
+        payload: Dict[str, Any],
+    ) -> None:
+        """Publish a domain update without creating an inbox notification."""
+        user_ids = await self._active_tenant_user_ids(str(tenant_id), admin_only=False)
+        for user_id in dict.fromkeys(user_ids):
+            await pusher_manager.publish_user_event(user_id, event_name, payload)
+
     async def _active_platform_admin_user_ids(self) -> List[str]:
         users = await self._engine.find(db_user_account, {})
         user_ids: List[str] = []

@@ -12,9 +12,11 @@ from orion.api.interactive.request_shift_manager.request_shift_manager import Re
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.mongo_manager.shared_model.db_notification_model import NotificationRecord
 from orion.services.mongo_manager.shared_model.db_request_model import (
+    ClientRequestRecord,
     RequestInvoiceTrigger,
     RequestScheduleTemplateRecord,
     RequestStatus,
+    RequestStaffingStatus,
     ShiftInstanceRecord,
     ShiftInstanceStatus,
     ShiftSlotRecord,
@@ -57,6 +59,7 @@ class request_shift_maintenance_manager:
             await asyncio.sleep(60)
 
     async def run_iteration(self) -> Dict[str, int]:
+        expired_request_count = await self._expire_due_requests()
         shift_manager = RequestShiftManager.get_instance()
         ensured = await shift_manager.ensure_future_shift_instances_for_active_schedules(limit=200)
         invoice_sync_count = await self._sync_advance_request_invoices(limit=200)
@@ -67,6 +70,7 @@ class request_shift_maintenance_manager:
         client_reminder_count = await self._send_client_arrival_confirmation_reminders()
 
         summary = {
+            "expired_request_count": expired_request_count,
             "created_shift_count": int(ensured.get("created_shift_count") or 0),
             "touched_request_count": int(ensured.get("touched_request_count") or 0),
             "advance_invoice_sync_count": invoice_sync_count,
@@ -79,6 +83,25 @@ class request_shift_maintenance_manager:
         if any(summary.values()):
             print(f"Shift maintenance summary: {summary}")
         return summary
+
+    async def _expire_due_requests(self, limit: int = 200) -> int:
+        collection = self._engine.get_collection(ClientRequestRecord)
+        docs = await collection.find({
+            "request_expires_at": {"$ne": None, "$lte": datetime.utcnow()},
+            "request_status": {"$nin": [RequestStatus.DRAFT.value, RequestStatus.CANCELLED.value, RequestStatus.CLOSED.value]},
+            "staffing_status": {"$ne": RequestStaffingStatus.EXPIRED.value},
+            "deleted_at": None,
+        }).sort("request_expires_at", 1).to_list(length=limit)
+        manager = RequestManager.get_instance()
+        expired = 0
+        for doc in docs:
+            try:
+                record = await manager._get_request_or_404(str(doc["_id"]))
+                await manager._sync_request_runtime_state(record)
+                expired += 1
+            except Exception as exc:
+                print(f"Request expiration failed for {doc.get('_id')}: {exc}")
+        return expired
 
     async def _sync_advance_request_invoices(self, limit: int = 200) -> int:
         request_manager = RequestManager.get_instance()

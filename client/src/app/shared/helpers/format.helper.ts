@@ -47,7 +47,7 @@ export function formatBackendDateTime(
   const preserveLocalTime = Boolean(options?.preserveLocalTime);
   const dateObj = preserveLocalTime
     ? parseIsoAsLocalWallTime(value)
-    : (value instanceof Date ? value : new Date(value));
+    : (value instanceof Date ? value : new Date(normalizeBackendDateTime(value)));
   if (Number.isNaN(dateObj.getTime())) return '-';
 
   return new Intl.DateTimeFormat(locale, {
@@ -59,6 +59,15 @@ export function formatBackendDateTime(
     timeZone: options?.timeZone || undefined,
     timeZoneName: options?.timeZoneName,
   }).format(dateObj);
+}
+
+// MongoDB timestamps are stored in UTC, but the API may serialize them without
+// a timezone suffix. JavaScript otherwise interprets those values as local time.
+function normalizeBackendDateTime(value: string): string {
+  const raw = value.trim();
+  return /^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(raw)
+    ? `${raw.replace(' ', 'T')}Z`
+    : raw;
 }
 
 function parseIsoAsLocalWallTime(value: Date | string): Date {

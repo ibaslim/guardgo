@@ -1254,6 +1254,39 @@ async def test_sync_shift_slots_for_request_allows_implicit_attendance_shift_aft
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("action", ["check_in", "confirm", "start"])
+async def test_cancelled_request_rejects_stale_attendance_actions(monkeypatch, action):
+    manager = object.__new__(RequestShiftManager)
+    slot = SimpleNamespace(request_id="request", shift_instance_id="shift", assigned_guard_tenant_id="guard", slot_status=ShiftSlotStatus.RESERVED, arrived_at=datetime.utcnow(), started_at=None, client_confirmed_at=datetime.utcnow())
+    shift = SimpleNamespace(schedule_template_id="schedule")
+    request = _make_request(request_status=RequestStatus.CANCELLED)
+
+    async def value(result):
+        return result
+
+    manager._get_shift_slot_or_404 = lambda *_: value(slot)
+    manager._assert_guard_slot_action_access = lambda *_: value((False, None))
+    manager._get_shift_or_404 = lambda *_: value(shift)
+    manager._get_schedule_template_or_404 = lambda *_: value(SimpleNamespace())
+    manager._assert_shift_start_window_is_open = lambda *_args, **_kwargs: None
+    manager._assert_shift_has_not_ended = lambda *_args, **_kwargs: None
+    manager._assert_client_slot_action_access = lambda *_: value((False, None))
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: SimpleNamespace(_get_request_or_404=lambda *_: value(request)),
+    )
+    with pytest.raises(HTTPException) as exc:
+        if action == "check_in":
+            await manager.check_in_shift_slot("slot", ShiftSlotCheckInPayload(latitude=0, longitude=0), None)
+        elif action == "confirm":
+            await manager.confirm_shift_slot_arrival("slot", ShiftSlotClientConfirmPayload(), None)
+        else:
+            await manager.start_shift_slot("slot", ShiftSlotStartPayload(), None)
+    assert exc.value.status_code == 409
+    assert "cancelled" in exc.value.detail
+
+
+@pytest.mark.anyio
 async def test_check_in_shift_slot_uses_actor_timezone_for_system_generated_shift(monkeypatch):
     _stub_notifications(monkeypatch)
     engine = FakeEngine()

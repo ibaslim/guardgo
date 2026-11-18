@@ -75,6 +75,24 @@ async def test_upsert_tenant_rejects_role_mismatch():
     assert exc.value.detail == "You are not allowed to update this tenant"
 
 
+@pytest.mark.anyio
+async def test_guard_onboarding_update_moves_to_pending_activation():
+    tenant = db_tenant_model(tenant_type=TenantType.GUARD, profile={}, status=TenantStatus.ONBOARDING)
+    manager = object.__new__(TenantManager)
+    manager._engine = FakeEngine(tenant)
+
+    async def noop(*_args, **_kwargs):
+        return None
+
+    manager._post_status_change = noop
+    result = await manager.upsert_tenant(_payload(), current_user=SimpleNamespace(
+        tenant_uuid=str(tenant.id), role=user_role.GUARD_ADMIN, username="guardadmin",
+    ), is_update=True)
+
+    assert tenant.status == TenantStatus.PENDING_ACTIVATION
+    assert result["status"] == "pending_activation"
+
+
 def test_validate_and_normalize_provider_operating_regions_requires_city_coordinates():
     profile = {
         "operating_regions": [
@@ -99,7 +117,8 @@ def test_validate_and_normalize_provider_operating_regions_requires_city_coordin
 
 
 @pytest.mark.anyio
-async def test_create_tenant_seeds_default_guard_leave_quota(monkeypatch):
+@pytest.mark.parametrize("initial_status", [TenantStatus.ONBOARDING, TenantStatus.PENDING_VERIFICATION])
+async def test_create_tenant_seeds_default_guard_leave_quota(monkeypatch, initial_status):
     manager = object.__new__(TenantManager)
     manager._engine = FakeEngine()
     tenant = db_tenant_model(
@@ -145,9 +164,10 @@ async def test_create_tenant_seeds_default_guard_leave_quota(monkeypatch):
         staticmethod(lambda: FakeLeaveManager()),
     )
 
-    await manager.create_tenant(tenant)
+    await manager.create_tenant(tenant, initial_status=initial_status)
 
     assert manager._engine.saved[0] is tenant
+    assert tenant.status == initial_status
     assert seeded == {
         "guard_id": str(tenant.id),
         "balance_guard_id": str(tenant.id),

@@ -670,7 +670,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   formatServiceWindowDateTime(value: Date | string | null | undefined): string {
-    return formatBackendDateTime(value || null, 'en-CA', { preserveLocalTime: true });
+    return formatBackendDateTime(value || null, 'en-CA', { preserveLocalTime: true, timeZone: 'UTC' });
   }
 
   get shiftCalendarMonthLabel(): string {
@@ -1091,6 +1091,12 @@ export class RequestsComponent implements OnInit, OnDestroy {
           this.requestRealtimeRefresh();
         }
       }),
+      this.pusherRealtime.requestUpdates$.subscribe((event) => {
+        const fields = event?.changed_fields || [];
+        if (fields.some((field) => ['guards_required', 'accepted_slots', 'open_slots'].includes(field))) {
+          this.refreshRequestCoverage(event.request_id);
+        }
+      }),
       this.pusherRealtime.subscriptionRestored$.subscribe(() => {
         this.requestRealtimeRefresh();
       }),
@@ -1108,6 +1114,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
         return;
       }
       if (this.pusherRealtime.isConnected()) {
+        this.realtimeRefreshTick += 1;
+        if (this.realtimeRefreshTick % 3 === 0) {
+          this.refreshRealtimeRequestLifecycleState();
+        }
         return;
       }
       this.realtimeRefreshTick += 1;
@@ -1115,6 +1125,57 @@ export class RequestsComponent implements OnInit, OnDestroy {
         return;
       }
       this.refreshRealtimeRequestLifecycleState();
+    });
+  }
+
+  private refreshRequestCoverage(requestId: string): void {
+    const normalizedId = String(requestId || '').trim();
+    if (!normalizedId) return;
+
+    const appearsInRequests = this.items.some((item) => item.id === normalizedId)
+      || this.selectedRequest?.id === normalizedId;
+    const appearsInJobs = this.jobs.some((job) => job.request_id === normalizedId)
+      || this.selectedJob?.request_id === normalizedId
+      || this.selectedJobRequest?.id === normalizedId;
+    if (!appearsInRequests && !appearsInJobs) return;
+
+    this.requestService.getRequest(normalizedId, { loadingMode: 'silent' }).subscribe({
+      next: (request) => {
+        this.items = this.items.map((item) => item.id === normalizedId ? { ...item, ...request } : item);
+        if (this.selectedRequest?.id === normalizedId) {
+          this.selectedRequest = { ...this.selectedRequest, ...request };
+        }
+
+        const requestSnapshot: RequestAssignmentRequestSnapshot = {
+          id: request.id,
+          title: request.title,
+          timezone: request.timezone,
+          request_status: request.request_status,
+          staffing_status: request.staffing_status ?? undefined,
+          fulfillment_mode: request.fulfillment_mode,
+          target_type: request.target_type,
+          requested_guard_type: request.requested_guard_type,
+          guards_required: request.guards_required,
+          site_name: request.site_snapshot?.site_name,
+          requested_start_at: request.requested_start_at,
+          requested_end_at: request.requested_end_at,
+          request_revision: request.request_revision,
+          request_expires_at: request.request_expires_at,
+          accepted_slots: request.accepted_slots,
+          open_slots: request.open_slots,
+          pricing_snapshot: request.pricing_snapshot,
+          invoicing_snapshot: request.invoicing_snapshot,
+        };
+        this.jobs = this.jobs.map((job) => job.request_id === normalizedId
+          ? { ...job, request: { ...job.request, ...requestSnapshot } }
+          : job);
+        if (this.selectedJob?.request_id === normalizedId) {
+          this.selectedJob = { ...this.selectedJob, request: { ...this.selectedJob.request, ...requestSnapshot } };
+        }
+        if (this.selectedJobRequest?.id === normalizedId) {
+          this.selectedJobRequest = { ...this.selectedJobRequest, ...request };
+        }
+      },
     });
   }
 
@@ -2989,8 +3050,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
       requestedStartTime: this.formatTimeInput(item.requested_start_at),
       requestedEndDate: this.formatDateInput(item.requested_end_at),
       requestedEndTime: this.formatTimeInput(item.requested_end_at),
-      requestExpiresDate: this.formatDateInput(item.request_expires_at),
-      requestExpiresTime: this.formatTimeInput(item.request_expires_at),
+      requestExpiresDate: this.formatCutoffInput(item.request_expires_at, item.timezone).slice(0, 10),
+      requestExpiresTime: this.formatCutoffInput(item.request_expires_at, item.timezone).slice(11, 16),
       specialInstructions: item.special_instructions || '',
       invoiceContractType: (item.invoicing_snapshot?.contract_type as 'short_term' | 'long_term') || 'short_term',
       invoiceCutoffDay: Number(item.invoicing_snapshot?.monthly_cutoff_day || 1),
@@ -3693,7 +3754,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.coverageErrors = {};
     this.coverageForm = {
       additionalSlots: 1,
-      requestExpiresAt: this.formatDateTimeLocalInput(item.request_expires_at),
+      requestExpiresAt: this.formatCutoffInput(item.request_expires_at, item.timezone),
     };
     this.showCoverageDrawer = true;
   }
@@ -7193,6 +7254,20 @@ export class RequestsComponent implements OnInit, OnDestroy {
       endTimeLocal: endTime || this.scheduleForm.endTimeLocal,
     };
     this.syncInvoiceContractTypeWithSchedule();
+  }
+
+  private formatCutoffInput(value: string | null | undefined, timeZone?: string | null): string {
+    if (!value) return '';
+    const raw = value.trim();
+    const utc = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw) ? raw : `${raw}Z`;
+    const date = new Date(utc);
+    if (Number.isNaN(date.getTime())) return '';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).formatToParts(date);
+    const part = (type: string) => parts.find(item => item.type === type)?.value || '';
+    return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`;
   }
 
   private combineDateAndTime(dateValue: string | null | undefined, timeValue: string | null | undefined): string {

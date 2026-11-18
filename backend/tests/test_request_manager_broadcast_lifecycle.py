@@ -39,6 +39,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     ShiftCoverageSourceType,
     ShiftInstanceRecord,
     ShiftSlotRecord,
+    ShiftSlotStatus,
 )
 from orion.services.mongo_manager.shared_model.db_tenant_model import GuardOwnershipType, TenantType
 
@@ -181,6 +182,61 @@ def _make_request_record(**overrides):
 
 async def _async_return(value):
     return value
+
+
+@pytest.mark.anyio
+async def test_cancellation_notifies_offer_recipients_and_rostered_guards(monkeypatch):
+    manager = object.__new__(RequestManager)
+    record = _make_request_record(id="req-cancel")
+    offered = SimpleNamespace(id=ObjectId(), assignee_tenant_id="guard-offered", assignment_status=RequestAssignmentStatus.OFFERED)
+    accepted = SimpleNamespace(id=ObjectId(), assignee_tenant_id="provider", assignment_status=RequestAssignmentStatus.ACCEPTED)
+    slot = SimpleNamespace(assigned_guard_tenant_id="guard-rostered", slot_status=ShiftSlotStatus.ROSTERED)
+    started = SimpleNamespace(assigned_guard_tenant_id="guard-working", slot_status=ShiftSlotStatus.IN_PROGRESS)
+
+    class Engine(FakeEngine):
+        async def find(self, *_args):
+            return [slot, started]
+
+    manager._engine = Engine()
+    manager._get_request_or_404 = lambda *_: _async_return(record)
+    manager._can_view_request = lambda *_: _async_return(True)
+    manager._assert_request_write_access = lambda *_: _async_return(None)
+    manager._get_assignments_for_request = lambda *_: _async_return([offered, accepted])
+    manager._get_waves_for_request = lambda *_: _async_return([])
+    manager._sync_request_runtime_state = lambda *_: _async_return(record)
+    manager._write_activity = lambda **_: _async_return(None)
+    sent = []
+
+    class Notifications:
+        async def create_for_tenant_admin_users(self, **kwargs):
+            sent.append(kwargs)
+
+    monkeypatch.setattr(NotificationManager, "get_instance", lambda: Notifications())
+    await manager.update_request_status(
+        "req-cancel", ClientRequestStatusUpdatePayload(request_status=RequestStatus.CANCELLED),
+        SimpleNamespace(role="client_admin"),
+    )
+    assert offered.assignment_status == RequestAssignmentStatus.CANCELLED
+    assert accepted.assignment_status == RequestAssignmentStatus.CANCELLED
+    assert slot.slot_status == ShiftSlotStatus.CANCELLED
+    assert started.slot_status == ShiftSlotStatus.IN_PROGRESS
+    assert {item["tenant_id"] for item in sent} == {
+        "guard-offered", "provider", "guard-rostered", "guard-working", "tenant-1",
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("status", [RequestAssignmentStatus.OFFERED, RequestAssignmentStatus.RECONFIRMATION_REQUIRED])
+async def test_cancelled_request_rejects_stale_offer_acceptance(status):
+    manager = object.__new__(RequestManager)
+    assignment = SimpleNamespace(assignee_tenant_id="guard-1", request_id="req-1", assignment_status=status)
+    manager._get_assignment_or_404 = lambda *_: _async_return(assignment)
+    manager._get_session_tenant = lambda *_: _async_return(SimpleNamespace(id="guard-1"))
+    manager._get_request_or_404 = lambda *_: _async_return(_make_request_record(request_status=RequestStatus.CANCELLED))
+    with pytest.raises(HTTPException) as exc:
+        await manager.update_job_status("assignment", RequestAssignmentStatusUpdatePayload(assignment_status=RequestAssignmentStatus.ACCEPTED), SimpleNamespace(role="guard_admin"))
+    assert exc.value.status_code == 409
+    assert assignment.assignment_status == status
 
 
 @pytest.mark.anyio

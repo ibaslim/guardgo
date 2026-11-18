@@ -17,7 +17,7 @@ from orion.services.mongo_manager.shared_model.db_auth_models import (
     UserStatus,
     is_platform_admin_role,
 )
-from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus
+from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus, TenantType, GuardOwnershipType
 from orion.services.session_manager.session_manager import session_manager
 from orion.services.mail_manager.mail_manager import mail_manager
 from orion.helper_manager.env_handler import env_handler
@@ -226,6 +226,18 @@ class auth_manager:
         existing = await engine.find_one(db_user_account, db_user_account.username == normalized_username)
         if existing and str(existing.id) != str(user.id):
             raise HTTPException(status_code=400, detail="Username already exists")
+
+        if user.role == user_role.GUARD_ADMIN and ObjectId.is_valid(user.tenant_uuid):
+            tenant = await engine.find_one(db_tenant_model, db_tenant_model.id == ObjectId(user.tenant_uuid))
+            migrated_invite = (
+                tenant and tenant.ownership_type == GuardOwnershipType.SERVICE_PROVIDER
+                and tenant.status == TenantStatus.PENDING_ACTIVATION
+                and (tenant.profile or {}) == {"name": "N/A"}
+            )
+            if tenant and tenant.tenant_type == TenantType.GUARD and (tenant.status == TenantStatus.PENDING_VERIFICATION or migrated_invite):
+                tenant.status = TenantStatus.ONBOARDING
+                tenant.updated_at = datetime.utcnow()
+                await engine.save(tenant)
 
         user.password = CONSTANTS.S_AUTH_PWD_CONTEXT.hash(password)
         user.username = normalized_username

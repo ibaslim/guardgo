@@ -592,7 +592,8 @@ async def invite_guard_for_service_provider(
         "### Input\n"
         "- **Query Parameters**:\n"
         "  - `page` *(integer, default: 1)*: Page number.\n"
-        "  - `rows` *(integer, default: 20)*: Page size.\n\n"
+        "  - `rows` *(integer, default: 20)*: Page size.\n"
+        "  - `status` *(string, optional)*: Filter guards by tenant status, such as `active` or `pending_activation`.\n\n"
         "### Output\n"
         "- Paginated list of guard records with profile details, license status, and operational coverage."
     ),
@@ -605,9 +606,32 @@ async def invite_guard_for_service_provider(
 async def list_service_provider_guards(
     page: int = 1,
     rows: int = 20,
+    status: str | None = None,
     current_user=Depends(get_current_user),
 ):
-    return await TenantManager.get_instance().list_service_provider_guards(current_user, page=page, rows=rows)
+    manager = TenantManager.get_instance()
+    if status is None:
+        return await manager.list_service_provider_guards(current_user, page=page, rows=rows)
+    return await manager.list_service_provider_guards(current_user, page=page, rows=rows, status=status)
+
+
+@tenant_routes.get(
+    "/api/sp/guards/search",
+    summary="Search service provider guards",
+    description="Search the caller's guards by name or email, case-insensitively. Results are paginated.",
+    tags=["Service Provider Guards"],
+    operation_id="searchServiceProviderGuards",
+    dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
+)
+async def search_service_provider_guards(
+    keyword: str = "",
+    page: int = 1,
+    rows: int = 20,
+    current_user=Depends(get_current_user),
+):
+    return await TenantManager.get_instance().list_service_provider_guards(
+        current_user, page=page, rows=rows, keyword=keyword
+    )
 
 
 @tenant_routes.get(

@@ -21,6 +21,19 @@ class FakeEngine:
 
 
 @pytest.mark.anyio
+async def test_pending_verification_cannot_be_approved():
+    tenant = db_tenant_model(tenant_type=TenantType.GUARD, profile={}, status=TenantStatus.PENDING_VERIFICATION)
+    manager = object.__new__(TenantManager)
+    manager._engine = FakeEngine(tenant)
+
+    with pytest.raises(HTTPException) as exc:
+        await manager.approve_tenant_activation(str(tenant.id), current_user=SimpleNamespace(username="admin", role=user_role.ADMIN))
+
+    assert exc.value.status_code == 400
+    assert tenant.status == TenantStatus.PENDING_VERIFICATION
+
+
+@pytest.mark.anyio
 async def test_set_tenant_status_returns_idempotent_when_same_status():
     tenant = db_tenant_model(tenant_type=TenantType.GUARD, profile={}, status=TenantStatus.ACTIVE)
     manager = object.__new__(TenantManager)

@@ -263,3 +263,32 @@ async def test_sync_advance_request_invoices_only_counts_live_long_term_requests
 
     assert synced_count == 1
     assert synced == [("req-long", "system", "weekly_advance")]
+
+
+@pytest.mark.asyncio
+async def test_expire_due_requests_runs_runtime_sync_and_isolates_failures(monkeypatch):
+    good_id = ObjectId()
+    bad_id = ObjectId()
+    seen = []
+
+    class Collection:
+        def find(self, query):
+            assert query['request_expires_at']['$lte'] <= datetime.utcnow()
+            assert query['staffing_status']['$ne'] == 'expired'
+            return _FakeCursor([{'_id': bad_id}, {'_id': good_id}])
+
+    class Manager:
+        async def _get_request_or_404(self, request_id):
+            if request_id == str(bad_id):
+                raise ValueError('unavailable')
+            return request_id
+
+        async def _sync_request_runtime_state(self, record):
+            seen.append(record)
+
+    manager = object.__new__(request_shift_maintenance_manager)
+    manager._engine = SimpleNamespace(get_collection=lambda _model: Collection())
+    monkeypatch.setattr('orion.management.managers.request_shift_maintenance_manager.RequestManager.get_instance', lambda: Manager())
+
+    assert await manager._expire_due_requests() == 1
+    assert seen == [str(good_id)]

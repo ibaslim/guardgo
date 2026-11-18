@@ -1594,6 +1594,9 @@ class RequestShiftManager:
         if isinstance(request_record, str):
             request_record = await request_manager._get_request_or_404(request_record)
 
+        if request_record.request_status == RequestStatus.CANCELLED:
+            return {"shift_count": 0, "slot_count": 0}
+
         assignments = await request_manager._get_assignments_for_request(str(request_record.id))
         committed_assignments = [
             assignment for assignment in assignments if getattr(assignment, "assignment_status", None) in _COMMITTED_ASSIGNMENT_STATUSES
@@ -4013,6 +4016,8 @@ class RequestShiftManager:
         shift_record = await self._get_shift_or_404(slot_record.shift_instance_id)
         request_manager = RequestManager.get_instance()
         request_record = await request_manager._get_request_or_404(slot_record.request_id)
+        if request_record.request_status == RequestStatus.CANCELLED:
+            raise HTTPException(status_code=409, detail="This request has been cancelled")
         schedule_record = await self._get_schedule_template_or_404(shift_record.schedule_template_id)
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         if shift_record.shift_start_at_utc <= now:
@@ -4285,6 +4290,8 @@ class RequestShiftManager:
         shift_record = await self._get_shift_or_404(slot_record.shift_instance_id)
         request_manager = RequestManager.get_instance()
         request_record = await request_manager._get_request_or_404(slot_record.request_id)
+        if request_record.request_status == RequestStatus.CANCELLED:
+            raise HTTPException(status_code=409, detail="This request has been cancelled")
         schedule_record = await self._get_schedule_template_or_404(shift_record.schedule_template_id)
         self._assert_shift_checkin_window_is_open(
             shift_record,
@@ -4362,6 +4369,8 @@ class RequestShiftManager:
         request_manager = RequestManager.get_instance()
         request_record = await request_manager._get_request_or_404(slot_record.request_id)
         await self._assert_client_slot_action_access(request_record, current_user)
+        if request_record.request_status == RequestStatus.CANCELLED:
+            raise HTTPException(status_code=409, detail="This request has been cancelled")
         if slot_record.arrived_at is None:
             raise HTTPException(status_code=409, detail="Guard must check in before client confirmation")
         if slot_record.started_at is not None:
@@ -4412,6 +4421,8 @@ class RequestShiftManager:
         now = self._utc_now()
         request_manager = RequestManager.get_instance()
         request_record = await request_manager._get_request_or_404(slot_record.request_id)
+        if request_record.request_status == RequestStatus.CANCELLED:
+            raise HTTPException(status_code=409, detail="This request has been cancelled")
         if slot_record.arrived_at is None:
             raise HTTPException(status_code=409, detail="Guard must check in before starting the shift")
         if slot_record.started_at is not None:

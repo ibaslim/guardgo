@@ -12,6 +12,12 @@ export interface PusherNotificationEvent {
   event_type: 'created' | 'updated' | 'read-all';
 }
 
+export interface PusherRequestUpdateEvent {
+  request_id: string;
+  changed_fields?: string[];
+  reason?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PusherRealtimeService {
   private client: Pusher | null = null;
@@ -19,10 +25,12 @@ export class PusherRealtimeService {
   private channelRequestPending = false;
   private lifecycleVersion = 0;
   private readonly notificationEvents = new Subject<PusherNotificationEvent>();
+  private readonly requestUpdates = new Subject<PusherRequestUpdateEvent>();
   private readonly subscriptionRestored = new Subject<void>();
   private readonly connectionState = new BehaviorSubject<boolean>(false);
 
   readonly notificationEvents$ = this.notificationEvents.asObservable();
+  readonly requestUpdates$ = this.requestUpdates.asObservable();
   readonly subscriptionRestored$ = this.subscriptionRestored.asObservable();
   readonly connectionState$ = this.connectionState.asObservable();
 
@@ -74,6 +82,9 @@ export class PusherRealtimeService {
         });
         this.channel.bind('notifications-read-all', () => {
           this.notificationEvents.next({ id: '', event_type: 'read-all' });
+        });
+        this.channel.bind('request-updated', (event: PusherRequestUpdateEvent) => {
+          if (event?.request_id) this.requestUpdates.next(event);
         });
         this.channel.bind('pusher:subscription_succeeded', () => {
           this.connectionState.next(true);
