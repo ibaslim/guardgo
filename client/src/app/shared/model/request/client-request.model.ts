@@ -499,6 +499,31 @@ export interface ShiftListResponse {
   };
 }
 
+export interface PendingShiftArrival {
+  slot_id: string;
+  slot_number: number;
+  slot_status: ShiftSlotStatus;
+  arrived_at: string;
+  distance_meters: number | null;
+  assigned_guard_tenant_id: string | null;
+  assigned_guard_name: string | null;
+  shift_id: string;
+  shift_start_at_utc: string;
+  shift_end_at_utc: string;
+  shift_date_local: string;
+  timezone: string;
+  request_id: string;
+  request_title: string | null;
+  site_name: string | null;
+}
+
+export interface PendingShiftArrivalsResponse {
+  items: PendingShiftArrival[];
+  total: number;
+  page: number;
+  rows: number;
+}
+
 export interface ProviderRosterSelectionPayload {
   slot_id: string;
   guard_tenant_id: string;

@@ -706,6 +706,9 @@ def _stub_notifications(monkeypatch):
         async def create_for_platform_admin_users(self, **kwargs):
             return None
 
+        async def publish_realtime_event_to_tenant_users(self, *args, **kwargs):
+            return None
+
     monkeypatch.setattr(NotificationManager, "get_instance", staticmethod(lambda: FakeNotificationManager()))
 
 
@@ -1666,6 +1669,7 @@ async def test_shift_slot_attendance_flow_updates_slot_shift_and_events(monkeypa
 @pytest.mark.anyio
 async def test_shift_slot_attendance_flow_emits_notifications_after_confirmation(monkeypatch):
     tenant_notifications: list[dict] = []
+    realtime_events = []
 
     class FakeNotificationManager:
         async def create_for_tenant_admin_users(self, **kwargs):
@@ -1674,6 +1678,9 @@ async def test_shift_slot_attendance_flow_emits_notifications_after_confirmation
 
         async def create_for_platform_admin_users(self, **kwargs):
             return None
+
+        async def publish_realtime_event_to_tenant_users(self, tenant_id, event_name, payload):
+            realtime_events.append((tenant_id, event_name, payload))
 
     monkeypatch.setattr(NotificationManager, "get_instance", staticmethod(lambda: FakeNotificationManager()))
 
@@ -1748,6 +1755,9 @@ async def test_shift_slot_attendance_flow_emits_notifications_after_confirmation
     titles = [str(item.get("title") or "") for item in tenant_notifications]
     assert "Guard arrived on site" in titles
     assert "Arrival confirmed" in titles
+    assert realtime_events == [("guard-direct-1", "request-updated", {
+        "request_id": str(request_record.id), "reason": "arrival_confirmed", "changed_fields": ["client_confirmed_at"],
+    })]
     assert "Shift started" in titles
     assert "Shift checked out" in titles
 

@@ -5660,11 +5660,13 @@ class RequestManager:
             raise HTTPException(status_code=400, detail="Use publish on draft requests")
         if record.request_status == RequestStatus.IN_PROGRESS:
             raise HTTPException(status_code=400, detail="Material updates are blocked once work is in progress")
-        if record.staffing_status == RequestStaffingStatus.EXPIRED:
-            raise HTTPException(status_code=400, detail="Expired requests cannot be updated")
+        if record.request_status not in {RequestStatus.SUBMITTED, RequestStatus.ASSIGNED}:
+            raise HTTPException(status_code=400, detail="Only active requests can be updated")
 
         provided = payload.model_dump(exclude_unset=True)
         changed = False
+        cutoff_changed = False
+        was_expired = record.staffing_status == RequestStaffingStatus.EXPIRED
         invoicing_snapshot = record.invoicing_snapshot if isinstance(getattr(record, "invoicing_snapshot", None), dict) else {}
         current_invoice_contract_type = self._normalize_invoice_contract_type(invoicing_snapshot.get("contract_type"))
         next_invoice_contract_type = current_invoice_contract_type
@@ -5678,8 +5680,19 @@ class RequestManager:
             record.target_type = self._default_target_type_for_mode(payload.fulfillment_mode)
             changed = True
         if "site" in provided and payload.site is not None:
-            record.site_snapshot = self._resolve_site_input_snapshot(payload.site)
-            changed = True
+            updated_site = self._resolve_site_input_snapshot(payload.site)
+            current_site = record.site_snapshot or {}
+            site_keys = ("site_name", "site_manager_contact", "manager_email", "google_maps_url")
+            address_keys = ("street", "city", "country", "province", "postal_code", "latitude", "longitude")
+            current_address = current_site.get("site_address") or {}
+            updated_address = updated_site.get("site_address") or {}
+            if (
+                any((current_site.get(key) or "") != (updated_site.get(key) or "") for key in site_keys)
+                or any((current_address.get(key) or "") != (updated_address.get(key) or "") for key in address_keys)
+                or ("site_type" in payload.site.model_fields_set and (current_site.get("site_type") or "") != (updated_site.get("site_type") or ""))
+            ):
+                record.site_snapshot = updated_site
+                changed = True
         if "requested_guard_type" in provided and (payload.requested_guard_type or "").strip() != (record.requested_guard_type or ""):
             record.requested_guard_type = (payload.requested_guard_type or "").strip() or None
             changed = True
@@ -5709,12 +5722,18 @@ class RequestManager:
                 changed = True
         if "request_expires_at" in provided:
             self._validate_request_expiry(payload.request_expires_at, record.requested_start_at, require_value=True, timezone_name=record.timezone)
+            cutoff_changed = payload.request_expires_at != record.request_expires_at
             record.request_expires_at = payload.request_expires_at
 
         self._validate_requested_window(record.requested_start_at, record.requested_end_at)
         self._validate_request_expiry(record.request_expires_at, record.requested_start_at, require_value=True, timezone_name=record.timezone)
-        if not changed:
+        if not changed and not cutoff_changed:
             raise HTTPException(status_code=400, detail="Publish update requires a material request change")
+
+        if was_expired:
+            record.staffing_status = RequestStaffingStatus.OPEN
+            record.lock_reason = None
+            record.expired_at = None
 
         await self._refresh_request_finance_snapshot(
             record,
@@ -5724,7 +5743,8 @@ class RequestManager:
         )
 
         await self._supersede_previous_waves(record)
-        await self._mark_assignments_reconfirmation_required(record)
+        if changed:
+            await self._mark_assignments_reconfirmation_required(record)
         record.updated_at = datetime.utcnow()
         await self._engine.save(record)
         if str((record.site_snapshot or {}).get("site_source") or "").strip().lower() == "request":

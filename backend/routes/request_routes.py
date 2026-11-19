@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from configs.app_dependency import get_current_user, role_required, status_required
 from orion.api.interactive.request_manager.request_manager import RequestManager
@@ -647,6 +647,28 @@ async def list_shift_exceptions(
 )
 async def get_request_shift(shift_id: str, current_user=Depends(get_current_user)):
     return await RequestShiftManager.get_instance().get_shift_by_id(shift_id=shift_id, current_user=current_user)
+
+
+@request_routes.get(
+    "/api/shift-slots/pending-arrivals",
+    summary="List pending guard arrivals",
+    tags=["Client Requests"],
+    operation_id="listPendingShiftArrivals",
+    dependencies=[Depends(role_required([
+        user_role.ADMIN, user_role.OPS_ADMIN, user_role.SUPPORT_ADMIN,
+        user_role.COMPLIANCE_ADMIN, user_role.CLIENT_ADMIN,
+    ]))],
+)
+async def list_pending_shift_arrivals(
+    page: int = Query(1, ge=1),
+    rows: int = Query(20, ge=1, le=100),
+    request_id: str = "",
+    shift_id: str = "",
+    current_user=Depends(get_current_user),
+):
+    return await RequestShiftManager.get_instance().list_pending_arrivals(
+        current_user=current_user, page=page, rows=rows, request_id=request_id, shift_id=shift_id,
+    )
 
 
 @request_routes.get(

@@ -3668,6 +3668,104 @@ class RequestShiftManager:
             "schedule": self._serialize_schedule(template_record, generated_shift_count=generated_count),
         }
 
+    @staticmethod
+    def _pending_arrival_slot_query() -> Dict[str, Any]:
+        return {
+            "slot_status": ShiftSlotStatus.CLIENT_CONFIRMATION_PENDING.value,
+            "arrived_at": {"$ne": None},
+            "client_confirmed_at": None,
+            "started_at": None,
+        }
+
+    @staticmethod
+    def _pending_arrival_shift_query(now: datetime) -> Dict[str, Any]:
+        return {
+            "instance_status": {"$nin": [ShiftInstanceStatus.CANCELLED.value, ShiftInstanceStatus.EXPIRED.value, ShiftInstanceStatus.COMPLETED.value]},
+            "shift_end_at_utc": {"$gt": now},
+        }
+
+    @classmethod
+    def _is_pending_arrival(cls, slot: Any, shift: Any, now: datetime) -> bool:
+        def value(record, key):
+            result = record.get(key) if isinstance(record, dict) else getattr(record, key, None)
+            return getattr(result, "value", result)
+
+        conditions = cls._pending_arrival_slot_query()
+        shift_conditions = cls._pending_arrival_shift_query(now)
+        return (
+            value(slot, "slot_status") == conditions["slot_status"]
+            and value(slot, "arrived_at") is not None
+            and value(slot, "client_confirmed_at") is None
+            and value(slot, "started_at") is None
+            and value(shift, "instance_status") not in shift_conditions["instance_status"]["$nin"]
+            and value(shift, "shift_end_at_utc") is not None
+            and value(shift, "shift_end_at_utc") > shift_conditions["shift_end_at_utc"]["$gt"]
+        )
+
+    async def list_pending_arrivals(
+        self, current_user, page: int = 1, rows: int = 20, request_id: str = "", shift_id: str = "",
+    ) -> Dict[str, Any]:
+        request_manager = RequestManager.get_instance()
+        role = request_manager._role_value(current_user)
+        query = self._pending_arrival_slot_query()
+        if not request_manager._is_platform_write_role(role):
+            if role != "client_admin":
+                raise HTTPException(status_code=403, detail="Access forbidden")
+            tenant = await request_manager._get_session_tenant(current_user)
+            if tenant.tenant_type != TenantType.CLIENT:
+                raise HTTPException(status_code=403, detail="Access forbidden")
+            query["client_tenant_id"] = str(tenant.id)
+        if request_id:
+            query["request_id"] = request_id
+        if shift_id:
+            query["shift_instance_id"] = shift_id
+
+        slots = await self._engine.get_collection(ShiftSlotRecord).find(query).sort(
+            [("arrived_at", 1), ("_id", 1)]
+        ).to_list(length=None)
+        def object_ids(values):
+            return [ObjectId(value) for value in set(values) if ObjectId.is_valid(value)]
+
+        shift_ids = object_ids([str(slot.get("shift_instance_id") or "") for slot in slots])
+        request_ids = object_ids([str(slot.get("request_id") or "") for slot in slots])
+        now = self._utc_now()
+        shift_docs = await self._engine.get_collection(ShiftInstanceRecord).find({
+            "_id": {"$in": shift_ids}, **self._pending_arrival_shift_query(now),
+        }).to_list(length=None)
+        request_docs = await self._engine.get_collection(ClientRequestRecord).find({
+            "_id": {"$in": request_ids}, "deleted_at": None,
+            "request_status": {"$ne": RequestStatus.CANCELLED.value},
+        }).to_list(length=None)
+        shifts = {str(doc["_id"]): doc for doc in shift_docs}
+        requests = {str(doc["_id"]): doc for doc in request_docs}
+        pending = [slot for slot in slots if str(slot.get("request_id")) in requests
+                   and str(slot.get("shift_instance_id")) in shifts
+                   and self._is_pending_arrival(slot, shifts[str(slot["shift_instance_id"])], now)]
+        total = len(pending)
+        selected = pending[(page - 1) * rows:page * rows]
+        serialized = await self._serialize_slots_with_guard_labels(selected)
+        slot_ids = [slot["id"] for slot in serialized]
+        events = await self._engine.get_collection(ShiftAttendanceEventRecord).find({
+            "shift_slot_id": {"$in": slot_ids}, "event_type": ShiftAttendanceEventType.ARRIVED.value,
+        }).sort("timestamp", -1).to_list(length=None)
+        distances: Dict[str, Any] = {}
+        for event in events:
+            distances.setdefault(str(event.get("shift_slot_id")), event.get("distance_meters"))
+        items = []
+        for slot in serialized:
+            shift = shifts[str(slot["shift_instance_id"])]
+            request = requests[str(slot["request_id"])]
+            items.append({
+                "slot_id": slot["id"], "slot_number": slot["slot_number"], "slot_status": slot["slot_status"],
+                "arrived_at": slot["arrived_at"], "distance_meters": distances.get(slot["id"]),
+                "assigned_guard_tenant_id": slot["assigned_guard_tenant_id"], "assigned_guard_name": slot["assigned_guard_name"],
+                "shift_id": str(shift["_id"]), "shift_start_at_utc": shift.get("shift_start_at_utc"),
+                "shift_end_at_utc": shift.get("shift_end_at_utc"), "shift_date_local": shift.get("shift_date_local"),
+                "timezone": shift.get("timezone"), "request_id": slot["request_id"],
+                "request_title": request.get("title"), "site_name": (request.get("site_snapshot") or {}).get("site_name"),
+            })
+        return {"items": items, "total": total, "page": page, "rows": rows}
+
     async def list_shifts(
         self,
         current_user,
@@ -4365,16 +4463,13 @@ class RequestShiftManager:
     async def confirm_shift_slot_arrival(self, slot_id: str, payload: ShiftSlotClientConfirmPayload, current_user) -> Dict[str, Any]:
         slot_record = await self._get_shift_slot_or_404(slot_id)
         shift_record = await self._get_shift_or_404(slot_record.shift_instance_id)
-        self._assert_shift_has_not_ended(shift_record, action="confirm arrival")
         request_manager = RequestManager.get_instance()
         request_record = await request_manager._get_request_or_404(slot_record.request_id)
         await self._assert_client_slot_action_access(request_record, current_user)
         if request_record.request_status == RequestStatus.CANCELLED:
             raise HTTPException(status_code=409, detail="This request has been cancelled")
-        if slot_record.arrived_at is None:
-            raise HTTPException(status_code=409, detail="Guard must check in before client confirmation")
-        if slot_record.started_at is not None:
-            raise HTTPException(status_code=409, detail="This shift slot has already started")
+        if not self._is_pending_arrival(slot_record, shift_record, self._utc_now()):
+            raise HTTPException(status_code=409, detail="This shift slot is not awaiting arrival confirmation")
 
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         slot_record.client_confirmed_at = slot_record.client_confirmed_at or now
@@ -4405,6 +4500,11 @@ class RequestShiftManager:
                 action_url=f"/dashboard/requests?slot={slot_record.id}",
                 action_label="Open slot",
                 metadata={"request_id": str(request_record.id), "shift_id": str(shift_record.id), "slot_id": str(slot_record.id)},
+            )
+            await NotificationManager.get_instance().publish_realtime_event_to_tenant_users(
+                slot_record.assigned_guard_tenant_id,
+                "request-updated",
+                {"request_id": str(request_record.id), "reason": "arrival_confirmed", "changed_fields": ["client_confirmed_at"]},
             )
         return await self.get_shift_slot_by_id(slot_id=str(slot_record.id), current_user=current_user)
 

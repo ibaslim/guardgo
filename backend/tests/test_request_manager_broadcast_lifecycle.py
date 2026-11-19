@@ -2579,6 +2579,93 @@ async def test_void_platform_payout_adjustment_marks_record_voided():
 
 
 @pytest.mark.anyio
+async def test_expired_request_can_rebroadcast_with_new_cutoff_without_reconfirming_coverage():
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+    now = datetime.utcnow().replace(second=0, microsecond=0)
+    site = {
+        "site_name": "Client HQ", "site_manager_contact": "", "manager_email": "",
+        "google_maps_url": "", "site_source": "saved", "site_id": "site-1",
+        "site_address": {"street": "Main", "city": "Toronto", "province": "ON", "country": "CA", "postal_code": "", "latitude": 43.65, "longitude": -79.38},
+    }
+    record = _make_request_record(
+        timezone="UTC", request_status=RequestStatus.SUBMITTED,
+        staffing_status=RequestStaffingStatus.EXPIRED, lock_reason=RequestLockReason.REQUEST_EXPIRED,
+        expired_at=now - timedelta(minutes=10), request_expires_at=now - timedelta(minutes=10),
+        requested_start_at=now + timedelta(hours=4), requested_end_at=now + timedelta(hours=8),
+        site_snapshot=site, invoicing_snapshot={},
+    )
+    assignment = SimpleNamespace(assignment_scope=RequestAssignmentScope.REQUEST, assignment_status=RequestAssignmentStatus.ACCEPTED, slots_committed=1)
+    manager._get_request_or_404 = lambda *_: _async_return(record)
+    manager._can_view_request = lambda *_: _async_return(True)
+    manager._assert_request_write_access = lambda *_: _async_return(None)
+    manager._get_assignments_for_request = lambda *_: _async_return([assignment])
+    manager._refresh_request_finance_snapshot = lambda *_args, **_kwargs: _async_return(None)
+    manager._supersede_previous_waves = lambda *_: _async_return(None)
+    async def unexpected_reconfirmation(*_args):
+        raise AssertionError("Cutoff-only changes must not require guard reconfirmation")
+    manager._mark_assignments_reconfirmation_required = unexpected_reconfirmation
+    async def publish(updated_record, **kwargs):
+        assert updated_record.staffing_status == RequestStaffingStatus.PARTIALLY_FILLED
+        assert updated_record.lock_reason is None
+        assert updated_record.expired_at is None
+        assert kwargs["trigger"] == RequestWaveTrigger.PUBLISH_UPDATE
+        return {"message": "Request published"}
+    manager._publish_existing_request = publish
+
+    response = await manager.publish_request_update(
+        str(record.id),
+        RequestPublishUpdatePayload(
+            timezone="UTC", fulfillment_mode=record.fulfillment_mode,
+            site={key: site[key] for key in ("site_name", "site_address", "site_manager_contact", "manager_email", "google_maps_url")},
+            request_expires_at=now + timedelta(hours=1),
+        ),
+        SimpleNamespace(role="client_admin"),
+    )
+    assert response["message"] == "Request published"
+    assert record.request_expires_at == now + timedelta(hours=1)
+    assert record.site_snapshot["site_id"] == "site-1"
+    assert assignment.assignment_status == RequestAssignmentStatus.ACCEPTED
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("cutoff_offset", [-1, 300])
+async def test_expired_request_rejects_invalid_new_cutoff(cutoff_offset):
+    manager = object.__new__(RequestManager)
+    now = datetime.utcnow().replace(second=0, microsecond=0)
+    record = _make_request_record(
+        timezone="UTC", staffing_status=RequestStaffingStatus.EXPIRED,
+        request_expires_at=now - timedelta(hours=1), requested_start_at=now + timedelta(hours=4),
+        requested_end_at=now + timedelta(hours=8),
+    )
+    manager._get_request_or_404 = lambda *_: _async_return(record)
+    manager._can_view_request = lambda *_: _async_return(True)
+    manager._assert_request_write_access = lambda *_: _async_return(None)
+    manager._sync_request_runtime_state = lambda *_: _async_return(record)
+    with pytest.raises(HTTPException) as exc:
+        await manager.publish_request_update(
+            str(record.id), RequestPublishUpdatePayload(request_expires_at=now + timedelta(minutes=cutoff_offset)),
+            SimpleNamespace(role="client_admin"),
+        )
+    assert exc.value.status_code == 400
+    assert record.staffing_status == RequestStaffingStatus.EXPIRED
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("status", [RequestStatus.CANCELLED, RequestStatus.CLOSED])
+async def test_terminal_request_cannot_be_republished(status):
+    manager = object.__new__(RequestManager)
+    record = _make_request_record(timezone="UTC", request_status=status)
+    manager._get_request_or_404 = lambda *_: _async_return(record)
+    manager._can_view_request = lambda *_: _async_return(True)
+    manager._assert_request_write_access = lambda *_: _async_return(None)
+    manager._sync_request_runtime_state = lambda *_: _async_return(record)
+    with pytest.raises(HTTPException) as exc:
+        await manager.publish_request_update(str(record.id), RequestPublishUpdatePayload(), SimpleNamespace(role="client_admin"))
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.anyio
 async def test_publish_request_update_recalculates_finance_snapshot_for_invoice_changes():
     manager = object.__new__(RequestManager)
     manager._engine = FakeEngine()

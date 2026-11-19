@@ -8,6 +8,7 @@ from orion.services.mongo_manager.mongo_enums import MONGO_CONNECTIONS
 from orion.services.mongo_manager.shared_model.db_auth_models import db_user_account, user_role
 from orion.services.mongo_manager.shared_model.db_system_settings import db_system_model
 from orion.services.mongo_manager.shared_model.db_keys import db_keys
+from orion.services.mongo_manager.shared_model.db_request_model import ShiftSlotRecord
 from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model
 from orion.services.mongo_manager.shared_views.tenant_admin_view import TenantAdminView
 from orion.services.mongo_manager.shared_views.tenant_key_admin_view import TenantKeyAdminView
@@ -68,6 +69,10 @@ class mongo_controller:
             name="unique_maintainer_per_company", )
 
         await self.__engine.get_collection(db_system_model).create_index("key", unique=True)
+        await self.__engine.get_collection(ShiftSlotRecord).create_index(
+            [("client_tenant_id", 1), ("slot_status", 1), ("arrived_at", 1)],
+            name="pending_arrivals_by_client",
+        )
 
     async def migrate_legacy_admin_role(self):
         user_collection = self.__engine.get_collection(db_user_account)

@@ -32,6 +32,25 @@ def _app(role=user_role.CLIENT_ADMIN):
 
 
 @pytest.mark.anyio
+async def test_pending_arrivals_route_paging_validation_and_roles(monkeypatch):
+    captured = {}
+    class FakeManager:
+        async def list_pending_arrivals(self, **kwargs):
+            captured.update(kwargs)
+            return {"items": [], "total": 0, "page": kwargs["page"], "rows": kwargs["rows"]}
+    monkeypatch.setattr(RequestShiftManager, "get_instance", staticmethod(lambda: FakeManager()))
+    async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as client:
+        response = await client.get("/api/shift-slots/pending-arrivals?page=2&rows=1&request_id=req&shift_id=shift")
+        invalid = await client.get("/api/shift-slots/pending-arrivals?rows=101")
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "total": 0, "page": 2, "rows": 1}
+    assert captured["request_id"] == "req" and captured["shift_id"] == "shift"
+    assert invalid.status_code == 422
+    async with AsyncClient(transport=ASGITransport(app=_app(user_role.GUARD_ADMIN)), base_url="http://test") as client:
+        assert (await client.get("/api/shift-slots/pending-arrivals")).status_code == 403
+
+
+@pytest.mark.anyio
 async def test_list_client_requests_forwards_filters(monkeypatch):
     captured = {}
 

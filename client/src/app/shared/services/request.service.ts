@@ -39,6 +39,7 @@ import {
   ShiftDetailResponse,
   ShiftExceptionListResponse,
   ShiftListResponse,
+  PendingShiftArrivalsResponse,
   ShiftSlotCheckInPayload,
   ShiftSlotCheckOutPayload,
   ShiftSlotClientConfirmPayload,
@@ -277,6 +278,13 @@ export class RequestService {
 
   getShift(shiftId: string, options?: ApiRequestOptions) {
     return this.api.get<ShiftDetailResponse>(`shifts/${shiftId}`, options);
+  }
+
+  listPendingShiftArrivals(page = 1, rows = 20, requestId = '', shiftId = '', options?: ApiRequestOptions) {
+    let params = new HttpParams().set('page', page).set('rows', rows);
+    params = this.withOptionalParam(params, 'request_id', requestId);
+    params = this.withOptionalParam(params, 'shift_id', shiftId);
+    return this.api.get<PendingShiftArrivalsResponse>('shift-slots/pending-arrivals', { ...options, params });
   }
 
   listShiftExceptions(

@@ -209,7 +209,10 @@
     [containerClass]="'rounded-xl border border-emerald-200 bg-white shadow-sm dark:border-emerald-900/40 dark:bg-gray-900'"
     [bodyClass]="'p-4 sm:p-5'"
   >
-    <div *ngIf="clientArrivalFocus as focus; else emptyClientArrivalFocusState" class="space-y-5">
+    <div *ngIf="clientArrivalFocuses.length; else emptyClientArrivalFocusState" class="space-y-5">
+      <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ clientArrivalTotal }} arrival{{ clientArrivalTotal === 1 ? '' : 's' }} waiting for confirmation</div>
+      <div *ngFor="let focus of clientArrivalFocuses" class="space-y-5 border-t border-gray-200 pt-4 dark:border-gray-700">
+      <p class="text-sm text-gray-600 dark:text-gray-300">{{ focus.slot.assigned_guard_name || 'Assigned guard' }} · Checked in {{ formatShiftDateTime(focus.slot.arrived_at, focus.shift) }}<span *ngIf="focus.distanceMeters != null"> · {{ focus.distanceMeters | number:'1.0-1' }} m from site</span></p>
       <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div class="min-w-0 flex-1 space-y-2">
           <div class="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Arrival Confirmation Waiting</div>
@@ -251,8 +254,14 @@
       </div>
 
       <div class="flex flex-wrap gap-3">
-        <app-button label="Open Arrival Details" type="secondary" (pressed)="openClientArrivalFocusDetails()"></app-button>
-        <app-button label="Confirm Arrival" type="primary" (pressed)="openClientArrivalFocusConfirm()"></app-button>
+        <app-button label="Open Arrival Details" type="secondary" (pressed)="openClientArrivalFocusDetails(focus)"></app-button>
+        <app-button label="Confirm Arrival" type="primary" (pressed)="openClientArrivalFocusConfirm(focus)"></app-button>
+      </div>
+      </div>
+      <div *ngIf="clientArrivalTotal > clientArrivalRows" class="flex items-center gap-3">
+        <app-button label="Previous" type="secondary" [disabled]="clientArrivalPage <= 1" (pressed)="changeClientArrivalPage(clientArrivalPage - 1)"></app-button>
+        <span class="text-sm">Page {{ clientArrivalPage }}</span>
+        <app-button label="Next" type="secondary" [disabled]="clientArrivalPage * clientArrivalRows >= clientArrivalTotal" (pressed)="changeClientArrivalPage(clientArrivalPage + 1)"></app-button>
       </div>
     </div>
 

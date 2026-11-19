@@ -6,8 +6,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription, forkJoin, interval } from 'rxjs';
 import { PusherRealtimeService } from '../../services/notifications/pusher-realtime.service';
 
-import { ButtonComponent } from '../../components/button/button.component';
-import { CardComponent } from '../../components/card/card.component';
+import { ButtonComponent } from '../../components/button';
+import { CardComponent } from '../../components/card';
 import { DrawerActionRowComponent } from '../../components/drawer-action-row/drawer-action-row.component';
 import { DrawerTitleBlockComponent } from '../../components/drawer-title-block/drawer-title-block.component';
 import { EventTimelineComponent } from '../../components/event-timeline/event-timeline.component';
@@ -125,6 +125,7 @@ interface ProviderRosterFocusContext {
 interface ClientArrivalFocusContext {
   shift: ShiftInstanceItem;
   slot: ShiftSlotItem;
+  distanceMeters?: number | null;
 }
 
 type PricingRequestContext = Pick<
@@ -319,6 +320,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
   guardShiftFocus: GuardShiftFocusContext | null = null;
   providerRosterFocus: ProviderRosterFocusContext | null = null;
   clientArrivalFocus: ClientArrivalFocusContext | null = null;
+  clientArrivalFocuses: ClientArrivalFocusContext[] = [];
+  clientArrivalTotal = 0;
+  clientArrivalPage = 1;
+  readonly clientArrivalRows = 20;
   selectedShiftLeaveTarget: ShiftSlotItem | null = null;
   selectedShiftGuardLeaves: ShiftGuardLeaveItem[] = [];
   selectedShiftGuardLeaveReviewTarget: ShiftGuardLeaveItem | null = null;
@@ -670,7 +675,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   formatServiceWindowDateTime(value: Date | string | null | undefined): string {
-    return formatBackendDateTime(value || null, 'en-CA', { preserveLocalTime: true, timeZone: 'UTC' });
+    return formatBackendDateTime(value || null, 'en-CA', { preserveLocalTime: true });
   }
 
   get shiftCalendarMonthLabel(): string {
@@ -1088,13 +1093,16 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.pusherRealtime.notificationEvents$.subscribe((event) => {
         const source = String(event?.source_module || '').trim().toLowerCase();
         if (source === 'requests' || source === 'leaves') {
+          if (source === 'requests' && event.event_type === 'created' && this.isClientAdmin) {
+            this.refreshClientArrivalFocus({ silent: true, suppressError: true });
+          }
           this.requestRealtimeRefresh();
         }
       }),
       this.pusherRealtime.requestUpdates$.subscribe((event) => {
-        const fields = event?.changed_fields || [];
-        if (fields.some((field) => ['guards_required', 'accepted_slots', 'open_slots'].includes(field))) {
-          this.refreshRequestCoverage(event.request_id);
+        if (event?.reason === 'arrival_confirmed') {
+          if (this.isGuardAdmin) this.refreshGuardShiftFocus({ silent: true, suppressError: true });
+          this.requestRealtimeRefresh();
         }
       }),
       this.pusherRealtime.subscriptionRestored$.subscribe(() => {
@@ -1114,10 +1122,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
         return;
       }
       if (this.pusherRealtime.isConnected()) {
-        this.realtimeRefreshTick += 1;
-        if (this.realtimeRefreshTick % 3 === 0) {
-          this.refreshRealtimeRequestLifecycleState();
-        }
         return;
       }
       this.realtimeRefreshTick += 1;
@@ -1125,57 +1129,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
         return;
       }
       this.refreshRealtimeRequestLifecycleState();
-    });
-  }
-
-  private refreshRequestCoverage(requestId: string): void {
-    const normalizedId = String(requestId || '').trim();
-    if (!normalizedId) return;
-
-    const appearsInRequests = this.items.some((item) => item.id === normalizedId)
-      || this.selectedRequest?.id === normalizedId;
-    const appearsInJobs = this.jobs.some((job) => job.request_id === normalizedId)
-      || this.selectedJob?.request_id === normalizedId
-      || this.selectedJobRequest?.id === normalizedId;
-    if (!appearsInRequests && !appearsInJobs) return;
-
-    this.requestService.getRequest(normalizedId, { loadingMode: 'silent' }).subscribe({
-      next: (request) => {
-        this.items = this.items.map((item) => item.id === normalizedId ? { ...item, ...request } : item);
-        if (this.selectedRequest?.id === normalizedId) {
-          this.selectedRequest = { ...this.selectedRequest, ...request };
-        }
-
-        const requestSnapshot: RequestAssignmentRequestSnapshot = {
-          id: request.id,
-          title: request.title,
-          timezone: request.timezone,
-          request_status: request.request_status,
-          staffing_status: request.staffing_status ?? undefined,
-          fulfillment_mode: request.fulfillment_mode,
-          target_type: request.target_type,
-          requested_guard_type: request.requested_guard_type,
-          guards_required: request.guards_required,
-          site_name: request.site_snapshot?.site_name,
-          requested_start_at: request.requested_start_at,
-          requested_end_at: request.requested_end_at,
-          request_revision: request.request_revision,
-          request_expires_at: request.request_expires_at,
-          accepted_slots: request.accepted_slots,
-          open_slots: request.open_slots,
-          pricing_snapshot: request.pricing_snapshot,
-          invoicing_snapshot: request.invoicing_snapshot,
-        };
-        this.jobs = this.jobs.map((job) => job.request_id === normalizedId
-          ? { ...job, request: { ...job.request, ...requestSnapshot } }
-          : job);
-        if (this.selectedJob?.request_id === normalizedId) {
-          this.selectedJob = { ...this.selectedJob, request: { ...this.selectedJob.request, ...requestSnapshot } };
-        }
-        if (this.selectedJobRequest?.id === normalizedId) {
-          this.selectedJobRequest = { ...this.selectedJobRequest, ...request };
-        }
-      },
     });
   }
 
@@ -2979,14 +2932,13 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
     const picked = samples[Math.floor(Math.random() * samples.length)];
 
-    const today = new Date();
-    const startDate = new Date(today);
-    startDate.setDate(today.getDate() + 7);
-    startDate.setHours(18, 0, 0, 0);
-    const endDate = new Date(startDate);
-    endDate.setHours(startDate.getHours() + 2, 0, 0, 0);
-    const expiryDate = new Date(startDate);
-    expiryDate.setHours(startDate.getHours() - 2, 0, 0, 0);
+    // Relative to now: respond within 6 hours, start in 7 hours, end in 8 hours.
+    // Adding whole hours means the date rolls to tomorrow when the time passes midnight.
+    const now = new Date();
+    const hoursFromNow = (hours: number) => new Date(now.getTime() + hours * 60 * 60 * 1000);
+    const startDate = hoursFromNow(7);
+    const endDate = hoursFromNow(8);
+    const expiryDate = hoursFromNow(6);
 
     this.requestForm = {
       ...this.requestForm,
@@ -3050,8 +3002,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
       requestedStartTime: this.formatTimeInput(item.requested_start_at),
       requestedEndDate: this.formatDateInput(item.requested_end_at),
       requestedEndTime: this.formatTimeInput(item.requested_end_at),
-      requestExpiresDate: this.formatCutoffInput(item.request_expires_at, item.timezone).slice(0, 10),
-      requestExpiresTime: this.formatCutoffInput(item.request_expires_at, item.timezone).slice(11, 16),
+      requestExpiresDate: this.formatDateInput(item.request_expires_at),
+      requestExpiresTime: this.formatTimeInput(item.request_expires_at),
       specialInstructions: item.special_instructions || '',
       invoiceContractType: (item.invoicing_snapshot?.contract_type as 'short_term' | 'long_term') || 'short_term',
       invoiceCutoffDay: Number(item.invoicing_snapshot?.monthly_cutoff_day || 1),
@@ -3754,7 +3706,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.coverageErrors = {};
     this.coverageForm = {
       additionalSlots: 1,
-      requestExpiresAt: this.formatCutoffInput(item.request_expires_at, item.timezone),
+      requestExpiresAt: this.formatDateTimeLocalInput(item.request_expires_at),
     };
     this.showCoverageDrawer = true;
   }
@@ -5685,8 +5637,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     return 'A guard has already checked in on site. Confirm the arrival here so the shift can move forward without delay.';
   }
 
-  openClientArrivalFocusDetails(): void {
-    const focus = this.clientArrivalFocus;
+  openClientArrivalFocusDetails(focus: ClientArrivalFocusContext): void {
     if (!focus) {
       return;
     }
@@ -5694,8 +5645,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.openShiftSlotById(focus.slot.id);
   }
 
-  openClientArrivalFocusConfirm(): void {
-    const focus = this.clientArrivalFocus;
+  openClientArrivalFocusConfirm(focus: ClientArrivalFocusContext): void {
     if (!focus) {
       return;
     }
@@ -7256,20 +7206,6 @@ export class RequestsComponent implements OnInit, OnDestroy {
     this.syncInvoiceContractTypeWithSchedule();
   }
 
-  private formatCutoffInput(value: string | null | undefined, timeZone?: string | null): string {
-    if (!value) return '';
-    const raw = value.trim();
-    const utc = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw) ? raw : `${raw}Z`;
-    const date = new Date(utc);
-    if (Number.isNaN(date.getTime())) return '';
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: timeZone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-    }).formatToParts(date);
-    const part = (type: string) => parts.find(item => item.type === type)?.value || '';
-    return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`;
-  }
-
   private combineDateAndTime(dateValue: string | null | undefined, timeValue: string | null | undefined): string {
     const normalizedDate = String(dateValue || '').trim();
     const normalizedTime = String(timeValue || '').trim();
@@ -7675,35 +7611,50 @@ export class RequestsComponent implements OnInit, OnDestroy {
   private refreshClientArrivalFocus(options?: { silent?: boolean; suppressError?: boolean }): void {
     if (!this.isClientAdmin || !this.canViewShifts) {
       this.clientArrivalFocus = null;
+      this.clientArrivalFocuses = [];
+      this.clientArrivalTotal = 0;
       return;
     }
 
     const silent = Boolean(options?.silent);
     const suppressError = Boolean(options?.suppressError);
-    const dateFrom = new Date();
-    dateFrom.setDate(dateFrom.getDate() - 1);
-
-    this.requestService.listShifts(
-      1,
-      12,
-      '',
-      '',
-      this.formatDateInput(dateFrom),
-      '',
+    this.requestService.listPendingShiftArrivals(
+      this.clientArrivalPage, this.clientArrivalRows, '', '',
       {
-        loadingScope: this.guardShiftFocusScope,
+        loadingScope: this.clientArrivalFocusScope,
         loadingMode: silent ? 'silent' : undefined,
       },
     ).subscribe({
       next: (response) => {
-        const now = Date.now();
-        const candidates = (response.items || [])
-          .filter((item) => !['completed', 'cancelled', 'expired'].includes(String(item.instance_status || '')))
-          .sort((left, right) => this.rankShiftForJob(left, now) - this.rankShiftForJob(right, now));
-        this.resolveClientArrivalFocusFromCandidates(candidates, 0);
+        this.clientArrivalTotal = response.total;
+        if (!response.items.length && response.total > 0 && this.clientArrivalPage > 1) {
+          this.clientArrivalPage = Math.ceil(response.total / this.clientArrivalRows);
+          this.refreshClientArrivalFocus(options);
+          return;
+        }
+        this.clientArrivalFocuses = response.items.map((item) => ({
+          distanceMeters: item.distance_meters,
+          shift: {
+            id: item.shift_id, request_id: item.request_id, request_title: item.request_title,
+            site_name: item.site_name, client_tenant_id: this.currentTenantId, schedule_template_id: '',
+            shift_date_local: item.shift_date_local, shift_start_at_utc: item.shift_start_at_utc,
+            shift_end_at_utc: item.shift_end_at_utc, timezone: item.timezone,
+            instance_status: 'staffed', slots_required: 0, slots_staffed: 0, slots_checked_in: 0,
+            slots_completed: 0, client_action_required: true,
+          },
+          slot: {
+            id: item.slot_id, shift_instance_id: item.shift_id, request_id: item.request_id,
+            client_tenant_id: this.currentTenantId, slot_number: item.slot_number,
+            assigned_guard_tenant_id: item.assigned_guard_tenant_id, assigned_guard_name: item.assigned_guard_name,
+            slot_status: item.slot_status, arrived_at: item.arrived_at, created_at: '', updated_at: '',
+          },
+        }));
+        this.clientArrivalFocus = this.clientArrivalFocuses[0] || null;
       },
       error: (error) => {
         this.clientArrivalFocus = null;
+        this.clientArrivalFocuses = [];
+        this.clientArrivalTotal = 0;
         if (!suppressError) {
           this.notification.show(error?.error?.detail || 'Failed to load waiting arrival confirmations', 'fail', 5000);
         }
@@ -7711,37 +7662,10 @@ export class RequestsComponent implements OnInit, OnDestroy {
     });
   }
 
-  private resolveClientArrivalFocusFromCandidates(candidates: ShiftInstanceItem[], index: number): void {
-    if (!this.isClientAdmin) {
-      this.clientArrivalFocus = null;
-      return;
-    }
-    if (index >= candidates.length) {
-      this.clientArrivalFocus = null;
-      return;
-    }
-
-    const candidate = candidates[index];
-    this.requestService.getShift(candidate.id, { loadingMode: 'silent' }).subscribe({
-      next: (response) => {
-        const waitingSlot = (response.slots || []).find((item) =>
-          String(item.slot_status || '') === 'client_confirmation_pending'
-          || (Boolean(item.arrived_at) && !item.client_confirmed_at && !item.started_at),
-        );
-        if (waitingSlot) {
-          this.ensureShiftRequestSummaries([response.shift]);
-          this.clientArrivalFocus = {
-            shift: response.shift,
-            slot: waitingSlot,
-          };
-          return;
-        }
-        this.resolveClientArrivalFocusFromCandidates(candidates, index + 1);
-      },
-      error: () => {
-        this.resolveClientArrivalFocusFromCandidates(candidates, index + 1);
-      },
-    });
+  changeClientArrivalPage(page: number): void {
+    if (page < 1 || (page - 1) * this.clientArrivalRows >= this.clientArrivalTotal) return;
+    this.clientArrivalPage = page;
+    this.refreshClientArrivalFocus();
   }
 
   private findCachedShiftById(shiftId: string): ShiftInstanceItem | null {
