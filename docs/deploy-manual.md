@@ -98,11 +98,21 @@ These are mounted into Docker nginx in both stage and production compose files.
 
 ### Recommended issuance path
 
-Use Certbot webroot mode with a temporary nginx container if direct standalone challenge is unreliable.
+Use Certbot webroot mode with the active Docker nginx serving the challenge:
 
-Basic validation rule:
+```bash
+sudo certbot certonly --webroot -w /var/www/letsencrypt \
+  -d <domain> -d <www-domain>
+```
 
-- public HTTP on port `80` must reach the VPS that is serving the ACME challenge
+The nginx ACME location must map `/.well-known/acme-challenge/<token>` to
+`/var/www/letsencrypt/.well-known/acme-challenge/<token>`. Use
+`root /var/www/letsencrypt;`; an `alias /var/www/letsencrypt/;` does not match
+Certbot's default webroot layout.
+
+Public HTTP on port `80` must reach this VPS and serve files from that webroot.
+After a successful renewal, reload the Docker nginx container so it reads the
+updated certificate files.
 
 After issuing certs, verify:
 

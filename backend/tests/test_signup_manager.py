@@ -125,7 +125,7 @@ async def test_signup_user_rejects_duplicate_user(monkeypatch):
         await SignupManager.signup_user(payload)
 
     assert exc.value.status_code == 400
-    assert exc.value.detail == "Username or email already exists"
+    assert exc.value.detail == "Username already exists"
 
 
 @pytest.mark.anyio

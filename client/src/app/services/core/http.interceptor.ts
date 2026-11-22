@@ -18,6 +18,7 @@ import {
   HTTP_SUPPRESSED_ERROR_STATUSES,
 } from '../../shared/http/http-loading.tokens';
 import { LoadingFeedbackService } from '../../shared/services/loading-feedback.service';
+import { PusherRealtimeService } from '../notifications/pusher-realtime.service';
 
 const inFlightCancels = new Map<string, Subject<void>>();
 const GLOBAL_TIMEOUT = 150000;
@@ -104,6 +105,7 @@ export const httpInterceptor: HttpInterceptorFn = (
         const isSilentLogout = silentLogoutMessages.has(message);
 
         if (error instanceof HttpErrorResponse && error.status === 401) {
+          injector.get(PusherRealtimeService, null)?.stop();
           localStorage.clear();
           sessionStorage.clear();
           router.navigate(['/login']).then();

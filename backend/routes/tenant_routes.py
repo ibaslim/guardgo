@@ -23,7 +23,7 @@ from orion.api.interactive.activity_manager.activity_manager import ActivityMana
 from bson import ObjectId
 
 tenant_routes = APIRouter(
-    dependencies=[Depends(status_required([UserStatus.ACTIVE]))], tags=["Orion API"], )
+    dependencies=[Depends(status_required([UserStatus.ACTIVE]))], tags=["Tenant Management"], )
 
 
 # ============================================================================
@@ -557,6 +557,21 @@ async def delete_system_image(current_user=Depends(get_current_user)):
 @tenant_routes.post(
     "/api/sp/guards/invite",
     summary="Invite guard under service provider",
+    description=(
+        "Send an onboarding invitation to a licensed security guard to join the service provider's managed guard roster.\n\n"
+        "### Workflow\n"
+        "- Creates a pending guard tenant linked to the caller's service provider.\n"
+        "- Generates an invite token and sends an onboarding email to the guard.\n\n"
+        "### Access\n"
+        "- **Role Required**: `sp_admin` (Service Provider Administrator).\n\n"
+        "### Input (`ServiceProviderGuardInviteRequest`)\n"
+        "- `email` *(email, required)*: Guard's email address.\n\n"
+        "### Output\n"
+        "- Created guard invite record with expiration timestamp and pending activation status."
+    ),
+    tags=["Service Provider Guards"],
+    operation_id="inviteGuardForServiceProvider",
+    response_description="Created guard invitation details.",
     status_code=201,
     dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
 )
@@ -570,6 +585,20 @@ async def invite_guard_for_service_provider(
 @tenant_routes.get(
     "/api/sp/guards",
     summary="List guards owned by service provider",
+    description=(
+        "Retrieve paginated security guards employed by or associated with the caller's service provider company.\n\n"
+        "### Access\n"
+        "- **Role Required**: `sp_admin`.\n\n"
+        "### Input\n"
+        "- **Query Parameters**:\n"
+        "  - `page` *(integer, default: 1)*: Page number.\n"
+        "  - `rows` *(integer, default: 20)*: Page size.\n\n"
+        "### Output\n"
+        "- Paginated list of guard records with profile details, license status, and operational coverage."
+    ),
+    tags=["Service Provider Guards"],
+    operation_id="listServiceProviderGuards",
+    response_description="Paginated list of service provider guards.",
     status_code=200,
     dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
 )
@@ -584,6 +613,19 @@ async def list_service_provider_guards(
 @tenant_routes.get(
     "/api/sp/guards/{guard_tenant_id}",
     summary="Get service provider guard details",
+    description=(
+        "Retrieve detailed information for a specific guard managed under the caller's service provider tenant.\n\n"
+        "### Access\n"
+        "- **Role Required**: `sp_admin`.\n\n"
+        "### Input\n"
+        "- **Path Parameter**:\n"
+        "  - `guard_tenant_id` *(string, required)*: Guard tenant ID.\n\n"
+        "### Output\n"
+        "- Detailed guard profile, contact information, verified security licenses, and operational dispatch settings."
+    ),
+    tags=["Service Provider Guards"],
+    operation_id="getServiceProviderGuardDetails",
+    response_description="Detailed guard profile and settings.",
     status_code=200,
     dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
 )
@@ -597,6 +639,24 @@ async def get_service_provider_guard_details(
 @tenant_routes.put(
     "/api/sp/guards/{guard_tenant_id}/operational-coverage",
     summary="Update managed guard operational coverage",
+    description=(
+        "Configure operational dispatch parameters for a managed guard including region, city, maximum travel radius, and weekly availability schedule.\n\n"
+        "### Access\n"
+        "- **Role Required**: `sp_admin`.\n\n"
+        "### Input\n"
+        "- **Path Parameter**:\n"
+        "  - `guard_tenant_id` *(string, required)*: Guard tenant ID.\n"
+        "- **JSON Body (`ServiceProviderGuardOperationalCoveragePayload`)**:\n"
+        "  - `operational_region_code` *(string, required)*: Province/state code (e.g. 'ON', 'BC').\n"
+        "  - `operational_city_code` *(string, required)*: Primary operational municipality (e.g. 'TORONTO').\n"
+        "  - `max_travel_radius_km` *(float, required)*: Maximum dispatch radius from base city in km.\n"
+        "  - `weekly_availability` *(object, optional)*: Day-of-week hour windows when guard is available.\n\n"
+        "### Output\n"
+        "- Updated operational coverage configuration for the guard."
+    ),
+    tags=["Service Provider Guards"],
+    operation_id="updateServiceProviderGuardOperationalCoverage",
+    response_description="Updated guard operational coverage settings.",
     status_code=200,
     dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
 )
@@ -615,6 +675,19 @@ async def update_service_provider_guard_operational_coverage(
 @tenant_routes.delete(
     "/api/sp/guards/pending/{guard_tenant_id}",
     summary="Delete expired pending guard invite",
+    description=(
+        "Remove an unaccepted or expired guard invitation and purge pending tenant records.\n\n"
+        "### Access\n"
+        "- **Role Required**: `sp_admin`.\n\n"
+        "### Input\n"
+        "- **Path Parameter**:\n"
+        "  - `guard_tenant_id` *(string, required)*: Pending guard tenant ID.\n\n"
+        "### Output\n"
+        "- Deletion confirmation message."
+    ),
+    tags=["Service Provider Guards"],
+    operation_id="deleteExpiredPendingGuardInvite",
+    response_description="Confirmation of pending guard invitation deletion.",
     status_code=200,
     dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
 )
@@ -627,8 +700,27 @@ async def delete_expired_pending_guard_invite(
 
 @tenant_routes.post(
     "/api/sp/guards/{guard_tenant_id}/status-request",
-    summary="Request guard status change",
-    description="For action='deactivate', request body must include a non-empty reason. For action='activate', reason is optional.",
+    summary="Request guard status change (activation / deactivation)",
+    description=(
+        "Submit a formal status change request to platform compliance admins to activate or deactivate a guard.\n\n"
+        "### Workflow\n"
+        "- For `action='deactivate'`, a mandatory justification reason must be supplied.\n"
+        "- For `action='activate'`, reason is optional.\n"
+        "- A platform compliance administrator must approve the request before the status changes.\n\n"
+        "### Access\n"
+        "- **Role Required**: `sp_admin`.\n\n"
+        "### Input\n"
+        "- **Path Parameter**:\n"
+        "  - `guard_tenant_id` *(string, required)*: Guard tenant ID.\n"
+        "- **JSON Body (`ServiceProviderGuardStatusRequestPayload`)**:\n"
+        "  - `action` *(string, required)*: Either `\"activate\"` or `\"deactivate\"`.\n"
+        "  - `reason` *(string, optional/required for deactivate)*: Business reason for the status request.\n\n"
+        "### Output\n"
+        "- Created guard status change request record with `status: pending`."
+    ),
+    tags=["Service Provider Guards"],
+    operation_id="requestGuardStatusChange",
+    response_description="Created status change request record.",
     status_code=200,
     dependencies=[Depends(role_required([user_role.SP_ADMIN]))],
 )
@@ -643,6 +735,20 @@ async def request_guard_status_change(
 @tenant_routes.get(
     "/api/guard-status-requests",
     summary="List guard status change requests",
+    description=(
+        "Retrieve all pending, approved, or rejected guard status change requests submitted by service providers.\n\n"
+        "### Access\n"
+        "- **Role Required**: `admin`.\n\n"
+        "### Input\n"
+        "- **Query Parameters**:\n"
+        "  - `page` *(integer, default: 1)*: Page number.\n"
+        "  - `rows` *(integer, default: 20)*: Page size.\n\n"
+        "### Output\n"
+        "- Paginated list of guard status change request records with requester and target guard metadata."
+    ),
+    tags=["Service Provider Guards"],
+    operation_id="listGuardStatusRequests",
+    response_description="Paginated list of guard status change requests.",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
@@ -653,6 +759,24 @@ async def list_guard_status_requests(page: int = 1, rows: int = 20):
 @tenant_routes.post(
     "/api/guard-status-requests/{request_id}/approve",
     summary="Approve guard status change request",
+    description=(
+        "Platform admin approval of a pending guard activation or deactivation request.\n\n"
+        "### Workflow\n"
+        "- Changes the target guard tenant status according to the requested action.\n"
+        "- Records decision audit trail with reviewer commentary.\n\n"
+        "### Access\n"
+        "- **Role Required**: `admin`.\n\n"
+        "### Input\n"
+        "- **Path Parameter**:\n"
+        "  - `request_id` *(string, required)*: Status change request ID.\n"
+        "- **JSON Body (`GuardStatusRequestDecisionPayload`)**:\n"
+        "  - `comment` *(string, optional)*: Reviewer notes or decision justification.\n\n"
+        "### Output\n"
+        "- Approved request record with updated target guard status."
+    ),
+    tags=["Service Provider Guards"],
+    operation_id="approveGuardStatusRequest",
+    response_description="Approved guard status request confirmation.",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
@@ -667,6 +791,21 @@ async def approve_guard_status_request(
 @tenant_routes.post(
     "/api/guard-status-requests/{request_id}/reject",
     summary="Reject guard status change request",
+    description=(
+        "Platform admin rejection of a pending guard status change request.\n\n"
+        "### Access\n"
+        "- **Role Required**: `admin`.\n\n"
+        "### Input\n"
+        "- **Path Parameter**:\n"
+        "  - `request_id` *(string, required)*: Status change request ID.\n"
+        "- **JSON Body (`GuardStatusRequestDecisionPayload`)**:\n"
+        "  - `comment` *(string, optional)*: Rejection reason communicated to service provider.\n\n"
+        "### Output\n"
+        "- Rejected request record."
+    ),
+    tags=["Service Provider Guards"],
+    operation_id="rejectGuardStatusRequest",
+    response_description="Rejected guard status request confirmation.",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
@@ -681,6 +820,22 @@ async def reject_guard_status_request(
 @tenant_routes.post(
     "/api/guards/{guard_tenant_id}/link-service-provider",
     summary="Link guard to service provider",
+    description=(
+        "Associate an independent security guard tenant with a service provider company.\n\n"
+        "### Access\n"
+        "- **Role Required**: `admin`.\n\n"
+        "### Input\n"
+        "- **Path Parameter**:\n"
+        "  - `guard_tenant_id` *(string, required)*: Guard tenant ID.\n"
+        "- **JSON Body (`GuardServiceProviderLinkPayload`)**:\n"
+        "  - `service_provider_tenant_id` *(string, required)*: Target service provider tenant ID.\n"
+        "  - `reason` *(string, required, min 3 chars)*: Audit explanation for linkage.\n\n"
+        "### Output\n"
+        "- Updated guard tenant record showing service provider association."
+    ),
+    tags=["Service Provider Guards"],
+    operation_id="linkGuardToServiceProvider",
+    response_description="Updated guard tenant record with linked provider.",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )
@@ -695,6 +850,21 @@ async def link_guard_to_service_provider(
 @tenant_routes.post(
     "/api/guards/{guard_tenant_id}/unlink-service-provider",
     summary="Unlink guard from service provider",
+    description=(
+        "Detach a guard from a service provider company, returning the guard to independent status.\n\n"
+        "### Access\n"
+        "- **Role Required**: `admin`.\n\n"
+        "### Input\n"
+        "- **Path Parameter**:\n"
+        "  - `guard_tenant_id` *(string, required)*: Guard tenant ID.\n"
+        "- **JSON Body (`GuardServiceProviderUnlinkPayload`)**:\n"
+        "  - `reason` *(string, required, min 3 chars)*: Audit explanation for unlinking.\n\n"
+        "### Output\n"
+        "- Updated guard tenant record with nullified service provider association."
+    ),
+    tags=["Service Provider Guards"],
+    operation_id="unlinkGuardFromServiceProvider",
+    response_description="Updated guard tenant record without provider association.",
     status_code=200,
     dependencies=[Depends(role_required([user_role.ADMIN]))],
 )

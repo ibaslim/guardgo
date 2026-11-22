@@ -28,6 +28,7 @@
     "libphonenumber-js": "^1.12.36",
     "ngx-material-timepicker": "^13.1.1",
     "ngx-print": "^20.0.0",
+    "pusher-js": "8.6.0",
     "qrcode": "^1.5.4",
     "rxjs": "~7.8.0",
     "tldts": "^7.0.19",

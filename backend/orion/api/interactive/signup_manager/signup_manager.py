@@ -36,10 +36,13 @@ class SignupManager:
             raise HTTPException(status_code=422, detail="Invalid email format")
 
         # Check for existing username or email
-        existing_user = await engine.find_one(
-            db_user_account, (db_user_account.username == username) | (db_user_account.email == email))
+        existing_email = await engine.find_one(db_user_account, db_user_account.email == email)
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Email already used, try with a different one")
+
+        existing_user = await engine.find_one(db_user_account, db_user_account.username == username)
         if existing_user:
-            raise HTTPException(status_code=400, detail="Username or email already exists")
+            raise HTTPException(status_code=400, detail="Username already exists")
 
         if password.startswith("$2b$") and len(password) >= 60:
             hashed_password = password
@@ -93,7 +96,12 @@ class SignupManager:
             verification_expiry=_verification_token_expire,
             licenses=[LicenseName.MAINTAINER],
             tenant_uuid=str(tenant.id))
-        await engine.save(user)
+        try:
+            await engine.save(user)
+        except Exception as exc:
+            if "unique_user_email" in str(exc) or "email_1" in str(exc):
+                raise HTTPException(status_code=400, detail="Email already used, try with a different one")
+            raise
 
         APP_URL = env_handler.get_instance().env("APP_URL")
         verify_url = f"{APP_URL}/welcome/{_verification_token}"
