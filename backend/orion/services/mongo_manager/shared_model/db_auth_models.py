@@ -135,6 +135,11 @@ class db_user_account(Model):
     current_session_id: Optional[str] = Field(default=None)
     licenses: List[LicenseName] = Field(default=[LicenseName.FREE])
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value):
+        return value.strip().lower() if isinstance(value, str) else value
+
     @staticmethod
     def hash_password(password: str) -> str:
         return pwd_context.hash(str(password))

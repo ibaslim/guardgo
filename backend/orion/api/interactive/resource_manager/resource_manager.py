@@ -3,7 +3,11 @@ from uuid import uuid4
 
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import FileResponse
-from orion.services.mongo_manager.shared_model.db_auth_models import normalize_role_value, user_role
+from orion.services.mongo_manager.shared_model.db_auth_models import (
+    is_platform_admin_role,
+    normalize_role_value,
+    user_role,
+)
 
 
 
@@ -117,6 +121,44 @@ class ResourceManager:
 
         return {"tenant_image": "deleted"}
 
+    async def _get_tenant_document_path(self, directory: Path, file_id: str, current_user) -> Path:
+        role = normalize_role_value(getattr(current_user, "role", None))
+
+        # Platform admins can inspect documents across tenants.
+        if is_platform_admin_role(role):
+            for tenant_dir in directory.iterdir():
+                if tenant_dir.is_dir():
+                    for file_path in tenant_dir.iterdir():
+                        if file_path.is_file() and file_path.stem == file_id:
+                            return file_path
+            raise HTTPException(status_code=404, detail="File not found")
+
+        # Tenant users can inspect their own uploaded documents.
+        tenant_dir = directory / str(getattr(current_user, "tenant_uuid", "") or "")
+        if tenant_dir.is_dir():
+            for file_path in tenant_dir.iterdir():
+                if file_path.is_file() and file_path.stem == file_id:
+                    return file_path
+
+        # Service providers may inspect documents uploaded by guards they manage.
+        if role == user_role.SP_ADMIN.value:
+            for tenant_dir in directory.iterdir():
+                if not tenant_dir.is_dir():
+                    continue
+                file_path = next(
+                    (path for path in tenant_dir.iterdir() if path.is_file() and path.stem == file_id),
+                    None,
+                )
+                if file_path is None:
+                    continue
+
+                from orion.api.interactive.tenant_manager.tenant_manager import TenantManager
+
+                await TenantManager.get_instance().get_service_provider_guard(tenant_dir.name, current_user)
+                return file_path
+
+        raise HTTPException(status_code=404, detail="File not found")
+
     async def upload_tenant_identity_document(self, file: UploadFile, current_user):
         contents = await file.read()
 
@@ -155,25 +197,8 @@ class ResourceManager:
         }
 
     async def get_tenant_identity_document(self, file_id: str, current_user):
-        # Allow admins to locate files across all tenant folders
-        if getattr(current_user, 'role', None) == 'admin':
-            for tenant_folder in self.TENANT_IDENTITY_DIR.iterdir():
-                if not tenant_folder.is_dir():
-                    continue
-                matches = list(tenant_folder.glob(f"{file_id}.*"))
-                if matches:
-                    return FileResponse(matches[0])
-            raise HTTPException(status_code=404, detail="File not found")
-
-        tenant_dir = self.TENANT_IDENTITY_DIR / f"{current_user.tenant_uuid}"
-        if not tenant_dir.exists():
-            raise HTTPException(status_code=404, detail="File not found")
-
-        matches = list(tenant_dir.glob(f"{file_id}.*"))
-        if not matches:
-            raise HTTPException(status_code=404, detail="File not found")
-
-        return FileResponse(matches[0])
+        path = await self._get_tenant_document_path(self.TENANT_IDENTITY_DIR, file_id, current_user)
+        return FileResponse(path)
 
     async def delete_tenant_identity_document(self, file_id: str, current_user):
         tenant_dir = self.TENANT_IDENTITY_DIR / f"{current_user.tenant_uuid}"
@@ -228,25 +253,8 @@ class ResourceManager:
         }
 
     async def get_tenant_security_license_document(self, file_id: str, current_user):
-        # Allow admins to locate files across all tenant folders
-        if getattr(current_user, 'role', None) == 'admin':
-            for tenant_folder in self.TENANT_SECURITY_LICENSE_DIR.iterdir():
-                if not tenant_folder.is_dir():
-                    continue
-                matches = list(tenant_folder.glob(f"{file_id}.*"))
-                if matches:
-                    return FileResponse(matches[0])
-            raise HTTPException(status_code=404, detail="File not found")
-
-        tenant_dir = self.TENANT_SECURITY_LICENSE_DIR / f"{current_user.tenant_uuid}"
-        if not tenant_dir.exists():
-            raise HTTPException(status_code=404, detail="File not found")
-
-        matches = list(tenant_dir.glob(f"{file_id}.*"))
-        if not matches:
-            raise HTTPException(status_code=404, detail="File not found")
-
-        return FileResponse(matches[0])
+        path = await self._get_tenant_document_path(self.TENANT_SECURITY_LICENSE_DIR, file_id, current_user)
+        return FileResponse(path)
 
     async def delete_tenant_security_license_document(self, file_id: str, current_user):
         tenant_dir = self.TENANT_SECURITY_LICENSE_DIR / f"{current_user.tenant_uuid}"
@@ -301,25 +309,8 @@ class ResourceManager:
         }
 
     async def get_tenant_police_clearance_document(self, file_id: str, current_user):
-        # Allow admins to locate files across all tenant folders
-        if getattr(current_user, 'role', None) == 'admin':
-            for tenant_folder in self.TENANT_POLICE_CLEARANCE_DIR.iterdir():
-                if not tenant_folder.is_dir():
-                    continue
-                matches = list(tenant_folder.glob(f"{file_id}.*"))
-                if matches:
-                    return FileResponse(matches[0])
-            raise HTTPException(status_code=404, detail="File not found")
-
-        tenant_dir = self.TENANT_POLICE_CLEARANCE_DIR / f"{current_user.tenant_uuid}"
-        if not tenant_dir.exists():
-            raise HTTPException(status_code=404, detail="File not found")
-
-        matches = list(tenant_dir.glob(f"{file_id}.*"))
-        if not matches:
-            raise HTTPException(status_code=404, detail="File not found")
-
-        return FileResponse(matches[0])
+        path = await self._get_tenant_document_path(self.TENANT_POLICE_CLEARANCE_DIR, file_id, current_user)
+        return FileResponse(path)
 
     async def delete_tenant_police_clearance_document(self, file_id: str, current_user):
         tenant_dir = self.TENANT_POLICE_CLEARANCE_DIR / f"{current_user.tenant_uuid}"
@@ -374,25 +365,8 @@ class ResourceManager:
         }
 
     async def get_tenant_training_certificate(self, file_id: str, current_user):
-        # Allow admins to locate files across all tenant folders
-        if getattr(current_user, 'role', None) == 'admin':
-            for tenant_folder in self.TENANT_TRAINING_CERT_DIR.iterdir():
-                if not tenant_folder.is_dir():
-                    continue
-                matches = list(tenant_folder.glob(f"{file_id}.*"))
-                if matches:
-                    return FileResponse(matches[0])
-            raise HTTPException(status_code=404, detail="File not found")
-
-        tenant_dir = self.TENANT_TRAINING_CERT_DIR / f"{current_user.tenant_uuid}"
-        if not tenant_dir.exists():
-            raise HTTPException(status_code=404, detail="File not found")
-
-        matches = list(tenant_dir.glob(f"{file_id}.*"))
-        if not matches:
-            raise HTTPException(status_code=404, detail="File not found")
-
-        return FileResponse(matches[0])
+        path = await self._get_tenant_document_path(self.TENANT_TRAINING_CERT_DIR, file_id, current_user)
+        return FileResponse(path)
 
     async def delete_tenant_training_certificate(self, file_id: str, current_user):
         tenant_dir = self.TENANT_TRAINING_CERT_DIR / f"{current_user.tenant_uuid}"
@@ -447,24 +421,8 @@ class ResourceManager:
         }
 
     async def get_tenant_insurance_document(self, file_id: str, current_user):
-        if getattr(current_user, 'role', None) == 'admin':
-            for tenant_folder in self.TENANT_INSURANCE_DIR.iterdir():
-                if not tenant_folder.is_dir():
-                    continue
-                matches = list(tenant_folder.glob(f"{file_id}.*"))
-                if matches:
-                    return FileResponse(matches[0])
-            raise HTTPException(status_code=404, detail="File not found")
-
-        tenant_dir = self.TENANT_INSURANCE_DIR / f"{current_user.tenant_uuid}"
-        if not tenant_dir.exists():
-            raise HTTPException(status_code=404, detail="File not found")
-
-        matches = list(tenant_dir.glob(f"{file_id}.*"))
-        if not matches:
-            raise HTTPException(status_code=404, detail="File not found")
-
-        return FileResponse(matches[0])
+        path = await self._get_tenant_document_path(self.TENANT_INSURANCE_DIR, file_id, current_user)
+        return FileResponse(path)
 
     async def delete_tenant_insurance_document(self, file_id: str, current_user):
         tenant_dir = self.TENANT_INSURANCE_DIR / f"{current_user.tenant_uuid}"

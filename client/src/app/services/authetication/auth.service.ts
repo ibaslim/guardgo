@@ -7,6 +7,7 @@ import { TokenRefreshService } from './token-refresh.service';
 import { HttpHeaders } from '@angular/common/http';
 import { AppStorageService } from '../core/app/app-storage.service';
 import { AppService } from '../core/app/app.service';
+import { PusherRealtimeService } from '../notifications/pusher-realtime.service';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -17,7 +18,8 @@ export class AuthService {
     private appStorageService: AppStorageService,
     private apiService: ApiService,
     private router: Router,
-    private tokenRefreshService: TokenRefreshService
+    private tokenRefreshService: TokenRefreshService,
+    private pusherRealtime: PusherRealtimeService,
   ) {
     if (this.isAuthenticated()) {
       const needsSession = !this.appService.userSessionData().user.username && !this.appService.userSessionData().user.role && !this.appService.userSessionData().user.verificationDate;
@@ -134,6 +136,7 @@ export class AuthService {
   }
 
   logout(): void {
+    this.pusherRealtime.stop();
     this.authState.next({
       token: null,
       isAuthenticated: false,

@@ -37,6 +37,10 @@ export class InviteActivationComponent implements OnInit {
     }
 
     this.token = token;
+    if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      window.location.href = `guardgomobile://invite/${encodeURIComponent(token)}`;
+    }
+
     this.auth_service.getInviteContext(token).subscribe({
       next: () => {},
       error: (err) => {
