@@ -272,7 +272,7 @@
             ></app-button>
             <app-button
               *ngIf="canSoftDelete"
-              label="Remove"
+              [label]="request.request_status === 'draft' ? 'Delete Draft' : 'Remove'"
               type="danger"
               size="sm"
               [loadingScope]="requestStatusScope"

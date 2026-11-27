@@ -413,6 +413,8 @@ export interface ShiftInstanceItem {
   roster_due_at?: string | null;
   created_from_revision?: number;
   cancel_reason?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by_role?: string | null;
   reduction_reason?: string | null;
   created_at?: string | null;
   updated_at?: string | null;

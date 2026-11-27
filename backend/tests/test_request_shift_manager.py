@@ -39,6 +39,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     ShiftGuardLeaveStatus,
     ShiftCoverageSourceType,
     ShiftInstanceRecord,
+    ShiftInstanceStatus,
     ShiftSlotCheckInPayload,
     ShiftSlotCheckOutPayload,
     ShiftSlotClientConfirmPayload,
@@ -710,6 +711,48 @@ def _stub_notifications(monkeypatch):
             return None
 
     monkeypatch.setattr(NotificationManager, "get_instance", staticmethod(lambda: FakeNotificationManager()))
+
+
+@pytest.mark.anyio
+async def test_cancelled_shift_remains_cancelled_when_progress_is_refreshed():
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = FakeEngine()
+    shift = ShiftInstanceRecord(
+        request_id="request", client_tenant_id="client", schedule_template_id="schedule",
+        shift_date_local="2026-11-19", shift_start_at_utc=datetime.utcnow(),
+        shift_end_at_utc=datetime.utcnow() + timedelta(hours=1), timezone="UTC",
+        instance_status=ShiftInstanceStatus.CANCELLED, cancelled_by_role="client_admin",
+        cancelled_at=datetime.utcnow(),
+    )
+    await manager._refresh_shift_progress(shift)
+    assert shift.instance_status == ShiftInstanceStatus.CANCELLED
+    serialized = manager._serialize_shift(shift)
+    assert serialized["cancelled_by_role"] == "client_admin"
+    assert serialized["cancelled_at"] == shift.cancelled_at
+
+
+@pytest.mark.anyio
+async def test_guard_can_still_see_cancelled_shift_via_assigned_slot(monkeypatch):
+    engine = FakeEngine()
+    request = _make_request(request_status=RequestStatus.CANCELLED)
+    shift_id = ObjectId()
+    engine.shift_slots = [ShiftSlotRecord(
+        shift_instance_id=str(shift_id), request_id=str(request.id), client_tenant_id=request.client_tenant_id,
+        slot_number=1, assigned_guard_tenant_id="guard-1", slot_status=ShiftSlotStatus.CANCELLED,
+    )]
+    manager = object.__new__(RequestShiftManager)
+    manager._engine = engine
+    monkeypatch.setattr(
+        "orion.api.interactive.request_shift_manager.request_shift_manager.RequestManager.get_instance",
+        lambda: _fake_request_manager(request, engine=engine),
+    )
+    async def visible_requests(_ids):
+        return {str(request.id)}
+    manager._non_deleted_request_ids = visible_requests
+    visible = await manager._visible_shift_ids_for_user(
+        SimpleNamespace(username="guard", role="guard_admin", tenant_uuid="guard-1"),
+    )
+    assert visible == {str(shift_id)}
 
 
 @pytest.mark.anyio

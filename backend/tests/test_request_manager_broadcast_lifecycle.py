@@ -38,6 +38,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestWaveStatus,
     ShiftCoverageSourceType,
     ShiftInstanceRecord,
+    ShiftInstanceStatus,
     ShiftSlotRecord,
     ShiftSlotStatus,
 )
@@ -185,17 +186,20 @@ async def _async_return(value):
 
 
 @pytest.mark.anyio
-async def test_cancellation_notifies_offer_recipients_and_rostered_guards(monkeypatch):
+@pytest.mark.parametrize("role,actor_label", [("client_admin", "the client"), ("ops_admin", "the platform")])
+async def test_cancellation_notifies_offer_recipients_and_rostered_guards(monkeypatch, role, actor_label):
     manager = object.__new__(RequestManager)
     record = _make_request_record(id="req-cancel")
     offered = SimpleNamespace(id=ObjectId(), assignee_tenant_id="guard-offered", assignment_status=RequestAssignmentStatus.OFFERED)
     accepted = SimpleNamespace(id=ObjectId(), assignee_tenant_id="provider", assignment_status=RequestAssignmentStatus.ACCEPTED)
-    slot = SimpleNamespace(assigned_guard_tenant_id="guard-rostered", slot_status=ShiftSlotStatus.ROSTERED)
-    started = SimpleNamespace(assigned_guard_tenant_id="guard-working", slot_status=ShiftSlotStatus.IN_PROGRESS)
+    shift = SimpleNamespace(id=ObjectId(), instance_status=ShiftInstanceStatus.STAFFED)
+    working_shift = SimpleNamespace(id=ObjectId(), instance_status=ShiftInstanceStatus.IN_PROGRESS)
+    slot = SimpleNamespace(assigned_guard_tenant_id="guard-rostered", slot_status=ShiftSlotStatus.ROSTERED, shift_instance_id=str(shift.id))
+    started = SimpleNamespace(assigned_guard_tenant_id="guard-working", slot_status=ShiftSlotStatus.IN_PROGRESS, shift_instance_id=str(working_shift.id))
 
     class Engine(FakeEngine):
-        async def find(self, *_args):
-            return [slot, started]
+        async def find(self, model, *_args):
+            return [slot, started] if model is ShiftSlotRecord else [shift, working_shift]
 
     manager._engine = Engine()
     manager._get_request_or_404 = lambda *_: _async_return(record)
@@ -213,16 +217,23 @@ async def test_cancellation_notifies_offer_recipients_and_rostered_guards(monkey
 
     monkeypatch.setattr(NotificationManager, "get_instance", lambda: Notifications())
     await manager.update_request_status(
-        "req-cancel", ClientRequestStatusUpdatePayload(request_status=RequestStatus.CANCELLED),
-        SimpleNamespace(role="client_admin"),
+        "req-cancel", ClientRequestStatusUpdatePayload(request_status=RequestStatus.CANCELLED, reason="Cancelled by requester"),
+        SimpleNamespace(role=role),
     )
     assert offered.assignment_status == RequestAssignmentStatus.CANCELLED
     assert accepted.assignment_status == RequestAssignmentStatus.CANCELLED
     assert slot.slot_status == ShiftSlotStatus.CANCELLED
     assert started.slot_status == ShiftSlotStatus.IN_PROGRESS
+    assert shift.instance_status == ShiftInstanceStatus.CANCELLED
+    assert shift.cancelled_by_role == role and shift.cancelled_at == record.cancelled_at
+    assert working_shift.instance_status == ShiftInstanceStatus.IN_PROGRESS
+    assert working_shift.cancelled_by_role == role
     assert {item["tenant_id"] for item in sent} == {
         "guard-offered", "provider", "guard-rostered", "guard-working", "tenant-1",
     }
+    guard_notice = next(item for item in sent if item["tenant_id"] == "guard-rostered")
+    assert f"{actor_label} cancelled" in guard_notice["message"]
+    assert guard_notice["metadata"]["event_type"] == "request_cancelled"
 
 
 @pytest.mark.anyio
@@ -4415,3 +4426,47 @@ def test_serialize_assignment_tolerates_legacy_missing_fields():
     assert serialized["assignment_origin"] == ""
     assert serialized["assigned_by_user_id"] == ""
     assert serialized["request"]["title"] == "Night Patrol"
+
+
+@pytest.mark.anyio
+async def test_client_can_delete_only_own_draft(monkeypatch):
+    manager = object.__new__(RequestManager)
+    manager._engine = FakeEngine()
+    manager._role_value = lambda _user: "client_admin"
+    manager._is_platform_write_role = lambda _role: False
+    record = _make_request_record(request_status=RequestStatus.DRAFT, client_tenant_id="tenant-1", deleted_at=None)
+    manager._get_request_or_404 = lambda *_: _async_return(record)
+    manager._get_session_tenant = lambda *_: _async_return(SimpleNamespace(id="tenant-1", tenant_type=TenantType.CLIENT))
+    manager._sync_request_runtime_state = lambda *_: _async_return(record)
+    manager._write_activity = lambda *_args, **_kwargs: _async_return(None)
+    class Notifications:
+        async def create_for_tenant_admin_users(self, **_kwargs):
+            pass
+    monkeypatch.setattr("orion.api.interactive.request_manager.request_manager.NotificationManager.get_instance", lambda: Notifications())
+    user = SimpleNamespace(id="user-1", username="client", role="client_admin")
+    payload = ClientRequestSoftDeletePayload(reason="No longer needed")
+    manager._get_session_tenant = lambda *_: _async_return(SimpleNamespace(id="other", tenant_type=TenantType.CLIENT))
+    with pytest.raises(HTTPException) as exc:
+        await manager.soft_delete_request(str(record.id), payload, user)
+    assert exc.value.status_code == 403
+    manager._get_session_tenant = lambda *_: _async_return(SimpleNamespace(id="tenant-1", tenant_type=TenantType.CLIENT))
+    record.request_status = RequestStatus.CLOSED
+    with pytest.raises(HTTPException) as exc:
+        await manager.soft_delete_request(str(record.id), payload, user)
+    assert exc.value.status_code == 403
+    record.request_status = RequestStatus.DRAFT
+    await manager.soft_delete_request(str(record.id), payload, user)
+    assert record.deleted_at is not None
+
+
+@pytest.mark.anyio
+async def test_publish_update_rejects_request_after_start():
+    manager = object.__new__(RequestManager)
+    record = _make_request_record(request_status=RequestStatus.SUBMITTED, requested_start_at=datetime.utcnow() - timedelta(minutes=1))
+    manager._get_request_or_404 = lambda *_: _async_return(record)
+    manager._can_view_request = lambda *_: _async_return(True)
+    manager._assert_request_write_access = lambda *_: _async_return(None)
+    manager._sync_request_runtime_state = lambda *_: _async_return(record)
+    with pytest.raises(HTTPException) as exc:
+        await manager.publish_request_update(str(record.id), RequestPublishUpdatePayload(), SimpleNamespace(role="client_admin"))
+    assert "once work has started" in exc.value.detail

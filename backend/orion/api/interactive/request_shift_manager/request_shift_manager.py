@@ -245,6 +245,8 @@ class RequestShiftManager:
                 "roster_due_at": record.get("roster_due_at"),
                 "created_from_revision": int(record.get("created_from_revision") or 0),
                 "cancel_reason": record.get("cancel_reason"),
+                "cancelled_at": record.get("cancelled_at"),
+                "cancelled_by_role": record.get("cancelled_by_role"),
                 "reduction_reason": record.get("reduction_reason"),
                 "created_at": record.get("created_at"),
                 "updated_at": record.get("updated_at"),
@@ -269,6 +271,8 @@ class RequestShiftManager:
             "roster_due_at": record.roster_due_at,
             "created_from_revision": int(record.created_from_revision or 0),
             "cancel_reason": record.cancel_reason,
+            "cancelled_at": getattr(record, "cancelled_at", None),
+            "cancelled_by_role": getattr(record, "cancelled_by_role", None),
             "reduction_reason": record.reduction_reason,
             "created_at": record.created_at,
             "updated_at": record.updated_at,
@@ -1765,7 +1769,9 @@ class RequestShiftManager:
         shift_record.slots_checked_in = len(checked_in_slots)
         shift_record.slots_completed = len(completed_slots)
         shift_record.client_action_required = bool(client_action_slots)
-        if in_progress_slots:
+        if shift_record.instance_status == ShiftInstanceStatus.CANCELLED:
+            pass
+        elif in_progress_slots:
             shift_record.instance_status = ShiftInstanceStatus.IN_PROGRESS
         elif completed_slots and len(completed_slots) >= len(staffed_slots) and staffed_slots:
             shift_record.instance_status = ShiftInstanceStatus.COMPLETED

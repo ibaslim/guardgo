@@ -322,7 +322,7 @@ export class RequestListCardComponent {
       return 'Send Request';
     }
     if (this.canPublishUpdate) {
-      return 'Send Updated Details';
+      return 'Edit Request';
     }
     if (this.canRequestAdditionalCoverage) {
       return 'Ask For More Coverage';

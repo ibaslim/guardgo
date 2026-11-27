@@ -436,6 +436,9 @@ class ShiftInstanceRecord(Model):
     roster_due_at: Optional[datetime] = Field(default=None, index=True)
     created_from_revision: int = Field(default=0, index=True)
     cancel_reason: Optional[str] = None
+    cancelled_at: Optional[datetime] = None
+    cancelled_by_role: Optional[str] = None
+    cancelled_by_user_id: Optional[str] = None
     reduction_reason: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)

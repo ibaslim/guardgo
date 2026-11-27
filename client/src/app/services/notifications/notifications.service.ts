@@ -114,7 +114,7 @@ export class NotificationsService {
       .reverse()
       .forEach((item) => {
         this.messageNotification.show(
-          item.title || item.message || 'New notification received',
+          (item.metadata?.['event_type'] === 'request_cancelled' ? item.message : item.title) || item.message || 'New notification received',
           this.toToastType(item.category),
           4500,
         );

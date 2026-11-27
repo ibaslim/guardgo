@@ -1359,6 +1359,7 @@ async def update_client_request_status(request_id: str, payload: ClientRequestSt
     operation_id="softDeleteClientRequest",
     response_description="Soft-deleted client request.",
     dependencies=[Depends(role_required([
+        user_role.CLIENT_ADMIN,
         user_role.ADMIN,
         user_role.OPS_ADMIN,
         user_role.SUPPORT_ADMIN,

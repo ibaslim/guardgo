@@ -57,6 +57,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     RequestPublishUpdatePayload,
     RequestPricingPreviewPayload,
     RequestScheduleTemplateRecord,
+    RequestScheduleType,
     RequestSiteInput,
     RequestStaffingStatus,
     RequestStatus,
@@ -67,6 +68,7 @@ from orion.services.mongo_manager.shared_model.db_request_model import (
     ShiftAttendanceEventType,
     ShiftCoverageSourceType,
     ShiftInstanceRecord,
+    ShiftInstanceStatus,
     ShiftSlotRecord,
     ShiftSlotStatus,
 )
@@ -5662,6 +5664,9 @@ class RequestManager:
             raise HTTPException(status_code=400, detail="Material updates are blocked once work is in progress")
         if record.request_status not in {RequestStatus.SUBMITTED, RequestStatus.ASSIGNED}:
             raise HTTPException(status_code=400, detail="Only active requests can be updated")
+        requested_start = self._as_datetime(record.requested_start_at)
+        if requested_start and requested_start <= datetime.utcnow():
+            raise HTTPException(status_code=400, detail="Material updates are blocked once work has started")
 
         provided = payload.model_dump(exclude_unset=True)
         changed = False
@@ -6021,6 +6026,8 @@ class RequestManager:
         if payload.request_status == RequestStatus.CANCELLED:
             record.cancelled_at = datetime.utcnow()
             record.lock_reason = RequestLockReason.REQUEST_CANCELLED
+            cancelled_by_role = self._role_value(current_user)
+            cancelled_by_label = "the client" if cancelled_by_role == "client_admin" else "the platform"
             # Persist the parent state before updating its dependent records so new
             # actions can reject the cancellation even while propagation is running.
             await self._engine.save(record)
@@ -6054,6 +6061,22 @@ class RequestManager:
                     slot.slot_status = ShiftSlotStatus.CANCELLED
                     slot.updated_at = record.cancelled_at
                     await self._engine.save(slot)
+            in_progress_shift_ids = {
+                str(slot.shift_instance_id) for slot in slots
+                if slot.slot_status == ShiftSlotStatus.IN_PROGRESS
+            }
+            for shift in await self._engine.find(ShiftInstanceRecord, ShiftInstanceRecord.request_id == str(record.id)):
+                if shift.instance_status in {ShiftInstanceStatus.COMPLETED, ShiftInstanceStatus.CANCELLED}:
+                    continue
+                shift.cancelled_at = record.cancelled_at
+                shift.cancelled_by_role = cancelled_by_role
+                shift.cancelled_by_user_id = str(getattr(current_user, "id", "") or "") or None
+                shift.cancel_reason = (payload.reason or "").strip() or None
+                shift.updated_at = record.cancelled_at
+                if str(shift.id) not in in_progress_shift_ids and shift.instance_status != ShiftInstanceStatus.IN_PROGRESS:
+                    shift.instance_status = ShiftInstanceStatus.CANCELLED
+                    shift.client_action_required = False
+                await self._engine.save(shift)
             for wave in await self._get_waves_for_request(str(record.id)):
                 if wave.wave_status in {RequestWaveStatus.ACTIVE, RequestWaveStatus.PENDING_REVIEW}:
                     await self._set_wave_status(wave, RequestWaveStatus.CANCELLED)
@@ -6071,7 +6094,7 @@ class RequestManager:
                 await notifications.create_for_tenant_admin_users(
                     tenant_id=assignee_tenant_id,
                     title="Job offer cancelled",
-                    message=f"{record.title}: the client cancelled this request. The job is no longer available.",
+                    message=f"{record.title}: {cancelled_by_label} cancelled this request. The job is no longer available.",
                     category="warning",
                     source_module="requests",
                     action_url=self._dashboard_requests_url(
@@ -6083,6 +6106,8 @@ class RequestManager:
                         "request_id": str(record.id),
                         "request_status": RequestStatus.CANCELLED.value,
                         "assignment_ids": assignment_ids,
+                        "event_type": "request_cancelled",
+                        "cancelled_by_role": cancelled_by_role,
                     },
                 )
 
@@ -6118,7 +6143,9 @@ class RequestManager:
         record = await self._get_request_or_404(request_id)
         role_value = self._role_value(current_user)
         if not self._is_platform_write_role(role_value):
-            raise HTTPException(status_code=403, detail="Only platform admins can remove client requests from the dashboard")
+            await self._assert_request_write_access(record, current_user)
+            if record.request_status != RequestStatus.DRAFT:
+                raise HTTPException(status_code=403, detail="Client admins can only delete draft requests")
         if self._is_soft_deleted(record):
             raise HTTPException(status_code=409, detail="Request has already been removed from the dashboard")
         await self._sync_request_runtime_state(record)
@@ -6141,7 +6168,7 @@ class RequestManager:
         await NotificationManager.get_instance().create_for_tenant_admin_users(
             tenant_id=record.client_tenant_id,
             title="Client request removed",
-            message=f"{record.title} was removed from the dashboard by a platform admin.",
+            message=f"{record.title} was removed from the dashboard.",
             category="warning",
             source_module="requests",
             action_url=self._dashboard_requests_url(tab="requests"),

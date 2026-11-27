@@ -575,9 +575,11 @@
                       *ngFor="let shift of day.shifts | slice:0:2; trackBy: trackByShiftId"
                       type="button"
                       class="block w-full rounded-md border border-gray-200 bg-white/80 px-2.5 py-2 text-left text-xs text-gray-700 transition hover:border-blue-300 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-900/80 dark:text-gray-200 dark:hover:border-blue-800 dark:hover:text-blue-300"
+                      [ngClass]="shift.instance_status === 'cancelled' ? '!border-red-400 !bg-red-50 !text-red-800 dark:!bg-red-950/40 dark:!text-red-200' : ''"
                       (click)="openShiftDetails(shift); $event.stopPropagation()"
                     >
                       <div class="break-words font-semibold">{{ getShiftRequestTitle(shift) }}</div>
+                      <div *ngIf="shift.instance_status === 'cancelled'" class="mt-1 font-semibold text-red-700">{{ getShiftCancellationLabel(shift) }}</div>
                       <div class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
                         {{ formatShiftDateTime(shift.shift_start_at_utc, shift) }}
                       </div>
@@ -2417,6 +2419,14 @@
     ></app-drawer-title-block>
 
     <div drawer-body *ngIf="selectedShift as shift" class="space-y-5">
+      <app-banner
+        *ngIf="shift.cancelled_at || shift.instance_status === 'cancelled'"
+        tone="warning"
+        [showIcon]="false"
+        [message]="getShiftCancellationLabel(shift) + (shift.cancelled_at ? ' on ' + formatBackendDateTime(shift.cancelled_at) : '') + (shift.cancel_reason ? '. Reason: ' + shift.cancel_reason : '')"
+        [containerClass]="'rounded-md px-4 py-3'"
+        [bodyClass]="'text-sm'"
+      ></app-banner>
       <app-banner
         *ngIf="shift.client_action_required"
         tone="warning"

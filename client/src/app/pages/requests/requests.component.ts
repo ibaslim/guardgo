@@ -1093,6 +1093,9 @@ export class RequestsComponent implements OnInit, OnDestroy {
       this.pusherRealtime.notificationEvents$.subscribe((event) => {
         const source = String(event?.source_module || '').trim().toLowerCase();
         if (source === 'requests' || source === 'leaves') {
+          if (source === 'requests' && event.event_type === 'created' && this.isGuardAdmin) {
+            this.loadShiftCalendar(this.shiftCalendarMonthAnchor, { silent: true, suppressError: true });
+          }
           if (source === 'requests' && event.event_type === 'created' && this.isClientAdmin) {
             this.refreshClientArrivalFocus({ silent: true, suppressError: true });
           }
@@ -5245,7 +5248,8 @@ export class RequestsComponent implements OnInit, OnDestroy {
   }
 
   canSoftDeleteRequest(item: ClientRequestItem): boolean {
-    return this.isPlatformAdmin && ['draft', 'cancelled', 'closed'].includes(item.request_status);
+    return (this.isClientAdmin && item.request_status === 'draft')
+      || (this.isPlatformAdmin && ['draft', 'cancelled', 'closed'].includes(item.request_status));
   }
 
   canManageRequestSchedule(item: ClientRequestItem | null): boolean {
@@ -5312,7 +5316,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
   canPublishUpdate(item: ClientRequestItem): boolean {
     return (this.isClientAdmin || this.isPlatformAdmin)
       && ['submitted', 'assigned'].includes(item.request_status)
-      && item.staffing_status !== 'expired';
+      && (!item.requested_start_at || new Date(item.requested_start_at).getTime() > Date.now());
   }
 
   canRequestAdditionalCoverage(item: ClientRequestItem): boolean {
@@ -5692,6 +5696,12 @@ export class RequestsComponent implements OnInit, OnDestroy {
       return 'border-gray-200 bg-white text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
     }
     return 'border-gray-100 bg-white text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100';
+  }
+
+  getShiftCancellationLabel(shift: ShiftInstanceItem): string {
+    if (shift.cancelled_by_role === 'client_admin') return 'Cancelled by client';
+    if (shift.cancelled_by_role) return 'Cancelled by platform';
+    return 'Cancelled';
   }
 
   getShiftCalendarCountLabel(day: ShiftCalendarDayCell): string {
@@ -6147,6 +6157,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   canConfirmShiftSlotArrival(slot: ShiftSlotItem | null): boolean {
     return this.canConfirmShiftArrivals
+      && String(slot?.slot_status || '') === 'client_confirmation_pending'
       && Boolean(slot?.arrived_at)
       && !slot?.client_confirmed_at
       && !slot?.started_at;
@@ -6154,6 +6165,7 @@ export class RequestsComponent implements OnInit, OnDestroy {
 
   canStartShiftSlot(slot: ShiftSlotItem | null): boolean {
     return this.canManageShiftAttendance
+      && !['cancelled', 'completed'].includes(String(slot?.slot_status || ''))
       && Boolean(slot?.arrived_at)
       && !slot?.started_at
       && (Boolean(slot?.client_confirmed_at) || this.isPlatformAdmin);
