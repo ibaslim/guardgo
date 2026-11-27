@@ -11,6 +11,7 @@ from orion.management.managers.request_shift_maintenance_manager import request_
 from orion.management.managers.test_manager import test_manager
 from orion.services.mongo_manager.mongo_controller import mongo_controller
 from orion.services.redis_manager.redis_controller import redis_controller
+from orion.services.push_manager import push_manager
 from orion.constants.constant import allowed_keys
 from orion.constants import constant
 
@@ -57,6 +58,7 @@ class service_manager:
         while not self._is_available:
             await sleep(5)
         await request_shift_maintenance_manager.get_instance().start()
+        await push_manager.start()
 
     def check_status(self):
         return self._is_available

@@ -9,6 +9,7 @@ from orion.services.mongo_manager.shared_model.db_auth_models import db_user_acc
 from orion.services.mongo_manager.shared_model.db_system_settings import db_system_model
 from orion.services.mongo_manager.shared_model.db_keys import db_keys
 from orion.services.mongo_manager.shared_model.db_request_model import ShiftSlotRecord
+from orion.services.mongo_manager.shared_model.db_push_token_model import PushTokenRecord, PushTicketRecord
 from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model
 from orion.services.mongo_manager.shared_views.tenant_admin_view import TenantAdminView
 from orion.services.mongo_manager.shared_views.tenant_key_admin_view import TenantKeyAdminView
@@ -73,6 +74,10 @@ class mongo_controller:
             [("client_tenant_id", 1), ("slot_status", 1), ("arrived_at", 1)],
             name="pending_arrivals_by_client",
         )
+
+        await self.__engine.get_collection(PushTokenRecord).create_index("token", unique=True, name="unique_push_token")
+        await self.__engine.get_collection(PushTokenRecord).create_index("user_id", name="push_tokens_by_user")
+        await self.__engine.get_collection(PushTicketRecord).create_index("created_at", expireAfterSeconds=86400, name="push_tickets_ttl")
 
     async def migrate_legacy_admin_role(self):
         user_collection = self.__engine.get_collection(db_user_account)

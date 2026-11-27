@@ -1,3 +1,4 @@
+from orion.services.push_manager import remove_disabled_user_tokens
 import re
 import secrets
 import threading
@@ -633,6 +634,7 @@ class TenantManager:
                     u.status = UserStatus.DISABLE
                     u.licenses = ["free"]
                     await self._engine.save(u)
+                    await remove_disabled_user_tokens(u.id)
 
         active_count = await self._engine.count(
             db_user_account,
@@ -648,6 +650,7 @@ class TenantManager:
             for u in extra_users:
                 u.status = UserStatus.DISABLE.value
                 await self._engine.save(u)
+                await remove_disabled_user_tokens(u.id)
 
 
         tenant_data = tenant.model_dump()

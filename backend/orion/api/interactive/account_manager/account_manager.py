@@ -1,3 +1,4 @@
+from orion.services.push_manager import remove_disabled_user_tokens
 import re
 import secrets
 import string
@@ -290,6 +291,7 @@ class AccountManager:
             status_changed_at=datetime.now(timezone.utc),
         )
         await self._engine.save(user)
+        await remove_disabled_user_tokens(user.id)
 
         await self._send_platform_admin_invite_mail(username=username, email=email, invite_token=invite_token)
 
@@ -331,6 +333,7 @@ class AccountManager:
         user.status_changed_by = getattr(current_user, "username", "system")
         user.status_changed_at = datetime.now(timezone.utc)
         await self._engine.save(user)
+        await remove_disabled_user_tokens(user.id)
 
         await self._send_platform_admin_invite_mail(
             username=user.username,
@@ -370,6 +373,8 @@ class AccountManager:
             user.licenses = data.licenses
 
         await self._engine.save(user)
+        if user.status in (UserStatus.INACTIVE, UserStatus.DISABLE, UserStatus.BLOCKED, UserStatus.DELETED):
+            await remove_disabled_user_tokens(user.id)
 
         return {
             "id": str(user.id),
@@ -405,6 +410,7 @@ class AccountManager:
             reason=data.reason,
         )
         await self._engine.save(user)
+        await remove_disabled_user_tokens(user.id)
 
         return {"message": "Platform user deleted", "id": str(user.id), "status": UserStatus.DELETED.value}
 
@@ -429,6 +435,7 @@ class AccountManager:
             reason="Restored by admin",
         )
         await self._engine.save(user)
+        await remove_disabled_user_tokens(user.id)
 
         return {
             "message": "Platform user restored",
@@ -519,6 +526,8 @@ class AccountManager:
 
         user.licenses = request.licenses
         await self._engine.save(user)
+        if user.status in (UserStatus.DISABLE, UserStatus.INACTIVE):
+            await remove_disabled_user_tokens(user.id)
 
 
         return {"message": "User updated successfully", "id": str(user.id)}

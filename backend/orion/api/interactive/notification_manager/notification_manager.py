@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import threading
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -16,6 +18,23 @@ from orion.services.mongo_manager.shared_model.db_auth_models import (
 )
 from orion.services.mongo_manager.shared_model.db_tenant_model import db_tenant_model, TenantStatus
 from orion.services.pusher_manager import pusher_manager
+from orion.services.push_manager import push_manager
+
+logger = logging.getLogger(__name__)
+_background_tasks = set()
+
+
+async def _send_push(record):
+    try:
+        await push_manager.send_for_notification(record)
+    except Exception:
+        logger.exception("Could not send push notification")
+
+
+def _spawn(coro):
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 class NotificationManager:
@@ -198,6 +217,8 @@ class NotificationManager:
             str(saved_record.id),
             saved_record.source_module,
         )
+        if not (saved_record.metadata or {}).get("seeded"):
+            _spawn(_send_push(saved_record))
         return saved_record
 
     async def create_for_users(
